@@ -10,7 +10,7 @@ import {
 } from "../vendor/ghostty/include/ghostty/vt.h";
 
 function main(): int32 {
-	let term: GhosttyTerminal = null;
+	let term: GhosttyTerminal;
 	const r = ghostty_terminal_new(null, term, 80, 24);
 	console.log(`new: ${r as int32}`);
 	const text = "hello\r\n";

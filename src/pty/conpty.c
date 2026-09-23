@@ -24,6 +24,7 @@ typedef struct {
 	int64_t cap;
 	int closed;
 	int outOfMemory;
+	int exited;
 	int exitCode;
 	int consoleClosed;
 } Pty;
@@ -78,6 +79,7 @@ static DWORD WINAPI waitLoop(LPVOID arg) {
 	GetExitCodeProcess(p->process, &code);
 	EnterCriticalSection(&p->lock);
 	p->exitCode = (int)code;
+	p->exited = 1;
 	LeaveCriticalSection(&p->lock);
 	closeConsole(p);
 	return 0;
@@ -129,9 +131,12 @@ int ptyOpen(const char* commandLine, int cols, int rows) {
 	memset(&pi, 0, sizeof pi);
 	int ok = attrs && wide
 		&& InitializeProcThreadAttributeList(attrs, 1, 0, &attrSize)
-		&& UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console, sizeof console, NULL, NULL)
+		&& UpdateProcThreadAttribute(
+			attrs, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console, sizeof console, NULL, NULL)
 		&& MultiByteToWideChar(CP_UTF8, 0, commandLine, -1, wide, wideLen)
-		&& CreateProcessW(NULL, wide, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &si.StartupInfo, &pi);
+		&& CreateProcessW(
+			NULL, wide, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL,
+			&si.StartupInfo, &pi);
 	if (attrs) {
 		DeleteProcThreadAttributeList(attrs);
 		free(attrs);
@@ -192,6 +197,15 @@ int ptyResize(int id, int cols, int rows) {
 	if (!p) return -1;
 	COORD size = { (SHORT)cols, (SHORT)rows };
 	return SUCCEEDED(ResizePseudoConsole(p->console, size)) ? 0 : -1;
+}
+
+int ptyExited(int id) {
+	Pty* p = slot(id);
+	if (!p) return 0;
+	EnterCriticalSection(&p->lock);
+	int exited = p->exited;
+	LeaveCriticalSection(&p->lock);
+	return exited;
 }
 
 int ptyExitCode(int id) {

@@ -29,6 +29,9 @@ import {
 
 struct Graphemes { cp: uint32[16]; }
 
+extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Span<uint8>): void
+	from "ghostty_terminal_vt_write";
+
 extern function stateCols(
 	s: GhosttyRenderState,
 	key: GhosttyRenderStateData,
@@ -112,8 +115,12 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 	return Result.ok({ terminal: terminal, state: state, rows: iterator, cells: cells });
 }
 
-export function write(this vt: Vt, bytes: string): void {
-	ghostty_terminal_vt_write(vt.terminal, bytes, bytes.byteLength);
+export function write(this vt: Vt, bytes: Span<uint8>): void {
+	vtWriteBytes(vt.terminal, bytes);
+}
+
+export function writeText(this vt: Vt, text: string): void {
+	ghostty_terminal_vt_write(vt.terminal, text, text.byteLength);
 }
 
 export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtError> {
@@ -201,7 +208,7 @@ test "written text lands on the rows the render state reports" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.write("hello\r\nworld");
+		vt.writeText("hello\r\nworld");
 		const updated = vt.update();
 		assert updated.ok;
 		const size = vt.size();
@@ -218,6 +225,26 @@ test "written text lands on the rows the render state reports" {
 			assert rows.value[1].text.trimEnd() == "world";
 			assert rows.value[0].dirty;
 		}
+		vt.free();
+	}
+}
+
+test "raw bytes keep a multi-byte UTF-8 character whole" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const bytes: Vec<uint8> = new Array(4);
+		bytes[0] = 0x61;
+		bytes[1] = 0xC3;
+		bytes[2] = 0xA9;
+		bytes[3] = 0x62;
+		vt.write(bytes);
+		const updated = vt.update();
+		assert updated.ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) { assert rows.value[0].text.trimEnd() == "aéb"; }
 		vt.free();
 	}
 }

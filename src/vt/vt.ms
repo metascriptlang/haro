@@ -150,13 +150,15 @@ export function size(this vt: Vt): Result<[int32, int32], VtError> {
 
 function rowText(this vt: Vt): Result<string, VtError> {
 	let cells = vt.cells;
-	if (!ok(rowCells(vt.rows, GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, cells))) {
+	const cellsKey = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_CELLS;
+	if (!ok(rowCells(vt.rows, cellsKey, cells))) {
 		return Result.err(VtError.ReadFailed);
 	}
 	let text = "";
 	while (ghostty_render_state_row_cells_next(cells)) {
 		let count: uint32 = 0;
-		const lenKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN;
+		const lenKey =
+			GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN;
 		if (!ok(cellGraphemeCount(cells, lenKey, count))) { return Result.err(VtError.ReadFailed); }
 		if (count == 0) {
 			text += " ";
@@ -164,7 +166,8 @@ function rowText(this vt: Vt): Result<string, VtError> {
 		}
 		if (count > MAX_GRAPHEMES) { return Result.err(VtError.GraphemeTooLong); }
 		let graphemes: Graphemes = { cp: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
-		const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
+		const bufKey =
+			GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
 		if (!ok(cellGraphemes(cells, bufKey, graphemes))) { return Result.err(VtError.ReadFailed); }
 		for (let i = 0; i < (count as int32); i++) {
 			const cp = graphemes.cp[i] as int32;

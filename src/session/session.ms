@@ -4,6 +4,7 @@ import { Vt } from "../vt/vt";
 export enum SessionError {
 	PtyOpenFailed,
 	PtyReadFailed,
+	PtyWriteFailed,
 	VtCreateFailed,
 	VtReadFailed,
 }
@@ -35,8 +36,22 @@ export function pump(this s: Session, buf: Span<uint8>): Result<boolean, Session
 		if (r.error == PtyError.Closed) { return Result.ok(false); }
 		return Result.err(SessionError.PtyReadFailed);
 	}
-	if (r.value > 0) { s.vt.write(buf[0..r.value]); }
+	if (r.value > 0) {
+		s.vt.write(buf[0..r.value]);
+		const _answered = try s.answer(buf);
+	}
 	return Result.ok(true);
+}
+
+function answer(this s: Session, buf: Span<uint8>): Result<int32, SessionError> {
+	let total = 0;
+	while (true) {
+		const n = s.vt.replies(buf);
+		if (!n.ok) { return Result.err(SessionError.VtReadFailed); }
+		if (n.value == 0) { return Result.ok(total); }
+		if (!s.pty.write(buf[0..n.value]).ok) { return Result.err(SessionError.PtyWriteFailed); }
+		total += n.value;
+	}
 }
 
 export function screen(this s: Session): Result<string[], SessionError> {
@@ -76,6 +91,28 @@ test "a real command's output, run through ConPTY, lands on the VT screen" {
 		assert screen.ok;
 		if (screen.ok) {
 			assert screen.value.join("\n") == "hello\n\n\n\n";
+		}
+		s.close();
+	}
+}
+
+test "a program's terminal query gets an answer back through the pty" {
+	const started = Session.start(
+		"powershell.exe -NoProfile -ExecutionPolicy Bypass -File src/session/xtversion.ps1",
+		60,
+		5,
+	);
+	assert started.ok;
+	if (started.ok) {
+		const s = started.value;
+		const ended = s.runToExit(10000);
+		assert ended.ok;
+		if (ended.ok) { assert ended.value; }
+		const screen = s.screen();
+		assert screen.ok;
+		if (screen.ok) {
+			assert screen.value[0].startsWith("reply=");
+			assert screen.value[0] != "reply=";
 		}
 		s.close();
 	}

@@ -54,13 +54,11 @@ function answer(this s: Session, buf: Span<uint8>): Result<int32, SessionError> 
 	}
 }
 
-export function screen(this s: Session): Result<string[], SessionError> {
+export function screen(this s: Session): Result<Vec<string>, SessionError> {
 	if (!s.vt.update().ok) { return Result.err(SessionError.VtReadFailed); }
-	const rows = s.vt.rows();
-	if (!rows.ok) { return Result.err(SessionError.VtReadFailed); }
-	const lines: string[] = [];
-	for (const row of rows.value) { lines.push(row.text.trimEnd()); }
-	return Result.ok(lines);
+	const lines = s.vt.lines();
+	if (!lines.ok) { return Result.err(SessionError.VtReadFailed); }
+	return Result.ok(lines.value);
 }
 
 export function close(this s: Session): void {

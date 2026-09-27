@@ -16,6 +16,7 @@ import {
 	ghostty_render_state_row_iterator_new,
 	ghostty_render_state_row_iterator_free,
 	ghostty_render_state_row_iterator_next,
+	ghostty_render_state_row_iterator_next_dirty,
 	ghostty_render_state_row_cells_new,
 	ghostty_render_state_row_cells_free,
 	ghostty_render_state_row_cells_next,
@@ -27,6 +28,11 @@ import {
 	GhosttyRenderStateRowData,
 	GhosttyRenderStateRowCells,
 	GhosttyRenderStateRowCellsData,
+	GhosttyColorRgb,
+	GhosttyStyle,
+	GhosttyCell,
+	GhosttyCellData,
+	GhosttyCellWide,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 
 struct Graphemes { cp: uint32[16]; }
@@ -72,6 +78,36 @@ extern function cellGraphemes(
 	key: GhosttyRenderStateRowCellsData,
 	out graphemes: Graphemes,
 ): GhosttyResult from "ghostty_render_state_row_cells_get";
+extern function stateColor(
+	s: GhosttyRenderState,
+	key: GhosttyRenderStateData,
+	out color: GhosttyColorRgb,
+): GhosttyResult from "ghostty_render_state_get";
+extern function cellColor(
+	cells: GhosttyRenderStateRowCells,
+	key: GhosttyRenderStateRowCellsData,
+	out color: GhosttyColorRgb,
+): GhosttyResult from "ghostty_render_state_row_cells_get";
+extern function cellHasStyling(
+	cells: GhosttyRenderStateRowCells,
+	key: GhosttyRenderStateRowCellsData,
+	out styled: boolean,
+): GhosttyResult from "ghostty_render_state_row_cells_get";
+extern function cellStyle(
+	cells: GhosttyRenderStateRowCells,
+	key: GhosttyRenderStateRowCellsData,
+	out style: GhosttyStyle,
+): GhosttyResult from "ghostty_render_state_row_cells_get";
+extern function cellRaw(
+	cells: GhosttyRenderStateRowCells,
+	key: GhosttyRenderStateRowCellsData,
+	out raw: GhosttyCell,
+): GhosttyResult from "ghostty_render_state_row_cells_get";
+extern function cellWide(
+	raw: GhosttyCell,
+	key: GhosttyCellData,
+	out wide: GhosttyCellWide,
+): GhosttyResult from "ghostty_cell_get";
 
 const MAX_GRAPHEMES: uint32 = 16;
 
@@ -93,11 +129,45 @@ export struct Vt {
 	effects: int32;
 }
 
-export struct VtRow {
-	y: int32;
-	dirty: boolean;
-	text: string;
+export struct Rgb { r: uint8; g: uint8; b: uint8; }
+
+export enum CellFlag {
+	Bold,
+	Italic,
+	Faint,
+	Blink,
+	Inverse,
+	Invisible,
+	Strikethrough,
+	Overline,
+	Wide,
 }
+
+export enum Underline {
+	None,
+	Single,
+	Double,
+	Curly,
+	Dotted,
+	Dashed,
+}
+
+export struct Cell {
+	cp: uint32;
+	extra: uint8;
+	fg: Rgb;
+	bg: Rgb;
+	flags: BitSet<CellFlag>;
+	underline: Underline;
+}
+
+export struct Row {
+	y: int32;
+	cells: Vec<Cell>;
+	extra: Vec<uint32>;
+}
+
+struct Palette { fg: Rgb; bg: Rgb; }
 
 function ok(r: GhosttyResult): boolean {
 	return r == GhosttyResult.GHOSTTY_SUCCESS;
@@ -176,50 +246,182 @@ export function size(this vt: Vt): Result<[int32, int32], VtError> {
 	return Result.ok([cols as int32, rows as int32]);
 }
 
-function rowText(this vt: Vt): Result<string, VtError> {
-	let cells = vt.cells;
-	const cellsKey = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_CELLS;
-	if (!ok(rowCells(vt.rows, cellsKey, cells))) {
+function rgb(c: GhosttyColorRgb): Rgb {
+	return { r: c.r, g: c.g, b: c.b };
+}
+
+function palette(this vt: Vt): Result<Palette, VtError> {
+	let fg: GhosttyColorRgb = { r: 0, g: 0, b: 0 };
+	let bg: GhosttyColorRgb = { r: 0, g: 0, b: 0 };
+	const fgKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLOR_FOREGROUND;
+	const bgKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLOR_BACKGROUND;
+	if (!ok(stateColor(vt.state, fgKey, fg)) || !ok(stateColor(vt.state, bgKey, bg))) {
 		return Result.err(VtError.ReadFailed);
 	}
-	let text = "";
+	return Result.ok({ fg: rgb(fg), bg: rgb(bg) });
+}
+
+function colorOr(
+	cells: GhosttyRenderStateRowCells,
+	key: GhosttyRenderStateRowCellsData,
+	fallback: Rgb,
+): Rgb {
+	let color: GhosttyColorRgb = { r: 0, g: 0, b: 0 };
+	if (!ok(cellColor(cells, key, color))) { return fallback; }
+	return rgb(color);
+}
+
+function styleFlags(style: GhosttyStyle): BitSet<CellFlag> {
+	let flags = 0 as BitSet<CellFlag>;
+	if (style.bold) { flags = flags.incl(CellFlag.Bold); }
+	if (style.italic) { flags = flags.incl(CellFlag.Italic); }
+	if (style.faint) { flags = flags.incl(CellFlag.Faint); }
+	if (style.blink) { flags = flags.incl(CellFlag.Blink); }
+	if (style.inverse) { flags = flags.incl(CellFlag.Inverse); }
+	if (style.invisible) { flags = flags.incl(CellFlag.Invisible); }
+	if (style.strikethrough) { flags = flags.incl(CellFlag.Strikethrough); }
+	if (style.overline) { flags = flags.incl(CellFlag.Overline); }
+	return flags;
+}
+
+function underlineOf(style: GhosttyStyle): Underline {
+	return match (style.underline) {
+		1 => Underline.Single,
+		2 => Underline.Double,
+		3 => Underline.Curly,
+		4 => Underline.Dotted,
+		5 => Underline.Dashed,
+		_ => Underline.None,
+	};
+}
+
+function readCell(
+	cells: GhosttyRenderStateRowCells,
+	colors: Palette,
+	ref extra: Vec<uint32>,
+): Result<Cell, VtError> {
+	const bgKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_BG_COLOR;
+	const bg = colorOr(cells, bgKey, colors.bg);
+	let count: uint32 = 0;
+	const lenKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN;
+	if (!ok(cellGraphemeCount(cells, lenKey, count))) { return Result.err(VtError.ReadFailed); }
+	const none = 0 as BitSet<CellFlag>;
+	if (count == 0) {
+		return Result.ok({
+			cp: 0,
+			extra: 0,
+			fg: colors.fg,
+			bg: bg,
+			flags: none,
+			underline: Underline.None,
+		});
+	}
+	if (count > MAX_GRAPHEMES) { return Result.err(VtError.GraphemeTooLong); }
+	let graphemes: Graphemes = { cp: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
+	const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
+	if (!ok(cellGraphemes(cells, bufKey, graphemes))) { return Result.err(VtError.ReadFailed); }
+	for (let i = 1; i < (count as int32); i++) { extra.push(graphemes.cp[i]); }
+	const fgKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR;
+	const fg = colorOr(cells, fgKey, colors.fg);
+	let flags = none;
+	let underline = Underline.None;
+	let styled = false;
+	const styledKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_HAS_STYLING;
+	if (!ok(cellHasStyling(cells, styledKey, styled))) { return Result.err(VtError.ReadFailed); }
+	if (styled) {
+		let style: GhosttyStyle;
+		style.size = sizeof GhosttyStyle;
+		const styleKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE;
+		if (!ok(cellStyle(cells, styleKey, style))) { return Result.err(VtError.ReadFailed); }
+		flags = styleFlags(style);
+		underline = underlineOf(style);
+	}
+	let raw: GhosttyCell = 0;
+	const rawKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW;
+	if (!ok(cellRaw(cells, rawKey, raw))) { return Result.err(VtError.ReadFailed); }
+	let wide = GhosttyCellWide.GHOSTTY_CELL_WIDE_NARROW;
+	if (!ok(cellWide(raw, GhosttyCellData.GHOSTTY_CELL_DATA_WIDE, wide))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	if (wide == GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE) { flags = flags.incl(CellFlag.Wide); }
+	return Result.ok({
+		cp: graphemes.cp[0],
+		extra: (count - 1) as uint8,
+		fg: fg,
+		bg: bg,
+		flags: flags,
+		underline: underline,
+	});
+}
+
+function readRow(
+	this vt: Vt,
+	iterator: GhosttyRenderStateRowIterator,
+	y: int32,
+	colors: Palette,
+): Result<Row, VtError> {
+	let cells = vt.cells;
+	const cellsKey = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_CELLS;
+	if (!ok(rowCells(iterator, cellsKey, cells))) { return Result.err(VtError.ReadFailed); }
+	let row: Row = { y: y, cells: [], extra: [] };
 	while (ghostty_render_state_row_cells_next(cells)) {
-		let count: uint32 = 0;
-		const lenKey =
-			GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN;
-		if (!ok(cellGraphemeCount(cells, lenKey, count))) { return Result.err(VtError.ReadFailed); }
-		if (count == 0) {
+		const cell = try readCell(cells, colors, row.extra);
+		row.cells.push(cell);
+	}
+	return Result.ok(row);
+}
+
+export function rows(this vt: Vt): Result<Vec<Row>, VtError> {
+	const colors = try vt.palette();
+	let iterator = vt.rows;
+	const key = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR;
+	if (!ok(stateRowIterator(vt.state, key, iterator))) { return Result.err(VtError.ReadFailed); }
+	let out: Vec<Row> = [];
+	let y = 0;
+	while (ghostty_render_state_row_iterator_next(iterator)) {
+		out.push(try vt.readRow(iterator, y, colors));
+		y++;
+	}
+	return Result.ok(out);
+}
+
+export function dirtyRows(this vt: Vt): Result<Vec<Row>, VtError> {
+	const colors = try vt.palette();
+	let iterator = vt.rows;
+	const key = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR;
+	if (!ok(stateRowIterator(vt.state, key, iterator))) { return Result.err(VtError.ReadFailed); }
+	let out: Vec<Row> = [];
+	let y: uint16 = 0;
+	while (ghostty_render_state_row_iterator_next_dirty(iterator, y)) {
+		out.push(try vt.readRow(iterator, y as int32, colors));
+	}
+	return Result.ok(out);
+}
+
+export function text(this row: Row): Result<string, VtError> {
+	let text = "";
+	let e = 0;
+	for (const cell of row.cells) {
+		if (cell.cp == 0) {
 			text += " ";
 			continue;
 		}
-		if (count > MAX_GRAPHEMES) { return Result.err(VtError.GraphemeTooLong); }
-		let graphemes: Graphemes = { cp: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
-		const bufKey =
-			GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
-		if (!ok(cellGraphemes(cells, bufKey, graphemes))) { return Result.err(VtError.ReadFailed); }
-		for (let i = 0; i < (count as int32); i++) {
-			const cp = graphemes.cp[i] as int32;
+		if (cell.cp > 0xFFFF) { return Result.err(VtError.CodepointAboveBmpParked); }
+		text += String.fromCharCode(cell.cp as int32);
+		for (let i = 0; i < (cell.extra as int32); i++) {
+			const cp = row.extra[e + i];
 			if (cp > 0xFFFF) { return Result.err(VtError.CodepointAboveBmpParked); }
-			text += String.fromCharCode(cp);
+			text += String.fromCharCode(cp as int32);
 		}
+		e += cell.extra as int32;
 	}
 	return Result.ok(text);
 }
 
-export function rows(this vt: Vt): Result<VtRow[], VtError> {
-	let iterator = vt.rows;
-	const key = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR;
-	if (!ok(stateRowIterator(vt.state, key, iterator))) { return Result.err(VtError.ReadFailed); }
-	const out: VtRow[] = [];
-	let y = 0;
-	while (ghostty_render_state_row_iterator_next(iterator)) {
-		let dirty = false;
-		const dirtyKey = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_DIRTY;
-		if (!ok(rowDirty(iterator, dirtyKey, dirty))) { return Result.err(VtError.ReadFailed); }
-		const text = try vt.rowText();
-		out.push({ y: y, dirty: dirty, text: text });
-		y++;
-	}
+export function lines(this vt: Vt): Result<Vec<string>, VtError> {
+	const all = try vt.rows();
+	let out: Vec<string> = [];
+	for (const row of all) { out.push((try row.text()).trimEnd()); }
 	return Result.ok(out);
 }
 
@@ -249,13 +451,12 @@ test "written text lands on the rows the render state reports" {
 			assert size.value[0] == 20;
 			assert size.value[1] == 4;
 		}
-		const rows = vt.rows();
-		assert rows.ok;
-		if (rows.ok) {
-			assert rows.value.length == 4;
-			assert rows.value[0].text.trimEnd() == "hello";
-			assert rows.value[1].text.trimEnd() == "world";
-			assert rows.value[0].dirty;
+		const lines = vt.lines();
+		assert lines.ok;
+		if (lines.ok) {
+			assert lines.value.length == 4;
+			assert lines.value[0] == "hello";
+			assert lines.value[1] == "world";
 		}
 		vt.free();
 	}
@@ -274,9 +475,9 @@ test "raw bytes keep a multi-byte UTF-8 character whole" {
 		vt.write(bytes);
 		const updated = vt.update();
 		assert updated.ok;
-		const rows = vt.rows();
-		assert rows.ok;
-		if (rows.ok) { assert rows.value[0].text.trimEnd() == "aéb"; }
+		const lines = vt.lines();
+		assert lines.ok;
+		if (lines.ok) { assert lines.value[0] == "aéb"; }
 		vt.free();
 	}
 }
@@ -311,6 +512,116 @@ test "text without a query leaves nothing to reply" {
 		const n = vt.replies(buf);
 		assert n.ok;
 		if (n.ok) { assert n.value == 0; }
+		vt.free();
+	}
+}
+
+test "a styled cell carries its colour, flags and underline" {
+	const created = Vt.create(20, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("[1;4;38;2;255;0;0mA[0mb");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const red: Rgb = { r: 255, g: 0, b: 0 };
+			const a = rows.value[0].cells[0];
+			assert a.cp == 0x41;
+			assert a.fg == red;
+			assert a.flags.has(CellFlag.Bold);
+			assert !a.flags.has(CellFlag.Italic);
+			assert a.underline == Underline.Single;
+			const b = rows.value[0].cells[1];
+			assert b.cp == 0x62;
+			assert b.fg != red;
+			assert b.flags.isEmpty();
+			assert b.underline == Underline.None;
+		}
+		vt.free();
+	}
+}
+
+test "an erased line keeps its background on cells without text" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("[48;2;0;0;255m[K");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const blue: Rgb = { r: 0, g: 0, b: 255 };
+			const cell = rows.value[0].cells[5];
+			assert cell.cp == 0;
+			assert cell.bg == blue;
+		}
+		vt.free();
+	}
+}
+
+test "a wide character is flagged and its spacer holds no text" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("中a");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const cells = rows.value[0].cells;
+			assert cells[0].cp == 0x4E2D;
+			assert cells[0].flags.has(CellFlag.Wide);
+			assert cells[1].cp == 0;
+			assert cells[2].cp == 0x61;
+			assert !cells[2].flags.has(CellFlag.Wide);
+		}
+		vt.free();
+	}
+}
+
+test "a combining mark joins its base cell" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("éx");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const row = rows.value[0];
+			assert row.cells[0].cp == 0x65;
+			assert row.cells[0].extra == 1;
+			assert row.extra.length == 1;
+			assert row.extra[0] == 0x301;
+			assert row.cells[1].cp == 0x78;
+		}
+		vt.free();
+	}
+}
+
+test "only rows written since the last clean are dirty" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("a
+b");
+		assert vt.update().ok;
+		vt.clean();
+		vt.writeText("c");
+		assert vt.update().ok;
+		const dirty = vt.dirtyRows();
+		assert dirty.ok;
+		if (dirty.ok) {
+			assert dirty.value.length == 1;
+			assert dirty.value[0].y == 1;
+			assert dirty.value[0].cells[1].cp == 0x62;
+		}
 		vt.free();
 	}
 }

@@ -53,13 +53,15 @@ export function close(this s: Session): void {
 	s.vt.free();
 }
 
-function runToExit(this s: Session): Result<boolean, SessionError> {
+function runToExit(this s: Session, timeoutMs: int32): Result<boolean, SessionError> {
 	const buf: Vec<uint8> = new Array(4096);
-	for (let spin = 0; spin < 50000000; spin++) {
+	while (true) {
+		const ready = s.pty.wait(timeoutMs);
+		if (!ready.ok) { return Result.err(SessionError.PtyReadFailed); }
+		if (!ready.value) { return Result.ok(false); }
 		const alive = try s.pump(buf);
 		if (!alive) { return Result.ok(true); }
 	}
-	return Result.ok(false);
 }
 
 test "a real command's output, run through ConPTY, lands on the VT screen" {
@@ -67,7 +69,7 @@ test "a real command's output, run through ConPTY, lands on the VT screen" {
 	assert started.ok;
 	if (started.ok) {
 		const s = started.value;
-		const ended = s.runToExit();
+		const ended = s.runToExit(10000);
 		assert ended.ok;
 		if (ended.ok) { assert ended.value; }
 		const screen = s.screen();

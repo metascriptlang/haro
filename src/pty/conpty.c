@@ -18,6 +18,7 @@ typedef struct {
 	HANDLE process;
 	HANDLE reader;
 	HANDLE waiter;
+	HANDLE ready;
 	CRITICAL_SECTION lock;
 	uint8_t* data;
 	int64_t len;
@@ -39,6 +40,7 @@ static int append(Pty* p, const uint8_t* bytes, int64_t n) {
 		uint8_t* grown = realloc(p->data, (size_t)cap);
 		if (!grown) {
 			p->outOfMemory = 1;
+			SetEvent(p->ready);
 			LeaveCriticalSection(&p->lock);
 			return 0;
 		}
@@ -47,6 +49,7 @@ static int append(Pty* p, const uint8_t* bytes, int64_t n) {
 	}
 	memcpy(p->data + p->len, bytes, (size_t)n);
 	p->len += n;
+	SetEvent(p->ready);
 	LeaveCriticalSection(&p->lock);
 	return 1;
 }
@@ -60,6 +63,7 @@ static DWORD WINAPI readLoop(LPVOID arg) {
 	}
 	EnterCriticalSection(&p->lock);
 	p->closed = 1;
+	SetEvent(p->ready);
 	LeaveCriticalSection(&p->lock);
 	return 0;
 }
@@ -158,6 +162,7 @@ int ptyOpen(const char* commandLine, int cols, int rows) {
 	p->output = outRead;
 	p->process = pi.hProcess;
 	p->exitCode = -1;
+	p->ready = CreateEventW(NULL, TRUE, FALSE, NULL);
 	InitializeCriticalSection(&p->lock);
 	p->reader = CreateThread(NULL, 0, readLoop, p, 0, NULL);
 	p->waiter = CreateThread(NULL, 0, waitLoop, p, 0, NULL);
@@ -179,9 +184,19 @@ int64_t ptyRead(int id, uint8_t* buf, int64_t cap) {
 		p->len -= n;
 	}
 	int ended = p->closed && p->len == 0;
+	if (p->len == 0 && !p->closed) ResetEvent(p->ready);
 	LeaveCriticalSection(&p->lock);
 	if (n == 0 && ended) return -1;
 	return n;
+}
+
+int ptyWait(int id, int timeoutMs) {
+	Pty* p = slot(id);
+	if (!p) return -1;
+	DWORD r = WaitForSingleObject(p->ready, (DWORD)timeoutMs);
+	if (r == WAIT_OBJECT_0) return 1;
+	if (r == WAIT_TIMEOUT) return 0;
+	return -2;
 }
 
 int64_t ptyWrite(int id, const uint8_t* data, int64_t len) {
@@ -228,6 +243,7 @@ void ptyClose(int id) {
 	CloseHandle(p->reader);
 	CloseHandle(p->waiter);
 	CloseHandle(p->process);
+	CloseHandle(p->ready);
 	DeleteCriticalSection(&p->lock);
 	free(p->data);
 	memset(p, 0, sizeof *p);

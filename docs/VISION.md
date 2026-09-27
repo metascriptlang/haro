@@ -52,15 +52,13 @@ Measured 2026-09-23 against ion `32bb557`, void `0167080` and neon `6dd27ac`:
    One device is shared per process and each view has its own surface, on Windows, iOS and Android.
    `void/docs/EMBED.md` holds the model and its proofs, and `void/examples/ionViews.ms` drives two
    views in one Ion window.
-2. **Neon: a desktop entry.** It binds an Ion window and its surface to one full-window `<Void>`
-   root, and forwards key, text, IME, focus and resize into the void host. None of this exists yet.
-3. **Ion: a frame clock.** Ion has none; the MS loop polls (`ion/docs/RENDER-SURFACE.md` "Driving
-   the renderer"). A truly idle frame needs a vsync source, such as a DXGI waitable object or
-   `DwmFlush`. A surface with its own frame, and input per surface, are not needed by a
-   full-window app.
+2. ~~**Neon: a desktop entry.**~~ Landed at neon `8f85cb3`: `runWindow` in
+   `neon/src/platform/ion/window.ms`, example `neon/examples/voidWindow.ms`.
+3. ~~**Ion: a frame clock.**~~ Landed at ion `44001f8`..`3f90df1`: a frame policy per surface,
+   measured in `ion/docs/RENDER-SURFACE.md`.
 
-Terminator's own core does not wait on any of them: ConPTY, libghostty-vt and a headless snapshot
-of the render state.
+Terminator's own core landed without them: ConPTY, libghostty-vt, query replies and a cell reader,
+with its measurements in `docs/CORE.md`.
 
 ## libghostty-vt — only the parts we need
 

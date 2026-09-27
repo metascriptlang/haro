@@ -1,6 +1,8 @@
 @passC("-I../../vendor/ghostty/include");
 @passC("-DGHOSTTY_STATIC");
 @link("../../vendor/ghostty/zig-out/lib/ghostty-vt-static.lib");
+@include("./effects.h");
+@compile("./effects.c");
 
 import {
 	ghostty_terminal_new,
@@ -31,6 +33,9 @@ struct Graphemes { cp: uint32[16]; }
 
 extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Span<uint8>): void
 	from "ghostty_terminal_vt_write";
+extern function vtEffectsOpen(terminal: GhosttyTerminal): int32;
+extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
+extern function vtEffectsClose(id: int32, terminal: GhosttyTerminal): void;
 
 extern function stateCols(
 	s: GhosttyRenderState,
@@ -77,6 +82,7 @@ export enum VtError {
 	ReadFailed,
 	GraphemeTooLong,
 	CodepointAboveBmpParked,
+	OutOfMemory,
 }
 
 export struct Vt {
@@ -84,6 +90,7 @@ export struct Vt {
 	state: GhosttyRenderState;
 	rows: GhosttyRenderStateRowIterator;
 	cells: GhosttyRenderStateRowCells;
+	effects: int32;
 }
 
 export struct VtRow {
@@ -112,7 +119,21 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		ghostty_terminal_free(terminal);
 		return Result.err(VtError.CreateFailed);
 	}
-	return Result.ok({ terminal: terminal, state: state, rows: iterator, cells: cells });
+	const effects = vtEffectsOpen(terminal);
+	if (effects < 0) {
+		ghostty_render_state_row_cells_free(cells);
+		ghostty_render_state_row_iterator_free(iterator);
+		ghostty_render_state_free(state);
+		ghostty_terminal_free(terminal);
+		return Result.err(VtError.CreateFailed);
+	}
+	return Result.ok({
+		terminal: terminal,
+		state: state,
+		rows: iterator,
+		cells: cells,
+		effects: effects,
+	});
 }
 
 export function write(this vt: Vt, bytes: Span<uint8>): void {
@@ -121,6 +142,13 @@ export function write(this vt: Vt, bytes: Span<uint8>): void {
 
 export function writeText(this vt: Vt, text: string): void {
 	ghostty_terminal_vt_write(vt.terminal, text, text.byteLength as uint64);
+}
+
+export function replies(this vt: Vt, buf: Span<uint8>): Result<int32, VtError> {
+	const n = vtRepliesTake(vt.effects, buf);
+	if (n == -2) { return Result.err(VtError.OutOfMemory); }
+	if (n < 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(n as int32);
 }
 
 export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtError> {
@@ -200,6 +228,7 @@ export function clean(this vt: Vt): void {
 }
 
 export function free(this vt: Vt): void {
+	vtEffectsClose(vt.effects, vt.terminal);
 	ghostty_render_state_row_cells_free(vt.cells);
 	ghostty_render_state_row_iterator_free(vt.rows);
 	ghostty_render_state_free(vt.state);
@@ -248,6 +277,40 @@ test "raw bytes keep a multi-byte UTF-8 character whole" {
 		const rows = vt.rows();
 		assert rows.ok;
 		if (rows.ok) { assert rows.value[0].text.trimEnd() == "aéb"; }
+		vt.free();
+	}
+}
+
+function ascii(bytes: Span<uint8>): string {
+	let text = "";
+	for (const b of bytes) { text += String.fromCharCode(b as int32); }
+	return text;
+}
+
+test "a cursor position query is answered with the cursor's place" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("ab[6n");
+		let buf: Vec<uint8> = new Array(64);
+		const n = vt.replies(buf);
+		assert n.ok;
+		if (n.ok) { assert ascii(buf[0..n.value]) == "[1;3R"; }
+		vt.free();
+	}
+}
+
+test "text without a query leaves nothing to reply" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("hello");
+		let buf: Vec<uint8> = new Array(64);
+		const n = vt.replies(buf);
+		assert n.ok;
+		if (n.ok) { assert n.value == 0; }
 		vt.free();
 	}
 }

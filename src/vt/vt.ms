@@ -120,7 +120,7 @@ export function write(this vt: Vt, bytes: Span<uint8>): void {
 }
 
 export function writeText(this vt: Vt, text: string): void {
-	ghostty_terminal_vt_write(vt.terminal, text, text.byteLength);
+	ghostty_terminal_vt_write(vt.terminal, text, text.byteLength as uint64);
 }
 
 export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtError> {
@@ -237,7 +237,7 @@ test "raw bytes keep a multi-byte UTF-8 character whole" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		const bytes: Vec<uint8> = new Array(4);
+		let bytes: Vec<uint8> = new Array(4);
 		bytes[0] = 0x61;
 		bytes[1] = 0xC3;
 		bytes[2] = 0xA9;

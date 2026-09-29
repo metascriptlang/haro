@@ -9,6 +9,15 @@ import {
 	ghostty_terminal_free,
 	ghostty_terminal_vt_write,
 	ghostty_terminal_resize,
+	ghostty_key_encoder_new,
+	ghostty_key_encoder_free,
+	ghostty_key_encoder_setopt_from_terminal,
+	ghostty_key_event_new,
+	ghostty_key_event_free,
+	ghostty_key_event_set_action,
+	ghostty_key_event_set_key,
+	ghostty_key_event_set_utf8,
+	ghostty_key_event_set_unshifted_codepoint,
 	ghostty_render_state_new,
 	ghostty_render_state_free,
 	ghostty_render_state_update,
@@ -33,7 +42,12 @@ import {
 	GhosttyCell,
 	GhosttyCellData,
 	GhosttyCellWide,
+	GhosttyKeyEncoder,
+	GhosttyKeyEvent,
+	GhosttyKeyAction,
+	GhosttyKey,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
+import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe } from "../keys/keys";
 
 struct Graphemes { cp: uint32[16]; }
 
@@ -42,6 +56,16 @@ extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Span<uint8>): voi
 extern function vtEffectsOpen(terminal: GhosttyTerminal): int32;
 extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
 extern function vtEffectsClose(id: int32, terminal: GhosttyTerminal): void;
+extern function eventSetMods(event: GhosttyKeyEvent, mods: uint16): void
+	from "ghostty_key_event_set_mods";
+extern function eventSetConsumedMods(event: GhosttyKeyEvent, mods: uint16): void
+	from "ghostty_key_event_set_consumed_mods";
+extern function encoderEncode(
+	encoder: GhosttyKeyEncoder,
+	event: GhosttyKeyEvent,
+	buf: Span<uint8>,
+	out written: uint64,
+): GhosttyResult from "ghostty_key_encoder_encode";
 
 extern function stateCols(
 	s: GhosttyRenderState,
@@ -437,6 +461,248 @@ export function free(this vt: Vt): void {
 	ghostty_terminal_free(vt.terminal);
 }
 
+export enum KeysError {
+	OpenFailed,
+	EncodeFailed,
+	NoRoom,
+}
+
+export struct Keys {
+	encoder: GhosttyKeyEncoder;
+	event: GhosttyKeyEvent;
+}
+
+function actionOf(a: KeyAction): GhosttyKeyAction {
+	return match (a) {
+		KeyAction.Release => GhosttyKeyAction.GHOSTTY_KEY_ACTION_RELEASE,
+		KeyAction.Press => GhosttyKeyAction.GHOSTTY_KEY_ACTION_PRESS,
+		KeyAction.Repeat => GhosttyKeyAction.GHOSTTY_KEY_ACTION_REPEAT,
+	};
+}
+
+function keyOf(name: string): GhosttyKey {
+	return match (name) {
+		"Backquote" => GhosttyKey.GHOSTTY_KEY_BACKQUOTE,
+		"Backslash" => GhosttyKey.GHOSTTY_KEY_BACKSLASH,
+		"BracketLeft" => GhosttyKey.GHOSTTY_KEY_BRACKET_LEFT,
+		"BracketRight" => GhosttyKey.GHOSTTY_KEY_BRACKET_RIGHT,
+		"Comma" => GhosttyKey.GHOSTTY_KEY_COMMA,
+		"Digit0" => GhosttyKey.GHOSTTY_KEY_DIGIT_0,
+		"Digit1" => GhosttyKey.GHOSTTY_KEY_DIGIT_1,
+		"Digit2" => GhosttyKey.GHOSTTY_KEY_DIGIT_2,
+		"Digit3" => GhosttyKey.GHOSTTY_KEY_DIGIT_3,
+		"Digit4" => GhosttyKey.GHOSTTY_KEY_DIGIT_4,
+		"Digit5" => GhosttyKey.GHOSTTY_KEY_DIGIT_5,
+		"Digit6" => GhosttyKey.GHOSTTY_KEY_DIGIT_6,
+		"Digit7" => GhosttyKey.GHOSTTY_KEY_DIGIT_7,
+		"Digit8" => GhosttyKey.GHOSTTY_KEY_DIGIT_8,
+		"Digit9" => GhosttyKey.GHOSTTY_KEY_DIGIT_9,
+		"Equal" => GhosttyKey.GHOSTTY_KEY_EQUAL,
+		"IntlBackslash" => GhosttyKey.GHOSTTY_KEY_INTL_BACKSLASH,
+		"IntlRo" => GhosttyKey.GHOSTTY_KEY_INTL_RO,
+		"IntlYen" => GhosttyKey.GHOSTTY_KEY_INTL_YEN,
+		"KeyA" => GhosttyKey.GHOSTTY_KEY_A,
+		"KeyB" => GhosttyKey.GHOSTTY_KEY_B,
+		"KeyC" => GhosttyKey.GHOSTTY_KEY_C,
+		"KeyD" => GhosttyKey.GHOSTTY_KEY_D,
+		"KeyE" => GhosttyKey.GHOSTTY_KEY_E,
+		"KeyF" => GhosttyKey.GHOSTTY_KEY_F,
+		"KeyG" => GhosttyKey.GHOSTTY_KEY_G,
+		"KeyH" => GhosttyKey.GHOSTTY_KEY_H,
+		"KeyI" => GhosttyKey.GHOSTTY_KEY_I,
+		"KeyJ" => GhosttyKey.GHOSTTY_KEY_J,
+		"KeyK" => GhosttyKey.GHOSTTY_KEY_K,
+		"KeyL" => GhosttyKey.GHOSTTY_KEY_L,
+		"KeyM" => GhosttyKey.GHOSTTY_KEY_M,
+		"KeyN" => GhosttyKey.GHOSTTY_KEY_N,
+		"KeyO" => GhosttyKey.GHOSTTY_KEY_O,
+		"KeyP" => GhosttyKey.GHOSTTY_KEY_P,
+		"KeyQ" => GhosttyKey.GHOSTTY_KEY_Q,
+		"KeyR" => GhosttyKey.GHOSTTY_KEY_R,
+		"KeyS" => GhosttyKey.GHOSTTY_KEY_S,
+		"KeyT" => GhosttyKey.GHOSTTY_KEY_T,
+		"KeyU" => GhosttyKey.GHOSTTY_KEY_U,
+		"KeyV" => GhosttyKey.GHOSTTY_KEY_V,
+		"KeyW" => GhosttyKey.GHOSTTY_KEY_W,
+		"KeyX" => GhosttyKey.GHOSTTY_KEY_X,
+		"KeyY" => GhosttyKey.GHOSTTY_KEY_Y,
+		"KeyZ" => GhosttyKey.GHOSTTY_KEY_Z,
+		"Minus" => GhosttyKey.GHOSTTY_KEY_MINUS,
+		"Period" => GhosttyKey.GHOSTTY_KEY_PERIOD,
+		"Quote" => GhosttyKey.GHOSTTY_KEY_QUOTE,
+		"Semicolon" => GhosttyKey.GHOSTTY_KEY_SEMICOLON,
+		"Slash" => GhosttyKey.GHOSTTY_KEY_SLASH,
+		"AltLeft" => GhosttyKey.GHOSTTY_KEY_ALT_LEFT,
+		"AltRight" => GhosttyKey.GHOSTTY_KEY_ALT_RIGHT,
+		"Backspace" => GhosttyKey.GHOSTTY_KEY_BACKSPACE,
+		"CapsLock" => GhosttyKey.GHOSTTY_KEY_CAPS_LOCK,
+		"ContextMenu" => GhosttyKey.GHOSTTY_KEY_CONTEXT_MENU,
+		"ControlLeft" => GhosttyKey.GHOSTTY_KEY_CONTROL_LEFT,
+		"ControlRight" => GhosttyKey.GHOSTTY_KEY_CONTROL_RIGHT,
+		"Enter" => GhosttyKey.GHOSTTY_KEY_ENTER,
+		"MetaLeft" => GhosttyKey.GHOSTTY_KEY_META_LEFT,
+		"MetaRight" => GhosttyKey.GHOSTTY_KEY_META_RIGHT,
+		"ShiftLeft" => GhosttyKey.GHOSTTY_KEY_SHIFT_LEFT,
+		"ShiftRight" => GhosttyKey.GHOSTTY_KEY_SHIFT_RIGHT,
+		"Space" => GhosttyKey.GHOSTTY_KEY_SPACE,
+		"Tab" => GhosttyKey.GHOSTTY_KEY_TAB,
+		"Convert" => GhosttyKey.GHOSTTY_KEY_CONVERT,
+		"KanaMode" => GhosttyKey.GHOSTTY_KEY_KANA_MODE,
+		"NonConvert" => GhosttyKey.GHOSTTY_KEY_NON_CONVERT,
+		"Delete" => GhosttyKey.GHOSTTY_KEY_DELETE,
+		"End" => GhosttyKey.GHOSTTY_KEY_END,
+		"Help" => GhosttyKey.GHOSTTY_KEY_HELP,
+		"Home" => GhosttyKey.GHOSTTY_KEY_HOME,
+		"Insert" => GhosttyKey.GHOSTTY_KEY_INSERT,
+		"PageDown" => GhosttyKey.GHOSTTY_KEY_PAGE_DOWN,
+		"PageUp" => GhosttyKey.GHOSTTY_KEY_PAGE_UP,
+		"ArrowDown" => GhosttyKey.GHOSTTY_KEY_ARROW_DOWN,
+		"ArrowLeft" => GhosttyKey.GHOSTTY_KEY_ARROW_LEFT,
+		"ArrowRight" => GhosttyKey.GHOSTTY_KEY_ARROW_RIGHT,
+		"ArrowUp" => GhosttyKey.GHOSTTY_KEY_ARROW_UP,
+		"NumLock" => GhosttyKey.GHOSTTY_KEY_NUM_LOCK,
+		"Numpad0" => GhosttyKey.GHOSTTY_KEY_NUMPAD_0,
+		"Numpad1" => GhosttyKey.GHOSTTY_KEY_NUMPAD_1,
+		"Numpad2" => GhosttyKey.GHOSTTY_KEY_NUMPAD_2,
+		"Numpad3" => GhosttyKey.GHOSTTY_KEY_NUMPAD_3,
+		"Numpad4" => GhosttyKey.GHOSTTY_KEY_NUMPAD_4,
+		"Numpad5" => GhosttyKey.GHOSTTY_KEY_NUMPAD_5,
+		"Numpad6" => GhosttyKey.GHOSTTY_KEY_NUMPAD_6,
+		"Numpad7" => GhosttyKey.GHOSTTY_KEY_NUMPAD_7,
+		"Numpad8" => GhosttyKey.GHOSTTY_KEY_NUMPAD_8,
+		"Numpad9" => GhosttyKey.GHOSTTY_KEY_NUMPAD_9,
+		"NumpadAdd" => GhosttyKey.GHOSTTY_KEY_NUMPAD_ADD,
+		"NumpadBackspace" => GhosttyKey.GHOSTTY_KEY_NUMPAD_BACKSPACE,
+		"NumpadClear" => GhosttyKey.GHOSTTY_KEY_NUMPAD_CLEAR,
+		"NumpadClearEntry" => GhosttyKey.GHOSTTY_KEY_NUMPAD_CLEAR_ENTRY,
+		"NumpadComma" => GhosttyKey.GHOSTTY_KEY_NUMPAD_COMMA,
+		"NumpadDecimal" => GhosttyKey.GHOSTTY_KEY_NUMPAD_DECIMAL,
+		"NumpadDivide" => GhosttyKey.GHOSTTY_KEY_NUMPAD_DIVIDE,
+		"NumpadEnter" => GhosttyKey.GHOSTTY_KEY_NUMPAD_ENTER,
+		"NumpadEqual" => GhosttyKey.GHOSTTY_KEY_NUMPAD_EQUAL,
+		"NumpadMemoryAdd" => GhosttyKey.GHOSTTY_KEY_NUMPAD_MEMORY_ADD,
+		"NumpadMemoryClear" => GhosttyKey.GHOSTTY_KEY_NUMPAD_MEMORY_CLEAR,
+		"NumpadMemoryRecall" => GhosttyKey.GHOSTTY_KEY_NUMPAD_MEMORY_RECALL,
+		"NumpadMemoryStore" => GhosttyKey.GHOSTTY_KEY_NUMPAD_MEMORY_STORE,
+		"NumpadMemorySubtract" => GhosttyKey.GHOSTTY_KEY_NUMPAD_MEMORY_SUBTRACT,
+		"NumpadMultiply" => GhosttyKey.GHOSTTY_KEY_NUMPAD_MULTIPLY,
+		"NumpadParenLeft" => GhosttyKey.GHOSTTY_KEY_NUMPAD_PAREN_LEFT,
+		"NumpadParenRight" => GhosttyKey.GHOSTTY_KEY_NUMPAD_PAREN_RIGHT,
+		"NumpadSubtract" => GhosttyKey.GHOSTTY_KEY_NUMPAD_SUBTRACT,
+		"NumpadSeparator" => GhosttyKey.GHOSTTY_KEY_NUMPAD_SEPARATOR,
+		"NumpadUp" => GhosttyKey.GHOSTTY_KEY_NUMPAD_UP,
+		"NumpadDown" => GhosttyKey.GHOSTTY_KEY_NUMPAD_DOWN,
+		"NumpadRight" => GhosttyKey.GHOSTTY_KEY_NUMPAD_RIGHT,
+		"NumpadLeft" => GhosttyKey.GHOSTTY_KEY_NUMPAD_LEFT,
+		"NumpadBegin" => GhosttyKey.GHOSTTY_KEY_NUMPAD_BEGIN,
+		"NumpadHome" => GhosttyKey.GHOSTTY_KEY_NUMPAD_HOME,
+		"NumpadEnd" => GhosttyKey.GHOSTTY_KEY_NUMPAD_END,
+		"NumpadInsert" => GhosttyKey.GHOSTTY_KEY_NUMPAD_INSERT,
+		"NumpadDelete" => GhosttyKey.GHOSTTY_KEY_NUMPAD_DELETE,
+		"NumpadPageUp" => GhosttyKey.GHOSTTY_KEY_NUMPAD_PAGE_UP,
+		"NumpadPageDown" => GhosttyKey.GHOSTTY_KEY_NUMPAD_PAGE_DOWN,
+		"Escape" => GhosttyKey.GHOSTTY_KEY_ESCAPE,
+		"F1" => GhosttyKey.GHOSTTY_KEY_F1,
+		"F2" => GhosttyKey.GHOSTTY_KEY_F2,
+		"F3" => GhosttyKey.GHOSTTY_KEY_F3,
+		"F4" => GhosttyKey.GHOSTTY_KEY_F4,
+		"F5" => GhosttyKey.GHOSTTY_KEY_F5,
+		"F6" => GhosttyKey.GHOSTTY_KEY_F6,
+		"F7" => GhosttyKey.GHOSTTY_KEY_F7,
+		"F8" => GhosttyKey.GHOSTTY_KEY_F8,
+		"F9" => GhosttyKey.GHOSTTY_KEY_F9,
+		"F10" => GhosttyKey.GHOSTTY_KEY_F10,
+		"F11" => GhosttyKey.GHOSTTY_KEY_F11,
+		"F12" => GhosttyKey.GHOSTTY_KEY_F12,
+		"F13" => GhosttyKey.GHOSTTY_KEY_F13,
+		"F14" => GhosttyKey.GHOSTTY_KEY_F14,
+		"F15" => GhosttyKey.GHOSTTY_KEY_F15,
+		"F16" => GhosttyKey.GHOSTTY_KEY_F16,
+		"F17" => GhosttyKey.GHOSTTY_KEY_F17,
+		"F18" => GhosttyKey.GHOSTTY_KEY_F18,
+		"F19" => GhosttyKey.GHOSTTY_KEY_F19,
+		"F20" => GhosttyKey.GHOSTTY_KEY_F20,
+		"F21" => GhosttyKey.GHOSTTY_KEY_F21,
+		"F22" => GhosttyKey.GHOSTTY_KEY_F22,
+		"F23" => GhosttyKey.GHOSTTY_KEY_F23,
+		"F24" => GhosttyKey.GHOSTTY_KEY_F24,
+		"F25" => GhosttyKey.GHOSTTY_KEY_F25,
+		"Fn" => GhosttyKey.GHOSTTY_KEY_FN,
+		"FnLock" => GhosttyKey.GHOSTTY_KEY_FN_LOCK,
+		"PrintScreen" => GhosttyKey.GHOSTTY_KEY_PRINT_SCREEN,
+		"ScrollLock" => GhosttyKey.GHOSTTY_KEY_SCROLL_LOCK,
+		"Pause" => GhosttyKey.GHOSTTY_KEY_PAUSE,
+		"BrowserBack" => GhosttyKey.GHOSTTY_KEY_BROWSER_BACK,
+		"BrowserFavorites" => GhosttyKey.GHOSTTY_KEY_BROWSER_FAVORITES,
+		"BrowserForward" => GhosttyKey.GHOSTTY_KEY_BROWSER_FORWARD,
+		"BrowserHome" => GhosttyKey.GHOSTTY_KEY_BROWSER_HOME,
+		"BrowserRefresh" => GhosttyKey.GHOSTTY_KEY_BROWSER_REFRESH,
+		"BrowserSearch" => GhosttyKey.GHOSTTY_KEY_BROWSER_SEARCH,
+		"BrowserStop" => GhosttyKey.GHOSTTY_KEY_BROWSER_STOP,
+		"Eject" => GhosttyKey.GHOSTTY_KEY_EJECT,
+		"LaunchApp1" => GhosttyKey.GHOSTTY_KEY_LAUNCH_APP_1,
+		"LaunchApp2" => GhosttyKey.GHOSTTY_KEY_LAUNCH_APP_2,
+		"LaunchMail" => GhosttyKey.GHOSTTY_KEY_LAUNCH_MAIL,
+		"MediaPlayPause" => GhosttyKey.GHOSTTY_KEY_MEDIA_PLAY_PAUSE,
+		"MediaSelect" => GhosttyKey.GHOSTTY_KEY_MEDIA_SELECT,
+		"MediaStop" => GhosttyKey.GHOSTTY_KEY_MEDIA_STOP,
+		"MediaTrackNext" => GhosttyKey.GHOSTTY_KEY_MEDIA_TRACK_NEXT,
+		"MediaTrackPrevious" => GhosttyKey.GHOSTTY_KEY_MEDIA_TRACK_PREVIOUS,
+		"Power" => GhosttyKey.GHOSTTY_KEY_POWER,
+		"Sleep" => GhosttyKey.GHOSTTY_KEY_SLEEP,
+		"AudioVolumeDown" => GhosttyKey.GHOSTTY_KEY_AUDIO_VOLUME_DOWN,
+		"AudioVolumeMute" => GhosttyKey.GHOSTTY_KEY_AUDIO_VOLUME_MUTE,
+		"AudioVolumeUp" => GhosttyKey.GHOSTTY_KEY_AUDIO_VOLUME_UP,
+		"WakeUp" => GhosttyKey.GHOSTTY_KEY_WAKE_UP,
+		"Copy" => GhosttyKey.GHOSTTY_KEY_COPY,
+		"Cut" => GhosttyKey.GHOSTTY_KEY_CUT,
+		"Paste" => GhosttyKey.GHOSTTY_KEY_PASTE,
+		_ => GhosttyKey.GHOSTTY_KEY_UNIDENTIFIED,
+	};
+}
+
+export function openKeys(this typeof Keys): Result<Keys, KeysError> {
+	let encoder: GhosttyKeyEncoder;
+	if (!ok(ghostty_key_encoder_new(null, encoder))) {
+		return Result.err(KeysError.OpenFailed);
+	}
+	let event: GhosttyKeyEvent;
+	if (!ok(ghostty_key_event_new(null, event))) {
+		ghostty_key_encoder_free(encoder);
+		return Result.err(KeysError.OpenFailed);
+	}
+	return Result.ok({ encoder: encoder, event: event });
+}
+
+export function encode(
+	this k: Keys,
+	vt: Vt,
+	e: KeyEvent,
+	buf: Span<uint8>,
+): Result<int32, KeysError> {
+	ghostty_key_encoder_setopt_from_terminal(k.encoder, vt.terminal);
+	ghostty_key_event_set_action(k.event, actionOf(e.action));
+	ghostty_key_event_set_key(k.event, keyOf(e.key));
+	eventSetMods(k.event, modsMask(e.mods));
+	eventSetConsumedMods(k.event, modsMask(e.consumedMods));
+	ghostty_key_event_set_unshifted_codepoint(k.event, e.unshifted);
+	if (textSafe(e.text)) {
+		ghostty_key_event_set_utf8(k.event, e.text, e.text.byteLength as uint64);
+	} else {
+		ghostty_key_event_set_utf8(k.event, "", 0);
+	}
+	let written: uint64 = 0;
+	const r = encoderEncode(k.encoder, k.event, buf, written);
+	if (r == GhosttyResult.GHOSTTY_OUT_OF_SPACE) { return Result.err(KeysError.NoRoom); }
+	if (!ok(r)) { return Result.err(KeysError.EncodeFailed); }
+	return Result.ok(written as int32);
+}
+
+export function freeKeys(this k: Keys): void {
+	ghostty_key_event_free(k.event);
+	ghostty_key_encoder_free(k.encoder);
+}
+
 test "written text lands on the rows the render state reports" {
 	const created = Vt.create(20, 4);
 	assert created.ok;
@@ -621,6 +887,173 @@ b");
 			assert dirty.value.length == 1;
 			assert dirty.value[0].y == 1;
 			assert dirty.value[0].cells[1].cp == 0x62;
+		}
+		vt.free();
+	}
+}
+
+function press(key: string, text: string, unshifted: uint32, mods: BitSet<KeyMod>): KeyEvent {
+	return {
+		action: KeyAction.Press,
+		key: key,
+		mods: mods,
+		consumedMods: 0 as BitSet<KeyMod>,
+		unshifted: unshifted,
+		text: text,
+	};
+}
+
+function encoded(k: Keys, vt: Vt, e: KeyEvent): string {
+	let buf: Vec<uint8> = new Array(64);
+	const r = k.encode(vt, e, buf);
+	if (!r.ok) { return ""; }
+	let out = "";
+	for (let i = 0; i < r.value; i++) { out += String.fromCharCode(buf[i] as int32); }
+	return out;
+}
+
+test "enter encodes as a carriage return" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const opened = Keys.openKeys();
+		assert opened.ok;
+		if (opened.ok) {
+			const k = opened.value;
+			const none = 0 as BitSet<KeyMod>;
+			assert encoded(k, vt, press("Enter", "\r", 0x0D, none)) == "\r";
+			k.freeKeys();
+		}
+		vt.free();
+	}
+}
+
+test "ctrl+c encodes as ETX even when the platform reports the byte as text" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const opened = Keys.openKeys();
+		assert opened.ok;
+		if (opened.ok) {
+			const k = opened.value;
+			const ctrl = (0 as BitSet<KeyMod>).incl(KeyMod.Ctrl);
+			assert encoded(k, vt, press("KeyC", "\x03", 0x63, ctrl)) == "\x03";
+			k.freeKeys();
+		}
+		vt.free();
+	}
+}
+
+test "arrow up follows the cursor key mode the vt is in" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const opened = Keys.openKeys();
+		assert opened.ok;
+		if (opened.ok) {
+			const k = opened.value;
+			const none = 0 as BitSet<KeyMod>;
+			assert encoded(k, vt, press("ArrowUp", "", 0, none)) == "\x1b[A";
+			vt.writeText("\x1b[?1h");
+			assert encoded(k, vt, press("ArrowUp", "", 0, none)) == "\x1bOA";
+			k.freeKeys();
+		}
+		vt.free();
+	}
+}
+
+test "alt prefixes the escape" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const opened = Keys.openKeys();
+		assert opened.ok;
+		if (opened.ok) {
+			const k = opened.value;
+			const alt = (0 as BitSet<KeyMod>).incl(KeyMod.Alt);
+			assert encoded(k, vt, press("KeyX", "x", 0x78, alt)) == "\x1bx";
+			k.freeKeys();
+		}
+		vt.free();
+	}
+}
+
+test "a consumed alt lets the text through unprefixed" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const opened = Keys.openKeys();
+		assert opened.ok;
+		if (opened.ok) {
+			const k = opened.value;
+			const none = 0 as BitSet<KeyMod>;
+			const alt = none.incl(KeyMod.Alt);
+			const e: KeyEvent = {
+				action: KeyAction.Press,
+				key: "BracketLeft",
+				mods: alt,
+				consumedMods: alt,
+				unshifted: 0x5B,
+				text: "{",
+			};
+			assert encoded(k, vt, e) == "{";
+			k.freeKeys();
+		}
+		vt.free();
+	}
+}
+
+test "ctrl with printable text encodes as fixterms csi u" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const opened = Keys.openKeys();
+		assert opened.ok;
+		if (opened.ok) {
+			const k = opened.value;
+			const none = 0 as BitSet<KeyMod>;
+			const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt);
+			const e: KeyEvent = {
+				action: KeyAction.Press,
+				key: "BracketLeft",
+				mods: ctrlAlt,
+				consumedMods: ctrlAlt,
+				unshifted: 0x5B,
+				text: "{",
+			};
+			assert encoded(k, vt, e) == "\x1b[123;7u";
+			k.freeKeys();
+		}
+		vt.free();
+	}
+}
+
+test "a committed grapheme arrives as its utf-8 bytes" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const opened = Keys.openKeys();
+		assert opened.ok;
+		if (opened.ok) {
+			const k = opened.value;
+			const none = 0 as BitSet<KeyMod>;
+			let buf: Vec<uint8> = new Array(64);
+			const r = k.encode(vt, press("Unidentified", "ệ", 0, none), buf);
+			assert r.ok;
+			if (r.ok) {
+				assert r.value == 3;
+				assert buf[0] == 0xE1;
+				assert buf[1] == 0xBB;
+				assert buf[2] == 0x87;
+			}
+			k.freeKeys();
 		}
 		vt.free();
 	}

@@ -107,6 +107,21 @@ extern function stateColor(
 	key: GhosttyRenderStateData,
 	out color: GhosttyColorRgb,
 ): GhosttyResult from "ghostty_render_state_get";
+extern function stateCursorHasValue(
+	s: GhosttyRenderState,
+	key: GhosttyRenderStateData,
+	out hasValue: boolean,
+): GhosttyResult from "ghostty_render_state_get";
+extern function stateCursorX(
+	s: GhosttyRenderState,
+	key: GhosttyRenderStateData,
+	out x: uint16,
+): GhosttyResult from "ghostty_render_state_get";
+extern function stateCursorY(
+	s: GhosttyRenderState,
+	key: GhosttyRenderStateData,
+	out y: uint16,
+): GhosttyResult from "ghostty_render_state_get";
 extern function cellColor(
 	cells: GhosttyRenderStateRowCells,
 	key: GhosttyRenderStateRowCellsData,
@@ -268,6 +283,29 @@ export function size(this vt: Vt): Result<[int32, int32], VtError> {
 		return Result.err(VtError.ReadFailed);
 	}
 	return Result.ok([cols as int32, rows as int32]);
+}
+
+export struct Cursor {
+	x: int32;
+	y: int32;
+}
+
+export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
+	const hasKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE;
+	let hasValue = false;
+	if (!ok(stateCursorHasValue(vt.state, hasKey, hasValue))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	if (!hasValue) { return Result.ok(null); }
+	let x: uint16 = 0;
+	let y: uint16 = 0;
+	const xKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X;
+	const yKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y;
+	if (!ok(stateCursorX(vt.state, xKey, x)) || !ok(stateCursorY(vt.state, yKey, y))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	const at: Cursor | null = { x: x as int32, y: y as int32 };
+	return Result.ok(at);
 }
 
 function rgb(c: GhosttyColorRgb): Rgb {
@@ -1054,6 +1092,39 @@ test "a committed grapheme arrives as its utf-8 bytes" {
 				assert buf[2] == 0x87;
 			}
 			k.freeKeys();
+		}
+		vt.free();
+	}
+}
+
+test "the cursor reports where the next write lands" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("ab");
+		assert vt.update().ok;
+		const afterText = vt.cursor();
+		assert afterText.ok;
+		if (afterText.ok) {
+			const at = afterText.value;
+			assert at !== null;
+			if (at !== null) {
+				assert at.x == 2;
+				assert at.y == 0;
+			}
+		}
+		vt.writeText("\r\n");
+		assert vt.update().ok;
+		const afterNewline = vt.cursor();
+		assert afterNewline.ok;
+		if (afterNewline.ok) {
+			const at = afterNewline.value;
+			assert at !== null;
+			if (at !== null) {
+				assert at.x == 0;
+				assert at.y == 1;
+			}
 		}
 		vt.free();
 	}

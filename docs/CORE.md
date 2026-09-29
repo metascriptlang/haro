@@ -25,6 +25,28 @@ measured numbers, platform behaviour found by probing, and paths that were rejec
   key that fails, and `FG_COLOR`/`BG_COLOR` fail with `INVALID_VALUE` whenever a cell uses the
   default colour, so a single multi call cannot read a default-coloured cell.
 
+## Key encoder
+
+- `ghostty_key_event_set_utf8(ptr, 0)` and `set_utf8(null, 0)` both leave the text empty
+  (`src/terminal/c/key_event.zig`), so `Keys.encode` always resets the reused event's text with
+  `""` before encoding; a reused event otherwise keeps the previous key's text (the header
+  sanctions reuse). Text with C0/DEL bytes or macOS PUA U+F700–U+F8FF must not be passed
+  (`key/event.h`), so `textSafe` filters it and the encoder derives the key from the logical key.
+- The legacy encoder emits fixterms `CSI <codepoint>;<mods>u` whenever Ctrl is held with
+  printable text, regardless of consumed mods (`src/input/key_encode.zig`, `legacy()`, the
+  `event.mods.ctrl` block). Consumed mods only remove a modifier from *binding*: a consumed Alt
+  with text sends the text raw, an unconsumed Alt prefixes `ESC`.
+- ion marks Ctrl+Alt consumed exactly when AltGr produced text ≥ 0x20
+  (`ion/src/platform/windows/input/input.c`, `ionWinKeyFlush`). An AltGr key fed to
+  `Keys.encode` unchanged therefore leaves as `CSI 123;7u`-style fixterms bytes, which conhost
+  shells do not parse. Whether the phase-B wiring strips consumed Ctrl+Alt first is open
+  (card step 7).
+- ion's `ION_MOD_*` bits and ghostty's `GHOSTTY_MODS_*` bits are the same order, including the
+  side bits (`src/keys/keys.ms` `modsMask` passes the mask through).
+- `\xNN` inside a `.ms` string literal is the *codepoint* NN, not a raw byte: `"\xef"` is "ï"
+  (UTF-8 `C3 AF`). Byte-level expectations in tests are written with `String.fromCharCode` or
+  compared against `buf` bytes directly.
+
 ## ConPTY, probed on Windows 11 10.0.26200
 
 - conhost answers a cursor position query (`ESC[6n`) and DA1 (`ESC[c`) itself: a child's query

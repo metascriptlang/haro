@@ -21,6 +21,8 @@ measured numbers, platform behaviour found by probing, and paths that were rejec
 - A write that moves the cursor dirties more than the row it writes. In `probe/frameRead.ms`,
   homing the cursor from row 59 and writing one cell on row 0 dirtied 2 rows; the same write
   with the cursor already on row 0 dirtied 1. Which second row it was was not checked.
+- `vt.size()` reads the render-state snapshot, so it lags a `vt.resize` until the next
+  `update()` — the session resize test checks the size only after `screen()`, which updates.
 - Rejected: `ghostty_render_state_row_cells_get_multi` for a whole cell. It stops at the first
   key that fails, and `FG_COLOR`/`BG_COLOR` fail with `INVALID_VALUE` whenever a cell uses the
   default colour, so a single multi call cannot read a default-coloured cell.
@@ -48,6 +50,10 @@ measured numbers, platform behaviour found by probing, and paths that were rejec
   compared against `buf` bytes directly.
 
 ## ConPTY, probed on Windows 11 10.0.26200
+
+- After a resize, pump before reading rows: ConPTY repaints and reflows, and the fresh content
+  lands through the normal output path (test "a resize reaches a live child as its console size",
+  which also shows `[Console]::WindowWidth/Height` inside the child tracking the new grid).
 
 - conhost answers a cursor position query (`ESC[6n`) and DA1 (`ESC[c`) itself: a child's query
   never reaches terminator. It forwards XTVERSION (`ESC[>q`), OSC 11 (`ESC]11;?`) and the colour

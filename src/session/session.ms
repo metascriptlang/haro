@@ -7,6 +7,7 @@ export enum SessionError {
 	PtyWriteFailed,
 	VtCreateFailed,
 	VtReadFailed,
+	ResizeFailed,
 }
 
 export struct Session {
@@ -61,6 +62,14 @@ export function screen(this s: Session): Result<Vec<string>, SessionError> {
 	return Result.ok(lines.value);
 }
 
+export function resize(this s: Session, cols: int32, rows: int32): Result<Session, SessionError> {
+	const resizedVt = s.vt.resize(cols, rows);
+	if (!resizedVt.ok) { return Result.err(SessionError.ResizeFailed); }
+	const resizedPty = s.pty.resize(cols, rows);
+	if (!resizedPty.ok) { return Result.err(SessionError.ResizeFailed); }
+	return Result.ok(s);
+}
+
 export function close(this s: Session): void {
 	s.pty.close();
 	s.vt.free();
@@ -111,6 +120,42 @@ test "a program's terminal query gets an answer back through the pty" {
 		if (screen.ok) {
 			assert screen.value[0].startsWith("reply=");
 			assert screen.value[0] != "reply=";
+		}
+		s.close();
+	}
+}
+
+test "a resize reaches a live child as its console size" {
+	const started = Session.start(
+		"powershell.exe -NoProfile -Command " +
+			"Start-Sleep -Milliseconds 900; " +
+			"[Console]::WriteLine([Console]::WindowWidth.ToString() + 'x' + " +
+			"[Console]::WindowHeight.ToString())",
+		80,
+		24,
+	);
+	assert started.ok;
+	if (started.ok) {
+		const s = started.value;
+		const ready = s.pty.wait(300);
+		assert ready.ok;
+		const resized = s.resize(100, 30);
+		assert resized.ok;
+		const ended = s.runToExit(15000);
+		assert ended.ok;
+		if (ended.ok) { assert ended.value; }
+		const screen = s.screen();
+		assert screen.ok;
+		if (screen.ok) {
+			const joined = screen.value.join("\n");
+			assert joined.includes("100x30");
+			assert !joined.includes("80x24");
+		}
+		const size = s.vt.size();
+		assert size.ok;
+		if (size.ok) {
+			assert size.value[0] == 100;
+			assert size.value[1] == 30;
 		}
 		s.close();
 	}

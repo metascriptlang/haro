@@ -66,7 +66,7 @@ export function close(this p: Pty): void {
 }
 
 function drain(this p: Pty): string {
-	const buf: Vec<uint8> = new Array(4096);
+	let buf: Vec<uint8> = new Array(4096);
 	let text = "";
 	while (true) {
 		const ready = p.wait(10000);
@@ -80,7 +80,7 @@ function drain(this p: Pty): string {
 }
 
 function quietWaitMs(this p: Pty, timeoutMs: int32): Result<float64, PtyError> {
-	const buf: Vec<uint8> = new Array(4096);
+	let buf: Vec<uint8> = new Array(4096);
 	while (true) {
 		const start: float64 = performance.now();
 		const ready = try p.wait(timeoutMs);

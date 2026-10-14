@@ -76,7 +76,7 @@ export function close(this s: Session): void {
 }
 
 function runToExit(this s: Session, timeoutMs: int32): Result<boolean, SessionError> {
-	const buf: Vec<uint8> = new Array(4096);
+	let buf: Vec<uint8> = new Array(4096);
 	while (true) {
 		const ready = s.pty.wait(timeoutMs);
 		if (!ready.ok) { return Result.err(SessionError.PtyReadFailed); }

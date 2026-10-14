@@ -7,7 +7,6 @@
 import {
 	ghostty_terminal_new,
 	ghostty_terminal_free,
-	ghostty_terminal_vt_write,
 	ghostty_terminal_resize,
 	ghostty_key_encoder_new,
 	ghostty_key_encoder_free,
@@ -51,7 +50,7 @@ import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe } from "../keys/keys";
 
 struct Graphemes { cp: uint32[16]; }
 
-extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Span<uint8>): void
+extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<Span<uint8>>): void
 	from "ghostty_terminal_vt_write";
 extern function vtEffectsOpen(terminal: GhosttyTerminal): int32;
 extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
@@ -250,7 +249,7 @@ export function write(this vt: Vt, bytes: Span<uint8>): void {
 }
 
 export function writeText(this vt: Vt, text: string): void {
-	ghostty_terminal_vt_write(vt.terminal, text, text.byteLength as uint64);
+	vtWriteBytes(vt.terminal, text.asBytes());
 }
 
 export function replies(this vt: Vt, buf: Span<uint8>): Result<int32, VtError> {

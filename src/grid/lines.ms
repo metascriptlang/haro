@@ -70,7 +70,7 @@ export function line(this row: Row, cursorCell: int32): Result<GridLine, GridErr
 			pushUnit(runs, run);
 			continue;
 		}
-		const cps: Vec<uint32> = [cell.cp];
+		let cps: Vec<uint32> = [cell.cp];
 		for (let k = 0; k < (cell.extra as int32); k++) { cps.push(row.extra[extra + k]); }
 		extra += cell.extra as int32;
 		for (const cp of cps) {

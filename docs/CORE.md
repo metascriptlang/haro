@@ -49,6 +49,27 @@ measured numbers, platform behaviour found by probing, and paths that were rejec
   (UTF-8 `C3 AF`). Byte-level expectations in tests are written with `String.fromCharCode` or
   compared against `buf` bytes directly.
 
+## How far output scrolled, probed
+
+A scroll marks every row of the render state dirty, so the dirty iterator cannot tell a scroll
+from a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree `504771cca46c2ce2d7153a16f5c9a5cb37e58e06`) measured what can:
+
+- A tracked grid ref placed on the top viewport row keeps its **screen** y when that row scrolls
+  into history (screen coordinates count from the top of scrollback); its viewport and active
+  points return `GHOSTTY_NO_VALUE` once the row leaves the viewport. So the ref alone gives no N.
+- **N = `ghostty_terminal_get(…SCROLLBAR)`.offset − the ref's screen y**, then re-anchor the ref
+  on viewport row 0. Exact for K = 1, 3, 7, 24 and 100 lines, with scrollback capped at 10 or 0
+  lines too (the cap is page-granular: 124 rows were still kept).
+- When the row is pruned from scrollback (K = 5000), `has_value` turns false: repaint everything.
+- Entering or leaving the alternate screen (`ESC[?1049h`/`l`) gives N = −7 and 7, both wrong:
+  the ref stays on the screen it was set on while the scrollbar is the active screen's. Watch
+  `GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN` and repaint everything when it changes.
+- A clear (`ESC[2J`) gives N = 0 with all 24 rows dirty; overwriting one row gives N = 0 with two
+  rows dirty (that row and, unverified, the old cursor row).
+
+`GhosttyPoint` is built in C (`probe/scrollRefShim.h`) because msc cannot import a C aggregate with
+a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-sizedarray.md`).
+
 ## ConPTY, probed on Windows 11 10.0.26200
 
 - After a resize, pump before reading rows: ConPTY repaints and reflows, and the fresh content

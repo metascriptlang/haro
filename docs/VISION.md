@@ -7,8 +7,8 @@ everywhere.
 It is a **Neon app whose only child is one `<Void>` filling the window**, the shape
 `~/metascript/neon/docs/VISION.md` gives a game: Ion → Neon → Void. The chrome (tabs, splits,
 settings, command palette) is Neon `Text`/`View` inside that Void area, so it is void2d too. The
-grid is void2d nodes that terminator updates directly from dirty rows, with no reconcile pass.
-There is no webview.
+grid is Neon JSX as well: `<TerminalGrid>` is a component whose rows are a `<ForList>` over a
+`createList` of row slots, each row one `<Text>` on the cell grid. There is no webview.
 
 ## Why it exists
 
@@ -21,6 +21,16 @@ Two goals, and the second is as important as the first.
    A terminal presses hard on exactly what that takes: glyph atlas pressure, font fallback (CJK,
    emoji, box drawing), thousands of coloured cells per frame, dirty-only redraw, scroll, and a
    truly idle frame.
+3. **Neon's reactive model at its hardest load.** Terminals drop to hand-written drawing for the
+   grid (xterm.js renderers, Zed's `TerminalElement`, Warp). Terminator keeps the grid in JSX and
+   aims to be faster than hand-drawn, because Neon's model hands it the optimisations a hand-drawn
+   grid has to write and maintain itself (see "How a frame is drawn"). It is measured against the
+   terminal in `~/projects/rexa` and against Ghostty, not against an internal hand-drawn variant.
+
+Decided by the person, 2026-10-15. Rejected: a self-managed `<TerminalGrid>` that writes void2d
+nodes directly with no reconcile. It is the lower bound for the same work, but it proves nothing
+about Neon, and every optimisation it needs (scroll as a move, skipping unchanged rows, coalescing
+PTY bursts into one write per frame) would be terminal-only code instead of Neon's.
 
 ## Principle: fix upstream, never work around
 
@@ -81,16 +91,21 @@ Kitty graphics is a later decision.
 
 ## How a frame is drawn
 
-- One node per visible row, owning that row's cells. Only the rows the render state marks dirty
-  are re-emitted.
+- One row component per visible row slot, fed by its own signal. A row whose line did not change
+  writes no node, and PTY output that arrives several times between two frames writes each row
+  once.
+- When output scrolls the screen by N lines, the list takes `remove` of the top N slots and `push`
+  of N new ones (Neon's op path, `neon/docs/RENDER-MODEL.md` "op"), so the other rows keep their
+  shaped glyphs and only move. The render state marks every row dirty on a scroll, so N comes from
+  the scrollbar offset and a tracked grid ref on the top row; an alternate-screen switch or a ref
+  pruned from scrollback repaints every row (`docs/CORE.md` "How far output scrolled").
 - Glyphs sit on an **integer cell grid**: monospace cells with whole-pixel origins.
 - Cell backgrounds, underline (straight and wavy), strikethrough, selection and cursor are
   instances of void2d's UI pipeline. The cursor and the selection are their own instances, so a
   blink touches no text.
 - Box drawing, blocks, braille and powerline glyphs are drawn procedurally rather than taken from
   the font.
-- Scroll is a snapped translation of the grid rather than a rebuild. When nothing changed, a frame
-  draws nothing.
+- When nothing changed, a frame draws nothing.
 
 ## References
 

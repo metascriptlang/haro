@@ -32,7 +32,7 @@ export function modsMask(mods: BitSet<KeyMod>): uint16 {
 
 export function textSafe(text: string): boolean {
 	if (text == "") { return false; }
-	const bytes: Span<char> = text;
+	const bytes: Readonly<Span<char>> = text;
 	const n = text.byteLength as int32;
 	for (let i = 0; i < n; i++) {
 		const b = bytes[i] as int32;

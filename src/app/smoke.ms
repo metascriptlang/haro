@@ -17,6 +17,15 @@ function counts(label: string): void {
 	console.log(`smoke: ${label}: requested=${c[0]} drawn=${c[1]}`);
 }
 
+export function smokeReplay(t: Term): void {
+	setTimeout((): void => {
+		dump(t, "replayed");
+		counts("after the replay");
+		t.shutdown();
+		exit(0);
+	}, 3000);
+}
+
 export function smoke(t: Term): void {
 	setTimeout((): void => { dump(t, "prompt"); counts("after the prompt"); }, 4000);
 	setTimeout((): void => {

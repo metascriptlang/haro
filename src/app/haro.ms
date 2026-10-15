@@ -1,215 +1,107 @@
 @include("./wake.h");
 @compile("./wake.c");
 
-import { element } from "../../../neon/src/macros/ui/element";
 import { NeonNode } from "../../../neon/src/render/node";
-import { NeonEvent } from "../../../neon/src/render/event";
-import { Accessor, createSignal } from "../../../neon/src/core/signal";
-import { ForList } from "../../../neon/src/macros/ui/flow";
-import { PixelRatio } from "../../../neon/src/api/pixelRatio";
-import { Void, View, Text } from "../../../neon/src/components/primitives";
 import {
 	runWindow,
 	DesktopOptions,
 	desktopOptions,
 } from "../../../neon/src/platform/ion/window";
-import { addFont } from "../../../void/src/void2d/font";
-import { Align, TextLayout, layout } from "../../../void/src/void2d/textLayout";
 import { onWake } from "../../../ion/src/index";
 import { argv, exit } from "std/process";
-import { RowSlot } from "./frame";
-import { gridSize } from "../grid/size";
-import { Cursor } from "../vt/vt";
-import { smoke } from "./smoke";
-import {
-	Term,
-	TermError,
-	shellExitCode,
-	fit,
-	openTerm,
-	pumpFrame,
-	sendKey,
-	sendText,
-	shutdown,
-} from "./term";
+import { readFile } from "std/fs";
+import { Pty, PtyError } from "../pty/transport";
+import { ConPty } from "../pty/pty";
+import { Replay } from "../pty/replay";
+import { App, Entry, measureCell } from "./app";
+import { smoke, smokeReplay } from "./smoke";
+import { Term, openTerm, shutdown } from "./term";
 
 extern function appWireWake(): void;
 
 const SHELL = "pwsh.exe -NoLogo";
 const FONT_PATH = "assets/JetBrainsMonoNL-Regular.ttf";
-const FONT_SIZE: number = 14;
-const PADDING: number = 6;
-const BACKGROUND = "#0c0c0c";
-const FOREGROUND = "#cccccc";
-const PROBE = "MMMMMMMMMM";
 
-interface Cell {
-	advance: number;
-	lineHeight: number;
-}
-
-function measureCell(): Cell {
-	const font = addFont(FONT_PATH);
-	if (!font.ok) {
-		console.log(`haro: the font ${FONT_PATH} did not load`);
-		exit(1);
-	}
-	const laid = TextLayout.layout(PROBE, {
-		font: font.value, size: FONT_SIZE as float32, letterSpacing: 0.0, lineSpacing: 0.0,
-		maxWidth: 0.0, align: Align.Left,
-	});
-	if (!laid.ok) {
-		console.log("haro: the cell probe did not lay out");
-		exit(1);
-	}
-	return {
-		advance: (laid.value.width as number) / PROBE.length,
-		lineHeight: laid.value.lineHeight as number,
-	};
-}
-
-function fatal(what: string, error: TermError): void {
-	console.log(`haro: ${what}: ${error.toString()}`);
+function fail(message: string): void {
+	console.log(`haro: ${message}`);
 	exit(1);
 }
 
-function App(t: Term, cell: Cell): NeonNode {
-	const [cellWidth, setCellWidth] = createSignal<number>(0);
-	const [rowHeight, setRowHeight] = createSignal<number>(0);
-	const [cursorCol, setCursorCol] = createSignal<number>(0);
-	const [cursorRow, setCursorRow] = createSignal<number>(0);
-	const [cursorShown, setCursorShown] = createSignal<boolean>(false);
-
-	const show = (cursor: Cursor | null): void => {
-		if (cursor === null) {
-			setCursorShown(false);
-			return;
-		}
-		setCursorCol(cursor.x);
-		setCursorRow(cursor.y);
-		setCursorShown(true);
-	};
-
-	function refresh(): void {
-		const frame = t.pumpFrame();
-		if (!frame.ok) {
-			fatal("frame", frame.error);
-			return;
-		}
-		show(frame.value.cursor);
-		if (frame.value.more) { setTimeout((): void => { refresh(); }, 0); }
-		if (!t.alive) {
-			console.log(`haro: the shell exited with code ${t.shellExitCode()}`);
-			t.shutdown();
-			exit(0);
-		}
-	}
-
-	onWake((): void => { refresh(); });
-
-	const lineRow = (item: Accessor<RowSlot>): NeonNode => {
-		return element(
-			<Text
-				style={{ fontSize: FONT_SIZE, color: FOREGROUND, height: rowHeight() }}
-				cellWidth={cellWidth()}
-				spans={item().spans}
-			/>
-		);
-	};
-
-	const layout = (e: NeonEvent): void => {
-		if (e.width <= 0 || e.height <= 0) { return; }
-		const advance = cell.advance;
-		const lineHeight = cell.lineHeight;
-		const ratio = PixelRatio.get();
-		const cellPx = Math.ceil(advance * ratio) as int32;
-		const rowPx = Math.ceil(lineHeight * ratio) as int32;
-		const widthPx = PixelRatio.getPixelSizeForLayoutSize(e.width) as int32;
-		const heightPx = PixelRatio.getPixelSizeForLayoutSize(e.height) as int32;
-		const size = gridSize(widthPx, heightPx, cellPx, rowPx);
-		if (!size.ok) {
-			console.log(`haro: cell ${advance}x${lineHeight} is not a grid size`);
-			exit(1);
-			return;
-		}
-		setCellWidth(cellPx / ratio);
-		setRowHeight(rowPx / ratio);
-		console.log(
-			`haro: layout ${e.width}x${e.height} ratio ${ratio} ` +
-				`cell ${advance}x${lineHeight} grid ${size.value[0]}x${size.value[1]}`
-		);
-		const fitted = t.fit(size.value[0], size.value[1]);
-		if (!fitted.ok) {
-			fatal("fit", fitted.error);
-			return;
-		}
-		if (fitted.value) { refresh(); }
-	};
-
-	const typed = (e: NeonEvent): void => {
-		const sent = t.sendKey(e);
-		if (!sent.ok) { fatal("key", sent.error); }
-	};
-
-	const committed = (e: NeonEvent): void => {
-		const sent = t.sendText(e.text);
-		if (!sent.ok) { fatal("text", sent.error); }
-	};
-
-	return element(
-		<Void style={{ backgroundColor: BACKGROUND, padding: PADDING }}>
-			<View
-				style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, pointerEvents: "box-only" }}
-				focusable
-				imeRect={{
-					x: cursorCol() * cellWidth(),
-					y: cursorRow() * rowHeight(),
-					width: cellWidth(),
-					height: rowHeight(),
-				}}
-				onLayout={layout}
-				onKeyDown={typed}
-				onTextInput={committed}>
-				{ForList<RowSlot>({ each: t.grid, children: lineRow })}
-				<View
-					style={{
-						position: "absolute",
-						left: cursorCol() * cellWidth(),
-						top: cursorRow() * rowHeight(),
-						width: cellWidth(),
-						height: rowHeight(),
-						backgroundColor: FOREGROUND,
-						opacity: cursorShown() ? 0.5 : 0,
-					}}
-				/>
-			</View>
-		</Void>
-	);
-}
-
-function shellOf(): string {
+function valueOf(flag: string): string | null {
 	for (let i = 1; i + 1 < argv.length; i++) {
-		if (argv[i] == "--shell") { return argv[i + 1]; }
+		if (argv[i] == flag) { return argv[i + 1]; }
 	}
-	return SHELL;
+	return null;
 }
 
-function main(): int32 {
-	const opened = openTerm(shellOf());
+function has(flag: string): boolean {
+	for (const arg of argv) {
+		if (arg == flag) { return true; }
+	}
+	return false;
+}
+
+function show(t: Term, exited: (code: int32) => void): int32 {
+	const cell = measureCell(FONT_PATH);
+	if (!cell.ok) {
+		fail(`the cell of ${FONT_PATH}: ${cell.error.toString()}`);
+		return 1;
+	}
+	const measured = cell.value;
+	const entry: Entry = {
+		onWake: (handler: () => void): void => { onWake(handler); },
+		exited: exited,
+		fail: fail,
+	};
+	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: FONT_PATH };
+	const code = runWindow(opts, (): NeonNode => App(t, measured, entry));
+	t.shutdown();
+	return code;
+}
+
+function runShell(shell: string): int32 {
+	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+		return ConPty.spawn(shell, cols, rows);
+	});
 	if (!opened.ok) {
-		fatal("open", opened.error);
+		fail(`open: ${opened.error.toString()}`);
 		return 1;
 	}
 	const t = opened.value;
 	appWireWake();
-	for (const arg of argv) {
-		if (arg == "--smoke") { smoke(t); }
+	if (has("--smoke")) { smoke(t); }
+	return show(t, (code: int32): void => {
+		console.log(`haro: the shell exited with code ${code}`);
+		t.shutdown();
+		exit(0);
+	});
+}
+
+function runReplay(path: string): int32 {
+	const recording = readFile(path);
+	if (!recording.ok) {
+		fail(`the recording ${path} did not read`);
+		return 1;
 	}
-	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: FONT_PATH };
-	const cell = measureCell();
-	const code = runWindow(opts, (): NeonNode => App(t, cell));
-	t.shutdown();
-	return code;
+	const replay = Replay.ofText(recording.value);
+	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+		return Result.ok(replay.toPty());
+	});
+	if (!opened.ok) {
+		fail(`open: ${opened.error.toString()}`);
+		return 1;
+	}
+	const t = opened.value;
+	if (has("--smoke")) { smokeReplay(t); }
+	return show(t, (code: int32): void => {
+		console.log(`haro: the recording ended with code ${code}`);
+	});
+}
+
+function main(): int32 {
+	const replayPath = valueOf("--replay");
+	if (replayPath !== null) { return runReplay(replayPath); }
+	return runShell(valueOf("--shell") ?? SHELL);
 }
 
 exit(main());

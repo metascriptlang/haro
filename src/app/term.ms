@@ -2,7 +2,8 @@ import { createList, List } from "../../../neon/src/core/list";
 import { NeonEvent } from "../../../neon/src/render/event";
 import { Style } from "../../../neon/src/render/style";
 import { KeyAction, KeyEvent, KeyMod } from "../keys/keys";
-import { Pty } from "../pty/pty";
+import { Pty, PtyError } from "../pty/transport";
+import { Replay } from "../pty/replay";
 import { Session } from "../session/session";
 import { Cursor, Keys } from "../vt/vt";
 import { FrameError, RowSlot, applyFrame } from "./frame";
@@ -12,6 +13,7 @@ const DRAIN_LIMIT = 16;
 
 export enum TermError {
 	KeysOpenFailed,
+	PtyOpenFailed,
 	SessionStartFailed,
 	ResizeFailed,
 	PumpFailed,
@@ -24,8 +26,10 @@ export enum TermError {
 	WriteFailed,
 }
 
+export type OpenPty = (cols: int32, rows: int32) => Result<Pty, PtyError>;
+
 export interface Term {
-	shell: string;
+	open: OpenPty;
 	session: Session | null;
 	keys: Keys;
 	grid: List<RowSlot>;
@@ -39,14 +43,15 @@ export interface Term {
 export struct Frame {
 	cursor: Cursor | null;
 	more: boolean;
+	ended: boolean;
 }
 
-export function openTerm(shell: string): Result<Term, TermError> {
+export function openTerm(open: OpenPty): Result<Term, TermError> {
 	const keys = Keys.openKeys();
 	if (!keys.ok) { return Result.err(TermError.KeysOpenFailed); }
 	const buf: Vec<uint8> = new Array(BUFFER_BYTES);
 	return Result.ok({
-		shell: shell,
+		open: open,
 		session: null,
 		keys: keys.value,
 		grid: createList<RowSlot>([]),
@@ -71,7 +76,9 @@ function matchGrid(this t: Term, rows: int32): void {
 export function fit(this t: Term, cols: int32, rows: int32): Result<boolean, TermError> {
 	const s = t.session;
 	if (s === null) {
-		const started = Session.start(t.shell, cols, rows);
+		const pty = t.open(cols, rows);
+		if (!pty.ok) { return Result.err(TermError.PtyOpenFailed); }
+		const started = Session.start(pty.value, cols, rows);
 		if (!started.ok) { return Result.err(TermError.SessionStartFailed); }
 		t.session = started.value;
 	} else {
@@ -95,20 +102,24 @@ function frameFailure(error: FrameError): TermError {
 
 export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok({ cursor: null, more: false }); }
+	if (s === null) { return Result.ok({ cursor: null, more: false, ended: false }); }
 	let more = false;
+	let ended = false;
 	for (let i = 0; i < DRAIN_LIMIT && t.alive; i++) {
 		const ready = s.pty.wait(0);
 		if (!ready.ok) { return Result.err(TermError.PumpFailed); }
 		if (!ready.value) { break; }
 		const alive = s.pump(t.buf);
 		if (!alive.ok) { return Result.err(TermError.PumpFailed); }
-		if (!alive.value) { t.alive = false; }
+		if (!alive.value) {
+			t.alive = false;
+			ended = true;
+		}
 		more = alive.value && i == DRAIN_LIMIT - 1;
 	}
 	const applied = applyFrame(t.grid, t.styles, s.vt);
 	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
-	return Result.ok({ cursor: applied.value, more: more });
+	return Result.ok({ cursor: applied.value, more: more, ended: ended });
 }
 
 export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
@@ -156,4 +167,39 @@ export function shellExitCode(this t: Term): int32 {
 	const code = s.pty.exitCode();
 	if (code === null) { return 0; }
 	return code;
+}
+
+test "a replayed recording fills the grid in one frame and ends the stream once" {
+	const replay = Replay.ofText("one\r\n\x1b[31mtwo\x1b[0m");
+	let openedCols = 0;
+	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+		openedCols = cols;
+		return Result.ok(replay.toPty());
+	});
+	assert opened.ok;
+	if (opened.ok) {
+		const t = opened.value;
+		assert openedCols == 0;
+		const fitted = t.fit(20, 3);
+		assert fitted.ok;
+		assert openedCols == 20;
+		assert t.grid.length() == 3;
+		const first = t.pumpFrame();
+		assert first.ok;
+		if (first.ok) {
+			assert first.value.ended;
+			assert !first.value.more;
+			assert first.value.cursor !== null;
+		}
+		assert t.grid.at(0).line.text.trimEnd() == "one";
+		assert t.grid.at(1).line.text.trimEnd() == "two";
+		assert t.grid.at(1).spans[0].text == "two";
+		assert t.grid.at(2).line.text.trimEnd() == "";
+		const second = t.pumpFrame();
+		assert second.ok;
+		if (second.ok) { assert !second.value.ended; }
+		assert !t.alive;
+		assert t.shellExitCode() == 0;
+		t.shutdown();
+	}
 }

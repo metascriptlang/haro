@@ -232,7 +232,7 @@ export interface Painted {
 	rows: Vec<Row>;
 }
 
-struct Palette { fg: Rgb; bg: Rgb; }
+export struct Palette { fg: Rgb; bg: Rgb; }
 
 function ok(r: GhosttyResult): boolean {
 	return r == GhosttyResult.GHOSTTY_SUCCESS;
@@ -343,7 +343,7 @@ function rgb(c: GhosttyColorRgb): Rgb {
 	return { r: c.r, g: c.g, b: c.b };
 }
 
-function palette(this vt: Vt): Result<Palette, VtError> {
+export function palette(this vt: Vt): Result<Palette, VtError> {
 	let fg: GhosttyColorRgb = { r: 0, g: 0, b: 0 };
 	let bg: GhosttyColorRgb = { r: 0, g: 0, b: 0 };
 	const fgKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLOR_FOREGROUND;

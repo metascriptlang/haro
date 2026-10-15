@@ -94,6 +94,23 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
 - At startup ConPTY emits `ESC[?9001h` (win32-input-mode) and `ESC[?1004h` (focus events), and
   resets both when the child exits.
 
+## First window, smoke-run
+
+`src/app/terminator.ms --smoke` (tree `c120ef45157c565615ff1a9e380849230844608e`, msc `b267cdb1`, neon `f48eec6`, ion `a68e849`,
+Consolas 14 px at 96 DPI, 948x588 → 118x34 cells, `pwsh -NoLogo -NoProfile`, run from
+`~/metascript/void` for void's default font path):
+
+- The prompt and command output appear with no window event: the ConPTY reader calls
+  `ionWakeLoop()` (`src/pty/conpty.c` `ptySetWake`) and `onWake` pumps and applies the frame plan.
+- 200 lines (`1..200 | % { "line $_" }`) leave rows `line 168` … `line 200` and the prompt in
+  order: the scroll path (`remove` of the top slots, `push` of the new rows) is correct.
+- Idle: frame counts did not move over 2 s (`requested=4 drawn=5` before and after), and the
+  process used 0–15.6 ms of CPU over 3 s.
+- Keys (`WM_KEYDOWN`/`WM_CHAR` posted to the window), committed text (`ệ`), Up-arrow history
+  through `Keys.encode`, and three resizes (pwsh reported 84x21, 99x26, 59x14) reached the shell.
+- With the person's profile the window exits at the first prompt: starship prints U+F0054, above
+  U+FFFF (`.inbox/compiler/2026-09-26-string-from-code-point.md`).
+
 ## Measured
 
 Ryzen 9 9950X, Windows 11 10.0.26200, msc `3f6873ee`, tree `07cec781ff808899b343bb1c595281a4d4ccffe1`.

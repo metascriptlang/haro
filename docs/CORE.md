@@ -1,4 +1,4 @@
-# Terminator core — what the code does not say
+# Haro core — what the code does not say
 
 The headless core is `src/pty` (ConPTY), `src/vt` (libghostty-vt) and `src/session` (the two
 joined). Types, signatures and the API are in those files; this page holds what they cannot say:
@@ -85,7 +85,7 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
   which also shows `[Console]::WindowWidth/Height` inside the child tracking the new grid).
 
 - conhost answers a cursor position query (`ESC[6n`) and DA1 (`ESC[c`) itself: a child's query
-  never reaches terminator. It forwards XTVERSION (`ESC[>q`), OSC 11 (`ESC]11;?`) and the colour
+  never reaches Haro. It forwards XTVERSION (`ESC[>q`), OSC 11 (`ESC]11;?`) and the colour
   scheme query (`ESC[?996n`). On POSIX every query reaches the terminal.
 - A reply written to the input pipe passes through conhost's input parser. A DCS reply
   (XTVERSION's `ESC P >| … ESC \`) reaches a child reading with `[Console]::ReadKey` as the
@@ -96,7 +96,7 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
 
 ## First window, smoke-run
 
-`src/app/terminator.ms --smoke` (tree `c120ef45157c565615ff1a9e380849230844608e`, msc `b267cdb1`, neon `f48eec6`, ion `a68e849`,
+`src/app/haro.ms --smoke` (tree `c120ef45157c565615ff1a9e380849230844608e`, msc `b267cdb1`, neon `f48eec6`, ion `a68e849`,
 Consolas 14 px at 96 DPI, 948x588 → 118x34 cells, `pwsh -NoLogo -NoProfile`, run from
 `~/metascript/void` for void's default font path):
 

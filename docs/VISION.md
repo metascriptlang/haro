@@ -1,6 +1,8 @@
-# Terminator — vision
+# Haro — vision
 
-A terminal emulator written in MetaScript. It gets its VT from **libghostty-vt**, draws its pixels
+A terminal emulator written in MetaScript, named after the robot that rides beside the pilot in
+Gundam 00. It was called Terminator until 2026-10-15; a Linux terminal emulator already owns that
+name. It gets its VT from **libghostty-vt**, draws its pixels
 with **void2d**, and runs in an **Ion** window, on Windows, macOS and Linux with the same pixels
 everywhere.
 
@@ -22,7 +24,7 @@ Two goals, and the second is as important as the first.
    emoji, box drawing), thousands of coloured cells per frame, dirty-only redraw, scroll, and a
    truly idle frame.
 3. **Neon's reactive model at its hardest load.** Terminals drop to hand-written drawing for the
-   grid (xterm.js renderers, Zed's `TerminalElement`, Warp). Terminator keeps the grid in JSX and
+   grid (xterm.js renderers, Zed's `TerminalElement`, Warp). Haro keeps the grid in JSX and
    aims to be faster than hand-drawn, because Neon's model hands it the optimisations a hand-drawn
    grid has to write and maintain itself (see "How a frame is drawn"). It is measured against the
    terminal in `~/projects/rexa` and against Ghostty, not against an internal hand-drawn variant.
@@ -34,24 +36,24 @@ PTY bursts into one write per frame) would be terminal-only code instead of Neon
 
 ## Principle: fix upstream, never work around
 
-When Terminator hits a defect in void2d, Ion or the MetaScript compiler, the fix goes into that
-project, and Terminator waits for it. It never works around the defect in its own code. A workaround
-here would hide exactly what this project exists to exercise. Terminator builds against released
+When Haro hits a defect in void2d, Ion or the MetaScript compiler, the fix goes into that
+project, and Haro waits for it. It never works around the defect in its own code. A workaround
+here would hide exactly what this project exists to exercise. Haro builds against released
 dependencies only.
 
 ## The stack
 
 | project | role |
 |---|---|
-| **MetaScript** (`msc`) | the language and compiler Terminator is written in |
+| **MetaScript** (`msc`) | the language and compiler Haro is written in |
 | **Void / void2d** | the renderer: a retained 2D node tree over sokol_gfx, one GLSL source for Metal, D3D11, GL/GLES3, WebGPU and WebGL2 |
 | **Ion** | the desktop runtime: window, event loop, a native render surface, input |
 | **libghostty-vt** | the VT emulation library extracted from Ghostty |
 | **Neon** | the app: components, fine-grained reactive state, the chrome; the grid sits inside its `<Void>` |
 
 Ion hands out a surface and input events and never draws. The glue between them is not
-terminator's. Void drives a surface that its host hands it, and Neon binds an Ion window to a
-`<Void>` root. Terminator is their first consumer on the desktop.
+Haro's. Void drives a surface that its host hands it, and Neon binds an Ion window to a
+`<Void>` root. Haro is their first consumer on the desktop.
 
 ## What unblocks the first window
 
@@ -67,7 +69,7 @@ Measured 2026-09-23 against ion `32bb557`, void `0167080` and neon `6dd27ac`:
 3. ~~**Ion: a frame clock.**~~ Landed at ion `44001f8`..`3f90df1`: a frame policy per surface,
    measured in `ion/docs/RENDER-SURFACE.md`.
 
-Terminator's own core landed without them: ConPTY, libghostty-vt, query replies and a cell reader,
+Haro's own core landed without them: ConPTY, libghostty-vt, query replies and a cell reader,
 with its measurements in `docs/CORE.md`.
 
 ## libghostty-vt — only the parts we need
@@ -87,7 +89,7 @@ Take:
 Do not take: Ghostty's renderer, font stack and app runtime. Those are void2d's and Ion's jobs.
 Kitty graphics is a later decision.
 
-**libghostty-vt has no PTY.** Terminator owns ConPTY on Windows and `forkpty` on POSIX.
+**libghostty-vt has no PTY.** Haro owns ConPTY on Windows and `forkpty` on POSIX.
 
 ## How a frame is drawn
 

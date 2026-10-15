@@ -37,7 +37,7 @@ import {
 extern function appWireWake(): void;
 
 const SHELL = "pwsh.exe -NoLogo";
-const FONT_PATH = "C:/Windows/Fonts/consola.ttf";
+const FONT_PATH = "assets/JetBrainsMonoNL-Regular.ttf";
 const FONT_SIZE: number = 14;
 const PADDING: number = 6;
 const BACKGROUND = "#0c0c0c";

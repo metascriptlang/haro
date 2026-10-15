@@ -99,7 +99,9 @@ Kitty graphics is a later decision.
   shaped glyphs and only move. The render state marks every row dirty on a scroll, so N comes from
   the scrollbar offset and a tracked grid ref on the top row; an alternate-screen switch or a ref
   pruned from scrollback repaints every row (`docs/CORE.md` "How far output scrolled").
-- Glyphs sit on an **integer cell grid**: monospace cells with whole-pixel origins.
+- Glyphs sit on an **integer cell grid**: monospace cells with whole-pixel origins. The font is
+  JetBrains Mono NL (`assets/`, SIL OFL 1.1, picked by the person 2026-10-15): the NL cut has no
+  ligatures, which a terminal must never apply across cells.
 - Cell backgrounds, underline (straight and wavy), strikethrough, selection and cursor are
   instances of void2d's UI pipeline. The cursor and the selection are their own instances, so a
   blink touches no text.

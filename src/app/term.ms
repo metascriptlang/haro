@@ -14,9 +14,8 @@ export enum TermError {
 	SessionStartFailed,
 	ResizeFailed,
 	PumpFailed,
-	FrameUpdateFailed,
+	FramePlanFailed,
 	FrameCursorFailed,
-	FrameDirtyRowsFailed,
 	FrameLineFailed,
 	EncodeFailed,
 	TextTooLong,
@@ -83,9 +82,8 @@ export function fit(this t: Term, cols: int32, rows: int32): Result<boolean, Ter
 
 function frameFailure(error: FrameError): TermError {
 	return match (error) {
-		FrameError.UpdateFailed => TermError.FrameUpdateFailed,
+		FrameError.PlanFailed => TermError.FramePlanFailed,
 		FrameError.CursorFailed => TermError.FrameCursorFailed,
-		FrameError.DirtyRowsFailed => TermError.FrameDirtyRowsFailed,
 		FrameError.LineFailed => TermError.FrameLineFailed,
 	};
 }

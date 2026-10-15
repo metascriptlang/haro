@@ -1,0 +1,13 @@
+[?9001h[?1004h[?25l[2J[m[2;1H]0;C:\Users\metacraft\scoop\apps\pwsh\current\pwsh.exe[?25h[?25l    Directory: C:\Users\metacraft\metascript\terminator-wt-terminator-m1[32m[1m[4;1HMode                 LastWriteTime[m [32m[1m[3m        Length[23m Name
+----   [m [32m[1m             -------------[m [32m[1m        ------[m [32m[1m----[m
+d----          10/15/2026  6:41 PM[16X[44m[1m[16Cassets[m
+d----          10/15/2026 11:17 PM[16X[44m[1m[16Cdocs[m
+d----          10/16/2026 12:12 AM[16X[44m[1m[16Cfixtures[m
+d----          10/15/2026  9:19 PM[16X[44m[1m[16Cout[m
+d----          10/16/2026 12:12 AM[16X[44m[1m[16Cprobe[m
+d----           9/30/2026  3:58 AM[16X[44m[1m[16Cscripts[m
+d----          10/15/2026  4:42 PM[16X[44m[1m[16Csrc[m
+d----           9/28/2026  3:47 AM[16X[44m[1m[16Cvendor[m
+-a---           9/30/2026  3:57 AM             19 .gitattributes
+-a---           9/30/2026  3:58 AM              5 .gitignore
+-a---           9/30/2026  3:58 AM             98 .gitmodules[18;1H[?25h[?9001l[?1004l

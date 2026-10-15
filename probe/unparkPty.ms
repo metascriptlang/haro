@@ -1,8 +1,13 @@
 import { Session } from "../src/session/session";
-import { Pty } from "../src/pty/pty";
+import { ConPty } from "../src/pty/pty";
 
 function main(): int32 {
-	const started = Session.start("cmd.exe /c echo mutable-buffer-smoke", 40, 5);
+	const pty = ConPty.spawn("cmd.exe /c echo mutable-buffer-smoke", 40, 5);
+	if (!pty.ok) {
+		console.log("FAIL: ConPTY did not open");
+		return 1;
+	}
+	const started = Session.start(pty.value, 40, 5);
 	if (!started.ok) {
 		console.log("FAIL: ConPTY session did not start");
 		return 1;

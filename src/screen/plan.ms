@@ -364,3 +364,62 @@ test "a resize repaints at the new size" {
 		vt.free();
 	}
 }
+
+test "scrolling the viewport down plans a scroll by that many rows and up repaints" {
+	const opening = opened(10);
+	assert opening.ok;
+	if (opening.ok) {
+		const vt = opening.value;
+		vt.writeText(newLines(24, 76));
+		const bottom = vt.plan();
+		assert bottom.ok;
+		vt.scrollLines(-3);
+		const up = vt.plan();
+		assert up.ok;
+		if (up.ok) {
+			assert up.value.kind == PlanKind.Repaint;
+			assert up.value.rows.length == 24;
+			assert textOf(up.value.rows[0]) == "row 73";
+		}
+		const idle = vt.plan();
+		assert idle.ok;
+		if (idle.ok) { assert idle.value.kind == PlanKind.Idle; }
+		vt.scrollLines(2);
+		const down = vt.plan();
+		assert down.ok;
+		if (down.ok) {
+			assert down.value.kind == PlanKind.Scroll;
+			assert down.value.scrolled == 2;
+			assert ys(down.value.rows) == "22,23";
+			assert textOf(down.value.rows[1]) == "row 98";
+		}
+		vt.free();
+	}
+}
+
+test "output while the viewport is scrolled up plans nothing, and snapping back plans the new rows" {
+	const opening = opened(10);
+	assert opening.ok;
+	if (opening.ok) {
+		const vt = opening.value;
+		vt.writeText(newLines(24, 76));
+		const bottom = vt.plan();
+		assert bottom.ok;
+		vt.scrollLines(-3);
+		const up = vt.plan();
+		assert up.ok;
+		vt.writeText(newLines(100, 5));
+		const held = vt.plan();
+		assert held.ok;
+		if (held.ok) { assert held.value.kind == PlanKind.Idle; }
+		vt.scrollBottom();
+		const snapped = vt.plan();
+		assert snapped.ok;
+		if (snapped.ok) {
+			assert snapped.value.kind == PlanKind.Scroll;
+			assert snapped.value.scrolled == 8;
+			assert textOf(snapped.value.rows[7]) == "row 104";
+		}
+		vt.free();
+	}
+}

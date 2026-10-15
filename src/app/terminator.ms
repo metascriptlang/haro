@@ -4,7 +4,6 @@
 import { element } from "../../../neon/src/macros/ui/element";
 import { NeonNode } from "../../../neon/src/render/node";
 import { NeonEvent } from "../../../neon/src/render/event";
-import { HostNode } from "../../../neon/src/render/hostTypes";
 import { Accessor, createSignal } from "../../../neon/src/core/signal";
 import { ForList } from "../../../neon/src/macros/ui/flow";
 import { PixelRatio } from "../../../neon/src/api/pixelRatio";
@@ -14,8 +13,8 @@ import {
 	DesktopOptions,
 	desktopOptions,
 } from "../../../neon/src/platform/ion/window";
-import { DrawKind, VoidNode } from "../../../neon/src/platform/void/host";
-import { textHeight, textWidth } from "../../../void/src/void2d/render";
+import { addFont } from "../../../void/src/void2d/font";
+import { Align, TextLayout, layout } from "../../../void/src/void2d/textLayout";
 import { onWake } from "../../../ion/src/index";
 import { argv, exit } from "std/process";
 import { RowSlot } from "./frame";
@@ -44,15 +43,29 @@ const BACKGROUND = "#0c0c0c";
 const FOREGROUND = "#cccccc";
 const PROBE = "MMMMMMMMMM";
 
-interface Probe {
-	node: VoidNode | null;
+interface Cell {
+	advance: number;
+	lineHeight: number;
 }
 
-function labelOf(node: VoidNode): VoidNode | null {
-	for (const child of node.children) {
-		if (child.ref.kind() == DrawKind.Label) { return child; }
+function measureCell(): Cell {
+	const font = addFont(FONT_PATH);
+	if (!font.ok) {
+		console.log(`terminator: the font ${FONT_PATH} did not load`);
+		exit(1);
 	}
-	return null;
+	const laid = TextLayout.layout(PROBE, {
+		font: font.value, size: FONT_SIZE as float32, letterSpacing: 0.0, lineSpacing: 0.0,
+		maxWidth: 0.0, align: Align.Left,
+	});
+	if (!laid.ok) {
+		console.log("terminator: the cell probe did not lay out");
+		exit(1);
+	}
+	return {
+		advance: (laid.value.width as number) / PROBE.length,
+		lineHeight: laid.value.lineHeight as number,
+	};
 }
 
 function fatal(what: string, error: TermError): void {
@@ -60,8 +73,7 @@ function fatal(what: string, error: TermError): void {
 	exit(1);
 }
 
-function App(t: Term): NeonNode {
-	const probe: Probe = { node: null };
+function App(t: Term, cell: Cell): NeonNode {
 	const [cellWidth, setCellWidth] = createSignal<number>(0);
 	const [rowHeight, setRowHeight] = createSignal<number>(0);
 	const [cursorCol, setCursorCol] = createSignal<number>(0);
@@ -97,23 +109,18 @@ function App(t: Term): NeonNode {
 
 	const lineRow = (item: Accessor<RowSlot>): NeonNode => {
 		return element(
-			<Text style={{ fontSize: FONT_SIZE, color: FOREGROUND, height: rowHeight() }}>
-				{item().line.text}
-			</Text>
+			<Text
+				style={{ fontSize: FONT_SIZE, color: FOREGROUND, height: rowHeight() }}
+				cellWidth={cellWidth()}
+				spans={item().spans}
+			/>
 		);
 	};
 
 	const layout = (e: NeonEvent): void => {
-		const node = probe.node;
-		if (node === null || e.width <= 0 || e.height <= 0) { return; }
-		const label = labelOf(node);
-		if (label === null) {
-			console.log("terminator: the measuring text has no label node");
-			exit(1);
-			return;
-		}
-		const advance = (label.ref.textWidth() as number) / PROBE.length;
-		const lineHeight = label.ref.textHeight() as number;
+		if (e.width <= 0 || e.height <= 0) { return; }
+		const advance = cell.advance;
+		const lineHeight = cell.lineHeight;
 		const ratio = PixelRatio.get();
 		const cellPx = Math.ceil(advance * ratio) as int32;
 		const rowPx = Math.ceil(lineHeight * ratio) as int32;
@@ -125,7 +132,7 @@ function App(t: Term): NeonNode {
 			exit(1);
 			return;
 		}
-		setCellWidth(advance);
+		setCellWidth(cellPx / ratio);
 		setRowHeight(rowPx / ratio);
 		console.log(
 			`terminator: layout ${e.width}x${e.height} ratio ${ratio} ` +
@@ -163,11 +170,6 @@ function App(t: Term): NeonNode {
 				onLayout={layout}
 				onKeyDown={typed}
 				onTextInput={committed}>
-				<Text
-					ref={(node: HostNode): void => { probe.node = node as VoidNode; }}
-					style={{ fontSize: FONT_SIZE, position: "absolute", opacity: 0 }}>
-					{PROBE}
-				</Text>
 				{ForList<RowSlot>({ each: t.grid, children: lineRow })}
 				<View
 					style={{
@@ -204,7 +206,8 @@ function main(): int32 {
 		if (arg == "--smoke") { smoke(t); }
 	}
 	const opts: DesktopOptions = { ...desktopOptions("Terminator", 960, 600), font: FONT_PATH };
-	const code = runWindow(opts, (): NeonNode => App(t));
+	const cell = measureCell();
+	const code = runWindow(opts, (): NeonNode => App(t, cell));
 	t.shutdown();
 	return code;
 }

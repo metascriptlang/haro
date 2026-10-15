@@ -1,5 +1,6 @@
 import { createList, List } from "../../../neon/src/core/list";
 import { NeonEvent } from "../../../neon/src/render/event";
+import { Style } from "../../../neon/src/render/style";
 import { KeyAction, KeyEvent, KeyMod } from "../keys/keys";
 import { Pty } from "../pty/pty";
 import { Session } from "../session/session";
@@ -16,6 +17,7 @@ export enum TermError {
 	PumpFailed,
 	FramePlanFailed,
 	FrameCursorFailed,
+	FramePaletteFailed,
 	FrameLineFailed,
 	EncodeFailed,
 	TextTooLong,
@@ -27,6 +29,7 @@ export interface Term {
 	session: Session | null;
 	keys: Keys;
 	grid: List<RowSlot>;
+	styles: Map<string, Style>;
 	buf: Vec<uint8>;
 	cols: int32;
 	rows: int32;
@@ -47,6 +50,7 @@ export function openTerm(shell: string): Result<Term, TermError> {
 		session: null,
 		keys: keys.value,
 		grid: createList<RowSlot>([]),
+		styles: new Map<string, Style>(),
 		buf: buf,
 		cols: 0,
 		rows: 0,
@@ -55,7 +59,7 @@ export function openTerm(shell: string): Result<Term, TermError> {
 }
 
 function blankSlot(): RowSlot {
-	return { line: { text: "", runs: [], cursorCell: -1 } };
+	return { line: { text: "", runs: [], cursorCell: -1 }, spans: [] };
 }
 
 function matchGrid(this t: Term, rows: int32): void {
@@ -84,6 +88,7 @@ function frameFailure(error: FrameError): TermError {
 	return match (error) {
 		FrameError.PlanFailed => TermError.FramePlanFailed,
 		FrameError.CursorFailed => TermError.FrameCursorFailed,
+		FrameError.PaletteFailed => TermError.FramePaletteFailed,
 		FrameError.LineFailed => TermError.FrameLineFailed,
 	};
 }
@@ -101,7 +106,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		if (!alive.value) { t.alive = false; }
 		more = alive.value && i == DRAIN_LIMIT - 1;
 	}
-	const applied = applyFrame(t.grid, s.vt);
+	const applied = applyFrame(t.grid, t.styles, s.vt);
 	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
 	return Result.ok({ cursor: applied.value, more: more });
 }

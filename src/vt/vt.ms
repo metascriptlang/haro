@@ -151,6 +151,7 @@ extern function cellHasStyling(
 	key: GhosttyRenderStateRowCellsData,
 	out styled: boolean,
 ): GhosttyResult from "ghostty_render_state_row_cells_get";
+extern function styleDefault(out style: GhosttyStyle): void from "ghostty_style_default";
 extern function cellStyle(
 	cells: GhosttyRenderStateRowCells,
 	key: GhosttyRenderStateRowCellsData,
@@ -423,6 +424,7 @@ function readCell(
 	if (!ok(cellHasStyling(cells, styledKey, styled))) { return Result.err(VtError.ReadFailed); }
 	if (styled) {
 		let style: GhosttyStyle;
+		styleDefault(style);
 		style.size = sizeof GhosttyStyle;
 		const styleKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE;
 		if (!ok(cellStyle(cells, styleKey, style))) { return Result.err(VtError.ReadFailed); }
@@ -533,7 +535,7 @@ export function alternateScreen(this vt: Vt): Result<boolean, VtError> {
 }
 
 export function anchoredRow(this vt: Vt): Result<int32 | null, VtError> {
-	let at: GhosttyPointCoordinate;
+	let at: GhosttyPointCoordinate = { x: 0, y: 0 };
 	const r = ghostty_tracked_grid_ref_point(vt.top, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, at);
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
 	if (!ok(r)) { return Result.err(VtError.ReadFailed); }

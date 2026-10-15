@@ -3,6 +3,8 @@
 @link("../../vendor/ghostty/zig-out/lib/ghostty-vt-static.lib");
 @include("./effects.h");
 @compile("./effects.c");
+@include("./select.h");
+@compile("./select.c");
 
 import {
 	ghostty_terminal_new,
@@ -55,6 +57,7 @@ import {
 	GhosttyKey,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe } from "../keys/keys";
+import { Marked, Point, Range, Selection, Unit } from "../select/select";
 
 struct Graphemes { cp: uint32[16]; }
 
@@ -168,6 +171,27 @@ extern function cellWide(
 	out wide: GhosttyCellWide,
 ): GhosttyResult from "ghostty_cell_get";
 
+extern function vtScroll(terminal: GhosttyTerminal, tag: int32, amount: int64): void;
+extern function vtSelSet(
+	terminal: GhosttyTerminal,
+	sx: int32,
+	sy: int32,
+	ex: int32,
+	ey: int32,
+	rectangle: int32,
+): int32;
+extern function vtSelClear(terminal: GhosttyTerminal): void;
+extern function vtSelGet(terminal: GhosttyTerminal, out: Span<int32>): int32;
+extern function vtSelWord(terminal: GhosttyTerminal, x: int32, y: int32, out: Span<int32>): int32;
+extern function vtSelLine(terminal: GhosttyTerminal, x: int32, y: int32, out: Span<int32>): int32;
+extern function vtSelText(terminal: GhosttyTerminal, buf: Span<uint8>): int64;
+extern function vtPasteEncode(
+	terminal: GhosttyTerminal,
+	data: Readonly<Span<uint8>>,
+	allowUnsafe: int32,
+	out: Span<uint8>,
+): int64;
+
 const MAX_GRAPHEMES: uint32 = 16;
 
 export enum VtError {
@@ -178,6 +202,12 @@ export enum VtError {
 	GraphemeTooLong,
 	CodepointAboveBmpParked,
 	OutOfMemory,
+	SelectFailed,
+}
+
+export enum PasteError {
+	Unsafe,
+	EncodeFailed,
 }
 
 export struct Vt {
@@ -803,6 +833,124 @@ export function freeKeys(this k: Keys): void {
 	ghostty_key_encoder_free(k.encoder);
 }
 
+const SCROLL_TOP: int32 = 0;
+const SCROLL_BOTTOM: int32 = 1;
+const SCROLL_DELTA: int32 = 2;
+
+export function scrollLines(this vt: Vt, rows: int32): void {
+	vtScroll(vt.terminal, SCROLL_DELTA, rows as int64);
+}
+
+export function scrollPages(this vt: Vt, pages: int32): Result<Vt, VtError> {
+	let bar: GhosttyTerminalScrollbar;
+	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
+	if (!ok(terminalScrollbar(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
+	vtScroll(vt.terminal, SCROLL_DELTA, (pages as int64) * (bar.len as int64));
+	return Result.ok(vt);
+}
+
+export function scrollTop(this vt: Vt): void {
+	vtScroll(vt.terminal, SCROLL_TOP, 0);
+}
+
+export function scrollBottom(this vt: Vt): void {
+	vtScroll(vt.terminal, SCROLL_BOTTOM, 0);
+}
+
+export function atBottom(this vt: Vt): Result<boolean, VtError> {
+	let bar: GhosttyTerminalScrollbar;
+	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
+	if (!ok(terminalScrollbar(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(bar.offset + bar.len >= bar.total);
+}
+
+function rangeOf(c: Vec<int32>): Range {
+	return {
+		start: { row: c[1], col: c[0] },
+		end: { row: c[3], col: c[2] },
+	};
+}
+
+export function selectionSet(this vt: Vt, m: Marked): Result<Vt, VtError> {
+	const r = m.range;
+	const block = m.block ? 1 : 0;
+	if (vtSelSet(vt.terminal, r.start.col, r.start.row, r.end.col, r.end.row, block) != 0) {
+		return Result.err(VtError.SelectFailed);
+	}
+	return Result.ok(vt);
+}
+
+export function selectionClear(this vt: Vt): void {
+	vtSelClear(vt.terminal);
+}
+
+export function selection(this vt: Vt): Result<Marked | null, VtError> {
+	let c: Vec<int32> = new Array(5);
+	const r = vtSelGet(vt.terminal, c);
+	if (r < 0) { return Result.err(VtError.SelectFailed); }
+	if (r > 0) { return Result.ok(null); }
+	const got: Marked | null = { range: rangeOf(c), block: c[4] != 0 };
+	return Result.ok(got);
+}
+
+export function wordAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
+	let c: Vec<int32> = new Array(5);
+	const r = vtSelWord(vt.terminal, at.col, at.row, c);
+	if (r < 0) { return Result.err(VtError.SelectFailed); }
+	if (r > 0) { return Result.ok(null); }
+	const got: Range | null = rangeOf(c);
+	return Result.ok(got);
+}
+
+export function lineAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
+	let c: Vec<int32> = new Array(5);
+	const r = vtSelLine(vt.terminal, at.col, at.row, c);
+	if (r < 0) { return Result.err(VtError.SelectFailed); }
+	if (r > 0) { return Result.ok(null); }
+	const got: Range | null = rangeOf(c);
+	return Result.ok(got);
+}
+
+export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtError> {
+	const here: Range = { start: at, end: at };
+	if (unit == Unit.Cell) { return Result.ok(here); }
+	if (unit == Unit.Line) {
+		const line = try vt.lineAt(at);
+		if (line === null) { return Result.ok(here); }
+		return Result.ok(line);
+	}
+	const word = try vt.wordAt(at);
+	if (word !== null) { return Result.ok(word); }
+	if (at.col > 0) {
+		const head = try vt.wordAt({ row: at.row, col: at.col - 1 });
+		if (head !== null) { return Result.ok(head); }
+	}
+	return Result.ok(here);
+}
+
+export function selectedText(this vt: Vt): Result<string | null, VtError> {
+	let buf: Vec<uint8> = new Array(4096);
+	let n = vtSelText(vt.terminal, buf);
+	if (n > (buf.length as int64)) {
+		buf = new Array(n as int32);
+		n = vtSelText(vt.terminal, buf);
+	}
+	if (n < 0) { return Result.ok(null); }
+	const text: string | null = buf[0..(n as int32)].asString();
+	return Result.ok(text);
+}
+
+export function pasteBytes(this vt: Vt, text: string, allowUnsafe: boolean): Result<Vec<uint8>, PasteError> {
+	const data = text.asBytes();
+	let out: Vec<uint8> = new Array((data.length as int32) + 16);
+	const n = vtPasteEncode(vt.terminal, data, allowUnsafe ? 1 : 0, out);
+	if (n == -1) { return Result.err(PasteError.Unsafe); }
+	if (n < 0) { return Result.err(PasteError.EncodeFailed); }
+	let bytes: Vec<uint8> = [];
+	for (let i = 0; i < (n as int32); i++) { bytes.push(out[i]); }
+	return Result.ok(bytes);
+}
+
 test "written text lands on the rows the render state reports" {
 	const created = Vt.create(20, 4);
 	assert created.ok;
@@ -1188,6 +1336,278 @@ test "the cursor reports where the next write lands" {
 				assert at.y == 1;
 			}
 		}
+		vt.free();
+	}
+}
+
+function numbered(count: int32): string {
+	let text = "r0";
+	for (let i = 1; i < count; i++) { text += `\r\nr${i}`; }
+	return text;
+}
+
+function newText(count: int32): string {
+	let text = "";
+	for (let i = 0; i < count; i++) { text += `
+q${i}`; }
+	return text;
+}
+
+function top(vt: Vt): string {
+	const lines = vt.lines();
+	if (lines.ok) { return lines.value[0]; }
+	return "<unreadable>";
+}
+
+function at(row: int32, col: int32): Point {
+	return { row: row, col: col };
+}
+
+function marked(r0: int32, c0: int32, r1: int32, c1: int32): Marked {
+	return { range: { start: at(r0, c0), end: at(r1, c1) }, block: false };
+}
+
+function copied(vt: Vt): string {
+	const text = vt.selectedText();
+	if (!text.ok) { return "<failed>"; }
+	const got = text.value;
+	if (got !== null) { return got; }
+	return "<none>";
+}
+
+test "the viewport scrolls by lines, pages, to the top and back to the bottom" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText(numbered(10));
+		assert vt.update().ok;
+		assert top(vt) == "r6";
+		assert (try vt.atBottom() catch false);
+		vt.scrollLines(-2);
+		assert vt.update().ok;
+		assert top(vt) == "r4";
+		assert !(try vt.atBottom() catch true);
+		assert (try vt.scrollOffset() catch -1) == 4;
+		vt.scrollLines(1);
+		assert vt.update().ok;
+		assert top(vt) == "r5";
+		vt.scrollTop();
+		assert vt.update().ok;
+		assert top(vt) == "r0";
+		vt.scrollLines(-5);
+		assert vt.update().ok;
+		assert top(vt) == "r0";
+		assert vt.scrollPages(1).ok;
+		assert vt.update().ok;
+		assert top(vt) == "r4";
+		vt.scrollBottom();
+		assert vt.update().ok;
+		assert top(vt) == "r6";
+		assert (try vt.atBottom() catch false);
+		vt.scrollLines(5);
+		assert vt.update().ok;
+		assert top(vt) == "r6";
+		vt.free();
+	}
+}
+
+test "new output while scrolled up leaves the view where it was" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText(numbered(10));
+		vt.scrollLines(-3);
+		assert vt.update().ok;
+		assert top(vt) == "r3";
+		vt.writeText("\r\nr10\r\nr11\r\nr12\r\nr13\r\nr14");
+		assert vt.update().ok;
+		assert top(vt) == "r3";
+		assert !(try vt.atBottom() catch true);
+		vt.scrollBottom();
+		assert vt.update().ok;
+		assert top(vt) == "r11";
+		vt.free();
+	}
+}
+
+test "a selection across two wrapped rows copies one logical line" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("abcdefghijklmnop\r\nnext");
+		assert vt.update().ok;
+		assert vt.selectionSet(marked(0, 2, 1, 4)).ok;
+		assert copied(vt) == "cdefghijklmno";
+		assert vt.selectionSet(marked(0, 0, 2, 3)).ok;
+		assert copied(vt) == "abcdefghijklmnop\nnext";
+		vt.free();
+	}
+}
+
+test "trailing spaces are trimmed on each copied line" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("hi   \r\nthere");
+		assert vt.update().ok;
+		assert vt.selectionSet(marked(0, 0, 1, 9)).ok;
+		assert copied(vt) == "hi\nthere";
+		vt.free();
+	}
+}
+
+test "a double click picks the word under the pointer and a triple click the logical line" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("foo bar-baz qux again");
+		assert vt.update().ok;
+		const word = vt.unitAt(Unit.Word, at(0, 5));
+		assert word.ok;
+		if (word.ok) {
+			assert word.value.start == at(0, 4);
+			const sel = Selection.press(Unit.Word, word.value, false);
+			assert vt.selectionSet(sel.marked()).ok;
+			assert copied(vt) == "bar-baz";
+		}
+		const line = vt.unitAt(Unit.Line, at(1, 3));
+		assert line.ok;
+		if (line.ok) {
+			assert line.value.start == at(0, 0);
+			assert vt.selectionSet({ range: line.value, block: false }).ok;
+			assert copied(vt) == "foo bar-baz qux again";
+		}
+		vt.free();
+	}
+}
+
+test "a click on the second half of a wide character picks that character" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("中文 x");
+		assert vt.update().ok;
+		const first = vt.unitAt(Unit.Word, at(0, 1));
+		assert first.ok;
+		if (first.ok) {
+			assert first.value.start == at(0, 0);
+			assert vt.selectionSet({ range: first.value, block: false }).ok;
+			assert copied(vt) == "中";
+		}
+		const second = vt.unitAt(Unit.Word, at(0, 3));
+		assert second.ok;
+		if (second.ok) {
+			assert vt.selectionSet({ range: second.value, block: false }).ok;
+			assert copied(vt) == "文";
+		}
+		vt.free();
+	}
+}
+
+test "a selection survives five lines of new output" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText(numbered(4));
+		assert vt.update().ok;
+		assert vt.selectionSet(marked(1, 0, 2, 1)).ok;
+		assert copied(vt) == "r1\nr2";
+		vt.writeText("\r\nn0\r\nn1\r\nn2\r\nn3\r\nn4");
+		assert vt.update().ok;
+		const kept = vt.selection();
+		assert kept.ok;
+		if (kept.ok) {
+			const m = kept.value;
+			assert m !== null;
+			if (m !== null) {
+				assert m.range.start == at(1, 0);
+				assert m.range.end == at(2, 1);
+			}
+		}
+		assert copied(vt) == "r1\nr2";
+		vt.free();
+	}
+}
+
+test "a selection follows its text when scrollback is pruned" {
+	const created = Vt.create(80, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText(numbered(6000));
+		assert vt.update().ok;
+		const row = (try vt.scrollOffset() catch 0) + 3;
+		assert vt.selectionSet(marked(row, 0, row, 5)).ok;
+		assert copied(vt) == "r5999";
+		vt.writeText(newText(400));
+		assert vt.update().ok;
+		const kept = vt.selection();
+		assert kept.ok;
+		if (kept.ok) {
+			const m = kept.value;
+			assert m !== null;
+			if (m !== null) { assert m.range.start.row < row; }
+		}
+		assert copied(vt) == "r5999";
+		vt.free();
+	}
+}
+
+test "an erased selection is gone from the terminal" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("hello");
+		assert vt.update().ok;
+		assert vt.selectionSet(marked(0, 0, 0, 4)).ok;
+		vt.selectionClear();
+		const none = vt.selection();
+		assert none.ok;
+		if (none.ok) { assert none.value === null; }
+		const text = vt.selectedText();
+		assert text.ok;
+		if (text.ok) { assert text.value === null; }
+		vt.free();
+	}
+}
+
+function pasted(vt: Vt, text: string, allowUnsafe: boolean): string {
+	const bytes = vt.pasteBytes(text, allowUnsafe);
+	if (bytes.ok) { return ascii(bytes.value); }
+	return bytes.error == PasteError.Unsafe ? "<unsafe>" : "<failed>";
+}
+
+test "an unbracketed paste turns newlines into carriage returns and refuses them unconfirmed" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		assert pasted(vt, "hello", false) == "hello";
+		assert pasted(vt, "a\nb", false) == "<unsafe>";
+		assert pasted(vt, "a\nb", true) == "a\rb";
+		vt.free();
+	}
+}
+
+test "a bracketed paste is framed and only its end marker is unsafe" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("\x1b[?2004h");
+		assert pasted(vt, "a\nb", false) == "\x1b[200~a\nb\x1b[201~";
+		assert pasted(vt, "x\x1b[31my", false) == "\x1b[200~x [31my\x1b[201~";
+		assert pasted(vt, "evil\x1b[201~rm", false) == "<unsafe>";
+		vt.writeText("\x1b[?2004l");
+		assert pasted(vt, "plain", false) == "plain";
 		vt.free();
 	}
 }

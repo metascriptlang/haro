@@ -8,6 +8,8 @@ import {
 	ghostty_terminal_new,
 	ghostty_terminal_free,
 	ghostty_terminal_resize,
+	ghostty_tracked_grid_ref_free,
+	ghostty_tracked_grid_ref_point,
 	ghostty_key_encoder_new,
 	ghostty_key_encoder_free,
 	ghostty_key_encoder_setopt_from_terminal,
@@ -30,6 +32,12 @@ import {
 	ghostty_render_state_row_cells_next,
 	GhosttyResult,
 	GhosttyTerminal,
+	GhosttyTerminalData,
+	GhosttyTerminalScreen,
+	GhosttyTerminalScrollbar,
+	GhosttyTrackedGridRef,
+	GhosttyPointCoordinate,
+	GhosttyPointTag,
 	GhosttyRenderState,
 	GhosttyRenderStateData,
 	GhosttyRenderStateRowIterator,
@@ -55,6 +63,18 @@ extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<Span<uin
 extern function vtEffectsOpen(terminal: GhosttyTerminal): int32;
 extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
 extern function vtEffectsClose(id: int32, terminal: GhosttyTerminal): void;
+extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
+extern function vtTopAnchor(ref: GhosttyTrackedGridRef, terminal: GhosttyTerminal): int32;
+extern function terminalScrollbar(
+	terminal: GhosttyTerminal,
+	key: GhosttyTerminalData,
+	out scrollbar: GhosttyTerminalScrollbar,
+): GhosttyResult from "ghostty_terminal_get";
+extern function terminalScreen(
+	terminal: GhosttyTerminal,
+	key: GhosttyTerminalData,
+	out screen: GhosttyTerminalScreen,
+): GhosttyResult from "ghostty_terminal_get";
 extern function eventSetMods(event: GhosttyKeyEvent, mods: uint16): void
 	from "ghostty_key_event_set_mods";
 extern function eventSetConsumedMods(event: GhosttyKeyEvent, mods: uint16): void
@@ -165,6 +185,8 @@ export struct Vt {
 	rows: GhosttyRenderStateRowIterator;
 	cells: GhosttyRenderStateRowCells;
 	effects: int32;
+	top: GhosttyTrackedGridRef;
+	painted: Painted;
 }
 
 export struct Rgb { r: uint8; g: uint8; b: uint8; }
@@ -205,6 +227,11 @@ export struct Row {
 	extra: Vec<uint32>;
 }
 
+export interface Painted {
+	alternate: boolean;
+	rows: Vec<Row>;
+}
+
 struct Palette { fg: Rgb; bg: Rgb; }
 
 function ok(r: GhosttyResult): boolean {
@@ -228,7 +255,9 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		return Result.err(VtError.CreateFailed);
 	}
 	const effects = vtEffectsOpen(terminal);
-	if (effects < 0) {
+	let top: GhosttyTrackedGridRef;
+	if (effects < 0 || vtTopTrack(terminal, top) != 0) {
+		if (effects >= 0) { vtEffectsClose(effects, terminal); }
 		ghostty_render_state_row_cells_free(cells);
 		ghostty_render_state_row_iterator_free(iterator);
 		ghostty_render_state_free(state);
@@ -241,6 +270,8 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		rows: iterator,
 		cells: cells,
 		effects: effects,
+		top: top,
+		painted: { alternate: false, rows: [] },
 	});
 }
 
@@ -262,6 +293,7 @@ export function replies(this vt: Vt, buf: Span<uint8>): Result<int32, VtError> {
 export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtError> {
 	const r = ghostty_terminal_resize(vt.terminal, cols as uint16, rows as uint16, 0, 0);
 	if (!ok(r)) { return Result.err(VtError.ResizeFailed); }
+	vt.painted.rows = [];
 	return Result.ok(vt);
 }
 
@@ -486,11 +518,40 @@ export function lines(this vt: Vt): Result<Vec<string>, VtError> {
 	return Result.ok(out);
 }
 
+export function scrollOffset(this vt: Vt): Result<int32, VtError> {
+	let bar: GhosttyTerminalScrollbar;
+	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
+	if (!ok(terminalScrollbar(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(bar.offset as int32);
+}
+
+export function alternateScreen(this vt: Vt): Result<boolean, VtError> {
+	let screen = GhosttyTerminalScreen.GHOSTTY_TERMINAL_SCREEN_PRIMARY;
+	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN;
+	if (!ok(terminalScreen(vt.terminal, key, screen))) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(screen == GhosttyTerminalScreen.GHOSTTY_TERMINAL_SCREEN_ALTERNATE);
+}
+
+export function anchoredRow(this vt: Vt): Result<int32 | null, VtError> {
+	let at: GhosttyPointCoordinate;
+	const r = ghostty_tracked_grid_ref_point(vt.top, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, at);
+	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
+	if (!ok(r)) { return Result.err(VtError.ReadFailed); }
+	const row: int32 | null = at.y as int32;
+	return Result.ok(row);
+}
+
+export function anchorTop(this vt: Vt): Result<Vt, VtError> {
+	if (vtTopAnchor(vt.top, vt.terminal) != 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(vt);
+}
+
 export function clean(this vt: Vt): void {
 	ghostty_render_state_clean(vt.state);
 }
 
 export function free(this vt: Vt): void {
+	ghostty_tracked_grid_ref_free(vt.top);
 	vtEffectsClose(vt.effects, vt.terminal);
 	ghostty_render_state_row_cells_free(vt.cells);
 	ghostty_render_state_row_iterator_free(vt.rows);

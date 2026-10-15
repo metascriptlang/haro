@@ -78,3 +78,17 @@ void vtEffectsClose(int id, GhosttyTerminal terminal) {
 	free(e->data);
 	memset(e, 0, sizeof *e);
 }
+
+/* msc cannot import GhosttyPoint: .inbox/compiler/2026-10-15-c-import-fixed-array-member-sizedarray.md */
+static GhosttyPoint viewportTop(void) {
+	GhosttyPoint p = { .tag = GHOSTTY_POINT_TAG_VIEWPORT };
+	return p;
+}
+
+int vtTopTrack(GhosttyTerminal terminal, GhosttyTrackedGridRef* out) {
+	return (int)ghostty_terminal_grid_ref_track(terminal, viewportTop(), out);
+}
+
+int vtTopAnchor(GhosttyTrackedGridRef ref, GhosttyTerminal terminal) {
+	return (int)ghostty_tracked_grid_ref_set(ref, terminal, viewportTop());
+}

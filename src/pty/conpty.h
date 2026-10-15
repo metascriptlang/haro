@@ -1,5 +1,5 @@
-#ifndef TERMINATOR_CONPTY_H
-#define TERMINATOR_CONPTY_H
+#ifndef HARO_CONPTY_H
+#define HARO_CONPTY_H
 
 #include <stdint.h>
 

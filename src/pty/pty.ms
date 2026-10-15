@@ -142,6 +142,6 @@ test "a resize of a live console succeeds and hands the pty back" {
 }
 
 test "a command that cannot start is an error" {
-	const opened = Pty.open("no-such-program-terminator.exe", 80, 24);
+	const opened = Pty.open("no-such-program-haro.exe", 80, 24);
 	assert !opened.ok;
 }

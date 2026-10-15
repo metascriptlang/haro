@@ -51,7 +51,7 @@ interface Cell {
 function measureCell(): Cell {
 	const font = addFont(FONT_PATH);
 	if (!font.ok) {
-		console.log(`terminator: the font ${FONT_PATH} did not load`);
+		console.log(`haro: the font ${FONT_PATH} did not load`);
 		exit(1);
 	}
 	const laid = TextLayout.layout(PROBE, {
@@ -59,7 +59,7 @@ function measureCell(): Cell {
 		maxWidth: 0.0, align: Align.Left,
 	});
 	if (!laid.ok) {
-		console.log("terminator: the cell probe did not lay out");
+		console.log("haro: the cell probe did not lay out");
 		exit(1);
 	}
 	return {
@@ -69,7 +69,7 @@ function measureCell(): Cell {
 }
 
 function fatal(what: string, error: TermError): void {
-	console.log(`terminator: ${what}: ${error.toString()}`);
+	console.log(`haro: ${what}: ${error.toString()}`);
 	exit(1);
 }
 
@@ -99,7 +99,7 @@ function App(t: Term, cell: Cell): NeonNode {
 		show(frame.value.cursor);
 		if (frame.value.more) { setTimeout((): void => { refresh(); }, 0); }
 		if (!t.alive) {
-			console.log(`terminator: the shell exited with code ${t.shellExitCode()}`);
+			console.log(`haro: the shell exited with code ${t.shellExitCode()}`);
 			t.shutdown();
 			exit(0);
 		}
@@ -128,14 +128,14 @@ function App(t: Term, cell: Cell): NeonNode {
 		const heightPx = PixelRatio.getPixelSizeForLayoutSize(e.height) as int32;
 		const size = gridSize(widthPx, heightPx, cellPx, rowPx);
 		if (!size.ok) {
-			console.log(`terminator: cell ${advance}x${lineHeight} is not a grid size`);
+			console.log(`haro: cell ${advance}x${lineHeight} is not a grid size`);
 			exit(1);
 			return;
 		}
 		setCellWidth(cellPx / ratio);
 		setRowHeight(rowPx / ratio);
 		console.log(
-			`terminator: layout ${e.width}x${e.height} ratio ${ratio} ` +
+			`haro: layout ${e.width}x${e.height} ratio ${ratio} ` +
 				`cell ${advance}x${lineHeight} grid ${size.value[0]}x${size.value[1]}`
 		);
 		const fitted = t.fit(size.value[0], size.value[1]);
@@ -205,7 +205,7 @@ function main(): int32 {
 	for (const arg of argv) {
 		if (arg == "--smoke") { smoke(t); }
 	}
-	const opts: DesktopOptions = { ...desktopOptions("Terminator", 960, 600), font: FONT_PATH };
+	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: FONT_PATH };
 	const cell = measureCell();
 	const code = runWindow(opts, (): NeonNode => App(t, cell));
 	t.shutdown();

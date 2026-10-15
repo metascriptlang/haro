@@ -1,5 +1,5 @@
-#ifndef TERMINATOR_APP_WAKE_H
-#define TERMINATOR_APP_WAKE_H
+#ifndef HARO_APP_WAKE_H
+#define HARO_APP_WAKE_H
 
 void appWireWake(void);
 

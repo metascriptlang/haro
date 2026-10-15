@@ -1,5 +1,5 @@
-#ifndef TERMINATOR_VT_EFFECTS_H
-#define TERMINATOR_VT_EFFECTS_H
+#ifndef HARO_VT_EFFECTS_H
+#define HARO_VT_EFFECTS_H
 
 #include <stdint.h>
 #include <ghostty/vt.h>

@@ -31,6 +31,15 @@ typedef struct {
 } Pty;
 
 static Pty ptys[PTY_MAX];
+static void (*wakeApp)(void);
+
+void ptySetWake(void (*wake)(void)) {
+	wakeApp = wake;
+}
+
+static void wake(void) {
+	if (wakeApp) wakeApp();
+}
 
 static int append(Pty* p, const uint8_t* bytes, int64_t n) {
 	EnterCriticalSection(&p->lock);
@@ -42,6 +51,7 @@ static int append(Pty* p, const uint8_t* bytes, int64_t n) {
 			p->outOfMemory = 1;
 			SetEvent(p->ready);
 			LeaveCriticalSection(&p->lock);
+			wake();
 			return 0;
 		}
 		p->data = grown;
@@ -51,6 +61,7 @@ static int append(Pty* p, const uint8_t* bytes, int64_t n) {
 	p->len += n;
 	SetEvent(p->ready);
 	LeaveCriticalSection(&p->lock);
+	wake();
 	return 1;
 }
 
@@ -65,6 +76,7 @@ static DWORD WINAPI readLoop(LPVOID arg) {
 	p->closed = 1;
 	SetEvent(p->ready);
 	LeaveCriticalSection(&p->lock);
+	wake();
 	return 0;
 }
 

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+void ptySetWake(void (*wake)(void));
 int ptyOpen(const char* commandLine, int cols, int rows);
 int64_t ptyRead(int id, uint8_t* buf, int64_t cap);
 int ptyWait(int id, int timeoutMs);

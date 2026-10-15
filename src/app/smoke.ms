@@ -20,10 +20,10 @@ function counts(label: string): void {
 export function smoke(t: Term): void {
 	setTimeout((): void => { dump(t, "prompt"); counts("after the prompt"); }, 4000);
 	setTimeout((): void => {
-		const sent = t.sendText("dir\r");
-		console.log(`smoke: sent dir, ok=${sent.ok}`);
+		const sent = t.sendText("1..200 | % { \"line $_\" }\r");
+		console.log(`smoke: sent 200 lines, ok=${sent.ok}`);
 	}, 4200);
-	setTimeout((): void => { dump(t, "after dir"); }, 6500);
+	setTimeout((): void => { dump(t, "after 200 lines"); }, 6500);
 	setTimeout((): void => { counts("idle begins"); }, 7000);
 	setTimeout((): void => {
 		counts("idle 2 s later");

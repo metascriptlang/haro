@@ -1,6 +1,8 @@
 @include("./conpty.h");
 @compile("./conpty.c");
 
+import { Pty, PtyError } from "./transport";
+
 extern function ptyOpen(commandLine: cstring, cols: int32, rows: int32): int32;
 extern function ptyRead(id: int32, buf: Span<uint8>): int64;
 extern function ptyWait(id: int32, timeoutMs: int32): int32;
@@ -10,59 +12,75 @@ extern function ptyExited(id: int32): int32;
 extern function ptyExitCode(id: int32): int32;
 extern function ptyClose(id: int32): void;
 
-export enum PtyError {
-	OpenFailed,
-	Closed,
-	OutOfMemory,
-	ResizeFailed,
-	WaitFailed,
-}
-
-export struct Pty { id: int32; }
+export struct ConPty { id: int32; }
 
 export function open(
-	this typeof Pty,
+	this typeof ConPty,
 	commandLine: string,
 	cols: int32,
 	rows: int32,
-): Result<Pty, PtyError> {
+): Result<ConPty, PtyError> {
 	const id = ptyOpen(commandLine, cols, rows);
 	if (id < 0) { return Result.err(PtyError.OpenFailed); }
 	return Result.ok({ id: id });
 }
 
-export function read(this p: Pty, buf: Span<uint8>): Result<int32, PtyError> {
+export function read(this p: ConPty, buf: Span<uint8>): Result<int32, PtyError> {
 	const n = ptyRead(p.id, buf);
 	if (n == -2) { return Result.err(PtyError.OutOfMemory); }
 	if (n < 0) { return Result.err(PtyError.Closed); }
 	return Result.ok(n as int32);
 }
 
-export function wait(this p: Pty, timeoutMs: int32): Result<boolean, PtyError> {
+export function wait(this p: ConPty, timeoutMs: int32): Result<boolean, PtyError> {
 	const r = ptyWait(p.id, timeoutMs);
 	if (r == -2) { return Result.err(PtyError.WaitFailed); }
 	if (r < 0) { return Result.err(PtyError.Closed); }
 	return Result.ok(r == 1);
 }
 
-export function write(this p: Pty, data: Span<uint8>): Result<int32, PtyError> {
+export function write(this p: ConPty, data: Span<uint8>): Result<int32, PtyError> {
 	const n = ptyWrite(p.id, data);
 	if (n < 0) { return Result.err(PtyError.Closed); }
 	return Result.ok(n as int32);
 }
 
-export function resize(this p: Pty, cols: int32, rows: int32): Result<Pty, PtyError> {
+export function resize(this p: ConPty, cols: int32, rows: int32): Result<ConPty, PtyError> {
 	if (ptyResize(p.id, cols, rows) != 0) { return Result.err(PtyError.ResizeFailed); }
 	return Result.ok(p);
 }
 
-export function exitCode(this p: Pty): int32 | null {
+export function exitCode(this p: ConPty): int32 | null {
 	if (ptyExited(p.id) == 0) { return null; }
 	return ptyExitCode(p.id);
 }
 
-export function close(this p: Pty): void {
+export function close(this p: ConPty): void {
 	ptyClose(p.id);
+}
+
+export function toPty(this p: ConPty): Pty {
+	return {
+		wait: (timeoutMs: int32): Result<boolean, PtyError> => { return p.wait(timeoutMs); },
+		read: (buf: Span<uint8>): Result<int32, PtyError> => { return p.read(buf); },
+		write: (data: Span<uint8>): Result<int32, PtyError> => { return p.write(data); },
+		resize: (cols: int32, rows: int32): Result<void, PtyError> => {
+			if (!p.resize(cols, rows).ok) { return Result.err(PtyError.ResizeFailed); }
+			return Result.ok(null);
+		},
+		exitCode: (): int32 | null => { return p.exitCode(); },
+		close: (): void => { p.close(); },
+	};
+}
+
+export function spawn(
+	this typeof ConPty,
+	commandLine: string,
+	cols: int32,
+	rows: int32,
+): Result<Pty, PtyError> {
+	const opened = try ConPty.open(commandLine, cols, rows);
+	return Result.ok(opened.toPty());
 }
 
 function drain(this p: Pty): string {
@@ -79,7 +97,7 @@ function drain(this p: Pty): string {
 	}
 }
 
-function quietWaitMs(this p: Pty, timeoutMs: int32): Result<float64, PtyError> {
+function quietWaitMs(this p: ConPty, timeoutMs: int32): Result<float64, PtyError> {
 	let buf: Vec<uint8> = new Array(4096);
 	while (true) {
 		const start: float64 = performance.now();
@@ -90,11 +108,11 @@ function quietWaitMs(this p: Pty, timeoutMs: int32): Result<float64, PtyError> {
 }
 
 test "a ConPTY child's output reaches read and its exit ends the stream" {
-	const opened = Pty.open("cmd.exe /c echo hello", 80, 24);
+	const opened = ConPty.open("cmd.exe /c echo hello", 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const p = opened.value;
-		const text = p.drain();
+		const text = p.toPty().drain();
 		assert text.includes("hello");
 		const code = p.exitCode();
 		assert code !== null;
@@ -104,7 +122,7 @@ test "a ConPTY child's output reaches read and its exit ends the stream" {
 }
 
 test "a wait returns as soon as the child writes" {
-	const opened = Pty.open("cmd.exe /c echo hello", 80, 24);
+	const opened = ConPty.open("cmd.exe /c echo hello", 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const p = opened.value;
@@ -118,7 +136,7 @@ test "a wait returns as soon as the child writes" {
 }
 
 test "a wait on a quiet child sleeps until its timeout" {
-	const opened = Pty.open("cmd.exe /c ping -n 4 127.0.0.1 > nul", 80, 24);
+	const opened = ConPty.open("cmd.exe /c ping -n 4 127.0.0.1 > nul", 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const p = opened.value;
@@ -131,7 +149,7 @@ test "a wait on a quiet child sleeps until its timeout" {
 }
 
 test "a resize of a live console succeeds and hands the pty back" {
-	const opened = Pty.open("cmd.exe /c echo hello", 80, 24);
+	const opened = ConPty.open("cmd.exe /c echo hello", 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const resized = opened.value.resize(120, 40);
@@ -142,6 +160,29 @@ test "a resize of a live console succeeds and hands the pty back" {
 }
 
 test "a command that cannot start is an error" {
-	const opened = Pty.open("no-such-program-haro.exe", 80, 24);
+	const opened = ConPty.open("no-such-program-haro.exe", 80, 24);
 	assert !opened.ok;
+}
+
+test "a ConPTY spawned as a Pty reads its output and reports its exit through the interface" {
+	const spawned = ConPty.spawn("cmd.exe /c echo hello", 80, 24);
+	assert spawned.ok;
+	if (spawned.ok) {
+		const pty = spawned.value;
+		assert pty.drain().includes("hello");
+		const code = pty.exitCode();
+		assert code !== null;
+		if (code !== null) { assert code == 0; }
+		pty.close();
+	}
+}
+
+test "a resize through the Pty interface reaches a live ConPTY" {
+	const spawned = ConPty.spawn("cmd.exe /c ping -n 4 127.0.0.1 > nul", 80, 24);
+	assert spawned.ok;
+	if (spawned.ok) {
+		const pty = spawned.value;
+		assert pty.resize(100, 30).ok;
+		pty.close();
+	}
 }

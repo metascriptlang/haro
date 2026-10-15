@@ -65,7 +65,15 @@ from a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree `504771cca46c2
   the ref stays on the screen it was set on while the scrollbar is the active screen's. Watch
   `GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN` and repaint everything when it changes.
 - A clear (`ESC[2J`) gives N = 0 with all 24 rows dirty; overwriting one row gives N = 0 with two
-  rows dirty (that row and, unverified, the old cursor row).
+  rows dirty: that row and the old cursor row. Moving the cursor to another row dirties both rows;
+  moving it within a row, or hiding or showing it, dirties nothing, so the cursor is read every frame.
+- After any scroll the render state is FULL and every row's dirty flag is set, so the VT cannot say
+  which kept rows changed. A pure scroll leaves each kept row identical to its old position at
+  `y + N`; a kept row edited in the same frame shows only by comparing cells. That is why
+  `src/screen/plan.ms` keeps the rows it last planned (`Vt.painted`) and diffs on a scroll frame.
+- Reverse index at the top, and any scroll inside the alternate screen, gives N = 0 with all rows
+  dirty: a rows frame, never a scroll. The scrollback cap is byte-based: 5000 lines prune the ref at
+  80 columns but not at 10.
 
 `GhosttyPoint` is built in C (`probe/scrollRefShim.h`) because msc cannot import a C aggregate with
 a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-sizedarray.md`).

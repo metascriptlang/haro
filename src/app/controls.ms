@@ -1,10 +1,12 @@
 import { NeonEvent, neonEvent } from "../../../neon/src/render/event";
+import { KeyMod } from "../keys/keys";
 import { Block } from "../select/select";
 import { Action, resolve } from "../input/bindings";
-import { Pointer, Spot } from "../input/pointer";
-import { ROWS_PER_NOTCH, Wheel, WheelRoute, route } from "../input/wheel";
-import { Held, Reply, replyTo, warningFor, Warning } from "../input/paste";
-import { Vt } from "../vt/vt";
+import { Pointer, Spot, claimsMouse } from "../input/pointer";
+import { ROWS_PER_NOTCH, Wheel, WheelRoute, reportButton, route } from "../input/wheel";
+import { Held, Reply, replyTo, replyToRead, warningFor, Warning } from "../input/paste";
+import { openable } from "../term/link";
+import { MouseAction, MouseGeometry, MouseInput, Vt } from "../vt/vt";
 import { Term, TermError } from "./term";
 import { Sink, termOf } from "./termTest";
 
@@ -14,6 +16,7 @@ export enum ControlError {
 	WriteFailed,
 	PasteEncodeFailed,
 	PasteUnsafe,
+	MouseFailed,
 }
 
 export enum Pasted {
@@ -22,23 +25,37 @@ export enum Pasted {
 	Held,
 }
 
-export interface Clip {
+export interface Bridge {
 	write: (text: string) => void;
 	read: (done: (text: string) => void) => void;
+	open: (uri: string) => void;
+}
+
+export struct Hit {
+	at: Spot;
+	x: float64;
+	y: float64;
+	scale: float64;
+	mods: int32;
+	cell: MouseGeometry;
 }
 
 export interface Controls {
 	pointer: Pointer;
 	wheel: Wheel;
 	held: Held | null;
+	reading: string | null;
+	button: int32;
 }
 
 const LEFT: int32 = 1;
 const RIGHT: int32 = 2;
+const SHIFT: int32 = 1;
+const CTRL: int32 = 2;
 const KEYBOARD_ROWS: int32 = ROWS_PER_NOTCH as int32;
 
 export function open(this typeof Controls): Controls {
-	return { pointer: Pointer.open(), wheel: Wheel.open(), held: null };
+	return { pointer: Pointer.open(), wheel: Wheel.open(), held: null, reading: null, button: 0 };
 }
 
 function vtOf(t: Term): Vt | null {
@@ -82,27 +99,57 @@ export function paste(this c: Controls, t: Term, text: string): Result<Pasted, C
 }
 
 export function holding(this c: Controls): boolean {
-	return c.held !== null;
+	return c.held !== null || c.reading !== null;
+}
+
+function answerClipboard(this c: Controls, t: Term, text: string, allow: boolean): Result<boolean, ControlError> {
+	const vt = vtOf(t);
+	if (vt === null) { return Result.ok(false); }
+	if (!vt.answerClipboard(text, allow).ok) { return Result.err(ControlError.VtFailed); }
+	if (!t.sendReplies().ok) { return Result.err(ControlError.WriteFailed); }
+	return Result.ok(true);
+}
+
+export function asked(this c: Controls, t: Term, host: Bridge): void {
+	host.read((text: string): void => {
+		if (text == "") {
+			const answered = c.answerClipboard(t, "", true);
+			if (!answered.ok) { console.log(`haro: clipboard answer failed: ${answered.error.toString()}`); }
+			return;
+		}
+		c.reading = text;
+	});
 }
 
 export function confirm(this c: Controls, t: Term): Result<boolean, ControlError> {
 	const held = c.held;
-	if (held === null) { return Result.ok(false); }
-	c.held = null;
-	const _sent = try c.send(t, held.text, true);
-	return Result.ok(true);
+	if (held !== null) {
+		c.held = null;
+		const _sent = try c.send(t, held.text, true);
+		return Result.ok(true);
+	}
+	const reading = c.reading;
+	if (reading === null) { return Result.ok(false); }
+	c.reading = null;
+	return c.answerClipboard(t, reading, true);
 }
 
-export function cancel(this c: Controls): void {
-	c.held = null;
+export function cancel(this c: Controls, t: Term): Result<boolean, ControlError> {
+	if (c.held !== null) {
+		c.held = null;
+		return Result.ok(true);
+	}
+	if (c.reading === null) { return Result.ok(false); }
+	c.reading = null;
+	return c.answerClipboard(t, "", false);
 }
 
 function answer(this c: Controls, t: Term, e: NeonEvent): Result<boolean, ControlError> {
-	const reply = replyTo(e.code, e.mods);
+	const reply = c.held !== null ? replyTo(e.code, e.mods) : replyToRead(e.code, e.mods);
 	if (reply == Reply.Confirm) {
 		const _sent = try c.confirm(t);
 	} else if (reply == Reply.Cancel) {
-		c.cancel();
+		const _dropped = try c.cancel(t);
 	}
 	return Result.ok(true);
 }
@@ -118,24 +165,24 @@ export function typed(this c: Controls, t: Term): Result<boolean, ControlError> 
 	return Result.ok(true);
 }
 
-function pasteFrom(this c: Controls, t: Term, clip: Clip): void {
-	clip.read((text: string): void => {
+function pasteFrom(this c: Controls, t: Term, host: Bridge): void {
+	host.read((text: string): void => {
 		const sent = c.paste(t, text);
 		if (!sent.ok) { console.log(`haro: paste failed: ${sent.error.toString()}`); }
 	});
 }
 
-export function keyDown(this c: Controls, t: Term, e: NeonEvent, clip: Clip): Result<boolean, ControlError> {
-	if (c.held !== null) { return c.answer(t, e); }
+export function keyDown(this c: Controls, t: Term, e: NeonEvent, host: Bridge): Result<boolean, ControlError> {
+	if (c.holding()) { return c.answer(t, e); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
 	if (!alt.ok) { return Result.err(ControlError.VtFailed); }
 	const action = resolve(e.code, e.mods, alt.value);
 	if (action == Action.None) { return Result.ok(false); }
-	if (action == Action.Copy) { return c.copy(t, clip); }
+	if (action == Action.Copy) { return c.copy(t, host); }
 	if (action == Action.Paste) {
-		c.pasteFrom(t, clip);
+		c.pasteFrom(t, host);
 		return Result.ok(true);
 	}
 	if (action == Action.PageUp || action == Action.PageDown) {
@@ -155,59 +202,111 @@ export function keyDown(this c: Controls, t: Term, e: NeonEvent, clip: Clip): Re
 	return Result.ok(true);
 }
 
-function copy(this c: Controls, t: Term, clip: Clip): Result<boolean, ControlError> {
+function copy(this c: Controls, t: Term, host: Bridge): Result<boolean, ControlError> {
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const text = c.pointer.copyText(vt);
 	if (!text.ok) { return Result.err(ControlError.VtFailed); }
 	const got = text.value;
 	if (got === null) { return Result.ok(false); }
-	clip.write(got);
+	host.write(got);
 	c.pointer.clear(vt);
 	return Result.ok(true);
 }
 
-export function down(
-	this c: Controls, t: Term, clip: Clip, button: int32, at: Spot, x: float64, y: float64, time: float64, reach: float64,
+function report(
+	this c: Controls, t: Term, action: MouseAction, button: int32, h: Hit, anyPressed: boolean,
 ): Result<boolean, ControlError> {
-	if (c.held !== null) { return Result.ok(false); }
+	const input: MouseInput = {
+		action: action,
+		button: button,
+		mods: (h.mods as uint16) as BitSet<KeyMod>,
+		x: (h.x * h.scale) as float32,
+		y: (h.y * h.scale) as float32,
+	};
+	const sent = t.sendMouse(input, h.cell, anyPressed);
+	if (!sent.ok) { return Result.err(match (sent.error) {
+		TermError.WriteFailed => ControlError.WriteFailed,
+		_ => ControlError.MouseFailed,
+	}); }
+	return Result.ok(sent.value > 0);
+}
+
+function follow(host: Bridge, uri: string): void {
+	if (openable(uri)) {
+		host.open(uri);
+	} else {
+		console.log(`haro: link refused, only http and https open: ${uri}`);
+	}
+}
+
+export function down(
+	this c: Controls, t: Term, host: Bridge, button: int32, h: Hit, time: float64,
+): Result<boolean, ControlError> {
+	if (c.holding()) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const modes = vt.modes();
 	if (!modes.ok) { return Result.err(ControlError.VtFailed); }
-	if (modes.value.mouseTracking) { return Result.ok(false); }
+	if (button == LEFT && (h.mods & CTRL) != 0) {
+		const link = vt.linkAt(h.at.col, h.at.row);
+		if (!link.ok) { return Result.err(ControlError.VtFailed); }
+		const uri = link.value;
+		if (uri !== null) {
+			follow(host, uri);
+			return Result.ok(true);
+		}
+	}
+	if (claimsMouse(modes.value.mouseTracking, (h.mods & SHIFT) != 0)) {
+		c.pointer.clear(vt);
+		c.button = button;
+		return c.report(t, MouseAction.Press, button, h, true);
+	}
 	if (button == LEFT) {
-		const pressed = c.pointer.press(vt, at, x, y, time, reach);
+		const reach = (h.cell.cellWidth as float64) / h.scale;
+		const pressed = c.pointer.press(vt, h.at, h.x, h.y, time, reach);
 		if (!pressed.ok) { return Result.err(ControlError.VtFailed); }
 		return Result.ok(true);
 	}
 	if (button == RIGHT) {
-		const copied = try c.copy(t, clip);
-		if (!copied) { c.pasteFrom(t, clip); }
+		const copied = try c.copy(t, host);
+		if (!copied) { c.pasteFrom(t, host); }
 		return Result.ok(copied);
 	}
 	return Result.ok(false);
 }
 
-export function move(this c: Controls, t: Term, at: Spot, pressed: boolean): Result<boolean, ControlError> {
-	if (c.held !== null) { return Result.ok(false); }
+export function move(this c: Controls, t: Term, h: Hit, pressed: boolean): Result<boolean, ControlError> {
+	if (c.holding()) { return Result.ok(false); }
 	const vt = vtOf(t);
-	if (vt === null || !c.pointer.dragging) { return Result.ok(false); }
+	if (vt === null) { return Result.ok(false); }
+	const modes = vt.modes();
+	if (!modes.ok) { return Result.err(ControlError.VtFailed); }
+	if (claimsMouse(modes.value.mouseTracking, (h.mods & SHIFT) != 0)) {
+		if (!pressed) { c.button = 0; }
+		const _reported = try c.report(t, MouseAction.Motion, c.button, h, c.button != 0);
+		return Result.ok(false);
+	}
+	if (!c.pointer.dragging) { return Result.ok(false); }
 	if (!pressed) {
 		c.pointer.release();
 		return Result.ok(false);
 	}
-	const dragged = c.pointer.drag(vt, at);
+	const dragged = c.pointer.drag(vt, h.at);
 	if (!dragged.ok) { return Result.err(ControlError.VtFailed); }
 	return Result.ok(dragged.value);
 }
 
-export function up(this c: Controls): void {
+export function up(this c: Controls, t: Term, button: int32, h: Hit): Result<boolean, ControlError> {
+	const reported = c.button != 0;
 	c.pointer.release();
+	if (!reported || c.holding()) { return Result.ok(false); }
+	c.button = 0;
+	return c.report(t, MouseAction.Release, button, h, false);
 }
 
-export function roll(this c: Controls, t: Term, notches: float64): Result<boolean, ControlError> {
-	if (c.held !== null) { return Result.ok(false); }
+export function roll(this c: Controls, t: Term, notches: float64, h: Hit): Result<boolean, ControlError> {
+	if (c.holding()) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
@@ -215,13 +314,20 @@ export function roll(this c: Controls, t: Term, notches: float64): Result<boolea
 	if (!alt.ok || !modes.ok) { return Result.err(ControlError.VtFailed); }
 	const rows = c.wheel.rows(notches);
 	if (rows == 0) { return Result.ok(false); }
-	const where = route(alt.value, modes.value.mouseTracking, modes.value.altScroll);
-	if (where == WheelRoute.Report) { return Result.ok(false); }
+	const shift = (h.mods & SHIFT) != 0;
+	const claimed = claimsMouse(modes.value.mouseTracking, shift);
+	const where = route(alt.value, claimed, modes.value.altScroll && !shift);
+	const presses = rows < 0 ? -rows : rows;
+	if (where == WheelRoute.Report) {
+		for (let i = 0; i < presses; i++) {
+			const _reported = try c.report(t, MouseAction.Press, reportButton(rows < 0), h, false);
+		}
+		return Result.ok(false);
+	}
 	if (where == WheelRoute.Arrows) {
 		c.pointer.clear(vt);
 		const key = neonEvent("keydown");
 		key.code = rows < 0 ? "ArrowUp" : "ArrowDown";
-		const presses = rows < 0 ? -rows : rows;
 		for (let i = 0; i < presses; i++) {
 			if (!t.sendKey(key).ok) { return Result.err(ControlError.KeyFailed); }
 		}
@@ -244,8 +350,8 @@ export function shades(this c: Controls, t: Term): Result<Vec<Block>, ControlErr
 	return Result.ok(drawn.value);
 }
 
-
 interface Board {
+	opened: string;
 	copied: string;
 	offer: string;
 	reads: int32;
@@ -253,12 +359,13 @@ interface Board {
 
 
 function boardOf(offer: string): Board {
-	return { copied: "", offer: offer, reads: 0 };
+	return { opened: "", copied: "", offer: offer, reads: 0 };
 }
 
-function clipOf(board: Board): Clip {
+function clipOf(board: Board): Bridge {
 	return {
 		write: (text: string): void => { board.copied = text; },
+		open: (uri: string): void => { board.opened = uri; },
 		read: (done: (text: string) => void): void => {
 			board.reads += 1;
 			done(board.offer);
@@ -299,10 +406,21 @@ function handled(r: Result<boolean, ControlError>): boolean {
 	return r.ok && r.value;
 }
 
-function drag(c: Controls, t: Term, clip: Clip, from: Spot, to: Spot): boolean {
-	const pressed = c.down(t, clip, 1, from, from.col as float64 * 8, from.row as float64 * 16, 0, 8).ok;
-	const moved = c.move(t, to, true).ok;
-	c.up();
+function hitAt(col: int32, row: int32): Hit {
+	return hitWith(col, row, 0);
+}
+
+function hitWith(col: int32, row: int32, mods: int32): Hit {
+	return {
+		at: at(col, row), x: col as float64 * 8, y: row as float64 * 16, scale: 1, mods: mods,
+		cell: { cellWidth: 8, cellHeight: 16, width: 160, height: 80 },
+	};
+}
+
+function drag(c: Controls, t: Term, clip: Bridge, from: Spot, to: Spot): boolean {
+	const pressed = c.down(t, clip, 1, hitAt(from.col, from.row), 0).ok;
+	const moved = c.move(t, hitAt(to.col, to.row), true).ok;
+	const _released = c.up(t, 1, hitAt(to.col, to.row));
 	return pressed && moved;
 }
 
@@ -464,7 +582,7 @@ test "the buttons confirm and cancel through the same paths as the keys" {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("a\nb"));
 		assert handled(c.keyDown(t, key("KeyV", 3), clip));
-		c.cancel();
+		const _dropped = c.cancel(t);
 		assert !c.holding();
 		assert sink.sent == "";
 		assert !handled(c.confirm(t));
@@ -535,11 +653,11 @@ test "while a paste is held the wheel, the buttons and the pointer do nothing" {
 		const clip = clipOf(boardOf("a\nb"));
 		const bottom = offsetOf(t);
 		assert handled(c.keyDown(t, key("KeyV", 3), clip));
-		assert !handled(c.roll(t, 1));
+		assert !handled(c.roll(t, 1, hitAt(0, 0)));
 		assert offsetOf(t) == bottom;
-		assert !handled(c.down(t, clip, 1, at(0, 0), 0, 0, 0, 8));
+		assert !handled(c.down(t, clip, 1, hitAt(0, 0), 0));
 		assert !c.pointer.dragging;
-		assert !handled(c.down(t, clip, 2, at(0, 0), 0, 0, 0, 8));
+		assert !handled(c.down(t, clip, 2, hitAt(0, 0), 0));
 		assert clip.write !== null;
 		t.shutdown();
 	}
@@ -575,14 +693,14 @@ test "the wheel scrolls three rows a notch on the primary screen and accumulates
 	if (t !== null) {
 		const c = Controls.open();
 		const bottom = offsetOf(t);
-		assert handled(c.roll(t, 1));
+		assert handled(c.roll(t, 1, hitAt(0, 0)));
 		assert offsetOf(t) == bottom - 3;
-		assert handled(c.roll(t, 2));
+		assert handled(c.roll(t, 2, hitAt(0, 0)));
 		assert offsetOf(t) == bottom - 9;
-		assert handled(c.roll(t, -1));
+		assert handled(c.roll(t, -1, hitAt(0, 0)));
 		assert offsetOf(t) == bottom - 6;
-		assert !handled(c.roll(t, 0.25));
-		assert handled(c.roll(t, 0.25));
+		assert !handled(c.roll(t, 0.25, hitAt(0, 0)));
+		assert handled(c.roll(t, 0.25, hitAt(0, 0)));
 		assert offsetOf(t) == bottom - 7;
 		assert sink.sent == "";
 		t.shutdown();
@@ -595,9 +713,9 @@ test "on the alternate screen the wheel is arrow keys, in the cursor key mode th
 	assert a !== null;
 	if (a !== null) {
 		const c = Controls.open();
-		assert !handled(c.roll(a, 1));
+		assert !handled(c.roll(a, 1, hitAt(0, 0)));
 		assert normal.sent == "\x1b[A\x1b[A\x1b[A";
-		assert !handled(c.roll(a, -1));
+		assert !handled(c.roll(a, -1, hitAt(0, 0)));
 		assert normal.sent == "\x1b[A\x1b[A\x1b[A\x1b[B\x1b[B\x1b[B";
 		a.shutdown();
 	}
@@ -606,7 +724,7 @@ test "on the alternate screen the wheel is arrow keys, in the cursor key mode th
 	assert b !== null;
 	if (b !== null) {
 		const c = Controls.open();
-		assert !handled(c.roll(b, 1));
+		assert !handled(c.roll(b, 1, hitAt(0, 0)));
 		assert app.sent == "\x1bOA\x1bOA\x1bOA";
 		b.shutdown();
 	}
@@ -615,26 +733,134 @@ test "on the alternate screen the wheel is arrow keys, in the cursor key mode th
 	assert d !== null;
 	if (d !== null) {
 		const c = Controls.open();
-		assert c.roll(d, 1).ok;
+		assert c.roll(d, 1, hitAt(0, 0)).ok;
 		assert off.sent == "";
 		d.shutdown();
 	}
 }
 
-test "an app that reports the mouse keeps the wheel and the buttons" {
+test "an app that tracks the mouse gets presses, releases and wheel notches as its own reports" {
 	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30) + "\x1b[?1000h", 20, 5, sink);
+	const t = termOf(lines(30) + "\x1b[?1000h\x1b[?1006h", 20, 5, sink);
 	assert t !== null;
 	if (t !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("x"));
 		const bottom = offsetOf(t);
-		assert !handled(c.roll(t, 1));
-		assert offsetOf(t) == bottom;
-		assert !handled(c.down(t, clip, 1, at(0, 0), 0, 0, 0, 8));
+		assert handled(c.down(t, clip, 1, hitAt(2, 1), 0));
 		assert !c.pointer.dragging;
-		assert !handled(c.down(t, clip, 2, at(0, 0), 0, 0, 0, 8));
+		assert sink.sent == "\x1b[<0;3;2M";
+		assert handled(c.up(t, 1, hitAt(2, 1)));
+		assert sink.sent == "\x1b[<0;3;2M\x1b[<0;3;2m";
+		assert !handled(c.roll(t, 1, hitAt(0, 0)));
+		assert offsetOf(t) == bottom;
+		assert sink.sent == "\x1b[<0;3;2M\x1b[<0;3;2m\x1b[<64;1;1M\x1b[<64;1;1M\x1b[<64;1;1M";
+		assert !handled(c.up(t, 1, hitAt(0, 0)));
+		t.shutdown();
+	}
+}
+
+test "motion is reported only in the modes that ask for it, and the held button rides along" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("\x1b[?1002h\x1b[?1006h", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf("x"));
+		assert !handled(c.move(t, hitAt(1, 1), false));
 		assert sink.sent == "";
+		assert handled(c.down(t, clip, 1, hitAt(1, 1), 0));
+		assert !handled(c.move(t, hitAt(4, 1), true));
+		assert sink.sent == "\x1b[<0;2;2M\x1b[<32;5;2M";
+		t.shutdown();
+	}
+}
+
+test "shift hands the mouse back from an app that tracks it, to selection and the viewport" {
+	const sink: Sink = { sent: "" };
+	const t = termOf(lines(30) + "\x1b[?1000h\x1b[?1006h", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf("x"));
+		const bottom = offsetOf(t);
+		assert handled(c.down(t, clip, 1, hitWith(0, 1, 1), 0));
+		assert c.pointer.dragging;
+		assert handled(c.move(t, hitWith(5, 1, 1), true));
+		assert c.pointer.selected();
+		assert sink.sent == "";
+		assert handled(c.roll(t, 1, hitWith(0, 0, 1)));
+		assert offsetOf(t) == bottom - 3;
+		t.shutdown();
+	}
+}
+
+test "a ctrl click on an http link opens it, on any other link or text it does not" {
+	const sink: Sink = { sent: "" };
+	const text = "\x1b]8;;https://example.com/a\x07link\x1b]8;;\x07 \x1b]8;;file:///c:/x.exe\x07bad\x1b]8;;\x07 plain";
+	const t = termOf(text, 30, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const board = boardOf("");
+		const clip = clipOf(board);
+		assert handled(c.down(t, clip, 1, hitWith(1, 0, 2), 0));
+		assert board.opened == "https://example.com/a";
+		board.opened = "";
+		assert handled(c.down(t, clip, 1, hitWith(6, 0, 2), 0));
+		assert board.opened == "";
+		assert handled(c.down(t, clip, 1, hitWith(12, 0, 2), 10000));
+		assert board.opened == "";
+		assert handled(c.down(t, clip, 1, hitWith(1, 0, 0), 20000));
+		assert board.opened == "";
+		t.shutdown();
+	}
+}
+
+test "a clipboard read waits for an answer: escape or enter deny it, ctrl enter allows it" {
+	const deny: Sink = { sent: "" };
+	const a = termOf("\x1b]52;c;?\x1b\\", 20, 5, deny);
+	assert a !== null;
+	if (a !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf("secret"));
+		c.asked(a, clip);
+		assert c.holding();
+		assert c.reading == "secret";
+		assert deny.sent == "";
+		assert handled(c.keyDown(a, key("KeyY", 0), clip));
+		assert c.holding();
+		assert handled(c.keyDown(a, key("Enter", 0), clip));
+		assert !c.holding();
+		assert deny.sent == "\x1b]52;c;\x1b\\";
+		a.shutdown();
+	}
+	const allow: Sink = { sent: "" };
+	const b = termOf("\x1b]52;c;?\x1b\\", 20, 5, allow);
+	assert b !== null;
+	if (b !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf("secret"));
+		c.asked(b, clip);
+		assert handled(c.keyDown(b, key("Enter", 2), clip));
+		assert allow.sent == "\x1b]52;c;c2VjcmV0\x1b\\";
+		b.shutdown();
+	}
+}
+
+test "an empty clipboard is answered at once and a read does not ask while the pointer is inert" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("\x1b]52;c;?\x1b\\", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		c.asked(t, clipOf(boardOf("")));
+		assert !c.holding();
+		assert sink.sent == "\x1b]52;c;\x1b\\";
+		c.reading = "x";
+		const clip = clipOf(boardOf(""));
+		assert !handled(c.roll(t, 1, hitAt(0, 0)));
+		assert !handled(c.down(t, clip, 1, hitAt(0, 0), 0));
 		t.shutdown();
 	}
 }
@@ -647,10 +873,10 @@ test "a right click copies a selection and otherwise pastes" {
 		const c = Controls.open();
 		const board = boardOf("pasted");
 		const clip = clipOf(board);
-		assert !handled(c.down(t, clip, 2, at(0, 0), 0, 0, 0, 8));
+		assert !handled(c.down(t, clip, 2, hitAt(0, 0), 0));
 		assert sink.sent == "pasted";
 		assert drag(c, t, clip, at(0, 0), at(4, 0));
-		assert handled(c.down(t, clip, 2, at(0, 0), 0, 0, 1000, 8));
+		assert handled(c.down(t, clip, 2, hitAt(0, 0), 1000));
 		assert board.copied == "alpha";
 		assert sink.sent == "pasted";
 		assert !c.pointer.selected();
@@ -665,13 +891,13 @@ test "a move that finds the button released ends the drag, and a wheel while dra
 	if (t !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
-		assert c.down(t, clip, 1, at(0, 4), 0, 64, 0, 8).ok;
-		assert handled(c.move(t, at(3, 4), true));
-		assert handled(c.roll(t, 1));
+		assert c.down(t, clip, 1, hitAt(0, 4), 0).ok;
+		assert handled(c.move(t, hitAt(3, 4), true));
+		assert handled(c.roll(t, 1, hitAt(0, 0)));
 		const kept = c.pointer.sel;
 		assert kept !== null;
 		if (kept !== null) { assert kept.bounds().start.row < kept.bounds().end.row; }
-		assert !handled(c.move(t, at(5, 4), false));
+		assert !handled(c.move(t, hitAt(5, 4), false));
 		assert !c.pointer.dragging;
 		t.shutdown();
 	}

@@ -93,6 +93,12 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
   back through the pty").
 - At startup ConPTY emits `ESC[?9001h` (win32-input-mode) and `ESC[?1004h` (focus events), and
   resets both when the child exits.
+- conhost re-encodes SGR. `58;2;255;80;80` (underline colour) comes out as `ESC[2m`, faint,
+  with the colour dropped, so an underline colour never reaches Haro through ConPTY; libghostty-vt
+  parses all three SGR 58 forms when it gets them. Bytes a child writes with `WriteFile` (`cmd /c
+  type`) are decoded with the console code page, 437 by default, then re-encoded as UTF-8: the
+  UTF-8 for `中` arrives as `Σ╕¡`. Measured 2026-10-16 by capturing ConPTY output for
+  `fixtures/styles.ansi`.
 
 ## First window, smoke-run
 

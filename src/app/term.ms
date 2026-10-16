@@ -38,6 +38,7 @@ export interface Term {
 	cols: int32;
 	rows: int32;
 	alive: boolean;
+	ended: boolean;
 }
 
 export struct Frame {
@@ -60,6 +61,7 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 		cols: 0,
 		rows: 0,
 		alive: true,
+		ended: false,
 	});
 }
 
@@ -100,11 +102,10 @@ function frameFailure(error: FrameError): TermError {
 	};
 }
 
-export function pumpFrame(this t: Term): Result<Frame, TermError> {
+export function drain(this t: Term): Result<boolean, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok({ cursor: null, more: false, ended: false }); }
+	if (s === null) { return Result.ok(false); }
 	let more = false;
-	let ended = false;
 	for (let i = 0; i < DRAIN_LIMIT && t.alive; i++) {
 		const ready = s.pty.wait(0);
 		if (!ready.ok) { return Result.err(TermError.PumpFailed); }
@@ -113,10 +114,19 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		if (!alive.ok) { return Result.err(TermError.PumpFailed); }
 		if (!alive.value) {
 			t.alive = false;
-			ended = true;
+			t.ended = true;
 		}
 		more = alive.value && i == DRAIN_LIMIT - 1;
 	}
+	return Result.ok(more);
+}
+
+export function pumpFrame(this t: Term): Result<Frame, TermError> {
+	const s = t.session;
+	if (s === null) { return Result.ok({ cursor: null, more: false, ended: false }); }
+	const more = try t.drain();
+	const ended = t.ended;
+	t.ended = false;
 	const applied = applyFrame(t.grid, t.styles, s.vt);
 	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
 	return Result.ok({ cursor: applied.value, more: more, ended: ended });
@@ -167,6 +177,35 @@ export function shellExitCode(this t: Term): int32 {
 	const code = s.pty.exitCode();
 	if (code === null) { return 0; }
 	return code;
+}
+
+test "output drained ahead of the frame shows in the grid only when the frame applies it" {
+	const replay = Replay.ofText("one\r\ntwo");
+	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+		return Result.ok(replay.toPty());
+	});
+	assert opened.ok;
+	if (opened.ok) {
+		const t = opened.value;
+		assert t.fit(20, 3).ok;
+		const drained = t.drain();
+		assert drained.ok;
+		if (drained.ok) { assert !drained.value; }
+		assert !t.alive;
+		assert t.grid.at(0).line.text.trimEnd() == "";
+		const frame = t.pumpFrame();
+		assert frame.ok;
+		if (frame.ok) {
+			assert frame.value.ended;
+			assert !frame.value.more;
+		}
+		assert t.grid.at(0).line.text.trimEnd() == "one";
+		assert t.grid.at(1).line.text.trimEnd() == "two";
+		const next = t.pumpFrame();
+		assert next.ok;
+		if (next.ok) { assert !next.value.ended; }
+		t.shutdown();
+	}
 }
 
 test "a replayed recording fills the grid in one frame and ends the stream once" {

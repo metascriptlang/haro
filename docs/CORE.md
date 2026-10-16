@@ -108,8 +108,14 @@ Consolas 14 px at 96 DPI, 948x588 → 118x34 cells, `pwsh -NoLogo -NoProfile`, r
   process used 0–15.6 ms of CPU over 3 s.
 - Keys (`WM_KEYDOWN`/`WM_CHAR` posted to the window), committed text (`ệ`), Up-arrow history
   through `Keys.encode`, and three resizes (pwsh reported 84x21, 99x26, 59x14) reached the shell.
-- With the person's profile the window exits at the first prompt: starship prints U+F0054, above
-  U+FFFF (`.inbox/compiler/2026-09-26-string-from-code-point.md`).
+- With the person's profile the window exited at the first prompt: starship prints U+F0054, above
+  U+FFFF. Since `9b63bd7` the grid builds such cells with std's `fromCodePoint`.
+
+Re-run 2026-10-16 (msc `5631dd3e5`, neon `2b0f58c`, void `40e9bfa3`, JetBrains Mono NL 14 px,
+105x30 cells): through a live ConPTY, bold, italic, bold-italic, plain and curly underline,
+strike-through, 16/256/truecolor and backgrounds draw right. A replay that ends before the first
+frame draws every row over row 0: the row height is a signal set in `onLayout`, and Neon requests
+no frame for a layout-only change (`.inbox/neon/2026-10-16-layout-only-style-change-requests-no-frame.md`).
 
 ## Measured
 
@@ -122,6 +128,17 @@ Ryzen 9 9950X, Windows 11 10.0.26200, msc `3f6873ee`, tree `07cec781ff808899b343
 | `update()` after one write | 0.4–1.0 µs | same probe |
 | CPU while a child is silent for 3 s, reading with `pty.wait` | 16–31 ms, 3 wakes | a loop of `wait(10000)` then `read` over `cmd.exe /c ping -n 4 127.0.0.1 > nul`, release, `TotalProcessorTime`, two runs |
 | the same child, reading in a spin loop | 3,016–3,078 ms | the same loop without `wait` |
+
+Flood and pipeline, 2026-10-16 (msc `5631dd3e5`, release):
+
+| what | number | how |
+|---|---|---|
+| Haro CPU while `cmd /c type` floods 10 MB | 74–80 % of a core before pacing (`318eab2`), 17–25 % after (`b2e9537`); flood 5.7–9.9 s either way; idle 0 % | `scratchpad/perf/driver.ps1 -Work flood`, three runs each, the Haro process only. The same script gave WT 17–22 %, Rexa 32–38 %, Alacritty 85–102 %, WezTerm 127–145 % the day before |
+| a full 40-row repaint through `applyFrame`, no window | about 0.5 ms (light_cells), 1.6 ms (dense_cells) | `sh bench/run.sh`, median of 7 |
+| `row.line()` | about 10 µs a row | same |
+| `spansOf` on a row whose every cell changes colour | about 57 µs a row; under 1 µs on plain rows | same |
+| libghostty-vt `write` of `y
+` scrolling | about 20 MiB/s | same |
 
 What the numbers decided: per-key getters stay. A full redraw costs about 3.5% of a 60 Hz frame,
 so neither `get_multi` nor a C row reader is needed until a measurement says otherwise.

@@ -113,6 +113,7 @@ extern function vtSetDefaultColors(
 	bgB: int32,
 ): int32;
 extern function vtSetPullScrollback(terminal: GhosttyTerminal, pull: int32): int32;
+extern function vtLinkAt(terminal: GhosttyTerminal, x: int32, y: int32, buf: Span<uint8>): int64;
 extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
 extern function vtString(terminal: GhosttyTerminal, which: int32, buf: Span<uint8>): int64;
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
@@ -400,6 +401,19 @@ function stringOf(terminal: GhosttyTerminal, which: int32): Result<string, VtErr
 
 export function title(this vt: Vt): Result<string, VtError> {
 	return stringOf(vt.terminal, STRING_TITLE);
+}
+
+export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, VtError> {
+	let buf: Vec<uint8> = new Array(256);
+	let n = vtLinkAt(vt.terminal, x, y, buf);
+	if (n > (buf.length as int64)) {
+		buf = new Array(n as int32);
+		n = vtLinkAt(vt.terminal, x, y, buf);
+	}
+	if (n < 0) { return Result.err(VtError.ReadFailed); }
+	if (n == 0) { return Result.ok(null); }
+	const uri: string | null = buf[0..(n as int32)].asString();
+	return Result.ok(uri);
 }
 
 export function pwd(this vt: Vt): Result<string, VtError> {
@@ -1597,6 +1611,29 @@ test "an OSC 52 write reaches the host once, and only for the standard clipboard
 		const second = vt.takeClipboard();
 		assert second.ok;
 		if (second.ok) { assert second.value === null; }
+		vt.free();
+	}
+}
+
+function linkText(vt: Vt, x: int32, y: int32): string {
+	const link = vt.linkAt(x, y);
+	if (!link.ok) { return "<failed>"; }
+	const got = link.value;
+	if (got !== null) { return got; }
+	return "<none>";
+}
+
+test "an OSC 8 link answers for each of its cells and for no others" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("]8;;https://example.com/a?b=1\\link]8;;\\ plain");
+		assert linkText(vt, 0, 0) == "https://example.com/a?b=1";
+		assert linkText(vt, 3, 0) == "https://example.com/a?b=1";
+		assert linkText(vt, 4, 0) == "<none>";
+		assert linkText(vt, 0, 1) == "<none>";
+		assert linkText(vt, 0, 40) == "<failed>";
 		vt.free();
 	}
 }

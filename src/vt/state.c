@@ -30,6 +30,23 @@ int vtSetPullScrollback(GhosttyTerminal terminal, int pull) {
 	return ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_RESIZE_PULL_SCROLLBACK, &on) == GHOSTTY_SUCCESS ? 0 : -1;
 }
 
+/* The OSC 8 URI of the viewport cell at x, y: its length, 0 when the cell has none, -1 on error. A
+   length above cap means nothing was copied. */
+int64_t vtLinkAt(GhosttyTerminal terminal, int x, int y, uint8_t* buf, int64_t cap) {
+	if (x < 0 || y < 0) return -1;
+	GhosttyPoint at;
+	memset(&at, 0, sizeof at);
+	at.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+	at.value.coordinate.x = (uint16_t)x;
+	at.value.coordinate.y = (uint32_t)y;
+	GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+	if (ghostty_terminal_grid_ref(terminal, at, &ref) != GHOSTTY_SUCCESS) return -1;
+	size_t len = 0;
+	GhosttyResult r = ghostty_grid_ref_hyperlink_uri(&ref, buf, (size_t)cap, &len);
+	if (r != GHOSTTY_SUCCESS && r != GHOSTTY_OUT_OF_SPACE) return -1;
+	return (int64_t)len;
+}
+
 /* out: visible (DECTCEM), shape (GhosttyRenderStateCursorVisualStyle), blinking. Reads the render
    state, so it describes the frame the last update captured. */
 int vtCursorLook(GhosttyRenderState state, int32_t* out, int64_t cap) {

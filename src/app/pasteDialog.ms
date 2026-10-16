@@ -6,7 +6,7 @@ import { ForList, Show } from "../../../neon/src/macros/ui/flow";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style } from "../../../neon/src/render/style";
 import { Pressable, Text, View } from "../../../neon/src/components/primitives";
-import { Held, Line, Tone, Warning, dialogOf } from "../input/paste";
+import { Dialog, Held, Line, Tone, Warning, askDialogOf, dialogOf } from "../input/paste";
 
 export struct Shown {
 	spans: TextSpan[];
@@ -17,9 +17,14 @@ export interface PasteView {
 	cols: Accessor<number>;
 	setOpen: Setter<boolean>;
 	setCols: Setter<number>;
+	confirmLabel: Accessor<string>;
+	cancelLabel: Accessor<string>;
+	setConfirmLabel: Setter<string>;
+	setCancelLabel: Setter<string>;
 	top: List<Shown>;
 	code: List<Shown>;
 	shownFor: Held | null;
+	shownRead: string | null;
 }
 
 export interface Look {
@@ -56,8 +61,10 @@ const DIM_STYLE: Style = { color: DIM };
 const CANCEL_STYLE: Style = { color: TEXT };
 const CONFIRM_STYLE: Style = { color: ON_PRIMARY, fontWeight: "bold" };
 
-const CANCEL_LABEL = "Cancel (Esc)";
-const CONFIRM_LABEL = "Paste anyway (Enter)";
+const PASTE_CANCEL = "Cancel (Esc)";
+const PASTE_CONFIRM = "Paste anyway (Enter)";
+const READ_CANCEL = "Deny (Esc)";
+const READ_CONFIRM = "Allow (Ctrl+Enter)";
 
 export function dialogCols(viewWidth: number, cellWidth: number): int32 {
 	if (cellWidth <= 0) { return MIN_COLS; }
@@ -86,25 +93,47 @@ function fill(list: List<Shown>, lines: Vec<Line>): void {
 export function open(this typeof PasteView): PasteView {
 	const [isOpen, setOpen] = createSignal<boolean>(false);
 	const [cols, setCols] = createSignal<number>(MIN_COLS as number);
+	const [confirmLabel, setConfirmLabel] = createSignal<string>(PASTE_CONFIRM);
+	const [cancelLabel, setCancelLabel] = createSignal<string>(PASTE_CANCEL);
 	return {
 		open: isOpen, cols: cols, setOpen: setOpen, setCols: setCols,
-		top: createList<Shown>([]), code: createList<Shown>([]), shownFor: null,
+		confirmLabel: confirmLabel, cancelLabel: cancelLabel,
+		setConfirmLabel: setConfirmLabel, setCancelLabel: setCancelLabel,
+		top: createList<Shown>([]), code: createList<Shown>([]), shownFor: null, shownRead: null,
 	};
 }
 
-export function show(this v: PasteView, held: Held | null, cellWidth: number, viewWidth: number): void {
-	if (held === null) {
+export function show(
+	this v: PasteView, held: Held | null, reading: string | null, cellWidth: number, viewWidth: number,
+): void {
+	if (held === null && reading === null) {
 		v.shownFor = null;
+		v.shownRead = null;
 		v.setOpen(false);
 		return;
 	}
-	if (v.shownFor === held) { return; }
 	const cols = dialogCols(viewWidth, cellWidth);
-	const d = dialogOf(held.warning, held.text, cols, PREVIEW_ROWS);
+	if (held !== null) {
+		if (v.shownFor === held) { return; }
+		const d = dialogOf(held.warning, held.text, cols, PREVIEW_ROWS);
+		v.open_(d, cols, PASTE_CONFIRM, PASTE_CANCEL);
+		v.shownFor = held;
+		v.shownRead = null;
+		return;
+	}
+	const text = reading as string;
+	if (v.shownRead === text) { return; }
+	v.open_(askDialogOf(text, cols, PREVIEW_ROWS), cols, READ_CONFIRM, READ_CANCEL);
+	v.shownRead = text;
+	v.shownFor = null;
+}
+
+function open_(this v: PasteView, d: Dialog, cols: int32, confirm: string, cancel: string): void {
 	fill(v.top, d.top);
 	fill(v.code, d.code);
 	v.setCols(cols as number);
-	v.shownFor = held;
+	v.setConfirmLabel(confirm);
+	v.setCancelLabel(cancel);
 	v.setOpen(true);
 }
 
@@ -122,12 +151,12 @@ export function PasteDialog(v: PasteView, look: Look): NeonNode {
 		);
 	};
 
-	const label = (text: string, style: Style): NeonNode => {
+	const label = (text: Accessor<string>, style: Style): NeonNode => {
 		return element(
 			<Text
-				style={{ fontSize: look.fontSize, height: look.rowHeight(), width: text.length * look.cellWidth() }}
+				style={{ fontSize: look.fontSize, height: look.rowHeight(), width: text().length * look.cellWidth() }}
 				cellWidth={look.cellWidth()}
-				spans={[{ text: text, style: style }]}
+				spans={[{ text: text(), style: style }]}
 			/>
 		);
 	};
@@ -169,7 +198,7 @@ export function PasteDialog(v: PasteView, look: Look): NeonNode {
 									onPressIn={(): void => { setCancelHeld(true); }}
 									onPressOut={(): void => { setCancelHeld(false); }}
 									onPress={(): void => { look.onCancel(); }}>
-									{label(CANCEL_LABEL, CANCEL_STYLE)}
+									{label(v.cancelLabel, CANCEL_STYLE)}
 								</Pressable>
 								<Pressable
 									style={{
@@ -179,7 +208,7 @@ export function PasteDialog(v: PasteView, look: Look): NeonNode {
 									onPressIn={(): void => { setConfirmHeld(true); }}
 									onPressOut={(): void => { setConfirmHeld(false); }}
 									onPress={(): void => { look.onConfirm(); }}>
-									{label(CONFIRM_LABEL, CONFIRM_STYLE)}
+									{label(v.confirmLabel, CONFIRM_STYLE)}
 								</Pressable>
 							</View>
 						</View>
@@ -201,19 +230,34 @@ test "a held paste opens the view with its lines and cancelling closes it" {
 	const v = PasteView.open();
 	assert !v.open();
 	const held: Held = { text: "ls\ncd ..\nrm x", warning: Warning.MultiLine };
-	v.show(held, 8.4, 960);
+	v.show(held, null, 8.4, 960);
 	assert v.open();
 	assert v.cols() == 88;
 	assert v.code.length() == 3;
 	assert v.top.length() >= 3;
 	assert v.top.at(0).spans[0].text == "Warning: potentially unsafe paste";
 	assert v.code.at(1).spans[0].text == "cd ..";
-	v.show(held, 8.4, 960);
+	v.show(held, null, 8.4, 960);
 	assert v.code.length() == 3;
 	const next: Held = { text: "a\nb", warning: Warning.MultiLine };
-	v.show(next, 8.4, 400);
+	v.show(next, null, 8.4, 400);
 	assert v.code.length() == 2;
 	assert v.cols() == 37;
-	v.show(null, 8.4, 960);
+	v.show(null, null, 8.4, 960);
+	assert !v.open();
+}
+
+test "a clipboard read opens the view with its own labels and closes it again" {
+	const v = PasteView.open();
+	v.show(null, "secret\ntoken", 8.4, 960);
+	assert v.open();
+	assert v.top.at(0).spans[0].text == "Authorize clipboard access";
+	assert v.code.length() == 2;
+	assert v.confirmLabel() == "Allow (Ctrl+Enter)";
+	assert v.cancelLabel() == "Deny (Esc)";
+	const held: Held = { text: "a\nb", warning: Warning.MultiLine };
+	v.show(held, "secret", 8.4, 960);
+	assert v.confirmLabel() == "Paste anyway (Enter)";
+	v.show(null, null, 8.4, 960);
 	assert !v.open();
 }

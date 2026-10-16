@@ -6,7 +6,7 @@ import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
 import { Session } from "../session/session";
 import {
-	Cursor, CursorLook, CursorShape, Keys, MouseGeometry, MouseInput, PasteError,
+	Cursor, CursorLook, CursorShape, Keys, MouseGeometry, MouseInput, PasteError, Palette,
 } from "../vt/vt";
 import { FrameError, RowSlot, applyFrame } from "./frame";
 
@@ -54,6 +54,7 @@ export interface Term {
 export struct Frame {
 	cursor: Cursor | null;
 	look: CursorLook;
+	colors: Palette | null;
 	more: boolean;
 	ended: boolean;
 	held: boolean;
@@ -67,7 +68,7 @@ const HIDDEN: CursorLook = { visible: false, shape: CursorShape.Block, blinking:
 
 function idle(more: boolean, ended: boolean): Frame {
 	return {
-		cursor: null, look: HIDDEN, more: more, ended: ended, held: false,
+		cursor: null, look: HIDDEN, colors: null, more: more, ended: ended, held: false,
 		copied: null, asked: false, bells: 0, title: null,
 	};
 }
@@ -171,8 +172,11 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
 	const look = vt.cursorLook();
 	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
+	const colors = vt.palette();
+	if (!colors.ok) { return Result.err(TermError.FramePaletteFailed); }
+	const current: Palette | null = colors.value;
 	return Result.ok({
-		cursor: applied.value, look: look.value, more: more, ended: ended, held: false,
+		cursor: applied.value, look: look.value, colors: current, more: more, ended: ended, held: false,
 		copied: copied.value, asked: asked, bells: events.value.bells, title: title,
 	});
 }

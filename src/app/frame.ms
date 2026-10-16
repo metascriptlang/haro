@@ -24,7 +24,7 @@ function hexByte(v: uint8): string {
 	return HEX[n >> 4] + HEX[n & 15];
 }
 
-function hexOf(c: Rgb): string {
+export function hexOf(c: Rgb): string {
 	return "#" + hexByte(c.r) + hexByte(c.g) + hexByte(c.b);
 }
 

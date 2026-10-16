@@ -13,7 +13,9 @@ import { RowSlot } from "./frame";
 import { gridSize } from "../grid/size";
 import { Spot, spotAt } from "../input/pointer";
 import { Block } from "../select/select";
-import { Cursor } from "../vt/vt";
+import { Cursor, Rgb } from "../vt/vt";
+import { hexOf } from "./frame";
+import { BACKGROUND, FOREGROUND, THEME_BG, THEME_FG } from "./theme";
 import { Clip, ControlError, Controls } from "./controls";
 import { PasteDialog, PasteView, Look } from "./pasteDialog";
 import {
@@ -28,10 +30,7 @@ import {
 
 const FONT_SIZE: number = 14;
 const PADDING: number = 6;
-const BACKGROUND = "#0c0c0c";
-const FOREGROUND = "#cccccc";
 const PROBE = "MMMMMMMMMM";
-const SELECTION = "#cccccc";
 const SHADES = 3;
 const NO_SHADE: Block = { row: 0, col: 0, rows: 0, cols: 0 };
 
@@ -71,6 +70,9 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 	const [cursorCol, setCursorCol] = createSignal<number>(0);
 	const [cursorRow, setCursorRow] = createSignal<number>(0);
 	const [cursorShown, setCursorShown] = createSignal<boolean>(false);
+	const [background, setBackground] = createSignal<string>(BACKGROUND);
+	const [foreground, setForeground] = createSignal<string>(FOREGROUND);
+	let themed = false;
 
 	const controls = Controls.open();
 	const dialog = PasteView.open();
@@ -117,6 +119,13 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 			return;
 		}
 		show(frame.value.cursor);
+		const colors = frame.value.colors;
+		if (colors !== null) {
+			const bg = hexOf(colors.bg);
+			const fg = hexOf(colors.fg);
+			if (bg != background()) { setBackground(bg); }
+			if (fg != foreground()) { setForeground(fg); }
+		}
 		repaint();
 		dialog.show(controls.held, cellWidth(), viewWidth());
 		if (frame.value.more) { setTimeout((): void => { refresh(); }, 0); }
@@ -144,7 +153,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 	const lineRow = (item: Accessor<RowSlot>): NeonNode => {
 		return element(
 			<Text
-				style={{ fontSize: FONT_SIZE, color: FOREGROUND, height: rowHeight() }}
+				style={{ fontSize: FONT_SIZE, color: foreground(), height: rowHeight() }}
 				cellWidth={cellWidth()}
 				spans={item().spans}
 			/>
@@ -177,6 +186,14 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 		if (!fitted.ok) {
 			fatal("fit", fitted.error);
 			return;
+		}
+		if (!themed) {
+			themed = true;
+			const s = t.session;
+			if (s !== null && !s.vt.setDefaultColors(THEME_FG, THEME_BG).ok) {
+				entry.fail("the default colours were refused");
+				return;
+			}
 		}
 		if (fitted.value) { refresh(); }
 	};
@@ -279,7 +296,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 					top: item().row * rowHeight(),
 					width: item().cols * cellWidth(),
 					height: item().rows * rowHeight(),
-					backgroundColor: SELECTION,
+					backgroundColor: foreground(),
 					opacity: item().rows > 0 ? 0.35 : 0,
 					pointerEvents: "none",
 				}}
@@ -288,7 +305,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 	};
 
 	return element(
-		<Void style={{ backgroundColor: BACKGROUND, padding: PADDING }}>
+		<Void style={{ backgroundColor: background(), padding: PADDING }}>
 			<View
 				style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, pointerEvents: "box-only" }}
 				focusable
@@ -314,7 +331,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 						top: cursorRow() * rowHeight(),
 						width: cellWidth(),
 						height: rowHeight(),
-						backgroundColor: FOREGROUND,
+						backgroundColor: foreground(),
 						opacity: cursorShown() ? 0.5 : 0,
 					}}
 				/>

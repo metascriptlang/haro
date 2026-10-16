@@ -32,6 +32,13 @@ export struct RowSpan {
 	to: int32;
 }
 
+export struct Block {
+	row: int32;
+	col: int32;
+	rows: int32;
+	cols: int32;
+}
+
 export function pointRange(at: Point): Range {
 	return { start: at, end: at };
 }
@@ -86,6 +93,20 @@ export function spans(
 		const last = m.block || row == r.end.row ? r.end.col : cols - 1;
 		if (first >= cols) { continue; }
 		out.push({ row: y, from: first, to: Math.min(last, cols - 1) });
+	}
+	return out;
+}
+
+export function blocks(this m: Marked, top: int32, rows: int32, cols: int32): Vec<Block> {
+	let out: Vec<Block> = [];
+	for (const s of m.spans(top, rows, cols)) {
+		const n = out.length as int32;
+		const width = s.to - s.from + 1;
+		if (n > 0 && out[n - 1].col == s.from && out[n - 1].cols == width && out[n - 1].row + out[n - 1].rows == s.row) {
+			out[n - 1].rows += 1;
+			continue;
+		}
+		out.push({ row: s.row, col: s.from, rows: 1, cols: width });
 	}
 	return out;
 }
@@ -197,4 +218,37 @@ test "a rebase follows the terminal's shift and drops a selection the terminal l
 	assert moved !== null;
 	if (moved !== null) { assert moved.bounds() == range(7, 2, 9, 4); }
 	assert sel.rebased(was, null) === null;
+}
+
+function block(row: int32, col: int32, rows: int32, cols: int32): Block {
+	return { row: row, col: col, rows: rows, cols: cols };
+}
+
+test "a linear selection draws as at most three rectangles: its head, the full rows between, its tail" {
+	const m: Marked = { range: range(10, 5, 14, 3), block: false };
+	const drawn = m.blocks(8, 10, 20);
+	assert drawn.length == 3;
+	assert drawn[0] == block(2, 5, 1, 15);
+	assert drawn[1] == block(3, 0, 3, 20);
+	assert drawn[2] == block(6, 0, 1, 4);
+}
+
+test "a head that starts at column 0 joins the full rows under it" {
+	const m: Marked = { range: range(2, 0, 4, 7), block: false };
+	const drawn = m.blocks(0, 10, 20);
+	assert drawn.length == 2;
+	assert drawn[0] == block(2, 0, 2, 20);
+	assert drawn[1] == block(4, 0, 1, 8);
+}
+
+test "a block selection is one rectangle however many rows it covers" {
+	const sel = Selection.press(Unit.Cell, pointRange(at(6, 12)), true).drag(pointRange(at(3, 3)));
+	const drawn = sel.marked().blocks(0, 10, 20);
+	assert drawn.length == 1;
+	assert drawn[0] == block(3, 3, 4, 10);
+}
+
+test "a selection scrolled out of view draws nothing" {
+	const m: Marked = { range: range(2, 5, 4, 3), block: false };
+	assert m.blocks(30, 5, 20).length == 0;
 }

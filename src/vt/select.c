@@ -49,6 +49,30 @@ void vtScroll(GhosttyTerminal terminal, int tag, int64_t amount) {
 	ghostty_terminal_scroll_viewport(terminal, v);
 }
 
+/* Scroll the viewport so the nearest prompt (OSC 133 A) above (delta < 0) or below (delta > 0) its top
+   row is the top row, as Surface.zig `jump_to_prompt` does. 1: scrolled, 0: no such prompt, -1: error. */
+int vtPromptJump(GhosttyTerminal terminal, int delta) {
+	GhosttyTerminalScrollbar bar;
+	memset(&bar, 0, sizeof bar);
+	if (delta == 0 || ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &bar) != GHOSTTY_SUCCESS) return -1;
+	int64_t step = delta < 0 ? -1 : 1;
+	int64_t last = (int64_t)bar.total - 1;
+	for (int64_t y = (int64_t)bar.offset + step; y >= 0 && y <= last; y += step) {
+		GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+		if (ghostty_terminal_grid_ref(terminal, screenPoint(0, (int)y), &ref) != GHOSTTY_SUCCESS) return -1;
+		GhosttyRow row = 0;
+		GhosttyRowSemanticPrompt prompt = GHOSTTY_ROW_SEMANTIC_NONE;
+		if (ghostty_grid_ref_row(&ref, &row) != GHOSTTY_SUCCESS
+			|| ghostty_row_get(row, GHOSTTY_ROW_DATA_SEMANTIC_PROMPT, &prompt) != GHOSTTY_SUCCESS) {
+			return -1;
+		}
+		if (prompt != GHOSTTY_ROW_SEMANTIC_PROMPT) continue;
+		vtScroll(terminal, GHOSTTY_SCROLL_VIEWPORT_ROW, y);
+		return 1;
+	}
+	return 0;
+}
+
 int vtSelSet(GhosttyTerminal terminal, int sx, int sy, int ex, int ey, int rectangle) {
 	GhosttySelection sel = GHOSTTY_INIT_SIZED(GhosttySelection);
 	if (refAt(terminal, sx, sy, &sel.start) != GHOSTTY_SUCCESS) return -1;

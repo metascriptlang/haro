@@ -8,6 +8,8 @@
 
 void vtScroll(GhosttyTerminal terminal, int tag, int64_t amount);
 
+int vtPromptJump(GhosttyTerminal terminal, int delta);
+
 int vtSelSet(GhosttyTerminal terminal, int sx, int sy, int ex, int ey, int rectangle);
 void vtSelClear(GhosttyTerminal terminal);
 int vtSelGet(GhosttyTerminal terminal, int32_t* out, int64_t cap);

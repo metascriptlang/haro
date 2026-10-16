@@ -222,6 +222,7 @@ extern function cellWide(
 ): GhosttyResult from "ghostty_cell_get";
 
 extern function vtScroll(terminal: GhosttyTerminal, tag: int32, amount: int64): void;
+extern function vtPromptJump(terminal: GhosttyTerminal, delta: int32): int32;
 extern function vtSelSet(
 	terminal: GhosttyTerminal,
 	sx: int32,
@@ -1099,6 +1100,12 @@ export function scrollPages(this vt: Vt, pages: int32): Result<Vt, VtError> {
 	return Result.ok(vt);
 }
 
+export function jumpToPrompt(this vt: Vt, delta: int32): Result<boolean, VtError> {
+	const r = vtPromptJump(vt.terminal, delta);
+	if (r < 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(r == 1);
+}
+
 export function scrollTop(this vt: Vt): void {
 	vtScroll(vt.terminal, SCROLL_TOP, 0);
 }
@@ -1634,6 +1641,52 @@ test "an OSC 8 link answers for each of its cells and for no others" {
 		assert linkText(vt, 4, 0) == "<none>";
 		assert linkText(vt, 0, 1) == "<none>";
 		assert linkText(vt, 0, 40) == "<failed>";
+		vt.free();
+	}
+}
+
+function topAfterJump(vt: Vt, delta: int32): string {
+	const jumped = vt.jumpToPrompt(delta);
+	if (!jumped.ok) { return "<failed>"; }
+	if (!jumped.value) { return "<none>"; }
+	vt.update();
+	const lines = vt.lines();
+	if (!lines.ok) { return "<unreadable>"; }
+	return lines.value[0];
+}
+
+test "the viewport jumps between OSC 133 prompts" {
+	const created = Vt.create(10, 3);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("]133;Ap1
+out1
+out2
+]133;Ap2
+out3
+]133;Ap3");
+		vt.update();
+		assert vt.lines().ok;
+		assert topAfterJump(vt, -1) == "p1";
+		assert topAfterJump(vt, -1) == "<none>";
+		assert topAfterJump(vt, 1) == "p2";
+		vt.free();
+	}
+}
+
+test "a screen without prompt marks has nothing to jump to" {
+	const created = Vt.create(10, 3);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("a
+b
+c
+d
+e");
+		assert topAfterJump(vt, -1) == "<none>";
+		assert topAfterJump(vt, 1) == "<none>";
 		vt.free();
 	}
 }

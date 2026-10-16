@@ -1,6 +1,7 @@
 import { List } from "../../../neon/src/core/list";
 import { frameCounts } from "../../../neon/src/platform/ion/window";
 import { exit } from "std/process";
+import { Pace } from "./pace";
 import { Term, shutdown, sendText } from "./term";
 
 function dump(t: Term, label: string): void {
@@ -44,4 +45,46 @@ export function smoke(t: Term): void {
 		t.shutdown();
 		exit(0);
 	}, 42000);
+}
+
+function shows(t: Term, text: string): boolean {
+	const n = t.grid.length() as int32;
+	for (let i = 0; i < n; i++) {
+		if (t.grid.at(i).line.text.trimEnd() == text) { return true; }
+	}
+	return false;
+}
+
+export function smokeFlood(t: Term, pace: Pace): void {
+	const FLOOD_LINES = 200000;
+	const IDLE_TICKS = 3;
+	const MAX_TICKS = 90;
+	let ticks = 0;
+	let doneAt = -1;
+	const report = (label: string): void => {
+		const c = frameCounts();
+		console.log(
+			`smoke: ${label}: wakes=${pace.wakes} applies=${pace.applies} requested=${c[0]} drawn=${c[1]}`
+		);
+	};
+	const tick = (): void => {
+		ticks += 1;
+		report(`tick ${ticks}`);
+		if (doneAt < 0 && shows(t, `line ${FLOOD_LINES}`)) { doneAt = ticks; }
+		const finished = doneAt >= 0 && ticks >= doneAt + IDLE_TICKS;
+		if (finished || ticks >= MAX_TICKS) {
+			console.log(`smoke: flood ${doneAt >= 0 ? "ended" : "did not end"} at tick ${doneAt}`);
+			dump(t, "after the flood");
+			t.shutdown();
+			exit(0);
+			return;
+		}
+		setTimeout(tick, 1000);
+	};
+	setTimeout((): void => {
+		report("before the flood");
+		const sent = t.sendText(`1..${FLOOD_LINES} | % { "line $_" }\r`);
+		console.log(`smoke: sent ${FLOOD_LINES} lines, ok=${sent.ok}`);
+		setTimeout(tick, 1000);
+	}, 4000);
 }

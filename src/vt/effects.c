@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "effects.h"
 #include "state.h"
@@ -59,6 +60,10 @@ typedef struct {
 	GhosttyMouseEvent mouseEvent;
 	int mouseSignature;
 	int mouseSize[4];
+	GhosttyRenderState state;
+	int held;
+	int64_t heldAtMs;
+	int64_t holdLimitMs;
 } Effects;
 
 static Effects effects[EFFECTS_MAX];
@@ -87,6 +92,20 @@ static Effects* slot(int id) {
 	return &effects[id];
 }
 
+static int64_t nowMs(void) {
+	struct timespec t;
+	timespec_get(&t, TIME_UTC);
+	return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
+
+static void onRenderHold(GhosttyTerminal terminal, void* userdata, bool held) {
+	Effects* e = userdata;
+	e->held = held;
+	if (!held) return;
+	ghostty_render_state_update(e->state, terminal);
+	e->heldAtMs = nowMs();
+}
+
 static void onBell(GhosttyTerminal terminal, void* userdata) {
 	(void)terminal;
 	((Effects*)userdata)->bells++;
@@ -102,7 +121,9 @@ static void onPwdChanged(GhosttyTerminal terminal, void* userdata) {
 	((Effects*)userdata)->pwdChanged = 1;
 }
 
-int vtEffectsOpen(GhosttyTerminal terminal) {
+#define HOLD_LIMIT_MS 1000
+
+int vtEffectsOpen(GhosttyTerminal terminal, GhosttyRenderState state) {
 	int id = -1;
 	for (int i = 0; i < EFFECTS_MAX; i++) {
 		if (!effects[i].used) { id = i; break; }
@@ -111,6 +132,8 @@ int vtEffectsOpen(GhosttyTerminal terminal) {
 	Effects* e = &effects[id];
 	memset(e, 0, sizeof *e);
 	e->used = 1;
+	e->state = state;
+	e->holdLimitMs = HOLD_LIMIT_MS;
 	if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, e) != GHOSTTY_SUCCESS
 		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*)writePty)
 			!= GHOSTTY_SUCCESS
@@ -119,6 +142,8 @@ int vtEffectsOpen(GhosttyTerminal terminal) {
 		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void*)onTitleChanged)
 			!= GHOSTTY_SUCCESS
 		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*)onPwdChanged)
+			!= GHOSTTY_SUCCESS
+		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_RENDER_HOLD, (const void*)onRenderHold)
 			!= GHOSTTY_SUCCESS) {
 		e->used = 0;
 		return -1;
@@ -152,6 +177,23 @@ int vtEventsTake(int id, int32_t* out, int64_t cap) {
 	return 0;
 }
 
+void vtHoldLimit(int id, int64_t ms) {
+	Effects* e = slot(id);
+	if (e) e->holdLimitMs = ms;
+}
+
+/* Whether synchronized output holds the screen. A hold older than the limit ends here: the terminal
+   has no clock and a program that never releases would freeze the screen (terminal.h, "Timeouts"). */
+int vtHeld(int id, GhosttyTerminal terminal) {
+	Effects* e = slot(id);
+	if (!e || !e->held) return 0;
+	if (nowMs() - e->heldAtMs < e->holdLimitMs) return 1;
+	GhosttyTerminalModeConfig mode = { GHOSTTY_MODE_SYNC_OUTPUT, false };
+	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_MODE, &mode);
+	e->held = 0;
+	return 0;
+}
+
 void vtEffectsClose(int id, GhosttyTerminal terminal) {
 	Effects* e = slot(id);
 	if (!e) return;
@@ -159,6 +201,7 @@ void vtEffectsClose(int id, GhosttyTerminal terminal) {
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_BELL, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, NULL);
+	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_RENDER_HOLD, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, NULL);
 	if (e->mouse) ghostty_mouse_encoder_free(e->mouse);
 	if (e->mouseEvent) ghostty_mouse_event_free(e->mouseEvent);

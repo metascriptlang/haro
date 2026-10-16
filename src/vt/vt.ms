@@ -71,7 +71,9 @@ struct Graphemes { cp: uint32[16]; }
 extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<Span<uint8>>): void
 	from "ghostty_terminal_vt_write";
 extern function vtAllocator(): Ptr<GhosttyAllocator>;
-extern function vtEffectsOpen(terminal: GhosttyTerminal): int32;
+extern function vtEffectsOpen(terminal: GhosttyTerminal, state: GhosttyRenderState): int32;
+extern function vtHoldLimit(id: int32, ms: int64): void;
+extern function vtHeld(id: int32, terminal: GhosttyTerminal): int32;
 extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
 extern function vtEffectsClose(id: int32, terminal: GhosttyTerminal): void;
 extern function vtEventsTake(id: int32, out: Span<int32>): int32;
@@ -313,7 +315,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		ghostty_terminal_free(terminal);
 		return Result.err(VtError.CreateFailed);
 	}
-	const effects = vtEffectsOpen(terminal);
+	const effects = vtEffectsOpen(terminal, state);
 	let top: GhosttyTrackedGridRef;
 	if (effects < 0 || vtTopTrack(terminal, top) != 0) {
 		if (effects >= 0) { vtEffectsClose(effects, terminal); }
@@ -390,7 +392,16 @@ export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtErro
 	return Result.ok(vt);
 }
 
+export function holding(this vt: Vt): boolean {
+	return vtHeld(vt.effects, vt.terminal) != 0;
+}
+
+export function holdLimit(this vt: Vt, ms: int64): void {
+	vtHoldLimit(vt.effects, ms);
+}
+
 export function update(this vt: Vt): Result<Vt, VtError> {
+	if (vt.holding()) { return Result.ok(vt); }
 	if (!ok(ghostty_render_state_update(vt.state, vt.terminal))) {
 		return Result.err(VtError.UpdateFailed);
 	}
@@ -1315,6 +1326,48 @@ test "the same cell is not reported twice for motion, and SGR-pixels reports pix
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "";
 		vt.writeText("[?1016h");
 		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "[<0;25;25M";
+		vt.free();
+	}
+}
+
+test "a frame drawn under synchronized output shows only once the program ends the hold" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("one");
+		assert vt.update().ok;
+		vt.writeText("[?2026h[2J[Hhalf");
+		assert vt.holding();
+		assert vt.update().ok;
+		const held = vt.lines();
+		assert held.ok;
+		if (held.ok) { assert held.value[0] == "one"; }
+		vt.writeText(" drawn[?2026l");
+		assert !vt.holding();
+		assert vt.update().ok;
+		const shown = vt.lines();
+		assert shown.ok;
+		if (shown.ok) { assert shown.value[0] == "half drawn"; }
+		vt.free();
+	}
+}
+
+test "a hold the program never ends is dropped after its limit" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.holdLimit(0);
+		vt.writeText("[?2026hstuck");
+		assert vt.update().ok;
+		assert !vt.holding();
+		const shown = vt.lines();
+		assert shown.ok;
+		if (shown.ok) { assert shown.value[0] == "stuck"; }
+		vt.writeText("[?2026h");
+		vt.holdLimit(1000);
+		assert vt.holding();
 		vt.free();
 	}
 }

@@ -92,10 +92,13 @@ function expectedRuns(line: string, own: boolean): Vec<LineRun> {
 	for (const item of line.split(" ")) {
 		const parts = item.split(":");
 		const flags = parts[3];
+		const inverse = flags.includes("V");
+		const fg = colorOf(parts[1], DEFAULT_FG, own);
+		const bg = colorOf(parts[2], DEFAULT_BG, own);
 		const run: LineRun = {
 			units: parts[0].parseInt() as int32,
-			fg: colorOf(parts[1], DEFAULT_FG, own),
-			bg: colorOf(parts[2], DEFAULT_BG, own),
+			fg: inverse ? bg : fg,
+			bg: inverse ? fg : bg,
 			underline: underlineOf(flags),
 			bold: flags.includes("B"),
 			italic: flags.includes("I"),
@@ -169,187 +172,224 @@ function conforms(name: string, chunk: int32, compare: Compare, skipRunsRow: int
 	return failure;
 }
 
-test "alacritty alt_reset: one frame and many frames" {
+test "alacritty alt_reset: whole, in 61-byte frames, in small frames" {
 	assert conforms("alt_reset", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("alt_reset", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("alt_reset", 7, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty clear_underline: one frame and many frames" {
+test "alacritty clear_underline: whole, in 61-byte frames, in small frames" {
 	assert conforms("clear_underline", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("clear_underline", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("clear_underline", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty colored_reset: one frame and many frames" {
+test "alacritty colored_reset: whole, in 61-byte frames, in small frames" {
 	assert conforms("colored_reset", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("colored_reset", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("colored_reset", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty colored_underline: one frame and many frames" {
+test "alacritty colored_underline: whole, in 61-byte frames, in small frames" {
 	assert conforms("colored_underline", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("colored_underline", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("colored_underline", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty csi_rep: one frame and many frames" {
+test "alacritty csi_rep: whole, in 61-byte frames, in small frames" {
 	assert conforms("csi_rep", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("csi_rep", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("csi_rep", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty delete_chars_reset: one frame and many frames" {
+test "alacritty delete_chars_reset: whole, in 61-byte frames, in small frames" {
 	assert conforms("delete_chars_reset", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("delete_chars_reset", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("delete_chars_reset", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty delete_lines: one frame and many frames" {
+test "alacritty delete_lines: whole, in 61-byte frames, in small frames" {
 	assert conforms("delete_lines", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("delete_lines", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("delete_lines", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty erase_chars_reset: one frame and many frames" {
+test "alacritty erase_chars_reset: whole, in 61-byte frames, in small frames" {
 	assert conforms("erase_chars_reset", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("erase_chars_reset", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("erase_chars_reset", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty fish_cc: one frame and many frames" {
+test "alacritty fish_cc: whole, in 61-byte frames, in small frames" {
 	assert conforms("fish_cc", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("fish_cc", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("fish_cc", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty grid_reset: one frame and many frames" {
+test "alacritty grid_reset: whole, in 61-byte frames, in small frames" {
 	assert conforms("grid_reset", 0, Compare.RunsDefaultPalette, -1) == "";
 	assert conforms("grid_reset", 61, Compare.RunsDefaultPalette, -1) == "";
+	assert conforms("grid_reset", 1, Compare.RunsDefaultPalette, -1) == "";
 }
 
-test "alacritty history: one frame and many frames" {
+test "alacritty history: whole, in 61-byte frames, in small frames" {
 	assert conforms("history", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("history", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("history", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty hyperlinks: one frame and many frames" {
+test "alacritty hyperlinks: whole, in 61-byte frames, in small frames" {
 	assert conforms("hyperlinks", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("hyperlinks", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("hyperlinks", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty indexed_256_colors: one frame and many frames" {
+test "alacritty indexed_256_colors: whole, in 61-byte frames, in small frames" {
 	assert conforms("indexed_256_colors", 0, Compare.RunsDefaultPalette, -1) == "";
 	assert conforms("indexed_256_colors", 61, Compare.RunsDefaultPalette, -1) == "";
+	assert conforms("indexed_256_colors", 1, Compare.RunsDefaultPalette, -1) == "";
 }
 
-test "alacritty insert_blank_reset: one frame and many frames" {
+test "alacritty insert_blank_reset: whole, in 61-byte frames, in small frames" {
 	assert conforms("insert_blank_reset", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("insert_blank_reset", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("insert_blank_reset", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty issue_855: one frame and many frames" {
+test "alacritty issue_855: whole, in 61-byte frames, in small frames" {
 	assert conforms("issue_855", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("issue_855", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("issue_855", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty ll: one frame and many frames" {
+test "alacritty ll: whole, in 61-byte frames, in small frames" {
 	assert conforms("ll", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("ll", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("ll", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty newline_with_cursor_beyond_scroll_region: one frame and many frames" {
+test "alacritty newline_with_cursor_beyond_scroll_region: whole, in 61-byte frames, in small frames" {
 	assert conforms("newline_with_cursor_beyond_scroll_region", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("newline_with_cursor_beyond_scroll_region", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("newline_with_cursor_beyond_scroll_region", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty origin_goto: one frame and many frames" {
+test "alacritty origin_goto: whole, in 61-byte frames, in small frames" {
 	assert conforms("origin_goto", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("origin_goto", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("origin_goto", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty region_scroll_down: one frame and many frames" {
+test "alacritty region_scroll_down: whole, in 61-byte frames, in small frames" {
 	assert conforms("region_scroll_down", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("region_scroll_down", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("region_scroll_down", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty row_reset: one frame and many frames" {
+test "alacritty row_reset: whole, in 61-byte frames, in small frames" {
 	assert conforms("row_reset", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("row_reset", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("row_reset", 7, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty scroll_in_region_up_preserves_history: one frame and many frames" {
+test "alacritty scroll_in_region_up_preserves_history: whole, in 61-byte frames, in small frames" {
 	assert conforms("scroll_in_region_up_preserves_history", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("scroll_in_region_up_preserves_history", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("scroll_in_region_up_preserves_history", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty scroll_up_reset: one frame and many frames" {
+test "alacritty scroll_up_reset: whole, in 61-byte frames, in small frames" {
 	assert conforms("scroll_up_reset", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("scroll_up_reset", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("scroll_up_reset", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty sgr: one frame and many frames" {
+test "alacritty sgr: whole, in 61-byte frames, in small frames" {
 	assert conforms("sgr", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("sgr", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("sgr", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty tab_rendering: one frame and many frames" {
+test "alacritty tab_rendering: whole, in 61-byte frames, in small frames" {
 	assert conforms("tab_rendering", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("tab_rendering", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("tab_rendering", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty tmux_git_log: one frame and many frames" {
+test "alacritty tmux_git_log: whole, in 61-byte frames, in small frames" {
 	assert conforms("tmux_git_log", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("tmux_git_log", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("tmux_git_log", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty tmux_htop: one frame and many frames" {
+test "alacritty tmux_htop: whole, in 61-byte frames, in small frames" {
 	assert conforms("tmux_htop", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("tmux_htop", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("tmux_htop", 7, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty underline: one frame and many frames" {
+test "alacritty underline: whole, in 61-byte frames, in small frames" {
 	assert conforms("underline", 0, Compare.RunsOwnPalette, 7) == "";
 	assert conforms("underline", 61, Compare.RunsOwnPalette, 7) == "";
+	assert conforms("underline", 1, Compare.RunsOwnPalette, 7) == "";
 }
 
-test "alacritty vim_24bitcolors_bce: one frame and many frames" {
+test "alacritty vim_24bitcolors_bce: whole, in 61-byte frames, in small frames" {
 	assert conforms("vim_24bitcolors_bce", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("vim_24bitcolors_bce", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("vim_24bitcolors_bce", 509, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty vim_large_window_scroll: one frame and many frames" {
+test "alacritty vim_large_window_scroll: whole, in 61-byte frames, in small frames" {
 	assert conforms("vim_large_window_scroll", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("vim_large_window_scroll", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("vim_large_window_scroll", 509, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty vim_simple_edit: one frame and many frames" {
+test "alacritty vim_simple_edit: whole, in 61-byte frames, in small frames" {
 	assert conforms("vim_simple_edit", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("vim_simple_edit", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("vim_simple_edit", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty vttest_origin_mode_1: one frame and many frames" {
+test "alacritty vttest_origin_mode_1: whole, in 61-byte frames, in small frames" {
 	assert conforms("vttest_origin_mode_1", 0, Compare.Text, -1) == "";
 	assert conforms("vttest_origin_mode_1", 61, Compare.Text, -1) == "";
+	assert conforms("vttest_origin_mode_1", 7, Compare.Text, -1) == "";
 }
 
-test "alacritty vttest_origin_mode_2: one frame and many frames" {
+test "alacritty vttest_origin_mode_2: whole, in 61-byte frames, in small frames" {
 	assert conforms("vttest_origin_mode_2", 0, Compare.Text, -1) == "";
 	assert conforms("vttest_origin_mode_2", 61, Compare.Text, -1) == "";
+	assert conforms("vttest_origin_mode_2", 1, Compare.Text, -1) == "";
 }
 
-test "alacritty vttest_scroll: one frame and many frames" {
+test "alacritty vttest_scroll: whole, in 61-byte frames, in small frames" {
 	assert conforms("vttest_scroll", 0, Compare.Text, -1) == "";
 	assert conforms("vttest_scroll", 61, Compare.Text, -1) == "";
+	assert conforms("vttest_scroll", 1, Compare.Text, -1) == "";
 }
 
-test "alacritty vttest_tab_clear_set: one frame and many frames" {
+test "alacritty vttest_tab_clear_set: whole, in 61-byte frames, in small frames" {
 	assert conforms("vttest_tab_clear_set", 0, Compare.Text, -1) == "";
 	assert conforms("vttest_tab_clear_set", 61, Compare.Text, -1) == "";
+	assert conforms("vttest_tab_clear_set", 1, Compare.Text, -1) == "";
 }
 
-test "alacritty wrapline_alt_toggle: one frame and many frames" {
+test "alacritty wrapline_alt_toggle: whole, in 61-byte frames, in small frames" {
 	assert conforms("wrapline_alt_toggle", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("wrapline_alt_toggle", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("wrapline_alt_toggle", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty zerowidth: one frame and many frames" {
+test "alacritty zerowidth: whole, in 61-byte frames, in small frames" {
 	assert conforms("zerowidth", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("zerowidth", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("zerowidth", 1, Compare.RunsOwnPalette, -1) == "";
 }
 
-test "alacritty zsh_tab_completion: one frame and many frames" {
+test "alacritty zsh_tab_completion: whole, in 61-byte frames, in small frames" {
 	assert conforms("zsh_tab_completion", 0, Compare.RunsOwnPalette, -1) == "";
 	assert conforms("zsh_tab_completion", 61, Compare.RunsOwnPalette, -1) == "";
+	assert conforms("zsh_tab_completion", 1, Compare.RunsOwnPalette, -1) == "";
 }

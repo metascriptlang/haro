@@ -63,6 +63,7 @@ import {
 	GhosttyKeyAction,
 	GhosttyKey,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
+import { fromCodePoint } from "std/core/string";
 import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe } from "../keys/keys";
 import { Marked, Point, Range, Selection, Unit } from "../select/select";
 
@@ -94,6 +95,7 @@ extern function vtMouseEncode(
 	anyPressed: int32,
 	buf: Span<uint8>,
 ): int64;
+extern function vtGraphemes(cells: GhosttyRenderStateRowCells, buf: Span<uint32>): int64;
 extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
 extern function vtString(terminal: GhosttyTerminal, which: int32, buf: Span<uint8>): int64;
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
@@ -223,6 +225,7 @@ extern function vtPasteEncode(
 ): int64;
 
 const MAX_GRAPHEMES: uint32 = 16;
+const MAX_CELL_EXTRA: uint32 = 65536;
 
 export enum VtError {
 	CreateFailed,
@@ -230,7 +233,7 @@ export enum VtError {
 	ResizeFailed,
 	ReadFailed,
 	GraphemeTooLong,
-	CodepointAboveBmpParked,
+	CodepointInvalid,
 	OutOfMemory,
 	SelectFailed,
 }
@@ -275,7 +278,7 @@ export enum Underline {
 
 export struct Cell {
 	cp: uint32;
-	extra: uint8;
+	extra: uint16;
 	fg: Rgb;
 	bg: Rgb;
 	flags: BitSet<CellFlag>;
@@ -575,6 +578,25 @@ function underlineOf(style: GhosttyStyle): Underline {
 	};
 }
 
+function graphemesOf(
+	cells: GhosttyRenderStateRowCells,
+	count: uint32,
+	ref extra: Vec<uint32>,
+): Result<uint32, VtError> {
+	if (count <= MAX_GRAPHEMES) {
+		let graphemes: Graphemes = { cp: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
+		const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
+		if (!ok(cellGraphemes(cells, bufKey, graphemes))) { return Result.err(VtError.ReadFailed); }
+		for (let i = 1; i < (count as int32); i++) { extra.push(graphemes.cp[i]); }
+		return Result.ok(graphemes.cp[0]);
+	}
+	if (count > MAX_CELL_EXTRA) { return Result.err(VtError.GraphemeTooLong); }
+	let all: Vec<uint32> = new Array(count as int32);
+	if (vtGraphemes(cells, all) != (count as int64)) { return Result.err(VtError.ReadFailed); }
+	for (let i = 1; i < (count as int32); i++) { extra.push(all[i]); }
+	return Result.ok(all[0]);
+}
+
 function readCell(
 	cells: GhosttyRenderStateRowCells,
 	colors: Palette,
@@ -596,11 +618,7 @@ function readCell(
 			underline: Underline.None,
 		});
 	}
-	if (count > MAX_GRAPHEMES) { return Result.err(VtError.GraphemeTooLong); }
-	let graphemes: Graphemes = { cp: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
-	const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
-	if (!ok(cellGraphemes(cells, bufKey, graphemes))) { return Result.err(VtError.ReadFailed); }
-	for (let i = 1; i < (count as int32); i++) { extra.push(graphemes.cp[i]); }
+	const base = try graphemesOf(cells, count, extra);
 	const fgKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR;
 	const fg = colorOr(cells, fgKey, colors.fg);
 	let flags = none;
@@ -626,8 +644,8 @@ function readCell(
 	}
 	if (wide == GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE) { flags = flags.incl(CellFlag.Wide); }
 	return Result.ok({
-		cp: graphemes.cp[0],
-		extra: (count - 1) as uint8,
+		cp: base,
+		extra: (count - 1) as uint16,
 		fg: fg,
 		bg: bg,
 		flags: flags,
@@ -679,6 +697,10 @@ export function dirtyRows(this vt: Vt): Result<Vec<Row>, VtError> {
 	return Result.ok(out);
 }
 
+function isScalar(cp: uint32): boolean {
+	return cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF);
+}
+
 export function text(this row: Row): Result<string, VtError> {
 	let text = "";
 	let e = 0;
@@ -687,12 +709,12 @@ export function text(this row: Row): Result<string, VtError> {
 			text += " ";
 			continue;
 		}
-		if (cell.cp > 0xFFFF) { return Result.err(VtError.CodepointAboveBmpParked); }
-		text += String.fromCharCode(cell.cp as int32);
+		if (!isScalar(cell.cp)) { return Result.err(VtError.CodepointInvalid); }
+		text += fromCodePoint(cell.cp as number);
 		for (let i = 0; i < (cell.extra as int32); i++) {
 			const cp = row.extra[e + i];
-			if (cp > 0xFFFF) { return Result.err(VtError.CodepointAboveBmpParked); }
-			text += String.fromCharCode(cp as int32);
+			if (!isScalar(cp)) { return Result.err(VtError.CodepointInvalid); }
+			text += fromCodePoint(cp as number);
 		}
 		e += cell.extra as int32;
 	}
@@ -1480,6 +1502,49 @@ test "an erased line keeps its background on cells without text" {
 			const cell = rows.value[0].cells[5];
 			assert cell.cp == 0;
 			assert cell.bg == blue;
+		}
+		vt.free();
+	}
+}
+
+test "a cluster of forty codepoints is one cell that keeps them all" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		let cluster = "a";
+		for (let i = 0; i < 39; i++) { cluster += String.fromCharCode(0x301); }
+		vt.writeText(cluster + "b");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const row = rows.value[0];
+			assert row.cells[0].cp == 0x61;
+			assert row.cells[0].extra == 39;
+			assert row.cells[1].cp == 0x62;
+			const text = row.text();
+			assert text.ok;
+			if (text.ok) { assert text.value.startsWith(cluster + "b"); }
+		}
+		vt.free();
+	}
+}
+
+test "a character above the basic plane reads back whole" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("x😀");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			assert rows.value[0].cells[1].cp == 0x1F600;
+			const text = rows.value[0].text();
+			assert text.ok;
+			if (text.ok) { assert text.value.startsWith("x😀"); }
 		}
 		vt.free();
 	}

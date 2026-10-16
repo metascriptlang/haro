@@ -80,3 +80,18 @@ int64_t vtFocusEncode(GhosttyTerminal terminal, int gained, uint8_t* buf, int64_
 		(char*)buf, (size_t)cap, &written);
 	return r == GHOSTTY_SUCCESS ? (int64_t)written : -2;
 }
+
+/* All codepoints of the cell's grapheme, base first, as many as the cell holds: buf must hold the
+   count GRAPHEMES_LEN reports. Returns the count, or -1. */
+int64_t vtGraphemes(GhosttyRenderStateRowCells cells, uint32_t* buf, int64_t cap) {
+	uint32_t count = 0;
+	if (ghostty_render_state_row_cells_get(cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN, &count)
+		!= GHOSTTY_SUCCESS || (int64_t)count > cap) {
+		return -1;
+	}
+	if (ghostty_render_state_row_cells_get(cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF, buf)
+		!= GHOSTTY_SUCCESS) {
+		return -1;
+	}
+	return (int64_t)count;
+}

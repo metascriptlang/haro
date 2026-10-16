@@ -75,6 +75,7 @@ extern function vtEffectsOpen(terminal: GhosttyTerminal): int32;
 extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
 extern function vtEffectsClose(id: int32, terminal: GhosttyTerminal): void;
 extern function vtEventsTake(id: int32, out: Span<int32>): int32;
+extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
 extern function vtString(terminal: GhosttyTerminal, which: int32, buf: Span<uint8>): int64;
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
 extern function vtTopAnchor(ref: GhosttyTrackedGridRef, terminal: GhosttyTerminal): int32;
@@ -412,6 +413,27 @@ export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	}
 	const at: Cursor | null = { x: x as int32, y: y as int32 };
 	return Result.ok(at);
+}
+
+export enum CursorShape {
+	Bar,
+	Block,
+	Underline,
+	BlockHollow,
+}
+
+export struct CursorLook {
+	visible: boolean;
+	shape: CursorShape;
+	blinking: boolean;
+}
+
+export function cursorLook(this vt: Vt): Result<CursorLook, VtError> {
+	let out: Vec<int32> = new Array(3);
+	if (vtCursorLook(vt.state, out) != 0 || out[1] < 0 || out[1] > (CursorShape.BlockHollow as int32)) {
+		return Result.err(VtError.ReadFailed);
+	}
+	return Result.ok({ visible: out[0] != 0, shape: out[1] as CursorShape, blinking: out[2] != 0 });
 }
 
 function rgb(c: GhosttyColorRgb): Rgb {
@@ -1099,6 +1121,59 @@ test "an untitled terminal has an empty title" {
 		assert title.ok;
 		if (title.ok) { assert title.value == ""; }
 		vt.free();
+	}
+}
+
+function lookAfter(input: string): CursorLook | null {
+	const created = Vt.create(20, 4);
+	if (!created.ok) { return null; }
+	const vt = created.value;
+	vt.writeText(input);
+	const updated = vt.update();
+	const look = vt.cursorLook();
+	vt.free();
+	if (!updated.ok || !look.ok) { return null; }
+	const found: CursorLook | null = look.value;
+	return found;
+}
+
+test "a fresh cursor is a visible steady block" {
+	const look = lookAfter("");
+	assert look !== null;
+	if (look !== null) {
+		assert look.visible;
+		assert look.shape == CursorShape.Block;
+		assert !look.blinking;
+	}
+}
+
+test "DECTCEM hides and shows the cursor" {
+	const hidden = lookAfter("[?25l");
+	assert hidden !== null;
+	if (hidden !== null) { assert !hidden.visible; }
+	const shown = lookAfter("[?25l[?25h");
+	assert shown !== null;
+	if (shown !== null) { assert shown.visible; }
+}
+
+test "DECSCUSR picks the cursor's shape and blink" {
+	const bar = lookAfter("[5 q");
+	assert bar !== null;
+	if (bar !== null) {
+		assert bar.shape == CursorShape.Bar;
+		assert bar.blinking;
+	}
+	const underline = lookAfter("[4 q");
+	assert underline !== null;
+	if (underline !== null) {
+		assert underline.shape == CursorShape.Underline;
+		assert !underline.blinking;
+	}
+	const block = lookAfter("[6 q[2 q");
+	assert block !== null;
+	if (block !== null) {
+		assert block.shape == CursorShape.Block;
+		assert !block.blinking;
 	}
 }
 

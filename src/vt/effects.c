@@ -64,6 +64,9 @@ typedef struct {
 	int held;
 	int64_t heldAtMs;
 	int64_t holdLimitMs;
+	uint8_t* clip;
+	int64_t clipLen;
+	int clipPending;
 } Effects;
 
 static Effects effects[EFFECTS_MAX];
@@ -124,6 +127,31 @@ static GhosttyString onXtversion(GhosttyTerminal terminal, void* userdata) {
 	return name;
 }
 
+static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const GhosttyClipboardWrite* write) {
+	(void)terminal;
+	Effects* e = userdata;
+	GhosttyClipboardWriteReply reply = { sizeof reply, GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED, false };
+	if (write->location == GHOSTTY_CLIPBOARD_LOCATION_STANDARD) {
+		for (size_t i = 0; i < write->contents_len; i++) {
+			const GhosttyClipboardContent* c = &write->contents[i];
+			if (c->mime.len != 10 || memcmp(c->mime.ptr, "text/plain", 10) != 0) continue;
+			uint8_t* copy = malloc(c->data.len > 0 ? c->data.len : 1);
+			if (!copy) {
+				reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_BUSY;
+				break;
+			}
+			memcpy(copy, c->data.ptr, c->data.len);
+			free(e->clip);
+			e->clip = copy;
+			e->clipLen = (int64_t)c->data.len;
+			e->clipPending = 1;
+			reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+			break;
+		}
+	}
+	write->reply(write, &reply);
+}
+
 static void onBell(GhosttyTerminal terminal, void* userdata) {
 	(void)terminal;
 	((Effects*)userdata)->bells++;
@@ -166,7 +194,9 @@ int vtEffectsOpen(GhosttyTerminal terminal, GhosttyRenderState state) {
 		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES,
 			(const void*)onDeviceAttributes) != GHOSTTY_SUCCESS
 		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*)onXtversion)
-			!= GHOSTTY_SUCCESS) {
+			!= GHOSTTY_SUCCESS
+		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
+			(const void*)onClipboardWrite) != GHOSTTY_SUCCESS) {
 		e->used = 0;
 		return -1;
 	}
@@ -199,6 +229,22 @@ int vtEventsTake(int id, int32_t* out, int64_t cap) {
 	return 0;
 }
 
+/* The text of the last OSC 52 write to the standard clipboard that the host has not taken. -1: none
+   pending. -2: buf is too small; the write stays pending and vtClipboardSize gives its length. */
+int64_t vtClipboardTake(int id, uint8_t* buf, int64_t cap) {
+	Effects* e = slot(id);
+	if (!e || !e->clipPending) return -1;
+	if (e->clipLen > cap) return -2;
+	memcpy(buf, e->clip, (size_t)e->clipLen);
+	e->clipPending = 0;
+	return e->clipLen;
+}
+
+int64_t vtClipboardSize(int id) {
+	Effects* e = slot(id);
+	return e && e->clipPending ? e->clipLen : -1;
+}
+
 void vtHoldLimit(int id, int64_t ms) {
 	Effects* e = slot(id);
 	if (e) e->holdLimitMs = ms;
@@ -226,9 +272,11 @@ void vtEffectsClose(int id, GhosttyTerminal terminal) {
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_RENDER_HOLD, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_XTVERSION, NULL);
+	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, NULL);
 	if (e->mouse) ghostty_mouse_encoder_free(e->mouse);
 	if (e->mouseEvent) ghostty_mouse_event_free(e->mouseEvent);
+	free(e->clip);
 	free(e->data);
 	memset(e, 0, sizeof *e);
 }

@@ -73,6 +73,8 @@ extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<Span<uin
 	from "ghostty_terminal_vt_write";
 extern function vtAllocator(): Ptr<GhosttyAllocator>;
 extern function vtEffectsOpen(terminal: GhosttyTerminal, state: GhosttyRenderState): int32;
+extern function vtClipboardTake(id: int32, buf: Span<uint8>): int64;
+extern function vtClipboardSize(id: int32): int64;
 extern function vtHoldLimit(id: int32, ms: int64): void;
 extern function vtHeld(id: int32, terminal: GhosttyTerminal): int32;
 extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
@@ -422,6 +424,16 @@ export function setDefaultColors(this vt: Vt, fg: Rgb, bg: Rgb): Result<Vt, VtEr
 export function setPullScrollback(this vt: Vt, pull: boolean): Result<Vt, VtError> {
 	if (vtSetPullScrollback(vt.terminal, pull ? 1 : 0) != 0) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(vt);
+}
+
+export function takeClipboard(this vt: Vt): Result<string | null, VtError> {
+	const size = vtClipboardSize(vt.effects);
+	if (size < 0) { return Result.ok(null); }
+	let buf: Vec<uint8> = new Array((size as int32) + 1);
+	const n = vtClipboardTake(vt.effects, buf);
+	if (n < 0) { return Result.err(VtError.ReadFailed); }
+	const text: string | null = buf[0..(n as int32)].asString();
+	return Result.ok(text);
 }
 
 export function holding(this vt: Vt): boolean {
@@ -1564,6 +1576,29 @@ l5");
 test "growing the grid reveals scrollback unless the pty keeps its own screen" {
 	assert rowsAfterGrowing(true) == "l1|l2|l3|l4|l5";
 	assert rowsAfterGrowing(false) == "l3|l4|l5||";
+}
+
+test "an OSC 52 write reaches the host once, and only for the standard clipboard" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const none = vt.takeClipboard();
+		assert none.ok;
+		if (none.ok) { assert none.value === null; }
+		vt.writeText("]52;p;cHJpbWFyeQ==");
+		const primary = vt.takeClipboard();
+		assert primary.ok;
+		if (primary.ok) { assert primary.value === null; }
+		vt.writeText("]52;c;aGVsbG8gd29ybGQ=");
+		const first = vt.takeClipboard();
+		assert first.ok;
+		if (first.ok) { assert first.value == "hello world"; }
+		const second = vt.takeClipboard();
+		assert second.ok;
+		if (second.ok) { assert second.value === null; }
+		vt.free();
+	}
 }
 
 test "text without a query leaves nothing to reply" {

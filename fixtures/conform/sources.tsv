@@ -67,3 +67,4 @@ wezterm/csi edit	ported	~/projects/wezterm/term/src/test/csi.rs:8,235,244,253,26
 wezterm/margins and delete_lines	ported	~/projects/wezterm/term/src/test/mod.rs:568,614,668	e2a98e1	IL and DL with a scroll region and left and right margins; src/conform/regions.ms
 wezterm/scrolling	ported	~/projects/wezterm/term/src/test/mod.rs:1087,1123,1130,1190,1236	e2a98e1	scrollback content through the viewport, RI, region scroll with and without scrollback, alternate screen; scrollback limits not ported (Ghostty prunes by bytes); src/conform/regions.ms
 ghostty/deccolm	ported	~/projects/ghostty/src/terminal/Terminal.zig:4003,16713,16700	22fa134a0	mode 40 then mode 3 resets to 80 columns and clears; src/conform/regions.ms
+frames/differential	property, no external reference	the oracle is a fresh read of the libghostty render state after the same bytes	-	generated streams painted in random frame cuts, per operation, with viewport scrolls and resizes; src/conform/frames.ms

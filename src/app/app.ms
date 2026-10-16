@@ -15,6 +15,7 @@ import { Spot, spotAt } from "../input/pointer";
 import { Block } from "../select/select";
 import { Cursor } from "../vt/vt";
 import { Clip, ControlError, Controls } from "./controls";
+import { PasteDialog, PasteView, Look } from "./pasteDialog";
 import {
 	Term,
 	TermError,
@@ -72,6 +73,8 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 	const [cursorShown, setCursorShown] = createSignal<boolean>(false);
 
 	const controls = Controls.open();
+	const dialog = PasteView.open();
+	const [viewWidth, setViewWidth] = createSignal<number>(0);
 	const shades = createList<Block>([NO_SHADE, NO_SHADE, NO_SHADE]);
 	let lit: Vec<Block> = [NO_SHADE, NO_SHADE, NO_SHADE];
 
@@ -115,6 +118,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 		}
 		show(frame.value.cursor);
 		repaint();
+		dialog.show(controls.held, cellWidth(), viewWidth());
 		if (frame.value.more) { setTimeout((): void => { refresh(); }, 0); }
 		if (frame.value.ended) { entry.exited(t.shellExitCode()); }
 	}
@@ -161,6 +165,8 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 			entry.fail(`cell ${advance}x${lineHeight} is not a grid size`);
 			return;
 		}
+		setViewWidth(e.width);
+		dialog.shownFor = null;
 		setCellWidth(cellPx / ratio);
 		setRowHeight(rowPx / ratio);
 		console.log(
@@ -203,6 +209,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 	};
 
 	const committed = (e: NeonEvent): void => {
+		if (controls.holding()) { return; }
 		const sent = t.sendText(e.text);
 		if (!sent.ok) {
 			fatal("text", sent.error);
@@ -246,6 +253,21 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 			return;
 		}
 		if (handled.value) { refresh(); }
+	};
+
+	const look: Look = {
+		cellWidth: cellWidth,
+		rowHeight: rowHeight,
+		fontSize: FONT_SIZE,
+		onConfirm: (): void => {
+			const sent = controls.confirm(t);
+			if (!sent.ok) { fatalControl("paste", sent.error); }
+			refresh();
+		},
+		onCancel: (): void => {
+			controls.cancel();
+			refresh();
+		},
 	};
 
 	const shadeBox = (item: Accessor<Block>): NeonNode => {
@@ -297,6 +319,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 					}}
 				/>
 			</View>
+			{PasteDialog(dialog, look)}
 		</Void>
 	);
 }

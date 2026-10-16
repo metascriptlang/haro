@@ -1581,11 +1581,7 @@ function rowsAfterGrowing(pull: boolean): string {
 	if (!created.ok) { return "create failed"; }
 	const vt = created.value;
 	vt.setPullScrollback(pull);
-	vt.writeText("l1
-l2
-l3
-l4
-l5");
+	vt.writeText("l1\r\nl2\r\nl3\r\nl4\r\nl5");
 	vt.resize(10, 5);
 	vt.update();
 	const lines = vt.lines();
@@ -1660,12 +1656,7 @@ test "the viewport jumps between OSC 133 prompts" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("]133;Ap1
-out1
-out2
-]133;Ap2
-out3
-]133;Ap3");
+		vt.writeText("\x1b]133;A\x07p1\r\nout1\r\nout2\r\n\x1b]133;A\x07p2\r\nout3\r\n\x1b]133;A\x07p3");
 		vt.update();
 		assert vt.lines().ok;
 		assert topAfterJump(vt, -1) == "p1";
@@ -1680,11 +1671,7 @@ test "a screen without prompt marks has nothing to jump to" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("a
-b
-c
-d
-e");
+		vt.writeText("a\r\nb\r\nc\r\nd\r\ne");
 		assert topAfterJump(vt, -1) == "<none>";
 		assert topAfterJump(vt, 1) == "<none>";
 		vt.free();
@@ -1871,8 +1858,7 @@ test "only rows written since the last clean are dirty" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("a
-b");
+		vt.writeText("a\nb");
 		assert vt.update().ok;
 		vt.clean();
 		vt.writeText("c");

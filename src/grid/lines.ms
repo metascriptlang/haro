@@ -30,11 +30,24 @@ function sameStyle(this a: LineRun, b: LineRun): boolean {
 		a.strikethrough == b.strikethrough;
 }
 
+const FAINT_OPACITY = 0.5;
+
+function over(fg: uint8, bg: uint8): uint8 {
+	return Math.round(fg * FAINT_OPACITY + bg * (1 - FAINT_OPACITY)) as uint8;
+}
+
+function faded(fg: Rgb, bg: Rgb): Rgb {
+	return { r: over(fg.r, bg.r), g: over(fg.g, bg.g), b: over(fg.b, bg.b) };
+}
+
 function lineRun(this cell: Cell): LineRun {
+	const inverse = cell.flags.has(CellFlag.Inverse);
+	const fg = inverse ? cell.bg : cell.fg;
+	const bg = inverse ? cell.fg : cell.bg;
 	return {
 		units: 0,
-		fg: cell.fg,
-		bg: cell.bg,
+		fg: cell.flags.has(CellFlag.Faint) ? faded(fg, bg) : fg,
+		bg: bg,
 		underline: cell.underline,
 		bold: cell.flags.has(CellFlag.Bold),
 		italic: cell.flags.has(CellFlag.Italic),
@@ -247,6 +260,51 @@ test "a codepoint above the BMP is two UTF-16 units of its run" {
 				assert line.value.runs[0].units == 3;
 				assert line.value.text.slice(0, 3) == "a😀";
 				assert line.value.runs[1].bold;
+			}
+		}
+		vt.free();
+	}
+}
+
+test "an inverse cell swaps its run's colours" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("\x1b[7mx");
+		assert vt.update().ok;
+		const colors = vt.palette();
+		const rows = vt.rows();
+		assert colors.ok && rows.ok;
+		if (colors.ok && rows.ok) {
+			const line = rows.value[0].line(-1);
+			assert line.ok;
+			if (line.ok) {
+				assert line.value.runs[0].fg == colors.value.bg;
+				assert line.value.runs[0].bg == colors.value.fg;
+				assert line.value.runs[1].fg == colors.value.fg;
+			}
+		}
+		vt.free();
+	}
+}
+
+test "a faint cell draws its foreground halfway to its background" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("\x1b[2;38;2;200;100;0;48;2;0;0;100mx");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const line = rows.value[0].line(-1);
+			assert line.ok;
+			if (line.ok) {
+				const fg = line.value.runs[0].fg;
+				assert fg.r == 100 && fg.g == 50 && fg.b == 50;
+				assert line.value.runs[0].bg.b == 100;
 			}
 		}
 		vt.free();

@@ -8,6 +8,7 @@ const GhosttyAllocator* vtAllocator(void);
 
 int vtEffectsOpen(GhosttyTerminal terminal);
 int64_t vtRepliesTake(int id, uint8_t* buf, int64_t cap);
+int vtEventsTake(int id, int32_t* out, int64_t cap);
 void vtEffectsClose(int id, GhosttyTerminal terminal);
 
 int vtTopTrack(GhosttyTerminal terminal, GhosttyTrackedGridRef* out);

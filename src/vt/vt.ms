@@ -9,6 +9,8 @@ when (emcc) {
 @compile("./effects.c");
 @include("./select.h");
 @compile("./select.c");
+@include("./state.h");
+@compile("./state.c");
 
 import {
 	ghostty_terminal_new,
@@ -72,6 +74,8 @@ extern function vtAllocator(): Ptr<GhosttyAllocator>;
 extern function vtEffectsOpen(terminal: GhosttyTerminal): int32;
 extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
 extern function vtEffectsClose(id: int32, terminal: GhosttyTerminal): void;
+extern function vtEventsTake(id: int32, out: Span<int32>): int32;
+extern function vtString(terminal: GhosttyTerminal, which: int32, buf: Span<uint8>): int64;
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
 extern function vtTopAnchor(ref: GhosttyTrackedGridRef, terminal: GhosttyTerminal): int32;
 extern function terminalScrollbar(
@@ -325,6 +329,40 @@ export function replies(this vt: Vt, buf: Span<uint8>): Result<int32, VtError> {
 	if (n == -2) { return Result.err(VtError.OutOfMemory); }
 	if (n < 0) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(n as int32);
+}
+
+export struct VtEvents {
+	bells: int32;
+	titleChanged: boolean;
+	pwdChanged: boolean;
+}
+
+export function takeEvents(this vt: Vt): Result<VtEvents, VtError> {
+	let out: Vec<int32> = new Array(3);
+	if (vtEventsTake(vt.effects, out) != 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok({ bells: out[0], titleChanged: out[1] != 0, pwdChanged: out[2] != 0 });
+}
+
+const STRING_TITLE: int32 = 0;
+const STRING_PWD: int32 = 1;
+
+function stringOf(terminal: GhosttyTerminal, which: int32): Result<string, VtError> {
+	let buf: Vec<uint8> = new Array(256);
+	let n = vtString(terminal, which, buf);
+	if (n > (buf.length as int64)) {
+		buf = new Array(n as int32);
+		n = vtString(terminal, which, buf);
+	}
+	if (n < 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(buf[0..(n as int32)].asString());
+}
+
+export function title(this vt: Vt): Result<string, VtError> {
+	return stringOf(vt.terminal, STRING_TITLE);
+}
+
+export function pwd(this vt: Vt): Result<string, VtError> {
+	return stringOf(vt.terminal, STRING_PWD);
 }
 
 export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtError> {
@@ -1018,6 +1056,48 @@ test "a cursor position query is answered with the cursor's place" {
 		const n = vt.replies(buf);
 		assert n.ok;
 		if (n.ok) { assert ascii(buf[0..n.value]) == "[1;3R"; }
+		vt.free();
+	}
+}
+
+test "bells, a title and a pwd reach the host as events once each" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("a]2;build: ok]7;file:///C:/Users/me");
+		const first = vt.takeEvents();
+		assert first.ok;
+		if (first.ok) {
+			assert first.value.bells == 2;
+			assert first.value.titleChanged;
+			assert first.value.pwdChanged;
+		}
+		const title = vt.title();
+		assert title.ok;
+		if (title.ok) { assert title.value == "build: ok"; }
+		const pwd = vt.pwd();
+		assert pwd.ok;
+		if (pwd.ok) { assert pwd.value == "file:///C:/Users/me"; }
+		const second = vt.takeEvents();
+		assert second.ok;
+		if (second.ok) {
+			assert second.value.bells == 0;
+			assert !second.value.titleChanged;
+			assert !second.value.pwdChanged;
+		}
+		vt.free();
+	}
+}
+
+test "an untitled terminal has an empty title" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const title = vt.title();
+		assert title.ok;
+		if (title.ok) { assert title.value == ""; }
 		vt.free();
 	}
 }

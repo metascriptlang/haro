@@ -51,6 +51,9 @@ typedef struct {
 	int64_t len;
 	int64_t cap;
 	int outOfMemory;
+	int bells;
+	int titleChanged;
+	int pwdChanged;
 } Effects;
 
 static Effects effects[EFFECTS_MAX];
@@ -79,6 +82,21 @@ static Effects* slot(int id) {
 	return &effects[id];
 }
 
+static void onBell(GhosttyTerminal terminal, void* userdata) {
+	(void)terminal;
+	((Effects*)userdata)->bells++;
+}
+
+static void onTitleChanged(GhosttyTerminal terminal, void* userdata) {
+	(void)terminal;
+	((Effects*)userdata)->titleChanged = 1;
+}
+
+static void onPwdChanged(GhosttyTerminal terminal, void* userdata) {
+	(void)terminal;
+	((Effects*)userdata)->pwdChanged = 1;
+}
+
 int vtEffectsOpen(GhosttyTerminal terminal) {
 	int id = -1;
 	for (int i = 0; i < EFFECTS_MAX; i++) {
@@ -90,6 +108,12 @@ int vtEffectsOpen(GhosttyTerminal terminal) {
 	e->used = 1;
 	if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, e) != GHOSTTY_SUCCESS
 		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*)writePty)
+			!= GHOSTTY_SUCCESS
+		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_BELL, (const void*)onBell)
+			!= GHOSTTY_SUCCESS
+		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void*)onTitleChanged)
+			!= GHOSTTY_SUCCESS
+		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*)onPwdChanged)
 			!= GHOSTTY_SUCCESS) {
 		e->used = 0;
 		return -1;
@@ -110,10 +134,26 @@ int64_t vtRepliesTake(int id, uint8_t* buf, int64_t cap) {
 	return n;
 }
 
+/* out: bells since the last take, title changed, pwd changed. A take clears them. */
+int vtEventsTake(int id, int32_t* out, int64_t cap) {
+	Effects* e = slot(id);
+	if (!e || cap < 3) return -1;
+	out[0] = e->bells;
+	out[1] = e->titleChanged;
+	out[2] = e->pwdChanged;
+	e->bells = 0;
+	e->titleChanged = 0;
+	e->pwdChanged = 0;
+	return 0;
+}
+
 void vtEffectsClose(int id, GhosttyTerminal terminal) {
 	Effects* e = slot(id);
 	if (!e) return;
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY, NULL);
+	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_BELL, NULL);
+	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, NULL);
+	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, NULL);
 	free(e->data);
 	memset(e, 0, sizeof *e);

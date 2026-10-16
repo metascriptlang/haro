@@ -15,7 +15,8 @@ import { Pty, PtyError } from "../pty/transport";
 import { ConPty } from "../pty/pty";
 import { Replay } from "../pty/replay";
 import { App, Entry, measureCell } from "./app";
-import { smoke, smokeReplay } from "./smoke";
+import { Cue, FRAME_MS, Pace } from "./pace";
+import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { Term, openTerm, shutdown } from "./term";
 
 extern function appWireWake(): void;
@@ -25,6 +26,8 @@ const FONT_PATH = "assets/JetBrainsMonoNL-Regular.ttf";
 const FONT_BOLD = "assets/JetBrainsMonoNL-Bold.ttf";
 const FONT_ITALIC = "assets/JetBrainsMonoNL-Italic.ttf";
 const FONT_BOLD_ITALIC = "assets/JetBrainsMonoNL-BoldItalic.ttf";
+
+const pace = Pace.start(FRAME_MS);
 
 function fail(message: string): void {
 	console.log(`haro: ${message}`);
@@ -56,7 +59,25 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 	registerFace(FONT_ITALIC, FONT_PATH, 400, FontStyle.Italic);
 	registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
 	const entry: Entry = {
-		onWake: (handler: () => void): void => { onWake(handler); },
+		onWake: (handler: () => void): void => {
+			const apply = (): void => {
+				pace.applied(performance.now());
+				handler();
+			};
+			onWake((): void => {
+				const drained = t.drain();
+				if (!drained.ok) {
+					fail(`drain: ${drained.error.toString()}`);
+					return;
+				}
+				const now = performance.now();
+				match (pace.wake(now)) {
+					Cue.Now => { apply(); },
+					Cue.Later => { setTimeout(apply, pace.wait(now)); },
+					Cue.Hold => {},
+				}
+			});
+		},
 		exited: exited,
 		fail: fail,
 	};
@@ -77,6 +98,7 @@ function runShell(shell: string): int32 {
 	const t = opened.value;
 	appWireWake();
 	if (has("--smoke")) { smoke(t); }
+	if (has("--flood")) { smokeFlood(t, pace); }
 	return show(t, (code: int32): void => {
 		console.log(`haro: the shell exited with code ${code}`);
 		t.shutdown();

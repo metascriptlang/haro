@@ -5,7 +5,9 @@ import { KeyAction, KeyEvent, KeyMod } from "../keys/keys";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
 import { Session } from "../session/session";
-import { Cursor, Keys, PasteError } from "../vt/vt";
+import {
+	Cursor, CursorLook, CursorShape, Keys, MouseGeometry, MouseInput, PasteError,
+} from "../vt/vt";
 import { FrameError, RowSlot, applyFrame } from "./frame";
 
 const BUFFER_BYTES = 65536;
@@ -26,6 +28,12 @@ export enum TermError {
 	WriteFailed,
 	PasteUnsafe,
 	PasteEncodeFailed,
+	FrameLookFailed,
+	EventsFailed,
+	ClipboardFailed,
+	FocusFailed,
+	MouseFailed,
+	RepliesFailed,
 }
 
 export type OpenPty = (cols: int32, rows: int32) => Result<Pty, PtyError>;
@@ -45,8 +53,23 @@ export interface Term {
 
 export struct Frame {
 	cursor: Cursor | null;
+	look: CursorLook;
 	more: boolean;
 	ended: boolean;
+	held: boolean;
+	copied: string | null;
+	asked: boolean;
+	bells: int32;
+	title: string | null;
+}
+
+const HIDDEN: CursorLook = { visible: false, shape: CursorShape.Block, blinking: false };
+
+function idle(more: boolean, ended: boolean): Frame {
+	return {
+		cursor: null, look: HIDDEN, more: more, ended: ended, held: false,
+		copied: null, asked: false, bells: 0, title: null,
+	};
 }
 
 export function openTerm(open: OpenPty): Result<Term, TermError> {
@@ -125,13 +148,33 @@ export function drain(this t: Term): Result<boolean, TermError> {
 
 export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok({ cursor: null, more: false, ended: false }); }
+	if (s === null) { return Result.ok(idle(false, false)); }
 	const more = try t.drain();
 	const ended = t.ended;
 	t.ended = false;
-	const applied = applyFrame(t.grid, t.styles, s.vt);
+	const vt = s.vt;
+	const events = vt.takeEvents();
+	if (!events.ok) { return Result.err(TermError.EventsFailed); }
+	const copied = vt.takeClipboard();
+	if (!copied.ok) { return Result.err(TermError.ClipboardFailed); }
+	let title: string | null = null;
+	if (events.value.titleChanged) {
+		const named = vt.title();
+		if (!named.ok) { return Result.err(TermError.EventsFailed); }
+		title = named.value;
+	}
+	const asked = vt.clipboardAsked();
+	if (vt.holding()) {
+		return Result.ok({ ...idle(more, ended), held: true, copied: copied.value, asked: asked, bells: events.value.bells, title: title });
+	}
+	const applied = applyFrame(t.grid, t.styles, vt);
 	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
-	return Result.ok({ cursor: applied.value, more: more, ended: ended });
+	const look = vt.cursorLook();
+	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
+	return Result.ok({
+		cursor: applied.value, look: look.value, more: more, ended: ended, held: false,
+		copied: copied.value, asked: asked, bells: events.value.bells, title: title,
+	});
 }
 
 export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
@@ -175,6 +218,41 @@ export function sendPaste(this t: Term, text: string, allowUnsafe: boolean): Res
 	if (n == 0) { return Result.ok(0); }
 	if (!s.pty.write(bytes.value[0..n]).ok) { return Result.err(TermError.WriteFailed); }
 	return Result.ok(n);
+}
+
+export function sendFocus(this t: Term, gained: boolean): Result<int32, TermError> {
+	const s = t.session;
+	if (s === null) { return Result.ok(0); }
+	const n = s.vt.focusReport(gained, t.buf);
+	if (!n.ok) { return Result.err(TermError.FocusFailed); }
+	if (n.value == 0) { return Result.ok(0); }
+	if (!s.pty.write(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
+	return Result.ok(n.value);
+}
+
+export function sendMouse(
+	this t: Term, e: MouseInput, g: MouseGeometry, anyPressed: boolean,
+): Result<int32, TermError> {
+	const s = t.session;
+	if (s === null) { return Result.ok(0); }
+	const n = s.vt.mouseReport(e, g, anyPressed, t.buf);
+	if (!n.ok) { return Result.err(TermError.MouseFailed); }
+	if (n.value == 0) { return Result.ok(0); }
+	if (!s.pty.write(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
+	return Result.ok(n.value);
+}
+
+export function sendReplies(this t: Term): Result<int32, TermError> {
+	const s = t.session;
+	if (s === null) { return Result.ok(0); }
+	let total = 0;
+	while (true) {
+		const n = s.vt.replies(t.buf);
+		if (!n.ok) { return Result.err(TermError.RepliesFailed); }
+		if (n.value == 0) { return Result.ok(total); }
+		if (!s.pty.write(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
+		total += n.value;
+	}
 }
 
 export function shutdown(this t: Term): void {

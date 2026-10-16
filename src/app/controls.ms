@@ -5,9 +5,8 @@ import { Pointer, Spot } from "../input/pointer";
 import { ROWS_PER_NOTCH, Wheel, WheelRoute, route } from "../input/wheel";
 import { Held, Reply, replyTo, warningFor, Warning } from "../input/paste";
 import { Vt } from "../vt/vt";
-import { Pty, PtyError } from "../pty/transport";
-import { Replay } from "../pty/replay";
-import { Term, TermError, openTerm } from "./term";
+import { Term, TermError } from "./term";
+import { Sink, termOf } from "./termTest";
 
 export enum ControlError {
 	VtFailed,
@@ -241,9 +240,6 @@ export function shades(this c: Controls, t: Term): Result<Vec<Block>, ControlErr
 	return Result.ok(drawn.value);
 }
 
-interface Sink {
-	sent: string;
-}
 
 interface Board {
 	copied: string;
@@ -251,29 +247,6 @@ interface Board {
 	reads: int32;
 }
 
-function recorder(text: string, sink: Sink): Pty {
-	const base = Replay.ofText(text).toPty();
-	return {
-		wait: base.wait,
-		read: base.read,
-		write: (data: Span<uint8>): Result<int32, PtyError> => {
-			for (let i = 0; i < data.length; i++) { sink.sent += String.fromCharCode(data[i] as int32); }
-			return Result.ok(data.length as int32);
-		},
-		resize: base.resize,
-		exitCode: base.exitCode,
-		close: base.close,
-	};
-}
-
-function termOf(text: string, cols: int32, rows: int32, sink: Sink): Term | null {
-	const opened = openTerm((c: int32, r: int32): Result<Pty, PtyError> => { return Result.ok(recorder(text, sink)); });
-	if (!opened.ok) { return null; }
-	const t = opened.value;
-	if (!t.fit(cols, rows).ok) { return null; }
-	if (!t.pumpFrame().ok) { return null; }
-	return t;
-}
 
 function boardOf(offer: string): Board {
 	return { copied: "", offer: offer, reads: 0 };

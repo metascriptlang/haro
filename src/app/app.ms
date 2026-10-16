@@ -13,7 +13,9 @@ import { RowSlot } from "./frame";
 import { gridSize } from "../grid/size";
 import { Spot, spotAt } from "../input/pointer";
 import { Block } from "../select/select";
-import { Cursor, Rgb } from "../vt/vt";
+import { Cursor, CursorLook, CursorShape } from "../vt/vt";
+import { BLINK_MS, BOX_SLOTS, Box, NO_BOX, blinks, boxes, drawn, resets, shapeOf } from "../term/cursor";
+import { applyTitle, ringBell } from "./chrome";
 import { hexOf } from "./frame";
 import { BACKGROUND, FOREGROUND, THEME_BG, THEME_FG } from "./theme";
 import { Clip, ControlError, Controls } from "./controls";
@@ -32,6 +34,7 @@ const FONT_SIZE: number = 14;
 const PADDING: number = 6;
 const PROBE = "MMMMMMMMMM";
 const SHADES = 3;
+const HOLD_RECHECK_MS = 100;
 const NO_SHADE: Block = { row: 0, col: 0, rows: 0, cols: 0 };
 
 export interface Cell {
@@ -69,7 +72,6 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 	const [rowHeight, setRowHeight] = createSignal<number>(0);
 	const [cursorCol, setCursorCol] = createSignal<number>(0);
 	const [cursorRow, setCursorRow] = createSignal<number>(0);
-	const [cursorShown, setCursorShown] = createSignal<boolean>(false);
 	const [background, setBackground] = createSignal<string>(BACKGROUND);
 	const [foreground, setForeground] = createSignal<string>(FOREGROUND);
 	let themed = false;
@@ -79,6 +81,15 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 	const [viewWidth, setViewWidth] = createSignal<number>(0);
 	const shades = createList<Block>([NO_SHADE, NO_SHADE, NO_SHADE]);
 	let lit: Vec<Block> = [NO_SHADE, NO_SHADE, NO_SHADE];
+	const cursorBoxes = createList<Box>([NO_BOX, NO_BOX, NO_BOX, NO_BOX]);
+	let litBoxes: Vec<Box> = [NO_BOX, NO_BOX, NO_BOX, NO_BOX];
+	let cursorAt: Cursor | null = null;
+	let cursorLook: CursorLook = { visible: false, shape: CursorShape.Block, blinking: false };
+	let focused = true;
+	let blinkOn = true;
+	let blinkTimer = -1;
+	let lastReset = 0.0;
+	let heldTimer = -1;
 
 	const fatal = (what: string, error: TermError): void => {
 		entry.fail(`${what}: ${error.toString()}`);
@@ -102,15 +113,71 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 		}
 	}
 
-	const show = (cursor: Cursor | null): void => {
-		if (cursor === null) {
-			setCursorShown(false);
-			return;
+	function paintCursor(): void {
+		let next: Vec<Box> = [];
+		const at = cursorAt;
+		if (at !== null && drawn(cursorLook, focused, blinkOn)) {
+			next = boxes(shapeOf(cursorLook, focused), at.x, at.y, cellWidth(), rowHeight(), 1 / PixelRatio.get());
 		}
-		setCursorCol(cursor.x);
-		setCursorRow(cursor.y);
-		setCursorShown(true);
-	};
+		for (let i = 0; i < BOX_SLOTS; i++) {
+			const box = i < next.length ? next[i] : NO_BOX;
+			if (box == litBoxes[i]) { continue; }
+			litBoxes[i] = box;
+			cursorBoxes.set(i, box);
+		}
+	}
+
+	function stopBlink(): void {
+		if (blinkTimer >= 0) { clearTimeout(blinkTimer); }
+		blinkTimer = -1;
+		blinkOn = true;
+	}
+
+	function armBlink(): void {
+		blinkTimer = setTimeout((): void => {
+			blinkTimer = -1;
+			blinkOn = !blinkOn;
+			paintCursor();
+			if (blinks(cursorLook, focused)) { armBlink(); }
+		}, BLINK_MS) as int32;
+	}
+
+	function syncBlink(): void {
+		if (!blinks(cursorLook, focused)) {
+			stopBlink();
+		} else if (blinkTimer < 0) {
+			armBlink();
+		}
+	}
+
+	function restartBlink(): void {
+		stopBlink();
+		syncBlink();
+		paintCursor();
+	}
+
+	function watchHold(): void {
+		if (heldTimer >= 0) { return; }
+		heldTimer = setTimeout((): void => {
+			heldTimer = -1;
+			refresh();
+		}, HOLD_RECHECK_MS) as int32;
+	}
+
+	function clipWrite(text: string): void {
+		try {
+			Clipboard.setString(text);
+		} catch (e) {
+			console.log(`haro: copy failed: ${e}`);
+		}
+	}
+
+	function clipRead(done: (text: string) => void): void {
+		Clipboard.getString().then((text: string): void => {
+			done(text);
+			refresh();
+		});
+	}
 
 	function refresh(): void {
 		const frame = t.pumpFrame();
@@ -118,37 +185,48 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 			fatal("frame", frame.error);
 			return;
 		}
-		show(frame.value.cursor);
-		const colors = frame.value.colors;
-		if (colors !== null) {
-			const bg = hexOf(colors.bg);
-			const fg = hexOf(colors.fg);
-			if (bg != background()) { setBackground(bg); }
-			if (fg != foreground()) { setForeground(fg); }
+		const f = frame.value;
+		const copied = f.copied;
+		if (copied !== null) { clipWrite(copied); }
+		const title = f.title;
+		if (title !== null) { applyTitle(title); }
+		if (f.bells > 0) { ringBell(f.bells); }
+		if (f.held) {
+			watchHold();
+		} else {
+			const colors = f.colors;
+			if (colors !== null) {
+				const bg = hexOf(colors.bg);
+				const fg = hexOf(colors.fg);
+				if (bg != background()) { setBackground(bg); }
+				if (fg != foreground()) { setForeground(fg); }
+			}
+			const cursor = f.cursor;
+			if (cursor !== null) {
+				setCursorCol(cursor.x);
+				setCursorRow(cursor.y);
+			}
+			cursorAt = cursor;
+			cursorLook = f.look;
+			syncBlink();
+			paintCursor();
+			repaint();
 		}
-		repaint();
 		dialog.show(controls.held, cellWidth(), viewWidth());
 		if (frame.value.more) { setTimeout((): void => { refresh(); }, 0); }
 		if (frame.value.ended) { entry.exited(t.shellExitCode()); }
 	}
 
-	entry.onWake((): void => { refresh(); });
+	const clip: Clip = { write: clipWrite, read: clipRead };
 
-	const clip: Clip = {
-		write: (text: string): void => {
-			try {
-				Clipboard.setString(text);
-			} catch (e) {
-				console.log(`haro: copy failed: ${e}`);
-			}
-		},
-		read: (done: (text: string) => void): void => {
-			Clipboard.getString().then((text: string): void => {
-				done(text);
-				refresh();
-			});
-		},
-	};
+	entry.onWake((): void => {
+		const now = Date.now() as float64;
+		if (resets(lastReset, now)) {
+			lastReset = now;
+			restartBlink();
+		}
+		refresh();
+	});
 
 	const lineRow = (item: Accessor<RowSlot>): NeonNode => {
 		return element(
@@ -158,6 +236,13 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 				spans={item().spans}
 			/>
 		);
+	};
+
+	const focus = (gained: boolean): void => {
+		focused = gained;
+		restartBlink();
+		const sent = t.sendFocus(gained);
+		if (!sent.ok) { fatal("focus", sent.error); }
 	};
 
 	const layout = (e: NeonEvent): void => {
@@ -178,6 +263,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 		dialog.shownFor = null;
 		setCellWidth(cellPx / ratio);
 		setRowHeight(rowPx / ratio);
+		paintCursor();
 		console.log(
 			`haro: layout ${e.width}x${e.height} ratio ${ratio} ` +
 				`cell ${advance}x${lineHeight} grid ${size.value[0]}x${size.value[1]}`
@@ -287,6 +373,23 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 		},
 	};
 
+	const cursorBox = (item: Accessor<Box>): NeonNode => {
+		return element(
+			<View
+				style={{
+					position: "absolute",
+					left: item().x,
+					top: item().y,
+					width: item().w,
+					height: item().h,
+					backgroundColor: foreground(),
+					opacity: item().alpha,
+					pointerEvents: "none",
+				}}
+			/>
+		);
+	};
+
 	const shadeBox = (item: Accessor<Block>): NeonNode => {
 		return element(
 			<View
@@ -321,20 +424,12 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 				onPointerDown={pressed}
 				onPointerMove={dragged}
 				onPointerUp={released}
+				onFocus={(e: NeonEvent): void => { focus(true); }}
+				onBlur={(e: NeonEvent): void => { focus(false); }}
 				onWheel={wheeled}>
 				{ForList<RowSlot>({ each: t.grid, children: lineRow })}
 				{ForList<Block>({ each: shades, children: shadeBox })}
-				<View
-					style={{
-						position: "absolute",
-						left: cursorCol() * cellWidth(),
-						top: cursorRow() * rowHeight(),
-						width: cellWidth(),
-						height: rowHeight(),
-						backgroundColor: foreground(),
-						opacity: cursorShown() ? 0.5 : 0,
-					}}
-				/>
+				{ForList<Box>({ each: cursorBoxes, children: cursorBox })}
 			</View>
 			{PasteDialog(dialog, look)}
 		</Void>

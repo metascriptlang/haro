@@ -3,22 +3,24 @@ import { Block } from "../select/select";
 import { Action, resolve } from "../input/bindings";
 import { Pointer, Spot } from "../input/pointer";
 import { ROWS_PER_NOTCH, Wheel, WheelRoute, route } from "../input/wheel";
-import { PasteError, Vt } from "../vt/vt";
+import { Held, Reply, replyTo, warningFor, Warning } from "../input/paste";
+import { Vt } from "../vt/vt";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
-import { Term, openTerm } from "./term";
+import { Term, TermError, openTerm } from "./term";
 
 export enum ControlError {
 	VtFailed,
 	KeyFailed,
 	WriteFailed,
 	PasteEncodeFailed,
+	PasteUnsafe,
 }
 
 export enum Pasted {
 	Sent,
 	Empty,
-	Refused,
+	Held,
 }
 
 export interface Clip {
@@ -29,6 +31,7 @@ export interface Clip {
 export interface Controls {
 	pointer: Pointer;
 	wheel: Wheel;
+	held: Held | null;
 }
 
 const LEFT: int32 = 1;
@@ -36,7 +39,7 @@ const RIGHT: int32 = 2;
 const KEYBOARD_ROWS: int32 = ROWS_PER_NOTCH as int32;
 
 export function open(this typeof Controls): Controls {
-	return { pointer: Pointer.open(), wheel: Wheel.open() };
+	return { pointer: Pointer.open(), wheel: Wheel.open(), held: null };
 }
 
 function vtOf(t: Term): Vt | null {
@@ -45,24 +48,64 @@ function vtOf(t: Term): Vt | null {
 	return s.vt;
 }
 
-export function normalized(text: string): string {
-	return text.split("\r\n").join("\n").split("\r").join("\n").trimEnd();
+export function normalized(text: string, bracketed: boolean): string {
+	const lf = text.split("\r\n").join("\n").split("\r").join("\n");
+	return bracketed ? lf : lf.trimEnd();
+}
+
+function send(this c: Controls, t: Term, text: string, allowUnsafe: boolean): Result<boolean, ControlError> {
+	const sent = t.sendPaste(text, allowUnsafe);
+	if (!sent.ok) {
+		return Result.err(match (sent.error) {
+			TermError.PasteUnsafe => ControlError.PasteUnsafe,
+			TermError.WriteFailed => ControlError.WriteFailed,
+			_ => ControlError.PasteEncodeFailed,
+		});
+	}
+	return c.typed(t);
 }
 
 export function paste(this c: Controls, t: Term, text: string): Result<Pasted, ControlError> {
-	const s = t.session;
-	if (s === null) { return Result.ok(Pasted.Empty); }
-	const clean = normalized(text);
-	if (clean == "") { return Result.ok(Pasted.Empty); }
-	const bytes = s.vt.pasteBytes(clean, false);
-	if (!bytes.ok) {
-		if (bytes.error == PasteError.Unsafe) { return Result.ok(Pasted.Refused); }
-		return Result.err(ControlError.PasteEncodeFailed);
+	const vt = vtOf(t);
+	if (vt === null) { return Result.ok(Pasted.Empty); }
+	const modes = vt.modes();
+	if (!modes.ok) { return Result.err(ControlError.VtFailed); }
+	const bracketed = modes.value.bracketedPaste;
+	const clean = normalized(text, bracketed);
+	if (clean == "" && !bracketed) { return Result.ok(Pasted.Empty); }
+	const warning = warningFor(clean, bracketed);
+	if (warning != Warning.None) {
+		c.held = { text: clean, warning: warning };
+		return Result.ok(Pasted.Held);
 	}
-	const n = bytes.value.length as int32;
-	if (!s.pty.write(bytes.value[0..n]).ok) { return Result.err(ControlError.WriteFailed); }
-	const _changed = try c.typed(t);
+	const _sent = try c.send(t, clean, false);
 	return Result.ok(Pasted.Sent);
+}
+
+export function holding(this c: Controls): boolean {
+	return c.held !== null;
+}
+
+export function confirm(this c: Controls, t: Term): Result<boolean, ControlError> {
+	const held = c.held;
+	if (held === null) { return Result.ok(false); }
+	c.held = null;
+	const _sent = try c.send(t, held.text, true);
+	return Result.ok(true);
+}
+
+export function cancel(this c: Controls): void {
+	c.held = null;
+}
+
+function answer(this c: Controls, t: Term, e: NeonEvent): Result<boolean, ControlError> {
+	const reply = replyTo(e.code, e.mods);
+	if (reply == Reply.Confirm) {
+		const _sent = try c.confirm(t);
+	} else if (reply == Reply.Cancel) {
+		c.cancel();
+	}
+	return Result.ok(true);
 }
 
 export function typed(this c: Controls, t: Term): Result<boolean, ControlError> {
@@ -79,15 +122,12 @@ export function typed(this c: Controls, t: Term): Result<boolean, ControlError> 
 function pasteFrom(this c: Controls, t: Term, clip: Clip): void {
 	clip.read((text: string): void => {
 		const sent = c.paste(t, text);
-		if (!sent.ok) {
-			console.log(`haro: paste failed: ${sent.error.toString()}`);
-		} else if (sent.value == Pasted.Refused) {
-			console.log("haro: paste refused: it holds a line break and the program has not asked for bracketed paste");
-		}
+		if (!sent.ok) { console.log(`haro: paste failed: ${sent.error.toString()}`); }
 	});
 }
 
 export function keyDown(this c: Controls, t: Term, e: NeonEvent, clip: Clip): Result<boolean, ControlError> {
+	if (c.held !== null) { return c.answer(t, e); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
@@ -127,6 +167,7 @@ function copy(this c: Controls, t: Term, clip: Clip): Result<boolean, ControlErr
 export function down(
 	this c: Controls, t: Term, clip: Clip, button: int32, at: Spot, x: float64, y: float64, time: float64, reach: float64,
 ): Result<boolean, ControlError> {
+	if (c.held !== null) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const modes = vt.modes();
@@ -146,6 +187,7 @@ export function down(
 }
 
 export function move(this c: Controls, t: Term, at: Spot, pressed: boolean): Result<boolean, ControlError> {
+	if (c.held !== null) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null || !c.pointer.dragging) { return Result.ok(false); }
 	if (!pressed) {
@@ -162,6 +204,7 @@ export function up(this c: Controls): void {
 }
 
 export function roll(this c: Controls, t: Term, notches: float64): Result<boolean, ControlError> {
+	if (c.held !== null) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
@@ -286,11 +329,12 @@ function drag(c: Controls, t: Term, clip: Clip, from: Spot, to: Spot): boolean {
 	return pressed && moved;
 }
 
-test "line endings of a paste become newlines and trailing whitespace goes" {
-	assert normalized("a\r\nb\rc\n") == "a\nb\nc";
-	assert normalized("echo hi\r\n  ") == "echo hi";
-	assert normalized("  keep leading") == "  keep leading";
-	assert normalized("\r\n") == "";
+test "line endings of a paste become newlines and an unbracketed paste loses trailing whitespace" {
+	assert normalized("a\r\nb\rc\n", false) == "a\nb\nc";
+	assert normalized("echo hi\r\n  ", false) == "echo hi";
+	assert normalized("echo hi\r\n  ", true) == "echo hi\n  ";
+	assert normalized("  keep leading", false) == "  keep leading";
+	assert normalized("\r\n", false) == "";
 }
 
 test "ctrl shift page, arrow, home and end keys move the viewport and say they did" {
@@ -368,7 +412,32 @@ test "paste sends the clipboard through the terminal's paste encoding" {
 	}
 }
 
-test "a paste with a line break is refused until the program asks for bracketed paste" {
+test "a paste with a line break waits for an answer and sends nothing meanwhile" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("ready", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf("one\r\ntwo"));
+		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert c.holding();
+		const held = c.held;
+		assert held !== null;
+		if (held !== null) {
+			assert held.warning == Warning.MultiLine;
+			assert held.text == "one\ntwo";
+		}
+		assert sink.sent == "";
+		assert handled(c.keyDown(t, key("KeyA", 0), clip));
+		assert handled(c.keyDown(t, key("ArrowUp", 3), clip));
+		assert handled(c.keyDown(t, key("KeyC", 3), clip));
+		assert sink.sent == "";
+		assert c.holding();
+		t.shutdown();
+	}
+}
+
+test "enter confirms a held paste and it goes out through the paste encoding" {
 	const plain: Sink = { sent: "" };
 	const a = termOf("ready", 20, 5, plain);
 	assert a !== null;
@@ -376,6 +445,94 @@ test "a paste with a line break is refused until the program asks for bracketed 
 		const c = Controls.open();
 		const clip = clipOf(boardOf("one\r\ntwo"));
 		assert handled(c.keyDown(a, key("KeyV", 3), clip));
+		assert handled(c.keyDown(a, key("Enter", 0), clip));
+		assert !c.holding();
+		assert plain.sent == "one\rtwo";
+		a.shutdown();
+	}
+	const chord: Sink = { sent: "" };
+	const b = termOf("ready", 20, 5, chord);
+	assert b !== null;
+	if (b !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf("one\r\ntwo"));
+		assert handled(c.keyDown(b, key("KeyV", 3), clip));
+		assert handled(c.keyDown(b, key("KeyV", 3), clip));
+		assert chord.sent == "one\rtwo";
+		b.shutdown();
+	}
+}
+
+test "escape drops a held paste and the next key reaches the shell again" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("ready", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf("one\r\ntwo"));
+		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert handled(c.keyDown(t, key("Escape", 0), clip));
+		assert !c.holding();
+		assert sink.sent == "";
+		assert !handled(c.keyDown(t, key("KeyA", 0), clip));
+		t.shutdown();
+	}
+}
+
+test "the buttons confirm and cancel through the same paths as the keys" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("ready", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf("a\nb"));
+		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		c.cancel();
+		assert !c.holding();
+		assert sink.sent == "";
+		assert !handled(c.confirm(t));
+		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert handled(c.confirm(t));
+		assert sink.sent == "a\rb";
+		t.shutdown();
+	}
+}
+
+test "bracketed paste takes line breaks as they are and an end marker or a large text still asks" {
+	const framed: Sink = { sent: "" };
+	const a = termOf("\x1b[?2004h", 20, 5, framed);
+	assert a !== null;
+	if (a !== null) {
+		const c = Controls.open();
+		assert handled(c.keyDown(a, key("KeyV", 3), clipOf(boardOf("one\r\ntwo\r\n"))));
+		assert framed.sent == "\x1b[200~one\ntwo\n\x1b[201~";
+		assert !c.holding();
+		const marker = c.paste(a, "evil\x1b[201~rm");
+		assert marker.ok;
+		if (marker.ok) { assert marker.value == Pasted.Held; }
+		const held = c.held;
+		assert held !== null;
+		if (held !== null) { assert held.warning == Warning.EndMarker; }
+		assert handled(c.keyDown(a, key("Enter", 0), clipOf(boardOf(""))));
+		assert framed.sent == "\x1b[200~one\ntwo\n\x1b[201~\x1b[200~evil [201~rm\x1b[201~";
+		let big = "";
+		for (let i = 0; i < 6000; i++) { big += "z"; }
+		const large = c.paste(a, big);
+		assert large.ok;
+		if (large.ok) { assert large.value == Pasted.Held; }
+		a.shutdown();
+	}
+}
+
+test "an empty clipboard pastes nothing, except an empty frame when the program asked for brackets" {
+	const plain: Sink = { sent: "" };
+	const a = termOf("ready", 20, 5, plain);
+	assert a !== null;
+	if (a !== null) {
+		const c = Controls.open();
+		const pasted = c.paste(a, "  \r\n");
+		assert pasted.ok;
+		if (pasted.ok) { assert pasted.value == Pasted.Empty; }
 		assert plain.sent == "";
 		a.shutdown();
 	}
@@ -384,23 +541,29 @@ test "a paste with a line break is refused until the program asks for bracketed 
 	assert b !== null;
 	if (b !== null) {
 		const c = Controls.open();
-		const clip = clipOf(boardOf("one\r\ntwo"));
-		assert handled(c.keyDown(b, key("KeyV", 3), clip));
-		assert framed.sent == "\x1b[200~one\ntwo\x1b[201~";
+		const pasted = c.paste(b, "");
+		assert pasted.ok;
+		if (pasted.ok) { assert pasted.value == Pasted.Sent; }
+		assert framed.sent == "\x1b[200~\x1b[201~";
 		b.shutdown();
 	}
 }
 
-test "an empty clipboard pastes nothing" {
+test "while a paste is held the wheel, the buttons and the pointer do nothing" {
 	const sink: Sink = { sent: "" };
-	const t = termOf("ready", 20, 5, sink);
+	const t = termOf(lines(30), 20, 5, sink);
 	assert t !== null;
 	if (t !== null) {
 		const c = Controls.open();
-		const pasted = c.paste(t, "  \r\n");
-		assert pasted.ok;
-		if (pasted.ok) { assert pasted.value == Pasted.Empty; }
-		assert sink.sent == "";
+		const clip = clipOf(boardOf("a\nb"));
+		const bottom = offsetOf(t);
+		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert !handled(c.roll(t, 1));
+		assert offsetOf(t) == bottom;
+		assert !handled(c.down(t, clip, 1, at(0, 0), 0, 0, 0, 8));
+		assert !c.pointer.dragging;
+		assert !handled(c.down(t, clip, 2, at(0, 0), 0, 0, 0, 8));
+		assert clip.write !== null;
 		t.shutdown();
 	}
 }

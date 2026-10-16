@@ -1,0 +1,46 @@
+id	status	reference	commit	note
+alacritty/alt_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/alt_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/clear_underline	ported	~/projects/alacritty/alacritty_terminal/tests/ref/clear_underline	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/colored_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/colored_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/colored_underline	ported	~/projects/alacritty/alacritty_terminal/tests/ref/colored_underline	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/csi_rep	ported	~/projects/alacritty/alacritty_terminal/tests/ref/csi_rep	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/delete_chars_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/delete_chars_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/delete_lines	ported	~/projects/alacritty/alacritty_terminal/tests/ref/delete_lines	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/erase_chars_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/erase_chars_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/fish_cc	ported	~/projects/alacritty/alacritty_terminal/tests/ref/fish_cc	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/grid_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/grid_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/history	ported	~/projects/alacritty/alacritty_terminal/tests/ref/history	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/hyperlinks	ported	~/projects/alacritty/alacritty_terminal/tests/ref/hyperlinks	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/indexed_256_colors	ported	~/projects/alacritty/alacritty_terminal/tests/ref/indexed_256_colors	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/insert_blank_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/insert_blank_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/issue_855	ported	~/projects/alacritty/alacritty_terminal/tests/ref/issue_855	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/ll	ported	~/projects/alacritty/alacritty_terminal/tests/ref/ll	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/newline_with_cursor_beyond_scroll_region	ported	~/projects/alacritty/alacritty_terminal/tests/ref/newline_with_cursor_beyond_scroll_region	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/origin_goto	ported	~/projects/alacritty/alacritty_terminal/tests/ref/origin_goto	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/region_scroll_down	ported	~/projects/alacritty/alacritty_terminal/tests/ref/region_scroll_down	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/row_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/row_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/scroll_in_region_up_preserves_history	ported	~/projects/alacritty/alacritty_terminal/tests/ref/scroll_in_region_up_preserves_history	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/scroll_up_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/scroll_up_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/sgr	ported	~/projects/alacritty/alacritty_terminal/tests/ref/sgr	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/tab_rendering	ported	~/projects/alacritty/alacritty_terminal/tests/ref/tab_rendering	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/tmux_git_log	ported	~/projects/alacritty/alacritty_terminal/tests/ref/tmux_git_log	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/tmux_htop	ported	~/projects/alacritty/alacritty_terminal/tests/ref/tmux_htop	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/underline	ported	~/projects/alacritty/alacritty_terminal/tests/ref/underline	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vim_24bitcolors_bce	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vim_24bitcolors_bce	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vim_large_window_scroll	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vim_large_window_scroll	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vim_simple_edit	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vim_simple_edit	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vttest_origin_mode_1	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vttest_origin_mode_1	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vttest_origin_mode_2	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vttest_origin_mode_2	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vttest_scroll	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vttest_scroll	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vttest_tab_clear_set	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vttest_tab_clear_set	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/wrapline_alt_toggle	ported	~/projects/alacritty/alacritty_terminal/tests/ref/wrapline_alt_toggle	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/zerowidth	ported	~/projects/alacritty/alacritty_terminal/tests/ref/zerowidth	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/zsh_tab_completion	ported	~/projects/alacritty/alacritty_terminal/tests/ref/zsh_tab_completion	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/decaln_reset	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:3759 decaln (homes the cursor, keeps colours: test at :12627)	22fa134a0	Alacritty leaves the cursor in place after ESC # 8, so the next prompt lands on another row; libghostty and xterm home it
+alacritty/deccolm_reset	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:4003 deccolm (test at :16700)	22fa134a0	libghostty ignores DECCOLM unless mode 40 is on; Alacritty clears the screen
+alacritty/erase_in_line	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:14055 test eraseLine resets pending wrap	22fa134a0	after a write to the last column, EL erases that cell and the next char overwrites it; Alacritty keeps the cell and wraps
+alacritty/saved_cursor	not ported: references disagree	~/projects/ghostty/src/terminal/charsets.zig:53-87 dec_special has no 0x5f	22fa134a0	DEC special graphics maps _ to a blank in Alacritty and VT100; libghostty prints _
+alacritty/saved_cursor_alt	not ported: references disagree	~/projects/ghostty/src/terminal/charsets.zig:53-87 dec_special has no 0x5f	22fa134a0	same as saved_cursor
+alacritty/selective_erasure	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:15433 test eraseDisplay protected complete	22fa134a0	libghostty honours DECSCA and CSI ? 2 J (leaves the protected B); the Alacritty recording expects ABC, so Alacritty ignores them
+alacritty/vttest_cursor_movement_1	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:4003 deccolm	22fa134a0	vttest switches to 80 columns with mode 40 on: libghostty resizes, Alacritty keeps 105
+alacritty/vttest_insert	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:4003 deccolm	22fa134a0	same as vttest_cursor_movement_1

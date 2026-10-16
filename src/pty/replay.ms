@@ -37,6 +37,7 @@ export function toPty(this r: Replay): Pty {
 		},
 		exitCode: (): int32 | null => { return at >= total ? 0 : null; },
 		close: (): void => { closed = true; },
+		ownsScreen: false,
 	};
 }
 

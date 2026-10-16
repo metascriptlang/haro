@@ -70,6 +70,7 @@ export function toPty(this p: ConPty): Pty {
 		},
 		exitCode: (): int32 | null => { return p.exitCode(); },
 		close: (): void => { p.close(); },
+		ownsScreen: true,
 	};
 }
 

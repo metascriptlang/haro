@@ -26,6 +26,11 @@ export function start(
 		pty.close();
 		return Result.err(SessionError.VtCreateFailed);
 	}
+	if (pty.ownsScreen && !vt.value.setPullScrollback(false).ok) {
+		vt.value.free();
+		pty.close();
+		return Result.err(SessionError.VtCreateFailed);
+	}
 	return Result.ok({ pty: pty, vt: vt.value });
 }
 
@@ -261,4 +266,23 @@ when (testBuild) {
 			s.close();
 		}
 	}
+}
+
+function rowsAfterGrowing(ownsScreen: boolean): string {
+	const pty: Pty = { ...Replay.ofText("l1\r\nl2\r\nl3\r\nl4\r\nl5").toPty(), ownsScreen: ownsScreen };
+	const started = Session.start(pty, 10, 3);
+	if (!started.ok) { return "start failed"; }
+	const s = started.value;
+	const ended = s.runToExit(1000);
+	if (!ended.ok) { return "pump failed"; }
+	if (!s.resize(10, 5).ok) { return "resize failed"; }
+	const screen = s.screen();
+	s.close();
+	if (!screen.ok) { return "read failed"; }
+	return screen.value.join("|");
+}
+
+test "a session keeps scrollback out of a grown grid when its pty owns the screen" {
+	assert rowsAfterGrowing(false) == "l1|l2|l3|l4|l5";
+	assert rowsAfterGrowing(true) == "l3|l4|l5||";
 }

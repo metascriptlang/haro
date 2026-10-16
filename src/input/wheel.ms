@@ -27,6 +27,10 @@ export function rows(this w: Wheel, notches: float64): int32 {
 	return whole as int32;
 }
 
+export function reportButton(up: boolean): int32 {
+	return up ? 4 : 5;
+}
+
 test "an app that reports the mouse gets the wheel, whatever the screen" {
 	assert route(false, true, true) == WheelRoute.Report;
 	assert route(true, true, true) == WheelRoute.Report;
@@ -64,4 +68,9 @@ test "scrolling the other way spends what is pending before moving" {
 	assert w.rows(0.5) == -1;
 	assert w.rows(-0.5) == 1;
 	assert w.pending > -0.0001 && w.pending < 0.0001;
+}
+
+test "the wheel reports as buttons four and five" {
+	assert reportButton(true) == 4;
+	assert reportButton(false) == 5;
 }

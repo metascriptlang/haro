@@ -13,12 +13,12 @@ import { RowSlot } from "./frame";
 import { gridSize } from "../grid/size";
 import { Spot, spotAt } from "../input/pointer";
 import { Block } from "../select/select";
-import { Cursor, CursorLook, CursorShape } from "../vt/vt";
+import { Cursor, CursorLook, CursorShape, MouseGeometry } from "../vt/vt";
 import { BLINK_MS, BOX_SLOTS, Box, NO_BOX, blinks, boxes, drawn, resets, shapeOf } from "../term/cursor";
 import { applyTitle, ringBell } from "./chrome";
 import { hexOf } from "./frame";
 import { BACKGROUND, FOREGROUND, THEME_BG, THEME_FG } from "./theme";
-import { Clip, ControlError, Controls } from "./controls";
+import { Bridge, ControlError, Controls, Hit } from "./controls";
 import { PasteDialog, PasteView, Look } from "./pasteDialog";
 import {
 	Term,
@@ -51,6 +51,7 @@ export interface Entry {
 	onWake: (handler: () => void) => void;
 	exited: (code: int32) => void;
 	fail: (message: string) => void;
+	openLink: (uri: string) => void;
 }
 
 export function measureCell(fontPath: string): Result<Cell, CellError> {
@@ -90,6 +91,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 	let blinkTimer = -1;
 	let lastReset = 0.0;
 	let heldTimer = -1;
+	let geometry: MouseGeometry = { cellWidth: 1, cellHeight: 1, width: 1, height: 1 };
 
 	const fatal = (what: string, error: TermError): void => {
 		entry.fail(`${what}: ${error.toString()}`);
@@ -179,6 +181,10 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 		});
 	}
 
+	function bridge(): Bridge {
+		return { write: clipWrite, read: clipRead, open: entry.openLink };
+	}
+
 	function refresh(): void {
 		const frame = t.pumpFrame();
 		if (!frame.ok) {
@@ -191,6 +197,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 		const title = f.title;
 		if (title !== null) { applyTitle(title); }
 		if (f.bells > 0) { ringBell(f.bells); }
+		if (f.asked) { controls.asked(t, bridge()); }
 		if (f.held) {
 			watchHold();
 		} else {
@@ -212,12 +219,12 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 			paintCursor();
 			repaint();
 		}
-		dialog.show(controls.held, cellWidth(), viewWidth());
+		dialog.show(controls.held, controls.reading, cellWidth(), viewWidth());
 		if (frame.value.more) { setTimeout((): void => { refresh(); }, 0); }
 		if (frame.value.ended) { entry.exited(t.shellExitCode()); }
 	}
 
-	const clip: Clip = { write: clipWrite, read: clipRead };
+	const clip: Bridge = bridge();
 
 	entry.onWake((): void => {
 		const now = Date.now() as float64;
@@ -261,6 +268,9 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 		}
 		setViewWidth(e.width);
 		dialog.shownFor = null;
+		geometry = {
+			cellWidth: cellPx, cellHeight: rowPx, width: size.value[0] * cellPx, height: size.value[1] * rowPx,
+		};
 		setCellWidth(cellPx / ratio);
 		setRowHeight(rowPx / ratio);
 		paintCursor();
@@ -325,9 +335,15 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 		return spotAt(e.locationX, e.locationY, cellWidth(), rowHeight(), t.cols, t.rows);
 	};
 
+	const hit = (e: NeonEvent): Hit => {
+		return {
+			at: spot(e), x: e.locationX, y: e.locationY, scale: PixelRatio.get(), mods: e.mods as int32, cell: geometry,
+		};
+	};
+
 	const pressed = (e: NeonEvent): void => {
 		if (cellWidth() <= 0) { return; }
-		const handled = controls.down(t, clip, e.button as int32, spot(e), e.locationX, e.locationY, Date.now(), cellWidth());
+		const handled = controls.down(t, clip, e.button as int32, hit(e), Date.now());
 		if (!handled.ok) {
 			fatalControl("press", handled.error);
 			return;
@@ -337,7 +353,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 
 	const dragged = (e: NeonEvent): void => {
 		if (cellWidth() <= 0) { return; }
-		const handled = controls.move(t, spot(e), e.pressed);
+		const handled = controls.move(t, hit(e), e.pressed);
 		if (!handled.ok) {
 			fatalControl("move", handled.error);
 			return;
@@ -346,11 +362,13 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 	};
 
 	const released = (e: NeonEvent): void => {
-		controls.up();
+		if (cellWidth() <= 0) { return; }
+		const handled = controls.up(t, e.button as int32, hit(e));
+		if (!handled.ok) { fatalControl("release", handled.error); }
 	};
 
 	const wheeled = (e: NeonEvent): void => {
-		const handled = controls.roll(t, e.deltaY);
+		const handled = controls.roll(t, e.deltaY, hit(e));
 		if (!handled.ok) {
 			fatalControl("wheel", handled.error);
 			return;
@@ -368,7 +386,8 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 			refresh();
 		},
 		onCancel: (): void => {
-			controls.cancel();
+			const dropped = controls.cancel(t);
+			if (!dropped.ok) { fatalControl("clipboard", dropped.error); }
 			refresh();
 		},
 	};

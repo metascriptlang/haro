@@ -7,7 +7,7 @@ import {
 	DesktopOptions,
 	desktopOptions,
 } from "../../../neon/src/platform/ion/window";
-import { onWake } from "../../../ion/src/index";
+import { onWake, openExternal } from "../../../ion/src/index";
 import { FontStyle, registerFace } from "../../../void/src/void2d/font";
 import { argv, exit } from "std/process";
 import { readFile } from "std/fs";
@@ -80,6 +80,7 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 		},
 		exited: exited,
 		fail: fail,
+		openLink: (uri: string): void => { openExternal(uri); },
 	};
 	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: FONT_PATH };
 	const code = runWindow(opts, (): NeonNode => App(t, measured, entry));

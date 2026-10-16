@@ -1,0 +1,90 @@
+Haro: libghostty-vt for wasm32-freestanding takes all its memory from the embedder.
+
+Pinned at ghostty 622b4ee. This is upstream a5423592c ("use caller allocation on native
+freestanding") extended to wasm: terminal pages come from the GhosttyAllocator the caller
+passes, never from memory.grow, and a NULL allocator fails instead of growing memory.
+scripts/buildVtWasm.sh applies it to a copy and checks the archive holds no memory.grow.
+
+diff --git a/src/lib/allocator.zig b/src/lib/allocator.zig
+index de343da..f20474f 100644
+--- a/src/lib/allocator.zig
++++ b/src/lib/allocator.zig
+@@ -31,9 +31,6 @@ pub fn default(c_alloc_: ?*const Allocator) std.mem.Allocator {
+     // malloc/free with custom allocators like mimalloc or something.
+     if (comptime builtin.link_libc) return std.heap.c_allocator;
+ 
+-    // Wasm
+-    if (comptime builtin.target.cpu.arch.isWasm()) return std.heap.wasm_allocator;
+-
+     // Freestanding targets don't have a default heap. Using the failing
+     // allocator makes a missing allocator show up as out-of-memory.
+     if (comptime builtin.os.tag == .freestanding) return std.mem.Allocator.failing;
+diff --git a/src/lib_vt.zig b/src/lib_vt.zig
+index a0227ae..f393cc8 100644
+--- a/src/lib_vt.zig
++++ b/src/lib_vt.zig
+@@ -484,8 +484,7 @@ pub const std_options: std.Options = opts: {
+ /// traces on panic, std.debug.print, etc.). These builds are for
+ /// development, where the roughly 160KB of binary size it costs is
+ /// worth it.
+-const native_freestanding = builtin.target.os.tag == .freestanding and
+-    !builtin.target.cpu.arch.isWasm();
++const native_freestanding = builtin.target.os.tag == .freestanding;
+ 
+ const debug_machinery: bool = !native_freestanding and
+     (builtin.is_test or switch (builtin.mode) {
+diff --git a/src/os/wasm.zig b/src/os/wasm.zig
+index 3d0b90e..abc39e8 100644
+--- a/src/os/wasm.zig
++++ b/src/os/wasm.zig
+@@ -13,7 +13,8 @@ comptime {
+ /// in JS will be backed by a SharedArrayBuffer and some behaviors change.
+ pub const shared_mem = options.wasm_shared;
+ 
+-/// The allocator to use in wasm environments.
++/// The allocator to use in wasm environments. Haro: it fails every allocation,
++/// because the embedder owns linear memory.
+ ///
+ /// The return values of this should NOT be sent to the host environment
+ /// unless toHostOwned is called on them. In this case, the caller is expected
+@@ -22,4 +23,4 @@ pub const shared_mem = options.wasm_shared;
+ pub const alloc = if (builtin.is_test)
+     std.testing.allocator
+ else
+-    std.heap.wasm_allocator;
++    std.mem.Allocator.failing;
+diff --git a/src/terminal/PageList.zig b/src/terminal/PageList.zig
+index d915bcf..60387c4 100644
+--- a/src/terminal/PageList.zig
++++ b/src/terminal/PageList.zig
+@@ -29,13 +29,12 @@ const Page = pagepkg.Page;
+ const Row = pagepkg.Row;
+ 
+ const log = std.log.scoped(.page_list);
+-const native_freestanding = builtin.os.tag == .freestanding and
+-    !builtin.target.cpu.arch.isWasm();
++const native_freestanding = builtin.os.tag == .freestanding;
+ 
+ /// The number of pages we preheat the page pool with. For operating systems
+ /// that support it, pages are demand-paged (see PagePool) so this only
+ /// costs us address space. For other operating systems, we don't preheat.
+-const page_preheat = 4;
++const page_preheat = if (native_freestanding) 0 else 4;
+ 
+ /// The number of nodes we preheat the node pool with. Unlike pages, nodes
+ /// are ordinary heap memory so every idle preheated node costs real
+@@ -326,11 +325,9 @@ const std_size = Page.layout(std_capacity).total_size;
+ 
+ /// True when the page pool is the wasm page pool, which recycles items
+ /// through a free list shared by the whole module instance instead of
+-/// dying with the pool.
+-///
+-/// Test builds use the native pool even on wasm so that pool memory goes
+-/// through the testing allocator and participates in leak detection.
+-const wasm_page_pool = builtin.target.cpu.arch.isWasm() and !builtin.is_test;
++/// dying with the pool. Haro never uses it: it grows linear memory with
++/// memory.grow, and the embedder must own every byte.
++const wasm_page_pool = false;
+ 
+ /// The memory pool we use for page memory buffers. We use a separate pool
+ /// so we can allocate these with a page allocator. We have to use a page

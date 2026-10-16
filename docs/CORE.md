@@ -103,6 +103,13 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
   pwsh script that hides the cursor and keeps running shows `?25l` only when it exits, beside
   conhost's own `?9001l`/`?1004l` (`probe/capture/capture.ms`, 2026-10-17). OSC 11, OSC 52 writes
   and DECSCUSR reach Haro.
+- conhost swallows a kitty keyboard reply written to the input pipe: `ESC[?0u` reaches a child
+  reading keys as nothing at all (`probe/inputEcho/inputEcho.ms`), so a program's `CSI ? u` query
+  never sees Haro's answer and stays in legacy key encoding.
+- nvim 0.12 with the person's config, 30 presses of `j` (release Haro, 2026-10-17): nvim's first
+  output follows the key in 4 ms (median), and the last frame applies 48 ms after the key (median,
+  126 ms max). Haro's pacing timer adds a median 13 ms (max 32 ms) to each later chunk, because
+  Ion's timers step by `GetTickCount64`, about 16 ms (`.inbox/neon/2026-10-16-ion-window-frame-callback-for-apps.md`).
 
 ## First window, smoke-run
 

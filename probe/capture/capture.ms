@@ -5,17 +5,27 @@ import { line } from "../../src/grid/lines";
 import { spansOf } from "../../src/app/frame";
 import { Style } from "../../../neon/src/render/style";
 
-const command = argv[argv.length - 1];
+const command = argv[1];
 const opened = ConPty.spawn(command, 105, 30);
 if (opened.ok) {
 	const p = opened.value;
 	let buf: Vec<uint8> = new Array(65536);
 	let raw: Vec<uint8> = [];
 	let shown = "";
+	let replied = argv.length < 3;
 	for (let i = 0; i < 40; i++) {
 		if (!p.wait(250).ok) { break; }
 		const r = p.read(buf);
 		if (!r.ok) { break; }
+		if (!replied && shown.includes("[?u")) {
+			let reply: Vec<uint8> = [27, 91, 63, 48, 117];
+			p.write(reply);
+			replied = true;
+			shown += `
+[${Math.round(performance.now())}ms REPLIED] `;
+		}
+		if (r.value > 0) { shown += `
+[${Math.round(performance.now())}ms ${r.value}B] `; }
 		for (let k = 0; k < r.value; k++) {
 			raw.push(buf[k]);
 			const b = buf[k] as int32;

@@ -1,7 +1,8 @@
+import { fromCodePoint } from "std/core/string";
 import { Cell, CellFlag, Row, Rgb, Underline, Vt } from "../vt/vt";
 
 export enum GridError {
-	CodepointAboveBmp,
+	CodepointInvalid,
 }
 
 export struct LineRun {
@@ -45,13 +46,17 @@ function isWideSpacer(this row: Row, i: int32): boolean {
 	return row.cells[i].cp == 0 && i > 0 && row.cells[i - 1].flags.has(CellFlag.Wide);
 }
 
-function pushUnit(ref runs: Vec<LineRun>, run: LineRun): void {
+function pushUnits(ref runs: Vec<LineRun>, run: LineRun, units: int32): void {
 	const last = runs.length;
 	if (last > 0 && runs[last - 1].sameStyle(run)) {
-		runs[last - 1].units += 1;
+		runs[last - 1].units += units;
 		return;
 	}
-	runs.push({ ...run, units: 1 });
+	runs.push({ ...run, units: units });
+}
+
+function isScalar(cp: uint32): boolean {
+	return cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF);
 }
 
 export function line(this row: Row, cursorCell: int32): Result<GridLine, GridError> {
@@ -67,16 +72,17 @@ export function line(this row: Row, cursorCell: int32): Result<GridLine, GridErr
 		const run = cell.lineRun();
 		if (cell.cp == 0) {
 			text += " ";
-			pushUnit(runs, run);
+			pushUnits(runs, run, 1);
 			continue;
 		}
 		let cps: Vec<uint32> = [cell.cp];
 		for (let k = 0; k < (cell.extra as int32); k++) { cps.push(row.extra[extra + k]); }
 		extra += cell.extra as int32;
 		for (const cp of cps) {
-			if (cp > 0xFFFF) { return Result.err(GridError.CodepointAboveBmp); }
-			text += String.fromCharCode(cp as int32);
-			pushUnit(runs, run);
+			if (!isScalar(cp)) { return Result.err(GridError.CodepointInvalid); }
+			const unit = fromCodePoint(cp as number);
+			text += unit;
+			pushUnits(runs, run, unit.length as int32);
 		}
 	}
 	return Result.ok({ text: text, runs: runs, cursorCell: cursorCell });
@@ -217,6 +223,30 @@ test "strikethrough is part of the run" {
 			if (line.ok) {
 				assert line.value.runs[0].strikethrough;
 				assert !line.value.runs[1].strikethrough;
+			}
+		}
+		vt.free();
+	}
+}
+
+test "a codepoint above the BMP is two UTF-16 units of its run" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("a😀\x1b[1mb");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const line = rows.value[0].line(-1);
+			assert line.ok;
+			if (line.ok) {
+				assert line.value.text == "a😀b      ";
+				assert line.value.runs.length == 3;
+				assert line.value.runs[0].units == 3;
+				assert line.value.text.slice(0, 3) == "a😀";
+				assert line.value.runs[1].bold;
 			}
 		}
 		vt.free();

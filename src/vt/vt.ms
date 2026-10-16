@@ -1,6 +1,10 @@
 @passC("-I../../vendor/ghostty/include");
 @passC("-DGHOSTTY_STATIC");
-@link("../../vendor/ghostty/zig-out/lib/ghostty-vt-static.lib");
+when (emcc) {
+	@link("../../out/wasm/libghostty-vt.a");
+} else {
+	@link("../../vendor/ghostty/zig-out/lib/ghostty-vt-static.lib");
+}
 @include("./effects.h");
 @compile("./effects.c");
 @include("./select.h");
@@ -32,6 +36,7 @@ import {
 	ghostty_render_state_row_cells_new,
 	ghostty_render_state_row_cells_free,
 	ghostty_render_state_row_cells_next,
+	GhosttyAllocator,
 	GhosttyResult,
 	GhosttyTerminal,
 	GhosttyTerminalData,
@@ -63,6 +68,7 @@ struct Graphemes { cp: uint32[16]; }
 
 extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<Span<uint8>>): void
 	from "ghostty_terminal_vt_write";
+extern function vtAllocator(): Ptr<GhosttyAllocator>;
 extern function vtEffectsOpen(terminal: GhosttyTerminal): int32;
 extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
 extern function vtEffectsClose(id: int32, terminal: GhosttyTerminal): void;
@@ -271,16 +277,16 @@ function ok(r: GhosttyResult): boolean {
 
 export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtError> {
 	let terminal: GhosttyTerminal;
-	if (!ok(ghostty_terminal_new(null, terminal, cols as uint16, rows as uint16))) {
+	if (!ok(ghostty_terminal_new(vtAllocator(), terminal, cols as uint16, rows as uint16))) {
 		return Result.err(VtError.CreateFailed);
 	}
 	let state: GhosttyRenderState;
 	let iterator: GhosttyRenderStateRowIterator;
 	let cells: GhosttyRenderStateRowCells;
 	if (
-		!ok(ghostty_render_state_new(null, state)) ||
-		!ok(ghostty_render_state_row_iterator_new(null, iterator)) ||
-		!ok(ghostty_render_state_row_cells_new(null, cells))
+		!ok(ghostty_render_state_new(vtAllocator(), state)) ||
+		!ok(ghostty_render_state_row_iterator_new(vtAllocator(), iterator)) ||
+		!ok(ghostty_render_state_row_cells_new(vtAllocator(), cells))
 	) {
 		ghostty_terminal_free(terminal);
 		return Result.err(VtError.CreateFailed);
@@ -793,11 +799,11 @@ function keyOf(name: string): GhosttyKey {
 
 export function openKeys(this typeof Keys): Result<Keys, KeysError> {
 	let encoder: GhosttyKeyEncoder;
-	if (!ok(ghostty_key_encoder_new(null, encoder))) {
+	if (!ok(ghostty_key_encoder_new(vtAllocator(), encoder))) {
 		return Result.err(KeysError.OpenFailed);
 	}
 	let event: GhosttyKeyEvent;
-	if (!ok(ghostty_key_event_new(null, event))) {
+	if (!ok(ghostty_key_event_new(vtAllocator(), event))) {
 		ghostty_key_encoder_free(encoder);
 		return Result.err(KeysError.OpenFailed);
 	}

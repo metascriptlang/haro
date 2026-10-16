@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <ghostty/vt.h>
 
+const GhosttyAllocator* vtAllocator(void);
+
 int vtEffectsOpen(GhosttyTerminal terminal);
 int64_t vtRepliesTake(int id, uint8_t* buf, int64_t cap);
 void vtEffectsClose(int id, GhosttyTerminal terminal);

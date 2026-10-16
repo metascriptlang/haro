@@ -25,6 +25,11 @@ int vtSetDefaultColors(GhosttyTerminal terminal, int fgR, int fgG, int fgB, int 
 	return 0;
 }
 
+int vtSetPullScrollback(GhosttyTerminal terminal, int pull) {
+	bool on = pull != 0;
+	return ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_RESIZE_PULL_SCROLLBACK, &on) == GHOSTTY_SUCCESS ? 0 : -1;
+}
+
 /* out: visible (DECTCEM), shape (GhosttyRenderStateCursorVisualStyle), blinking. Reads the render
    state, so it describes the frame the last update captured. */
 int vtCursorLook(GhosttyRenderState state, int32_t* out, int64_t cap) {

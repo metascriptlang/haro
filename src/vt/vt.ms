@@ -110,6 +110,7 @@ extern function vtSetDefaultColors(
 	bgG: int32,
 	bgB: int32,
 ): int32;
+extern function vtSetPullScrollback(terminal: GhosttyTerminal, pull: int32): int32;
 extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
 extern function vtString(terminal: GhosttyTerminal, which: int32, buf: Span<uint8>): int64;
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
@@ -415,6 +416,11 @@ export function setDefaultColors(this vt: Vt, fg: Rgb, bg: Rgb): Result<Vt, VtEr
 		vt.terminal, fg.r as int32, fg.g as int32, fg.b as int32, bg.r as int32, bg.g as int32, bg.b as int32,
 	);
 	if (set != 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(vt);
+}
+
+export function setPullScrollback(this vt: Vt, pull: boolean): Result<Vt, VtError> {
+	if (vtSetPullScrollback(vt.terminal, pull ? 1 : 0) != 0) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(vt);
 }
 
@@ -1535,6 +1541,29 @@ test "a theme the host sets is what a colour query reports" {
 		if (n.ok) { assert ascii(buf[0..n.value]) == "]11;rgb:ffff/ffff/fefe\\"; }
 		vt.free();
 	}
+}
+
+function rowsAfterGrowing(pull: boolean): string {
+	const created = Vt.create(10, 3);
+	if (!created.ok) { return "create failed"; }
+	const vt = created.value;
+	vt.setPullScrollback(pull);
+	vt.writeText("l1
+l2
+l3
+l4
+l5");
+	vt.resize(10, 5);
+	vt.update();
+	const lines = vt.lines();
+	vt.free();
+	if (!lines.ok) { return "read failed"; }
+	return lines.value.join("|");
+}
+
+test "growing the grid reveals scrollback unless the pty keeps its own screen" {
+	assert rowsAfterGrowing(true) == "l1|l2|l3|l4|l5";
+	assert rowsAfterGrowing(false) == "l3|l4|l5||";
 }
 
 test "text without a query leaves nothing to reply" {

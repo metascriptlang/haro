@@ -316,3 +316,58 @@ test "a flood past the scrollback limit leaves the last rows right and the frame
 		s.close();
 	}
 }
+
+test "widening and narrowing reflows a wrapped line and keeps hard breaks" {
+	const s = open(4, 8);
+	assert s !== null;
+	if (s !== null) {
+		assert s.step("111\r\n2222aa\r\n333\r\n");
+		assert s.lines() == "111\n2222\naa\n333\n\n\n\n";
+		assert s.resize(5, 8) && s.mismatch() == "";
+		assert s.lines() == "111\n2222a\na\n333\n\n\n\n";
+		assert s.resize(6, 8) && s.mismatch() == "";
+		assert s.lines() == "111\n2222aa\n333\n\n\n\n\n";
+		assert s.resize(8, 8) && s.mismatch() == "";
+		assert s.lines() == "111\n2222aa\n333\n\n\n\n\n";
+		assert s.resize(6, 8) && s.lines() == "111\n2222aa\n333\n\n\n\n\n";
+		assert s.resize(5, 8) && s.lines() == "111\n2222a\na\n333\n\n\n\n";
+		assert s.resize(4, 8) && s.lines() == "111\n2222\naa\n333\n\n\n\n";
+		assert s.mismatch() == "";
+		s.close();
+	}
+}
+
+test "a line that fills the width survives being widened, and rows can shrink and grow around it" {
+	const s = open(20, 4);
+	assert s !== null;
+	if (s !== null) {
+		assert s.step("some long long text");
+		assert s.resize(18, 4) && s.mismatch() == "";
+		assert s.lines() == "some long long tex\nt\n\n";
+		assert s.resize(20, 3) && s.mismatch() == "";
+		assert s.lines() == "some long long text\n\n";
+		assert s.resize(20, 4) && s.mismatch() == "";
+		assert s.lines() == "some long long text\n\n\n";
+		assert s.resize(19, 4) && s.lines() == "some long long text\n\n\n";
+		s.close();
+	}
+}
+
+test "a drawing character set, a hidden cursor and a reset before a wrap do not stop the reflow" {
+	const draw = open(4, 4);
+	const hidden = open(4, 4);
+	const reset = open(4, 4);
+	assert draw !== null && hidden !== null && reset !== null;
+	if (draw !== null && hidden !== null && reset !== null) {
+		assert draw.step("\x1b(0qqqq\x1b(B\r\nSS\r\n") && draw.resize(6, 4);
+		assert draw.lines() == "\u2500\u2500\u2500\u2500\nSS\n\n";
+		assert hidden.step("\x1b[?25l====\x1b[?25h\r\nSS\r\n") && hidden.resize(6, 4);
+		assert hidden.lines() == "====\nSS\n\n";
+		assert reset.step("====\x1b[0m\r\nSS\r\n") && reset.resize(6, 4);
+		assert reset.lines() == "====\nSS\n\n";
+		assert draw.mismatch() == "" && hidden.mismatch() == "" && reset.mismatch() == "";
+		draw.close();
+		hidden.close();
+		reset.close();
+	}
+}

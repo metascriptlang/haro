@@ -7,7 +7,7 @@ const MODES: string[] = [
 	"\x1b[?7l", "\x1b[?7h", "\x1b[?6h", "\x1b[?6l", "\x1b[4h", "\x1b[4l", "\x1b[20h", "\x1b[20l",
 	"\x1b[?2027h", "\x1b[?2027l", "\x1b[?69h", "\x1b[?69l", "\x1b7", "\x1b8", "\x1bH", "\x1b[0g", "\x1b[3g",
 	"\x1b(0", "\x1b(B", "\x0e", "\x0f", "\x1b[!p", "\x1bc", "\x1b#8", "\x1b[?47h", "\x1b[?47l", "\x1b[?1047h", "\x1b[?1047l",
-	"\x1b[1;3s", "\x1b[?25l", "\x1b[?25h", "\x1b[?2004h", "\x1b[0;1;2;3;4;7;9m",
+	"\x1b[1;3s", "\x1b[?40h", "\x1b[?3l", "\x1b[?3h", "\x1b[?25l", "\x1b[?25h", "\x1b[?2004h", "\x1b[0;1;2;3;4;7;9m",
 ];
 const ERASES: string[] = ["J", "0J", "1J", "2J", "K", "0K", "1K", "2K"];
 
@@ -131,8 +131,8 @@ function playWithViewportAndResize(seed: int32, ops: int32): string {
 			vt.scrollLines(by);
 			ok = s.paint();
 		} else if (kind == 1) {
-			const cols = 5 + r.next(16);
-			const rows = 3 + r.next(8);
+			const cols = 1 + r.next(20);
+			const rows = 1 + r.next(10);
 			sent += `<resize ${cols}x${rows}>`;
 			ok = s.resize(cols, rows);
 		} else {

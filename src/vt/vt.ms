@@ -75,6 +75,23 @@ extern function vtEffectsOpen(terminal: GhosttyTerminal): int32;
 extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
 extern function vtEffectsClose(id: int32, terminal: GhosttyTerminal): void;
 extern function vtEventsTake(id: int32, out: Span<int32>): int32;
+extern function vtModes(terminal: GhosttyTerminal, out: Span<int32>): int32;
+extern function vtFocusEncode(terminal: GhosttyTerminal, gained: int32, buf: Span<uint8>): int64;
+extern function vtMouseEncode(
+	id: int32,
+	terminal: GhosttyTerminal,
+	action: int32,
+	button: int32,
+	mods: int32,
+	x: float32,
+	y: float32,
+	cellWidth: int32,
+	cellHeight: int32,
+	width: int32,
+	height: int32,
+	anyPressed: int32,
+	buf: Span<uint8>,
+): int64;
 extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
 extern function vtString(terminal: GhosttyTerminal, which: int32, buf: Span<uint8>): int64;
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
@@ -434,6 +451,68 @@ export function cursorLook(this vt: Vt): Result<CursorLook, VtError> {
 		return Result.err(VtError.ReadFailed);
 	}
 	return Result.ok({ visible: out[0] != 0, shape: out[1] as CursorShape, blinking: out[2] != 0 });
+}
+
+export struct Modes {
+	focusEvents: boolean;
+	bracketedPaste: boolean;
+	altScroll: boolean;
+	cursorKeys: boolean;
+	mouseTracking: boolean;
+}
+
+export function modes(this vt: Vt): Result<Modes, VtError> {
+	let out: Vec<int32> = new Array(5);
+	if (vtModes(vt.terminal, out) != 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok({
+		focusEvents: out[0] != 0,
+		bracketedPaste: out[1] != 0,
+		altScroll: out[2] != 0,
+		cursorKeys: out[3] != 0,
+		mouseTracking: out[4] != 0,
+	});
+}
+
+export function focusReport(this vt: Vt, gained: boolean, buf: Span<uint8>): Result<int32, VtError> {
+	const n = vtFocusEncode(vt.terminal, gained ? 1 : 0, buf);
+	if (n < 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(n as int32);
+}
+
+export enum MouseAction {
+	Press,
+	Release,
+	Motion,
+}
+
+export struct MouseInput {
+	action: MouseAction;
+	button: int32;
+	mods: BitSet<KeyMod>;
+	x: float32;
+	y: float32;
+}
+
+export struct MouseGeometry {
+	cellWidth: int32;
+	cellHeight: int32;
+	width: int32;
+	height: int32;
+}
+
+export function mouseReport(
+	this vt: Vt,
+	e: MouseInput,
+	g: MouseGeometry,
+	anyPressed: boolean,
+	buf: Span<uint8>,
+): Result<int32, VtError> {
+	const n = vtMouseEncode(
+		vt.effects, vt.terminal, e.action as int32, e.button, modsMask(e.mods) as int32, e.x, e.y,
+		g.cellWidth, g.cellHeight, g.width, g.height, anyPressed ? 1 : 0, buf,
+	);
+	if (n < 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(n as int32);
 }
 
 function rgb(c: GhosttyColorRgb): Rgb {
@@ -1120,6 +1199,122 @@ test "an untitled terminal has an empty title" {
 		const title = vt.title();
 		assert title.ok;
 		if (title.ok) { assert title.value == ""; }
+		vt.free();
+	}
+}
+
+test "the input modes a program sets are readable, and a fresh terminal sets none but alternate scroll" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const fresh = vt.modes();
+		assert fresh.ok;
+		if (fresh.ok) {
+			assert !fresh.value.focusEvents;
+			assert !fresh.value.bracketedPaste;
+			assert !fresh.value.cursorKeys;
+			assert !fresh.value.mouseTracking;
+			assert fresh.value.altScroll;
+		}
+		vt.writeText("[?1004h[?2004h[?1h[?1000h[?1007l");
+		const set = vt.modes();
+		assert set.ok;
+		if (set.ok) {
+			assert set.value.focusEvents;
+			assert set.value.bracketedPaste;
+			assert set.value.cursorKeys;
+			assert set.value.mouseTracking;
+			assert !set.value.altScroll;
+		}
+		vt.free();
+	}
+}
+
+test "a focus change is reported only once the program asked for it" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		let buf: Vec<uint8> = new Array(16);
+		const before = vt.focusReport(true, buf);
+		assert before.ok;
+		if (before.ok) { assert before.value == 0; }
+		vt.writeText("[?1004h");
+		const gained = vt.focusReport(true, buf);
+		assert gained.ok;
+		if (gained.ok) { assert ascii(buf[0..gained.value]) == "[I"; }
+		const lost = vt.focusReport(false, buf);
+		assert lost.ok;
+		if (lost.ok) { assert ascii(buf[0..lost.value]) == "[O"; }
+		vt.free();
+	}
+}
+
+const CELLS: MouseGeometry = { cellWidth: 10, cellHeight: 20, width: 200, height: 80 };
+
+function mouseBytes(vt: Vt, action: MouseAction, button: int32, mods: BitSet<KeyMod>, anyPressed: boolean): string {
+	let buf: Vec<uint8> = new Array(32);
+	const e: MouseInput = { action: action, button: button, mods: mods, x: 25.0, y: 25.0 };
+	const n = vt.mouseReport(e, CELLS, anyPressed, buf);
+	if (!n.ok) { return "error"; }
+	return ascii(buf[0..n.value]);
+}
+
+test "a mouse event is silent until the program turns mouse reporting on" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const none = 0 as BitSet<KeyMod>;
+		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "";
+		vt.free();
+	}
+}
+
+test "SGR reporting names the cell, the button and the modifiers" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const none = 0 as BitSet<KeyMod>;
+		vt.writeText("[?1000h[?1006h");
+		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "[<0;3;2M";
+		assert mouseBytes(vt, MouseAction.Release, 1, none, false) == "[<0;3;2m";
+		assert mouseBytes(vt, MouseAction.Press, 3, none, true) == "[<1;3;2M";
+		assert mouseBytes(vt, MouseAction.Press, 4, none, false) == "[<64;3;2M";
+		assert mouseBytes(vt, MouseAction.Press, 1, none.incl(KeyMod.Shift), true) == "[<4;3;2M";
+		vt.free();
+	}
+}
+
+test "motion is reported only under button or any-event tracking" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const none = 0 as BitSet<KeyMod>;
+		vt.writeText("[?1000h[?1006h");
+		assert mouseBytes(vt, MouseAction.Motion, 1, none, true) == "";
+		vt.writeText("[?1002h");
+		assert mouseBytes(vt, MouseAction.Motion, 1, none, true) == "[<32;3;2M";
+		vt.writeText("[?1003h");
+		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "[<35;3;2M";
+		vt.free();
+	}
+}
+
+test "the same cell is not reported twice for motion, and SGR-pixels reports pixels" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const none = 0 as BitSet<KeyMod>;
+		vt.writeText("[?1003h[?1006h");
+		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "[<35;3;2M";
+		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "";
+		vt.writeText("[?1016h");
+		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "[<0;25;25M";
 		vt.free();
 	}
 }

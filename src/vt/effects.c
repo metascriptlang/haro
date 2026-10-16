@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "effects.h"
+#include "state.h"
 
 #ifdef __EMSCRIPTEN__
 static const uint8_t maxLog2Align = 4;
@@ -54,6 +55,10 @@ typedef struct {
 	int bells;
 	int titleChanged;
 	int pwdChanged;
+	GhosttyMouseEncoder mouse;
+	GhosttyMouseEvent mouseEvent;
+	int mouseSignature;
+	int mouseSize[4];
 } Effects;
 
 static Effects effects[EFFECTS_MAX];
@@ -155,8 +160,62 @@ void vtEffectsClose(int id, GhosttyTerminal terminal) {
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, NULL);
+	if (e->mouse) ghostty_mouse_encoder_free(e->mouse);
+	if (e->mouseEvent) ghostty_mouse_event_free(e->mouseEvent);
 	free(e->data);
 	memset(e, 0, sizeof *e);
+}
+
+static int mouseOpen(Effects* e) {
+	if (e->mouse && e->mouseEvent) return 1;
+	if (!e->mouse && ghostty_mouse_encoder_new(vtAllocator(), &e->mouse) != GHOSTTY_SUCCESS) return 0;
+	if (!e->mouseEvent && ghostty_mouse_event_new(vtAllocator(), &e->mouseEvent) != GHOSTTY_SUCCESS) return 0;
+	bool track = true;
+	ghostty_mouse_encoder_setopt(e->mouse, GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL, &track);
+	e->mouseSignature = -1;
+	return 1;
+}
+
+/* The report for one pointer event under the modes the program set; 0 bytes when the mode reports
+   nothing for it (a motion within the cell it last reported, for one). The encoder forgets the last
+   cell on every setopt_from_terminal and size, so each is set only when its value changed. action is a
+   GhosttyMouseAction, button a GhosttyMouseButton with 0 for none. x and y are surface pixels with
+   the grid at the origin. -2: buf too small. */
+int64_t vtMouseEncode(int id, GhosttyTerminal terminal, int action, int button, int mods,
+	float x, float y, int cellWidth, int cellHeight, int width, int height, int anyPressed,
+	uint8_t* buf, int64_t cap) {
+	Effects* e = slot(id);
+	if (!e || !mouseOpen(e)) return -1;
+	int signature = vtMouseSignature(terminal);
+	if (signature < 0) return -1;
+	if (signature != e->mouseSignature) {
+		ghostty_mouse_encoder_setopt_from_terminal(e->mouse, terminal);
+		e->mouseSignature = signature;
+	}
+	int geometry[4] = { cellWidth, cellHeight, width, height };
+	if (memcmp(geometry, e->mouseSize, sizeof geometry) != 0) {
+		GhosttyMouseEncoderSize size;
+		memset(&size, 0, sizeof size);
+		size.size = sizeof size;
+		size.screen_width = (uint32_t)width;
+		size.screen_height = (uint32_t)height;
+		size.cell_width = (uint32_t)cellWidth;
+		size.cell_height = (uint32_t)cellHeight;
+		ghostty_mouse_encoder_setopt(e->mouse, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+		memcpy(e->mouseSize, geometry, sizeof geometry);
+	}
+	bool pressed = anyPressed != 0;
+	GhosttyMousePosition at = { x, y };
+	ghostty_mouse_encoder_setopt(e->mouse, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &pressed);
+	ghostty_mouse_event_set_action(e->mouseEvent, (GhosttyMouseAction)action);
+	if (button == 0) ghostty_mouse_event_clear_button(e->mouseEvent);
+	else ghostty_mouse_event_set_button(e->mouseEvent, (GhosttyMouseButton)button);
+	ghostty_mouse_event_set_mods(e->mouseEvent, (GhosttyMods)mods);
+	ghostty_mouse_event_set_position(e->mouseEvent, at);
+	size_t written = 0;
+	GhosttyResult r = ghostty_mouse_encoder_encode(e->mouse, e->mouseEvent, (char*)buf, (size_t)cap, &written);
+	if (r == GHOSTTY_SUCCESS) return (int64_t)written;
+	return r == GHOSTTY_OUT_OF_SPACE ? -2 : -1;
 }
 
 /* msc cannot import GhosttyPoint: .inbox/compiler/2026-10-15-c-import-fixed-array-member-sizedarray.md */

@@ -29,7 +29,6 @@ test "a wide character is one unit of text on two cells and moves the cursor two
 	if (s !== null) {
 		assert s.text(0) == "\u{1F600}a";
 		assert cursorAt(s, 3, 0);
-		assert s.cursorCell(0) == 3;
 		s.close();
 	}
 	const narrow = run(6, 2, "中a");

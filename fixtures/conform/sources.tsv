@@ -56,9 +56,14 @@ ghostty/print wide char	ported	~/projects/ghostty/src/terminal/Terminal.zig:5315
 ghostty/print over wide char	ported	~/projects/ghostty/src/terminal/Terminal.zig:5403,5431,5470	22fa134a0	src/conform/cells.ms
 ghostty/disabled wraparound wide	ported	~/projects/ghostty/src/terminal/Terminal.zig:7338,7370	22fa134a0	src/conform/cells.ms
 ghostty/graphemes	ported	~/projects/ghostty/src/terminal/Terminal.zig:5556,5788,5888,5917,5991,6249,6726,6752,6786	22fa134a0	family, skin tone, VS15, VS16, o+grave, Devanagari with mode 2027 on and off; src/conform/cells.ms
-ghostty/zero-width	ported	~/projects/ghostty/src/terminal/Terminal.zig:5250,5266,5290; cap ~/projects/ghostty/src/terminal/page.zig:92	22fa134a0	src/conform/cells.ms
-ghostty/glitch.txt	ported	~/projects/ghostty/src/terminal/Terminal.zig:5222; ~/projects/ghostty/src/terminal/res/glitch.txt	22fa134a0	expected row from fixtures/conform/tools/glitchRow.mjs with the 64-mark cap of page.zig:92; src/conform/cells.ms
+ghostty/zero-width	ported	~/projects/ghostty/src/terminal/Terminal.zig:5250,5266,5282; cap ~/projects/ghostty/src/terminal/page.zig:92	22fa134a0	src/conform/cells.ms
+ghostty/glitch.txt	ported	~/projects/ghostty/src/terminal/Terminal.zig:5225; ~/projects/ghostty/src/terminal/res/glitch.txt	22fa134a0	expected row from fixtures/conform/tools/glitchRow.mjs with the 64-mark cap of page.zig:92; src/conform/cells.ms
 ghostty/wraparound and scroll	ported	~/projects/ghostty/src/terminal/Terminal.zig:5155,5189,7302	22fa134a0	src/conform/cells.ms
 wezterm/emoji and hangul	ported	~/projects/wezterm/term/src/test/mod.rs:1153,1171	e2a98e1	src/conform/cells.ms
 wezterm/basic_output	ported	~/projects/wezterm/term/src/test/mod.rs:503	e2a98e1	src/conform/cells.ms
 wezterm/dec special graphics	ported	~/projects/wezterm/term/src/test/mod.rs:722	e2a98e1	src/conform/cells.ms
+wezterm/csi cursor addressing	ported	~/projects/wezterm/term/src/test/csi.rs:216,297,312,345; ~/projects/ghostty/src/terminal/Terminal.zig:8143,8221	e2a98e1 / 22fa134a0	CUP, HVP, CHA, VPA; clamps follow Ghostty, WezTerm leaves the cursor one past the last column; src/conform/regions.ms
+wezterm/csi edit	ported	~/projects/wezterm/term/src/test/csi.rs:8,235,244,253,267,281,327,368,397	e2a98e1	789 (DCH keeps the background), REP, IRM, ICH, ECH, DCH, DL, ED incl. BCE and ED 3; negative parameters not ported; src/conform/regions.ms
+wezterm/margins and delete_lines	ported	~/projects/wezterm/term/src/test/mod.rs:568,614,668	e2a98e1	IL and DL with a scroll region and left and right margins; src/conform/regions.ms
+wezterm/scrolling	ported	~/projects/wezterm/term/src/test/mod.rs:1087,1123,1130,1190,1236	e2a98e1	scrollback content through the viewport, RI, region scroll with and without scrollback, alternate screen; scrollback limits not ported (Ghostty prunes by bytes); src/conform/regions.ms
+ghostty/deccolm	ported	~/projects/ghostty/src/terminal/Terminal.zig:4003,16713,16700	22fa134a0	mode 40 then mode 3 resets to 80 columns and clears; src/conform/regions.ms

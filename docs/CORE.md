@@ -99,6 +99,10 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
   type`) are decoded with the console code page, 437 by default, then re-encoded as UTF-8: the
   UTF-8 for `中` arrives as `Σ╕¡`. Measured 2026-10-16 by capturing ConPTY output for
   `fixtures/styles.ansi`.
+- conhost drops OSC 111 (reset the default background), and holds back a child's `ESC[?25l`: a
+  pwsh script that hides the cursor and keeps running shows `?25l` only when it exits, beside
+  conhost's own `?9001l`/`?1004l` (`probe/capture/capture.ms`, 2026-10-17). OSC 11, OSC 52 writes
+  and DECSCUSR reach Haro.
 
 ## First window, smoke-run
 

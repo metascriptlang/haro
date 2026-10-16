@@ -67,13 +67,15 @@ typedef struct {
 	uint8_t* clip;
 	int64_t clipLen;
 	int clipPending;
+	uint8_t* readReply;
+	int64_t readReplyLen;
+	int readPending;
+	int readNew;
 } Effects;
 
 static Effects effects[EFFECTS_MAX];
 
-static void writePty(GhosttyTerminal terminal, void* userdata, const uint8_t* bytes, size_t n) {
-	(void)terminal;
-	Effects* e = userdata;
+static void append(Effects* e, const uint8_t* bytes, size_t n) {
 	if (e->outOfMemory) return;
 	if (e->len + (int64_t)n > e->cap) {
 		int64_t cap = e->cap ? e->cap : 256;
@@ -88,6 +90,11 @@ static void writePty(GhosttyTerminal terminal, void* userdata, const uint8_t* by
 	}
 	memcpy(e->data + e->len, bytes, n);
 	e->len += (int64_t)n;
+}
+
+static void writePty(GhosttyTerminal terminal, void* userdata, const uint8_t* bytes, size_t n) {
+	(void)terminal;
+	append(userdata, bytes, n);
 }
 
 static Effects* slot(int id) {
@@ -142,6 +149,7 @@ static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const Gho
 			}
 			memcpy(copy, c->data.ptr, c->data.len);
 			free(e->clip);
+	free(e->readReply);
 			e->clip = copy;
 			e->clipLen = (int64_t)c->data.len;
 			e->clipPending = 1;
@@ -150,6 +158,32 @@ static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const Gho
 		}
 	}
 	write->reply(write, &reply);
+}
+
+/* An OSC 52 read cannot wait for the user inside vt_write: the reply must be given before the callback
+   returns. So the callback answers "denied", which makes libghostty write an empty clipboard reply
+   ("ESC ] 52 ; c ;" and the terminator the program used), takes those bytes back out of the reply
+   queue and keeps them. vtClipboardAnswer later writes the same frame with the clipboard in it, or
+   empty. A request while one is pending, or for a clipboard Windows has no equivalent of, keeps its
+   empty reply. */
+static void onClipboardRead(GhosttyTerminal terminal, void* userdata, const GhosttyClipboardRead* read) {
+	(void)terminal;
+	Effects* e = userdata;
+	GhosttyClipboardReadReply reply = { sizeof reply, GHOSTTY_CLIPBOARD_READ_RESULT_DENIED, NULL, 0, NULL, 0, false };
+	int64_t mark = e->len;
+	read->reply(read, &reply);
+	if (e->readPending || read->location != GHOSTTY_CLIPBOARD_LOCATION_STANDARD || e->outOfMemory) return;
+	int64_t n = e->len - mark;
+	if (n < 8) return;
+	uint8_t* copy = malloc((size_t)n);
+	if (!copy) return;
+	memcpy(copy, e->data + mark, (size_t)n);
+	e->len = mark;
+	free(e->readReply);
+	e->readReply = copy;
+	e->readReplyLen = n;
+	e->readPending = 1;
+	e->readNew = 1;
 }
 
 static void onBell(GhosttyTerminal terminal, void* userdata) {
@@ -196,7 +230,9 @@ int vtEffectsOpen(GhosttyTerminal terminal, GhosttyRenderState state) {
 		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*)onXtversion)
 			!= GHOSTTY_SUCCESS
 		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
-			(const void*)onClipboardWrite) != GHOSTTY_SUCCESS) {
+			(const void*)onClipboardWrite) != GHOSTTY_SUCCESS
+		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ,
+			(const void*)onClipboardRead) != GHOSTTY_SUCCESS) {
 		e->used = 0;
 		return -1;
 	}
@@ -245,6 +281,46 @@ int64_t vtClipboardSize(int id) {
 	return e && e->clipPending ? e->clipLen : -1;
 }
 
+/* 1 once per OSC 52 read request that waits for an answer. */
+int vtClipboardReadTake(int id) {
+	Effects* e = slot(id);
+	if (!e || !e->readNew) return 0;
+	e->readNew = 0;
+	return 1;
+}
+
+static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static void appendBase64(Effects* e, const uint8_t* in, int64_t n) {
+	for (int64_t i = 0; i < n; i += 3) {
+		uint32_t v = (uint32_t)in[i] << 16;
+		if (i + 1 < n) v |= (uint32_t)in[i + 1] << 8;
+		if (i + 2 < n) v |= in[i + 2];
+		uint8_t out[4] = { (uint8_t)b64[(v >> 18) & 63], (uint8_t)b64[(v >> 12) & 63],
+			i + 1 < n ? (uint8_t)b64[(v >> 6) & 63] : '=', i + 2 < n ? (uint8_t)b64[v & 63] : '=' };
+		append(e, out, 4);
+	}
+}
+
+/* Writes the reply the pending read waits for: the clipboard text when allow is set, else empty.
+   -1: no read pending. */
+int vtClipboardAnswer(int id, const uint8_t* text, int64_t len, int allow) {
+	Effects* e = slot(id);
+	if (!e || !e->readPending) return -1;
+	int64_t head = 0;
+	for (int semis = 0; head < e->readReplyLen && semis < 2;) {
+		if (e->readReply[head++] == ';') semis++;
+	}
+	append(e, e->readReply, (size_t)head);
+	if (allow) appendBase64(e, text, len);
+	append(e, e->readReply + head, (size_t)(e->readReplyLen - head));
+	free(e->readReply);
+	e->readReply = NULL;
+	e->readReplyLen = 0;
+	e->readPending = 0;
+	return 0;
+}
+
 void vtHoldLimit(int id, int64_t ms) {
 	Effects* e = slot(id);
 	if (e) e->holdLimitMs = ms;
@@ -273,6 +349,7 @@ void vtEffectsClose(int id, GhosttyTerminal terminal) {
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_XTVERSION, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, NULL);
+	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, NULL);
 	if (e->mouse) ghostty_mouse_encoder_free(e->mouse);
 	if (e->mouseEvent) ghostty_mouse_event_free(e->mouseEvent);

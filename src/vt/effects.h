@@ -11,6 +11,8 @@ int64_t vtClipboardTake(int id, uint8_t* buf, int64_t cap);
 int64_t vtClipboardSize(int id);
 void vtHoldLimit(int id, int64_t ms);
 int vtHeld(int id, GhosttyTerminal terminal);
+int vtClipboardReadTake(int id);
+int vtClipboardAnswer(int id, const uint8_t* text, int64_t len, int allow);
 int64_t vtRepliesTake(int id, uint8_t* buf, int64_t cap);
 int64_t vtMouseEncode(int id, GhosttyTerminal terminal, int action, int button, int mods,
 	float x, float y, int cellWidth, int cellHeight, int width, int height, int anyPressed,

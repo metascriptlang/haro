@@ -159,3 +159,15 @@ int vtUnderlineColor(GhosttyRenderState state, GhosttyRenderStateRowCells cells,
 	}
 	return 0;
 }
+
+/* Blinking is what a fresh terminal starts in and what DECSCUSR 0 returns to. The blink mode is not
+   configurable as a reset default, so a full reset (RIS) goes back to a steady cursor. */
+int vtSetBlinkDefault(GhosttyTerminal terminal, int on) {
+	GhosttyTerminalModeConfig m;
+	memset(&m, 0, sizeof m);
+	m.mode = GHOSTTY_MODE_CURSOR_BLINKING;
+	m.value = on != 0;
+	bool blink = on != 0;
+	if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_MODE, &m) != GHOSTTY_SUCCESS) return -1;
+	return ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK, &blink) == GHOSTTY_SUCCESS ? 0 : -1;
+}

@@ -115,6 +115,9 @@ extern function vtSetDefaultColors(
 extern function vtSetPullScrollback(terminal: GhosttyTerminal, pull: int32): int32;
 extern function vtLinkAt(terminal: GhosttyTerminal, x: int32, y: int32, buf: Span<uint8>): int64;
 extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
+extern function vtSetBlinkDefault(terminal: GhosttyTerminal, on: int32): int32;
+extern function vtClipboardReadTake(id: int32): int32;
+extern function vtClipboardAnswer(id: int32, text: Readonly<Span<uint8>>, allow: int32): int32;
 extern function vtString(terminal: GhosttyTerminal, which: int32, buf: Span<uint8>): int64;
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
 extern function vtTopAnchor(ref: GhosttyTrackedGridRef, terminal: GhosttyTerminal): int32;
@@ -340,7 +343,8 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 	}
 	const effects = vtEffectsOpen(terminal, state);
 	let top: GhosttyTrackedGridRef;
-	if (effects < 0 || vtTopTrack(terminal, top) != 0 || vtSetDefaultColors(terminal, 255, 255, 255, 0, 0, 0) != 0) {
+	if (effects < 0 || vtTopTrack(terminal, top) != 0 || vtSetDefaultColors(terminal, 255, 255, 255, 0, 0, 0) != 0
+		|| vtSetBlinkDefault(terminal, 1) != 0) {
 		if (effects >= 0) { vtEffectsClose(effects, terminal); }
 		ghostty_render_state_row_cells_free(cells);
 		ghostty_render_state_row_iterator_free(iterator);
@@ -449,6 +453,15 @@ export function takeClipboard(this vt: Vt): Result<string | null, VtError> {
 	if (n < 0) { return Result.err(VtError.ReadFailed); }
 	const text: string | null = buf[0..(n as int32)].asString();
 	return Result.ok(text);
+}
+
+export function clipboardAsked(this vt: Vt): boolean {
+	return vtClipboardReadTake(vt.effects) != 0;
+}
+
+export function answerClipboard(this vt: Vt, text: string, allow: boolean): Result<Vt, VtError> {
+	if (vtClipboardAnswer(vt.effects, text.asBytes(), allow ? 1 : 0) != 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(vt);
 }
 
 export function holding(this vt: Vt): boolean {
@@ -1486,13 +1499,13 @@ function lookAfter(input: string): CursorLook | null {
 	return found;
 }
 
-test "a fresh cursor is a visible steady block" {
+test "a fresh cursor is a visible blinking block" {
 	const look = lookAfter("");
 	assert look !== null;
 	if (look !== null) {
 		assert look.visible;
 		assert look.shape == CursorShape.Block;
-		assert !look.blinking;
+		assert look.blinking;
 	}
 }
 
@@ -2344,4 +2357,81 @@ test "a bracketed paste is framed and only its end marker is unsafe" {
 		assert pasted(vt, "plain", false) == "plain";
 		vt.free();
 	}
+}
+
+function pending(vt: Vt): string {
+	let buf: Vec<uint8> = new Array(128);
+	const n = vt.replies(buf);
+	if (!n.ok) { return "read failed"; }
+	return ascii(buf[0..n.value]);
+}
+
+test "an OSC 52 read waits for the host and is answered in the frame the program used" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		assert !vt.clipboardAsked();
+		vt.writeText("\x1b]52;c;?\x1b\\");
+		assert pending(vt) == "";
+		assert vt.clipboardAsked();
+		assert !vt.clipboardAsked();
+		assert vt.answerClipboard("hello", true).ok;
+		assert pending(vt) == "\x1b]52;c;aGVsbG8=\x1b\\";
+		assert !vt.answerClipboard("again", true).ok;
+		vt.writeText("\x1b]52;c;?\x07");
+		assert vt.clipboardAsked();
+		assert vt.answerClipboard("secret", false).ok;
+		assert pending(vt) == "\x1b]52;c;\x07";
+		vt.free();
+	}
+}
+
+test "base64 in an OSC 52 answer pads one and two leftover bytes" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("\x1b]52;c;?\x1b\\");
+		assert vt.answerClipboard("ab", true).ok;
+		assert pending(vt) == "\x1b]52;c;YWI=\x1b\\";
+		vt.writeText("\x1b]52;c;?\x1b\\");
+		assert vt.answerClipboard("a", true).ok;
+		assert pending(vt) == "\x1b]52;c;YQ==\x1b\\";
+		vt.writeText("\x1b]52;c;?\x1b\\");
+		assert vt.answerClipboard("", true).ok;
+		assert pending(vt) == "\x1b]52;c;\x1b\\";
+		vt.free();
+	}
+}
+
+test "a second read while one waits, and a read of the primary selection, get an empty answer at once" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("\x1b]52;c;?\x1b\\");
+		assert vt.clipboardAsked();
+		vt.writeText("\x1b]52;c;?\x1b\\");
+		assert pending(vt) == "\x1b]52;c;\x1b\\";
+		assert !vt.clipboardAsked();
+		assert vt.answerClipboard("x", true).ok;
+		assert pending(vt) == "\x1b]52;c;eA==\x1b\\";
+		vt.writeText("\x1b]52;p;?\x1b\\");
+		assert pending(vt) == "\x1b]52;p;\x1b\\";
+		assert !vt.clipboardAsked();
+		vt.free();
+	}
+}
+
+test "the cursor blinks until the program asks for a steady one, and DECSCUSR 0 blinks again" {
+	const fresh = lookAfter("");
+	assert fresh !== null;
+	if (fresh !== null) { assert fresh.blinking; }
+	const steady = lookAfter("\x1b[2 q");
+	assert steady !== null;
+	if (steady !== null) { assert !steady.blinking; }
+	const reset = lookAfter("\x1b[2 q\x1b[0 q");
+	assert reset !== null;
+	if (reset !== null) { assert reset.blinking; }
 }

@@ -46,11 +46,13 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 	const updated = try vt.update();
 	const rowCount = (try vt.size())[1];
 	const alternate = try vt.alternateScreen();
+	const colors = try vt.palette();
 	const painted = vt.painted;
+	const recoloured = painted.palette !== null && painted.palette != colors;
 	const scrolled = try vt.scrolledRows();
 	let kind = PlanKind.Rows;
 	let moved = 0;
-	if ((painted.rows.length as int32) != rowCount || painted.alternate != alternate) {
+	if ((painted.rows.length as int32) != rowCount || painted.alternate != alternate || recoloured) {
 		kind = PlanKind.Repaint;
 	} else if (scrolled === null || scrolled < 0 || scrolled >= rowCount) {
 		kind = PlanKind.Repaint;
@@ -69,6 +71,7 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 		painted.rows = all;
 	}
 	painted.alternate = alternate;
+	painted.palette = colors;
 	if (kind != PlanKind.Idle) {
 		const anchored = try vt.anchorTop();
 	}
@@ -420,6 +423,30 @@ test "output while the viewport is scrolled up plans nothing, and snapping back 
 			assert snapped.value.scrolled == 8;
 			assert textOf(snapped.value.rows[7]) == "row 104";
 		}
+		vt.free();
+	}
+}
+
+function kindAfter(vt: Vt, bytes: string): PlanKind {
+	vt.writeText(bytes);
+	const planned = vt.plan();
+	if (!planned.ok) { return PlanKind.Idle; }
+	return planned.value.kind;
+}
+
+test "a new default colour or reverse video repaints every row once" {
+	const created = Vt.create(10, 6);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		assert kindAfter(vt, "hello") == PlanKind.Repaint;
+		assert kindAfter(vt, "") == PlanKind.Idle;
+		assert kindAfter(vt, "\x1b]11;rgb:10/10/10\x07") == PlanKind.Repaint;
+		assert kindAfter(vt, "") == PlanKind.Idle;
+		assert kindAfter(vt, "\x1b]10;rgb:ff/00/00\x07") == PlanKind.Repaint;
+		assert kindAfter(vt, "\x1b[?5h") == PlanKind.Repaint;
+		assert kindAfter(vt, "\x1b[?5l") == PlanKind.Repaint;
+		assert kindAfter(vt, "x") == PlanKind.Rows;
 		vt.free();
 	}
 }

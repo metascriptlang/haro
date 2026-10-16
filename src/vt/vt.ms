@@ -317,6 +317,7 @@ export struct Row {
 export interface Painted {
 	alternate: boolean;
 	rows: Vec<Row>;
+	palette: Palette | null;
 }
 
 export struct Palette { fg: Rgb; bg: Rgb; }
@@ -359,7 +360,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		cells: cells,
 		effects: effects,
 		top: top,
-		painted: { alternate: false, rows: [] },
+		painted: { alternate: false, rows: [], palette: null },
 	});
 }
 
@@ -429,6 +430,7 @@ export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtErro
 	const r = ghostty_terminal_resize(vt.terminal, cols as uint16, rows as uint16, 0, 0);
 	if (!ok(r)) { return Result.err(VtError.ResizeFailed); }
 	vt.painted.rows = [];
+	vt.painted.palette = null;
 	return Result.ok(vt);
 }
 

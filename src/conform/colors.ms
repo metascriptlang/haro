@@ -30,7 +30,7 @@ test "an OSC 4 palette change repaints the cells that use the entry, OSC 104 put
 	}
 }
 
-test "known bug: a new default colour (OSC 10, OSC 11, DECSCNM) does not repaint rows already drawn" {
+test "a new default colour (OSC 10, OSC 11, DECSCNM) repaints rows already drawn" {
 	const fg = open(10, 3);
 	const bg = open(10, 3);
 	const reverse = open(10, 3);
@@ -38,15 +38,15 @@ test "known bug: a new default colour (OSC 10, OSC 11, DECSCNM) does not repaint
 	if (fg !== null && bg !== null && reverse !== null) {
 		assert fg.step("abc\r\n");
 		assert fg.feed("\x1b]10;rgb:ff/00/00\x07");
-		assert colorAt(fg, 0) == "#ffffff";
-		assert fg.mismatch() != "";
+		assert colorAt(fg, 0) == "#ff0000";
+		assert fg.mismatch() == "";
 		assert bg.step("abc\x1b[44mb\x1b[0m");
 		assert bg.feed("\x1b]11;rgb:10/10/10\x07");
-		assert bg.mismatch() != "";
+		assert bg.mismatch() == "";
+		assert bg.spans(0)[0].style!.backgroundColor === undefined;
 		assert reverse.step("abc\r\n");
 		assert reverse.feed("\x1b[?5h");
-		assert colorAt(reverse, 0) == "#ffffff";
-		assert reverse.mismatch() != "";
+		assert reverse.mismatch() == "";
 		fg.close();
 		bg.close();
 		reverse.close();

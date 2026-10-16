@@ -96,6 +96,11 @@ extern function vtMouseEncode(
 	buf: Span<uint8>,
 ): int64;
 extern function vtGraphemes(cells: GhosttyRenderStateRowCells, buf: Span<uint32>): int64;
+extern function vtUnderlineColor(
+	state: GhosttyRenderState,
+	cells: GhosttyRenderStateRowCells,
+	rgb: Span<uint8>,
+): int32;
 extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
 extern function vtString(terminal: GhosttyTerminal, which: int32, buf: Span<uint8>): int64;
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
@@ -283,6 +288,7 @@ export struct Cell {
 	bg: Rgb;
 	flags: BitSet<CellFlag>;
 	underline: Underline;
+	underlineColor: Rgb | null;
 }
 
 export struct Row {
@@ -597,7 +603,20 @@ function graphemesOf(
 	return Result.ok(all[0]);
 }
 
+function underlineColorOf(
+	state: GhosttyRenderState,
+	cells: GhosttyRenderStateRowCells,
+): Result<Rgb | null, VtError> {
+	let rgb: Vec<uint8> = new Array(3);
+	const found = vtUnderlineColor(state, cells, rgb);
+	if (found < 0) { return Result.err(VtError.ReadFailed); }
+	if (found == 0) { return Result.ok(null); }
+	const color: Rgb | null = { r: rgb[0], g: rgb[1], b: rgb[2] };
+	return Result.ok(color);
+}
+
 function readCell(
+	state: GhosttyRenderState,
 	cells: GhosttyRenderStateRowCells,
 	colors: Palette,
 	ref extra: Vec<uint32>,
@@ -616,6 +635,7 @@ function readCell(
 			bg: bg,
 			flags: none,
 			underline: Underline.None,
+			underlineColor: null,
 		});
 	}
 	const base = try graphemesOf(cells, count, extra);
@@ -635,6 +655,8 @@ function readCell(
 		flags = styleFlags(style);
 		underline = underlineOf(style);
 	}
+	let underlineColor: Rgb | null = null;
+	if (underline != Underline.None) { underlineColor = try underlineColorOf(state, cells); }
 	let raw: GhosttyCell = 0;
 	const rawKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW;
 	if (!ok(cellRaw(cells, rawKey, raw))) { return Result.err(VtError.ReadFailed); }
@@ -650,6 +672,7 @@ function readCell(
 		bg: bg,
 		flags: flags,
 		underline: underline,
+		underlineColor: underlineColor,
 	});
 }
 
@@ -664,7 +687,7 @@ function readRow(
 	if (!ok(rowCells(iterator, cellsKey, cells))) { return Result.err(VtError.ReadFailed); }
 	let row: Row = { y: y, cells: [], extra: [] };
 	while (ghostty_render_state_row_cells_next(cells)) {
-		const cell = try readCell(cells, colors, row.extra);
+		const cell = try readCell(vt.state, cells, colors, row.extra);
 		row.cells.push(cell);
 	}
 	return Result.ok(row);
@@ -1545,6 +1568,36 @@ test "a character above the basic plane reads back whole" {
 			const text = rows.value[0].text();
 			assert text.ok;
 			if (text.ok) { assert text.value.startsWith("x😀"); }
+		}
+		vt.free();
+	}
+}
+
+test "an underline carries the SGR 58 colour, resolved from the palette when it is an index" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("[4:3m[58;2;255;80;80ma[58;5;1mb[59mc[24;58;2;1;2;3md");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const cells = rows.value[0].cells;
+			const rgb = cells[0].underlineColor;
+			assert rgb !== null;
+			if (rgb !== null) {
+				assert rgb.r == 255;
+				assert rgb.g == 80;
+				assert rgb.b == 80;
+			}
+			const indexed = cells[1].underlineColor;
+			assert indexed !== null;
+			if (indexed !== null) { assert indexed.r > indexed.g && indexed.r > indexed.b && indexed.r != 255; }
+			assert cells[2].underline == Underline.Curly;
+			assert cells[2].underlineColor === null;
+			assert cells[3].underline == Underline.None;
+			assert cells[3].underlineColor === null;
 		}
 		vt.free();
 	}

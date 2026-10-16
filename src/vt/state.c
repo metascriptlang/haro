@@ -95,3 +95,34 @@ int64_t vtGraphemes(GhosttyRenderStateRowCells cells, uint32_t* buf, int64_t cap
 	}
 	return (int64_t)count;
 }
+
+/* The cell's SGR 58 underline colour with a palette index resolved: 1 and rgb filled, or 0 when the
+   cell has none (the text colour applies, generic.zig `underlineColor(...) orelse fg`). */
+int vtUnderlineColor(GhosttyRenderState state, GhosttyRenderStateRowCells cells, uint8_t* rgb, int64_t cap) {
+	if (cap < 3) return -1;
+	GhosttyStyle style;
+	ghostty_style_default(&style);
+	style.size = sizeof style;
+	if (ghostty_render_state_row_cells_get(cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE, &style)
+		!= GHOSTTY_SUCCESS) {
+		return -1;
+	}
+	if (style.underline_color.tag == GHOSTTY_STYLE_COLOR_RGB) {
+		rgb[0] = style.underline_color.value.rgb.r;
+		rgb[1] = style.underline_color.value.rgb.g;
+		rgb[2] = style.underline_color.value.rgb.b;
+		return 1;
+	}
+	if (style.underline_color.tag == GHOSTTY_STYLE_COLOR_PALETTE) {
+		GhosttyColorRgb palette[256];
+		if (ghostty_render_state_get(state, GHOSTTY_RENDER_STATE_DATA_COLOR_PALETTE, palette) != GHOSTTY_SUCCESS) {
+			return -1;
+		}
+		GhosttyColorRgb c = palette[style.underline_color.value.palette];
+		rgb[0] = c.r;
+		rgb[1] = c.g;
+		rgb[2] = c.b;
+		return 1;
+	}
+	return 0;
+}

@@ -101,6 +101,15 @@ extern function vtUnderlineColor(
 	cells: GhosttyRenderStateRowCells,
 	rgb: Span<uint8>,
 ): int32;
+extern function vtSetDefaultColors(
+	terminal: GhosttyTerminal,
+	fgR: int32,
+	fgG: int32,
+	fgB: int32,
+	bgR: int32,
+	bgG: int32,
+	bgB: int32,
+): int32;
 extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
 extern function vtString(terminal: GhosttyTerminal, which: int32, buf: Span<uint8>): int64;
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
@@ -326,7 +335,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 	}
 	const effects = vtEffectsOpen(terminal, state);
 	let top: GhosttyTrackedGridRef;
-	if (effects < 0 || vtTopTrack(terminal, top) != 0) {
+	if (effects < 0 || vtTopTrack(terminal, top) != 0 || vtSetDefaultColors(terminal, 255, 255, 255, 0, 0, 0) != 0) {
 		if (effects >= 0) { vtEffectsClose(effects, terminal); }
 		ghostty_render_state_row_cells_free(cells);
 		ghostty_render_state_row_iterator_free(iterator);
@@ -398,6 +407,14 @@ export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtErro
 	const r = ghostty_terminal_resize(vt.terminal, cols as uint16, rows as uint16, 0, 0);
 	if (!ok(r)) { return Result.err(VtError.ResizeFailed); }
 	vt.painted.rows = [];
+	return Result.ok(vt);
+}
+
+export function setDefaultColors(this vt: Vt, fg: Rgb, bg: Rgb): Result<Vt, VtError> {
+	const set = vtSetDefaultColors(
+		vt.terminal, fg.r as int32, fg.g as int32, fg.b as int32, bg.r as int32, bg.g as int32, bg.b as int32,
+	);
+	if (set != 0) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(vt);
 }
 
@@ -1467,6 +1484,56 @@ test "DECSCUSR picks the cursor's shape and blink" {
 	if (block !== null) {
 		assert block.shape == CursorShape.Block;
 		assert !block.blinking;
+	}
+}
+
+function replyTo(query: string): string {
+	const created = Vt.create(20, 4);
+	if (!created.ok) { return "create failed"; }
+	const vt = created.value;
+	vt.writeText(query);
+	let buf: Vec<uint8> = new Array(64);
+	const n = vt.replies(buf);
+	vt.free();
+	if (!n.ok) { return "read failed"; }
+	return ascii(buf[0..n.value]);
+}
+
+test "the device attributes and the version name Haro as a VT220 with colour and clipboard" {
+	assert replyTo("[c") == "[?62;22;52c";
+	assert replyTo("[>c") == "[>1;10;0c";
+	assert replyTo("[>q") == "P>|haro\\";
+}
+
+test "the tertiary device attributes carry a zero unit id" {
+	assert replyTo("[=c") == "P!|00000000\\";
+}
+
+test "a mode report names a mode set, reset and unknown" {
+	assert replyTo("[?2004$p") == "[?2004;2$y";
+	assert replyTo("[?2004h[?2004$p") == "[?2004;1$y";
+	assert replyTo("[?9999$p") == "[?9999;0$y";
+}
+
+test "the colour queries answer with the host's default colours, a program's override and the palette" {
+	assert replyTo("]11;?") == "]11;rgb:0000/0000/0000";
+	assert replyTo("]10;?") == "]10;rgb:ffff/ffff/ffff";
+	assert replyTo("]11;rgb:10/20/30]11;?") == "]11;rgb:1010/2020/3030";
+	assert replyTo("]4;1;?") == "]4;1;rgb:cccc/6666/6666";
+}
+
+test "a theme the host sets is what a colour query reports" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		assert vt.setDefaultColors({ r: 0x28, g: 0x2c, b: 0x34 }, { r: 0xff, g: 0xff, b: 0xfe }).ok;
+		vt.writeText("]11;?\\");
+		let buf: Vec<uint8> = new Array(64);
+		const n = vt.replies(buf);
+		assert n.ok;
+		if (n.ok) { assert ascii(buf[0..n.value]) == "]11;rgb:ffff/ffff/fefe\\"; }
+		vt.free();
 	}
 }
 

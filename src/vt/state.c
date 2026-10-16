@@ -14,6 +14,17 @@ int64_t vtString(GhosttyTerminal terminal, int which, uint8_t* buf, int64_t cap)
 }
 
 
+/* The colours a program's OSC 10/11 query is answered with while it has set none. */
+int vtSetDefaultColors(GhosttyTerminal terminal, int fgR, int fgG, int fgB, int bgR, int bgG, int bgB) {
+	GhosttyColorRgb fg = { (uint8_t)fgR, (uint8_t)fgG, (uint8_t)fgB };
+	GhosttyColorRgb bg = { (uint8_t)bgR, (uint8_t)bgG, (uint8_t)bgB };
+	if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &fg) != GHOSTTY_SUCCESS
+		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &bg) != GHOSTTY_SUCCESS) {
+		return -1;
+	}
+	return 0;
+}
+
 /* out: visible (DECTCEM), shape (GhosttyRenderStateCursorVisualStyle), blinking. Reads the render
    state, so it describes the frame the last update captured. */
 int vtCursorLook(GhosttyRenderState state, int32_t* out, int64_t cap) {

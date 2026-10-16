@@ -106,6 +106,24 @@ static void onRenderHold(GhosttyTerminal terminal, void* userdata, bool held) {
 	e->heldAtMs = nowMs();
 }
 
+static bool onDeviceAttributes(GhosttyTerminal terminal, void* userdata, GhosttyDeviceAttributes* out) {
+	(void)terminal; (void)userdata;
+	memset(out, 0, sizeof *out);
+	out->primary.conformance_level = GHOSTTY_DA_CONFORMANCE_LEVEL_2;
+	out->primary.features[0] = GHOSTTY_DA_FEATURE_ANSI_COLOR;
+	out->primary.features[1] = GHOSTTY_DA_FEATURE_CLIPBOARD;
+	out->primary.num_features = 2;
+	out->secondary.device_type = GHOSTTY_DA_DEVICE_TYPE_VT220;
+	out->secondary.firmware_version = 10;
+	return true;
+}
+
+static GhosttyString onXtversion(GhosttyTerminal terminal, void* userdata) {
+	(void)terminal; (void)userdata;
+	GhosttyString name = { (const uint8_t*)"haro", 4 };
+	return name;
+}
+
 static void onBell(GhosttyTerminal terminal, void* userdata) {
 	(void)terminal;
 	((Effects*)userdata)->bells++;
@@ -144,6 +162,10 @@ int vtEffectsOpen(GhosttyTerminal terminal, GhosttyRenderState state) {
 		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*)onPwdChanged)
 			!= GHOSTTY_SUCCESS
 		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_RENDER_HOLD, (const void*)onRenderHold)
+			!= GHOSTTY_SUCCESS
+		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES,
+			(const void*)onDeviceAttributes) != GHOSTTY_SUCCESS
+		|| ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*)onXtversion)
 			!= GHOSTTY_SUCCESS) {
 		e->used = 0;
 		return -1;
@@ -202,6 +224,8 @@ void vtEffectsClose(int id, GhosttyTerminal terminal) {
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_RENDER_HOLD, NULL);
+	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, NULL);
+	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_XTVERSION, NULL);
 	ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, NULL);
 	if (e->mouse) ghostty_mouse_encoder_free(e->mouse);
 	if (e->mouseEvent) ghostty_mouse_event_free(e->mouseEvent);

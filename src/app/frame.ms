@@ -5,7 +5,7 @@ import { GridLine, LineRun, line } from "../grid/lines";
 import { PlanKind, plan } from "../screen/plan";
 import { Cursor, Rgb, Row, Underline, Vt, palette } from "../vt/vt";
 
-export interface RowSlot {
+export struct RowSlot {
 	line: GridLine;
 	spans: TextSpan[];
 }
@@ -42,12 +42,18 @@ function styleOf(styles: Map<string, Style>, run: LineRun, background: Rgb): Sty
 	const fg = hexOf(run.fg);
 	const bg = run.bg == background ? "" : hexOf(run.bg);
 	const decoration = decorationOf(run);
-	const key = fg + bg + decoration;
+	const weight: "bold" | "normal" = run.bold ? "bold" : "normal";
+	const slant: "italic" | "normal" = run.italic ? "italic" : "normal";
+	const line: "wavy" | "solid" = run.underline == Underline.Curly ? "wavy" : "solid";
+	const key = fg + bg + decoration + weight + slant + line;
 	const known = styles.get(key);
 	if (known !== undefined) { return known; }
 	const style: Style = bg == ""
-		? { color: fg, textDecorationLine: decoration }
-		: { color: fg, backgroundColor: bg, textDecorationLine: decoration };
+		? { color: fg, textDecorationLine: decoration, textDecorationStyle: line, fontWeight: weight, fontStyle: slant }
+		: {
+			color: fg, backgroundColor: bg, textDecorationLine: decoration, textDecorationStyle: line,
+			fontWeight: weight, fontStyle: slant,
+		};
 	styles.set(key, style);
 	return style;
 }

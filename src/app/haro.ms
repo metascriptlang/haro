@@ -8,6 +8,7 @@ import {
 	desktopOptions,
 } from "../../../neon/src/platform/ion/window";
 import { onWake } from "../../../ion/src/index";
+import { FontStyle, registerFace } from "../../../void/src/void2d/font";
 import { argv, exit } from "std/process";
 import { readFile } from "std/fs";
 import { Pty, PtyError } from "../pty/transport";
@@ -21,6 +22,9 @@ extern function appWireWake(): void;
 
 const SHELL = "pwsh.exe -NoLogo";
 const FONT_PATH = "assets/JetBrainsMonoNL-Regular.ttf";
+const FONT_BOLD = "assets/JetBrainsMonoNL-Bold.ttf";
+const FONT_ITALIC = "assets/JetBrainsMonoNL-Italic.ttf";
+const FONT_BOLD_ITALIC = "assets/JetBrainsMonoNL-BoldItalic.ttf";
 
 function fail(message: string): void {
 	console.log(`haro: ${message}`);
@@ -48,6 +52,9 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 		return 1;
 	}
 	const measured = cell.value;
+	registerFace(FONT_BOLD, FONT_PATH, 700, FontStyle.Normal);
+	registerFace(FONT_ITALIC, FONT_PATH, 400, FontStyle.Italic);
+	registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
 	const entry: Entry = {
 		onWake: (handler: () => void): void => { onWake(handler); },
 		exited: exited,

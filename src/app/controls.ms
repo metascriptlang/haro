@@ -142,6 +142,10 @@ export function keyDown(this c: Controls, t: Term, e: NeonEvent, clip: Clip): Re
 		if (!vt.scrollPages(action == Action.PageUp ? -1 : 1).ok) { return Result.err(ControlError.VtFailed); }
 		return Result.ok(true);
 	}
+	if (action == Action.PromptUp || action == Action.PromptDown) {
+		if (!vt.jumpToPrompt(action == Action.PromptUp ? -1 : 1).ok) { return Result.err(ControlError.VtFailed); }
+		return Result.ok(true);
+	}
 	match (action) {
 		Action.LineUp => { vt.scrollLines(-KEYBOARD_ROWS); },
 		Action.LineDown => { vt.scrollLines(KEYBOARD_ROWS); },
@@ -691,6 +695,22 @@ test "the shades are the highlight rectangles of the viewport" {
 			assert drawn.value[0].row == 0 && drawn.value[0].col == 2 && drawn.value[0].cols == 18;
 			assert drawn.value[1].row == 1 && drawn.value[1].col == 0 && drawn.value[1].cols == 4;
 		}
+		t.shutdown();
+	}
+}
+
+test "ctrl alt up and down move the viewport between prompts the shell marked" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("\x1b]133;A\x07p1\r\nout1\r\nout2\r\n\x1b]133;A\x07p2\r\nout3\r\n\x1b]133;A\x07p3", 10, 3, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf(""));
+		const bottom = offsetOf(t);
+		assert handled(c.keyDown(t, key("ArrowUp", 6), clip));
+		assert offsetOf(t) < bottom;
+		assert handled(c.keyDown(t, key("ArrowDown", 6), clip));
+		assert sink.sent == "";
 		t.shutdown();
 	}
 }

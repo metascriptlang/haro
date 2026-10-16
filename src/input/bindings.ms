@@ -8,6 +8,8 @@ export enum Action {
 	PageDown,
 	Top,
 	Bottom,
+	PromptUp,
+	PromptDown,
 }
 
 const SHIFT: int32 = 1;
@@ -35,6 +37,8 @@ const BINDINGS: Vec<Binding> = [
 	{ code: "PageDown", mods: CTRL | SHIFT, action: Action.PageDown, primaryOnly: false },
 	{ code: "Home", mods: CTRL | SHIFT, action: Action.Top, primaryOnly: false },
 	{ code: "End", mods: CTRL | SHIFT, action: Action.Bottom, primaryOnly: false },
+	{ code: "ArrowUp", mods: CTRL | ALT, action: Action.PromptUp, primaryOnly: false },
+	{ code: "ArrowDown", mods: CTRL | ALT, action: Action.PromptDown, primaryOnly: false },
 	{ code: "PageUp", mods: SHIFT, action: Action.PageUp, primaryOnly: true },
 	{ code: "PageDown", mods: SHIFT, action: Action.PageDown, primaryOnly: true },
 ];
@@ -85,6 +89,14 @@ test "shift page keys scroll on the primary screen and reach a full-screen app o
 	assert resolve("PageDown", 1, false) == Action.PageDown;
 	assert resolve("PageUp", 1, true) == Action.None;
 	assert resolve("PageUp", 3, true) == Action.PageUp;
+}
+
+test "ctrl alt up and down jump between prompts, leaving ctrl shift up and down to the line scroll" {
+	assert resolve("ArrowUp", 6, false) == Action.PromptUp;
+	assert resolve("ArrowDown", 6, false) == Action.PromptDown;
+	assert resolve("ArrowUp", 3, false) == Action.LineUp;
+	assert resolve("ArrowUp", 4, false) == Action.None;
+	assert resolve("ArrowUp", 2, false) == Action.None;
 }
 
 test "a key with no binding resolves to nothing" {

@@ -6,9 +6,7 @@ import { createList } from "../../../neon/src/core/list";
 import { ForList } from "../../../neon/src/macros/ui/flow";
 import { PixelRatio } from "../../../neon/src/api/pixelRatio";
 import { Clipboard } from "../../../neon/src/api/clipboard";
-import { Void, View, Text } from "../../../neon/src/components/primitives";
-import { addFont } from "../../../void/src/void2d/font";
-import { Align, TextLayout } from "../../../void/src/void2d/textLayout";
+import { Void, View, Text, ViewHandle } from "../../../neon/src/components/primitives";
 import { RowSlot } from "./frame";
 import { gridSize } from "../grid/size";
 import { Spot, spotAt } from "../input/pointer";
@@ -37,16 +35,6 @@ const SHADES = 3;
 const HOLD_RECHECK_MS = 100;
 const NO_SHADE: Block = { row: 0, col: 0, rows: 0, cols: 0 };
 
-export interface Cell {
-	advance: number;
-	lineHeight: number;
-}
-
-export enum CellError {
-	FontNotLoaded,
-	ProbeNotLaidOut,
-}
-
 export interface Entry {
 	onWake: (handler: () => void) => void;
 	exited: (code: int32) => void;
@@ -54,21 +42,8 @@ export interface Entry {
 	openLink: (uri: string) => void;
 }
 
-export function measureCell(fontPath: string): Result<Cell, CellError> {
-	const font = addFont(fontPath);
-	if (!font.ok) { return Result.err(CellError.FontNotLoaded); }
-	const laid = TextLayout.layout(PROBE, {
-		font: font.value, size: FONT_SIZE as float32, letterSpacing: 0.0, lineSpacing: 0.0,
-		maxWidth: 0.0, align: Align.Left,
-	});
-	if (!laid.ok) { return Result.err(CellError.ProbeNotLaidOut); }
-	return Result.ok({
-		advance: (laid.value.width as number) / PROBE.length,
-		lineHeight: laid.value.lineHeight as number,
-	});
-}
-
-export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
+export function App(t: Term, entry: Entry): NeonNode {
+	let grid: ViewHandle | null = null;
 	const [cellWidth, setCellWidth] = createSignal<number>(0);
 	const [rowHeight, setRowHeight] = createSignal<number>(0);
 	const [cursorCol, setCursorCol] = createSignal<number>(0);
@@ -254,8 +229,14 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 
 	const layout = (e: NeonEvent): void => {
 		if (e.width <= 0 || e.height <= 0) { return; }
-		const advance = cell.advance;
-		const lineHeight = cell.lineHeight;
+		const handle = grid;
+		if (handle === null) {
+			entry.fail("the grid laid out before its handle arrived");
+			return;
+		}
+		const probe = handle.measureText(PROBE, { fontSize: FONT_SIZE });
+		const advance = probe.width / PROBE.length;
+		const lineHeight = probe.height;
 		const ratio = PixelRatio.get();
 		const cellPx = Math.ceil(advance * ratio) as int32;
 		const rowPx = Math.ceil(lineHeight * ratio) as int32;
@@ -431,6 +412,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 			<View
 				style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, pointerEvents: "box-only" }}
 				focusable
+				ref={(h: ViewHandle): void => { grid = h; }}
 				imeRect={{
 					x: cursorCol() * cellWidth(),
 					y: cursorRow() * rowHeight(),

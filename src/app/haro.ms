@@ -14,7 +14,7 @@ import { readFile } from "std/fs";
 import { Pty, PtyError } from "../pty/transport";
 import { ConPty } from "../pty/pty";
 import { Replay } from "../pty/replay";
-import { App, Entry, measureCell } from "./app";
+import { App, Entry } from "./app";
 import { Cue, FRAME_MS, Pace } from "./pace";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { Term, openTerm, shutdown } from "./term";
@@ -49,12 +49,6 @@ function has(flag: string): boolean {
 }
 
 function show(t: Term, exited: (code: int32) => void): int32 {
-	const cell = measureCell(FONT_PATH);
-	if (!cell.ok) {
-		fail(`the cell of ${FONT_PATH}: ${cell.error.toString()}`);
-		return 1;
-	}
-	const measured = cell.value;
 	registerFace(FONT_BOLD, FONT_PATH, 700, FontStyle.Normal);
 	registerFace(FONT_ITALIC, FONT_PATH, 400, FontStyle.Italic);
 	registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
@@ -83,7 +77,7 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 		openLink: (uri: string): void => { openExternal(uri); },
 	};
 	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: FONT_PATH };
-	const code = runWindow(opts, (): NeonNode => App(t, measured, entry));
+	const code = runWindow(opts, (): NeonNode => App(t, entry));
 	t.shutdown();
 	return code;
 }

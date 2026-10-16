@@ -5,7 +5,7 @@ import { KeyAction, KeyEvent, KeyMod } from "../keys/keys";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
 import { Session } from "../session/session";
-import { Cursor, Keys } from "../vt/vt";
+import { Cursor, Keys, PasteError } from "../vt/vt";
 import { FrameError, RowSlot, applyFrame } from "./frame";
 
 const BUFFER_BYTES = 65536;
@@ -24,6 +24,8 @@ export enum TermError {
 	EncodeFailed,
 	TextTooLong,
 	WriteFailed,
+	PasteUnsafe,
+	PasteEncodeFailed,
 }
 
 export type OpenPty = (cols: int32, rows: int32) => Result<Pty, PtyError>;
@@ -159,6 +161,19 @@ export function sendText(this t: Term, text: string): Result<int32, TermError> {
 	const bytes: Readonly<Span<char>> = text;
 	for (let i = 0; i < n; i++) { t.buf[i] = bytes[i] as uint8; }
 	if (!s.pty.write(t.buf[0..n]).ok) { return Result.err(TermError.WriteFailed); }
+	return Result.ok(n);
+}
+
+export function sendPaste(this t: Term, text: string, allowUnsafe: boolean): Result<int32, TermError> {
+	const s = t.session;
+	if (s === null) { return Result.ok(0); }
+	const bytes = s.vt.pasteBytes(text, allowUnsafe);
+	if (!bytes.ok) {
+		return Result.err(bytes.error == PasteError.Unsafe ? TermError.PasteUnsafe : TermError.PasteEncodeFailed);
+	}
+	const n = bytes.value.length as int32;
+	if (n == 0) { return Result.ok(0); }
+	if (!s.pty.write(bytes.value[0..n]).ok) { return Result.err(TermError.WriteFailed); }
 	return Result.ok(n);
 }
 

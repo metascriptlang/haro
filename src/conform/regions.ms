@@ -132,26 +132,12 @@ test "ED 3 erases the scrollback and the viewport is all that is left" {
 	const s = open(3, 3);
 	assert s !== null;
 	if (s !== null) {
-		assert s.step("abc
-def
-ghi
-111
-222
-a");
-		assert everything(s) == "abc
-def
-ghi
-111
-222
-a";
-		assert s.step("[3J");
-		assert everything(s) == "111
-222
-a";
+		assert s.step("abc\r\ndef\r\nghi\r\n111\r\n222\r\na");
+		assert everything(s) == "abc\ndef\nghi\n111\n222\na";
+		assert s.step("\x1b[3J");
+		assert everything(s) == "111\n222\na";
 		assert s.step("b");
-		assert everything(s) == "111
-222
-ab";
+		assert everything(s) == "111\n222\nab";
 		s.close();
 	}
 }
@@ -209,18 +195,10 @@ test "reverse index moves up, and scrolls the screen down at the top row" {
 	const top = open(1, 3);
 	assert s !== null && top !== null;
 	if (s !== null && top !== null) {
-		assert s.step("1
-M
-");
-		assert s.lines() == "1
-
-";
-		assert top.step("a
-b
-c" + cup(0, 0) + "M");
-		assert top.lines() == "
-a
-b";
+		assert s.step("1\n\x1bM\n");
+		assert s.lines() == "1\n\n";
+		assert top.step("a\nb\nc" + cup(0, 0) + "\x1bM");
+		assert top.lines() == "\na\nb";
 		s.close();
 		top.close();
 	}
@@ -230,19 +208,9 @@ test "output scrolls the screen and keeps the lines in scrollback" {
 	const s = open(1, 2);
 	assert s !== null;
 	if (s !== null) {
-		for (let i = 1; i <= 8; i++) { assert s.step(`${i}
-`); }
-		assert s.lines() == "8
-";
-		assert everything(s) == "1
-2
-3
-4
-5
-6
-7
-8
-";
+		for (let i = 1; i <= 8; i++) { assert s.step(`${i}\n`); }
+		assert s.lines() == "8\n";
+		assert everything(s) == "1\n2\n3\n4\n5\n6\n7\n8\n";
 		s.close();
 	}
 }
@@ -251,47 +219,17 @@ test "a region that starts on the first row pushes its top line into scrollback"
 	const s = open(1, 3);
 	assert s !== null;
 	if (s !== null) {
-		assert s.step("1
-2
-3
-4
-");
-		assert s.lines() == "3
-4
-";
-		assert everything(s) == "1
-2
-3
-4
-";
-		assert s.step(region(0, 1) + "z
-");
-		assert s.lines() == "z
-4
-";
-		assert s.step("a
-");
-		assert s.lines() == "a
-
-";
-		assert everything(s) == "1
-2
-z
-a
-
-";
-		assert s.step(cup(0, 1) + "W
-");
-		assert s.lines() == "W
-
-";
-		assert everything(s) == "1
-2
-z
-a
-W
-
-";
+		assert s.step("1\n2\n3\n4\n");
+		assert s.lines() == "3\n4\n";
+		assert everything(s) == "1\n2\n3\n4\n";
+		assert s.step(region(0, 1) + "z\n");
+		assert s.lines() == "z\n4\n";
+		assert s.step("a\n");
+		assert s.lines() == "a\n\n";
+		assert everything(s) == "1\n2\nz\na\n\n";
+		assert s.step(cup(0, 1) + "W\n");
+		assert s.lines() == "W\n\n";
+		assert everything(s) == "1\n2\nz\na\nW\n\n";
 		s.close();
 	}
 }
@@ -300,62 +238,19 @@ test "a region below the first row scrolls in place and never touches scrollback
 	const s = open(1, 5);
 	assert s !== null;
 	if (s !== null) {
-		assert s.step("1
-2
-3
-4
-5");
-		assert s.step(region(1, 2) + cup(0, 2) + "
-a");
-		assert s.lines() == "1
-3
-a
-4
-5";
-		assert everything(s) == "1
-3
-a
-4
-5";
-		assert s.step(region(0, 1) + cup(0, 1) + "
-b");
-		assert s.lines() == "3
-b
-a
-4
-5";
-		assert everything(s) == "1
-3
-b
-a
-4
-5";
-		assert s.step(cup(0, 1) + "[3M");
-		assert s.lines() == "3
-
-a
-4
-5";
-		assert everything(s) == "1
-3
-
-a
-4
-5";
-		assert s.step(region(0, 4) + cup(0, 4) + "
-X");
-		assert s.lines() == "
-a
-4
-5
-X";
-		assert everything(s) == "1
-3
-
-a
-4
-5
-X";
+		assert s.step("1\n2\n3\n4\n5");
+		assert s.step(region(1, 2) + cup(0, 2) + "\na");
+		assert s.lines() == "1\n3\na\n4\n5";
+		assert everything(s) == "1\n3\na\n4\n5";
+		assert s.step(region(0, 1) + cup(0, 1) + "\nb");
+		assert s.lines() == "3\nb\na\n4\n5";
+		assert everything(s) == "1\n3\nb\na\n4\n5";
+		assert s.step(cup(0, 1) + "\x1b[3M");
+		assert s.lines() == "3\n\na\n4\n5";
+		assert everything(s) == "1\n3\n\na\n4\n5";
+		assert s.step(region(0, 4) + cup(0, 4) + "\nX");
+		assert s.lines() == "\na\n4\n5\nX";
+		assert everything(s) == "1\n3\n\na\n4\n5\nX";
 		s.close();
 	}
 }
@@ -364,60 +259,19 @@ test "the alternate screen scrolls without scrollback and gives the main screen 
 	const s = open(1, 5);
 	assert s !== null;
 	if (s !== null) {
-		assert s.step("M
-o
-n
-k
-e
-y");
-		assert s.lines() == "o
-n
-k
-e
-y";
-		assert s.step("[?1049h1
-2
-3
-4
-5");
-		assert s.lines() == "1
-2
-3
-4
-5";
-		assert s.step(region(1, 2) + cup(0, 2) + "
-a");
-		assert s.lines() == "1
-3
-a
-4
-5";
-		assert s.step(region(0, 1) + cup(0, 1) + "
-b");
-		assert s.lines() == "3
-b
-a
-4
-5";
-		assert s.step(region(0, 4) + cup(0, 4) + "
-X");
-		assert s.lines() == "b
-a
-4
-5
-X";
-		assert s.step("[?1049l");
-		assert s.lines() == "o
-n
-k
-e
-y";
-		assert everything(s) == "M
-o
-n
-k
-e
-y";
+		assert s.step("M\no\nn\nk\ne\ny");
+		assert s.lines() == "o\nn\nk\ne\ny";
+		assert s.step("\x1b[?1049h1\n2\n3\n4\n5");
+		assert s.lines() == "1\n2\n3\n4\n5";
+		assert s.step(region(1, 2) + cup(0, 2) + "\na");
+		assert s.lines() == "1\n3\na\n4\n5";
+		assert s.step(region(0, 1) + cup(0, 1) + "\nb");
+		assert s.lines() == "3\nb\na\n4\n5";
+		assert s.step(region(0, 4) + cup(0, 4) + "\nX");
+		assert s.lines() == "b\na\n4\n5\nX";
+		assert s.step("\x1b[?1049l");
+		assert s.lines() == "o\nn\nk\ne\ny";
+		assert everything(s) == "M\no\nn\nk\ne\ny";
 		s.close();
 	}
 }
@@ -426,18 +280,39 @@ test "DECCOLM with mode 40 on resizes the terminal and the rows follow" {
 	const s = open(5, 5);
 	assert s !== null;
 	if (s !== null) {
-		assert s.step("ABCDE[?3l");
+		assert s.step("ABCDE\x1b[?3l");
 		assert s.raw(0).length == 5;
-		assert s.step("[?40h[?3l");
+		assert s.step("\x1b[?40h\x1b[?3l");
 		assert s.raw(0).length == 80;
-		assert s.lines() == "
-
-
-
-";
+		assert s.lines() == "\n\n\n\n";
 		assert cursorAt(s, 0, 0);
 		assert s.step("x");
 		assert s.text(0) == "x";
+		s.close();
+	}
+}
+
+function numbered(from: int32, to: int32): string {
+	let out = "";
+	for (let i = from; i <= to; i++) { out += `line ${i}\r\n`; }
+	return out;
+}
+
+test "a flood past the scrollback limit leaves the last rows right and the frames in step" {
+	const s = open(40, 24);
+	assert s !== null;
+	if (s !== null) {
+		const lines = 120000;
+		let at = 1;
+		while (at <= lines) {
+			const to = at + 3999 < lines ? at + 3999 : lines;
+			assert s.feedChunks(numbered(at, to), 0);
+			assert s.mismatch() == "";
+			at = to + 1;
+		}
+		let want = "";
+		for (let i = lines - 22; i <= lines; i++) { want += `line ${i}\n`; }
+		assert s.lines() == want;
 		s.close();
 	}
 }

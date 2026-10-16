@@ -99,23 +99,23 @@ test "with wraparound off a wide character that does not fit is dropped" {
 }
 
 test "a combining mark joins its base in text and in the cursor column" {
-	const s = run(5, 5, GRAPHEMES_ON + "ò");
+	const s = run(5, 5, GRAPHEMES_ON + "o\u{300}");
 	assert s !== null;
 	if (s !== null) {
-		assert s.text(0) == "ò";
+		assert s.text(0) == "o\u{300}";
 		assert cursorAt(s, 1, 0);
 		s.close();
 	}
-	const pending = run(2, 2, "xå̲");
+	const pending = run(2, 2, "xå\u{332}");
 	assert pending !== null;
 	if (pending !== null) {
-		assert pending.text(0) == "xå̲";
+		assert pending.text(0) == "xå\u{332}";
 		pending.close();
 	}
 }
 
 test "a zero-width joiner with nothing before it is ignored" {
-	const s = run(80, 4, "‍");
+	const s = run(80, 4, "\u{200D}");
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "";
@@ -125,7 +125,7 @@ test "a zero-width joiner with nothing before it is ignored" {
 }
 
 test "a family of emoji joined by ZWJ is one wide cell with grapheme clustering on, six cells off" {
-	const family = "\u{1F468}‍\u{1F469}‍\u{1F467}";
+	const family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
 	const on = run(80, 2, GRAPHEMES_ON + family);
 	const off = run(80, 2, family);
 	assert on !== null && off !== null;
@@ -160,8 +160,8 @@ test "a skin tone modifier joins an emoji base and stays apart from a quote" {
 }
 
 test "a flag, a ZWJ sequence with a variation selector and a Hangul jamo run keep every codepoint" {
-	const pirate = "\u{1F3F4}‍☠️";
-	const hangul = "한";
+	const pirate = "\u{1F3F4}\u{200D}☠\u{FE0F}";
+	const hangul = "ᄒ\u{1161}\u{11AB}";
 	const s = run(5, 2, GRAPHEMES_ON + pirate + "\r\n" + hangul);
 	const off = run(5, 2, pirate + "\r\n" + hangul);
 	assert s !== null && off !== null;
@@ -180,28 +180,28 @@ test "VS15 narrows a wide symbol back to one cell" {
 		const s = opened.value;
 		assert s.feed(GRAPHEMES_ON + "☔");
 		assert cursorAt(s, 2, 0);
-		assert s.feed("︎");
+		assert s.feed("\u{FE0E}");
 		assert cursorAt(s, 1, 0);
-		assert s.text(0) == "☔︎";
+		assert s.text(0) == "☔\u{FE0E}";
 		s.close();
 	}
 }
 
 test "VS16 widens a narrow symbol at the last column onto the next row" {
-	const s = run(3, 5, GRAPHEMES_ON + "\x1b[2C#️");
+	const s = run(3, 5, GRAPHEMES_ON + "\x1b[2C#\u{FE0F}");
 	assert s !== null;
 	if (s !== null) {
 		assert s.raw(0) == blanks(3);
-		assert s.text(1) == "#️";
+		assert s.text(1) == "#\u{FE0F}";
 		assert cursorAt(s, 2, 1);
 		s.close();
 	}
 }
 
 test "a Devanagari conjunct is one wide cell, also when it widens at the last column" {
-	const conjunct = "क्‍ष";
+	const conjunct = "क\u{94D}\u{200D}ष";
 	const plain = run(5, 5, GRAPHEMES_ON + conjunct);
-	const edge = run(3, 5, GRAPHEMES_ON + "\x1b[2Cक्‍ष");
+	const edge = run(3, 5, GRAPHEMES_ON + "\x1b[2Cक\u{94D}\u{200D}ष");
 	assert plain !== null && edge !== null;
 	if (plain !== null && edge !== null) {
 		assert plain.text(0) == conjunct;
@@ -215,10 +215,10 @@ test "a Devanagari conjunct is one wide cell, also when it widens at the last co
 }
 
 test "a cell keeps at most 64 marks after its base and the frame still paints" {
-	const s = run(10, 2, "A" + "́".repeat(100) + "B");
+	const s = run(10, 2, "A" + "\u{301}".repeat(100) + "B");
 	assert s !== null;
 	if (s !== null) {
-		assert s.text(0) == "A" + "́".repeat(64) + "B";
+		assert s.text(0) == "A" + "\u{301}".repeat(64) + "B";
 		assert s.sameAsFreshRead();
 		s.close();
 	}

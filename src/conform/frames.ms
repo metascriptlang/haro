@@ -4,10 +4,10 @@ import { Screen } from "./screen";
 const WORDS: string[] = ["a", "hello", "x1", "TEST", "abc def", "中", "\u{1F600}", "e\u{301}", "क\u{94D}ष", "\t", "\b", "  "];
 const SGRS: string[] = ["0", "1", "2", "3", "4", "4:3", "4:2", "7", "9", "22", "27", "31", "42", "93", "103", "38;5;200", "48;5;17", "38;2;10;200;30", "48;2;250;5;5", "39", "49"];
 const MODES: string[] = [
-	"[?7l", "[?7h", "[?6h", "[?6l", "[4h", "[4l", "[20h", "[20l",
-	"[?2027h", "[?2027l", "[?69h", "[?69l", "7", "8", "H", "[0g", "[3g",
-	"(0", "(B", "", "", "[!p", "c", "#8", "[?47h", "[?47l", "[?1047h", "[?1047l",
-	"[1;3s", "[?25l", "[?25h", "[?2004h", "[0;1;2;3;4;7;9m",
+	"\x1b[?7l", "\x1b[?7h", "\x1b[?6h", "\x1b[?6l", "\x1b[4h", "\x1b[4l", "\x1b[20h", "\x1b[20l",
+	"\x1b[?2027h", "\x1b[?2027l", "\x1b[?69h", "\x1b[?69l", "\x1b7", "\x1b8", "\x1bH", "\x1b[0g", "\x1b[3g",
+	"\x1b(0", "\x1b(B", "\x0e", "\x0f", "\x1b[!p", "\x1bc", "\x1b#8", "\x1b[?47h", "\x1b[?47l", "\x1b[?1047h", "\x1b[?1047l",
+	"\x1b[1;3s", "\x1b[?25l", "\x1b[?25h", "\x1b[?2004h", "\x1b[0;1;2;3;4;7;9m",
 ];
 const ERASES: string[] = ["J", "0J", "1J", "2J", "K", "0K", "1K", "2K"];
 
@@ -146,9 +146,7 @@ function playWithViewportAndResize(seed: int32, ops: int32): string {
 	}
 	if (failure != "") {
 		console.log(`frames: seed ${seed} viewport and resize: ${failure}`);
-		console.log(`frames: bytes ${sent.replaceAll("", "<ESC>").replaceAll("
-", "<CR>").replaceAll("
-", "<LF>")}`);
+		console.log(`frames: bytes ${sent.replaceAll("\x1b", "<ESC>").replaceAll("\r", "<CR>").replaceAll("\n", "<LF>")}`);
 	}
 	s.close();
 	return failure;

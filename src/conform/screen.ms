@@ -140,8 +140,7 @@ export function history(this s: Screen): Vec<string> | null {
 export function joined(lines: Vec<string>): string {
 	let out = "";
 	for (let i = 0; i < (lines.length as int32); i++) {
-		if (i > 0) { out += "
-"; }
+		if (i > 0) { out += "\n"; }
 		out += lines[i];
 	}
 	return out;

@@ -37,9 +37,9 @@ export function palettePrelude(own: boolean): string {
 	let out = "";
 	for (let n = 0; own && n < 256; n++) {
 		const c = ownIndexed(n);
-		out += `]4;${n};rgb:${hex2(c.r as int32)}/${hex2(c.g as int32)}/${hex2(c.b as int32)}`;
+		out += `\x1b]4;${n};rgb:${hex2(c.r as int32)}/${hex2(c.g as int32)}/${hex2(c.b as int32)}\x07`;
 	}
-	out += `]10;rgb:${hex2(DEFAULT_FG.r as int32)}/${hex2(DEFAULT_FG.g as int32)}/${hex2(DEFAULT_FG.b as int32)}`;
-	out += `]11;rgb:${hex2(DEFAULT_BG.r as int32)}/${hex2(DEFAULT_BG.g as int32)}/${hex2(DEFAULT_BG.b as int32)}`;
+	out += `\x1b]10;rgb:${hex2(DEFAULT_FG.r as int32)}/${hex2(DEFAULT_FG.g as int32)}/${hex2(DEFAULT_FG.b as int32)}\x07`;
+	out += `\x1b]11;rgb:${hex2(DEFAULT_BG.r as int32)}/${hex2(DEFAULT_BG.g as int32)}/${hex2(DEFAULT_BG.b as int32)}\x07`;
 	return out;
 }

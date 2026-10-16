@@ -52,3 +52,48 @@ test "known bug: a new default colour (OSC 10, OSC 11, DECSCNM) does not repaint
 		reverse.close();
 	}
 }
+
+function red(s: Screen, y: int32, from: int32, units: int32): boolean {
+	let at = 0;
+	for (const r of s.runs(y)) {
+		if (at == from) {
+			return r.units == units && r.bg.r == 255 && r.bg.g == 0 && r.bg.b == 0;
+		}
+		at += r.units;
+	}
+	return false;
+}
+
+test "erasing, inserting and deleting fill the vacated cells with the current background" {
+	const index = open(5, 5);
+	const ech = open(10, 10);
+	const ich = open(10, 10);
+	const el = open(5, 5);
+	const ed = open(5, 5);
+	const dl = open(5, 5);
+	const bg = "\x1b[48;2;255;0;0m";
+	assert index !== null && ech !== null && ich !== null && el !== null && ed !== null && dl !== null;
+	if (index !== null && ech !== null && ich !== null && el !== null && ed !== null && dl !== null) {
+		assert index.step("\x1b[5;1HA" + bg + "\x1bD");
+		assert index.lines() == "\n\n\nA\n";
+		assert red(index, 4, 0, 5);
+		assert ech.step("ABC\x1b[1;1H" + bg + "\x1b[2X");
+		assert ech.text(0) == "  C" && red(ech, 0, 0, 2);
+		assert ich.step("ABC\x1b[1;1H" + bg + "\x1b[2@");
+		assert ich.text(0) == "  ABC" && red(ich, 0, 0, 2);
+		assert el.step("ABCDE\x1b[1;2H" + bg + "\x1b[K");
+		assert el.text(0) == "A" && red(el, 0, 1, 4);
+		assert ed.step("ABC\r\nDEF\r\nGHI\x1b[2;2H" + bg + "\x1b[J");
+		assert ed.lines() == "ABC\nD\n\n\n";
+		assert red(ed, 1, 1, 4) && red(ed, 2, 0, 5) && red(ed, 4, 0, 5);
+		assert dl.step("ABC\r\nDEF\r\nGHI\x1b[2;2H" + bg + "\x1b[M");
+		assert dl.lines() == "ABC\nGHI\n\n\n";
+		assert red(dl, 4, 0, 5);
+		index.close();
+		ech.close();
+		ich.close();
+		el.close();
+		ed.close();
+		dl.close();
+	}
+}

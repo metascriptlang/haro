@@ -44,3 +44,11 @@ alacritty/saved_cursor_alt	not ported: references disagree	~/projects/ghostty/sr
 alacritty/selective_erasure	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:15433 test eraseDisplay protected complete	22fa134a0	libghostty honours DECSCA and CSI ? 2 J (leaves the protected B); the Alacritty recording expects ABC, so Alacritty ignores them
 alacritty/vttest_cursor_movement_1	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:4003 deccolm	22fa134a0	vttest switches to 80 columns with mode 40 on: libghostty resizes, Alacritty keeps 105
 alacritty/vttest_insert	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:4003 deccolm	22fa134a0	same as vttest_cursor_movement_1
+ghostty/sgr 8 colours	ported	~/projects/ghostty/src/terminal/sgr.zig:761; palette ~/projects/ghostty/src/terminal/color.zig:495-513	22fa134a0	SGR 30-37, 40-47, 90-97, 100-107 against the default palette; src/conform/sgr.ms
+ghostty/sgr 256 colours	ported	~/projects/ghostty/src/terminal/sgr.zig:789; cube and grey ramp ~/projects/ghostty/src/terminal/color.zig:20-37	22fa134a0	src/conform/sgr.ms
+ghostty/sgr truecolour and colour space	ported	~/projects/ghostty/src/terminal/sgr.zig:883	22fa134a0	colon form skips the optional colour space id, semicolon form does not; src/conform/sgr.ms
+ghostty/sgr bold, italic, strikethrough, resets	ported	~/projects/ghostty/src/terminal/sgr.zig:614,626,749	22fa134a0	src/conform/sgr.ms
+ghostty/sgr underline kinds	ported	~/projects/ghostty/src/terminal/sgr.zig:638,651,312,318	22fa134a0	4, 4:0..4:5, 21, 24; the wavy-only span mapping is Haro's (docs/VISION.md, straight and wavy); src/conform/sgr.ms
+ghostty/sgr colon overflow	ported	~/projects/ghostty/src/terminal/sgr.zig:689,704,939	22fa134a0	a parameter with too many colons is unknown and the next one applies; src/conform/sgr.ms
+ghostty/inverse	ported	~/projects/ghostty/src/renderer/generic.zig:3174; ~/projects/alacritty/alacritty/src/display/content.rs:214	22fa134a0 / 29dc5537	fg and bg swap; src/conform/sgr.ms
+ghostty/faint	ported	~/projects/ghostty/src/renderer/generic.zig:670,3182; ~/projects/ghostty/src/config/Config.zig:3927	22fa134a0	faint-opacity 0.5 blends fg into bg, compared within one channel step; src/conform/sgr.ms

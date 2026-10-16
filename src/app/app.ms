@@ -4,7 +4,7 @@ import { NeonEvent } from "../../../neon/src/render/event";
 import { Accessor, createSignal } from "../../../neon/src/core/signal";
 import { ForList } from "../../../neon/src/macros/ui/flow";
 import { PixelRatio } from "../../../neon/src/api/pixelRatio";
-import { Void, View, Text } from "../../../neon/src/components/primitives";
+import { Void, View, Text, ViewHandle } from "../../../neon/src/components/primitives";
 import { addFont } from "../../../void/src/void2d/font";
 import { Align, TextLayout } from "../../../void/src/void2d/textLayout";
 import { RowSlot } from "./frame";
@@ -143,6 +143,7 @@ export function App(t: Term, cell: Cell, entry: Entry): NeonNode {
 			<View
 				style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, pointerEvents: "box-only" }}
 				focusable
+				ref={(h: ViewHandle): void => { h.focus(); }}
 				imeRect={{
 					x: cursorCol() * cellWidth(),
 					y: cursorRow() * rowHeight(),

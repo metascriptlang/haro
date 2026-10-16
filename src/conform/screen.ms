@@ -50,6 +50,13 @@ export function feed(this s: Screen, bytes: string): boolean {
 	return s.paint();
 }
 
+export function feedBytes(this s: Screen, values: int32[]): boolean {
+	let bytes: Vec<uint8> = new Array(values.length);
+	for (let i = 0; i < values.length; i++) { bytes[i] = values[i] as uint8; }
+	s.vt.write(bytes);
+	return s.paint();
+}
+
 export function step(this s: Screen, bytes: string): boolean {
 	return s.feed(bytes) && s.sameAsFreshRead();
 }

@@ -290,3 +290,18 @@ test "DEC special graphics maps the line-drawing range, SO and SI switch sets" {
 		shifted.close();
 	}
 }
+
+test "bytes that are not UTF-8 show as replacement characters and the text after them is intact" {
+	const opened = Screen.open(20, 2);
+	assert opened.ok;
+	if (opened.ok) {
+		const s = opened.value;
+		assert s.feedBytes([0xF0, 0x9F, 0xF0, 0x9F, 0x98, 0x84, 0xED, 0xA0, 0x80, 0x61]);
+		assert s.text(0) == "\uFFFD\u{1F604}\uFFFD\uFFFD\uFFFDa";
+		assert s.feedBytes([0xFF, 0x62, 0xC3]);
+		assert s.feedBytes([0xA9]);
+		assert s.text(0) == "\uFFFD\u{1F604}\uFFFD\uFFFD\uFFFDa\uFFFDb\u00e9";
+		assert s.mismatch() == "";
+		s.close();
+	}
+}

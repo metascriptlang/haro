@@ -371,3 +371,74 @@ test "a drawing character set, a hidden cursor and a reset before a wrap do not 
 		reset.close();
 	}
 }
+
+test "C0 controls move the cursor without writing: BS, LF, CR and tab stops" {
+	const bs = open(4, 3);
+	const lf = open(10, 3);
+	const cr = open(10, 3);
+	const tab = open(25, 3);
+	assert bs !== null && lf !== null && cr !== null && tab !== null;
+	if (bs !== null && lf !== null && cr !== null && tab !== null) {
+		assert bs.step("\b") && cursorAt(bs, 0, 0);
+		assert bs.step("ab\b") && cursorAt(bs, 1, 0);
+		assert lf.step("hello\n") && cursorAt(lf, 5, 1);
+		assert cr.step("hello\r") && cursorAt(cr, 0, 0);
+		assert tab.step("\t") && cursorAt(tab, 8, 0);
+		assert tab.step("\t") && cursorAt(tab, 16, 0);
+		assert tab.step("\t") && cursorAt(tab, 24, 0);
+		assert tab.step("\t") && cursorAt(tab, 24, 0);
+		bs.close();
+		lf.close();
+		cr.close();
+		tab.close();
+	}
+}
+
+test "IND and NEL scroll at the bottom, NEL also returns to the first column" {
+	const ind = open(4, 4);
+	const nel = open(4, 4);
+	assert ind !== null && nel !== null;
+	if (ind !== null && nel !== null) {
+		assert ind.step("a\r\nb\x1bD") && cursorAt(ind, 1, 2);
+		assert ind.lines() == "a\nb\n\n";
+		assert ind.step("\x1bD") && cursorAt(ind, 1, 3);
+		assert ind.step("\x1bD") && cursorAt(ind, 1, 3);
+		assert ind.lines() == "b\n\n\n";
+		assert nel.step("a\r\nb\x1bE") && cursorAt(nel, 0, 2);
+		assert nel.step("\x1bE\x1bE") && cursorAt(nel, 0, 3);
+		assert nel.lines() == "b\n\n\n";
+		ind.close();
+		nel.close();
+	}
+}
+
+test "RI moves up one row at a time and scrolls the rows down at the top" {
+	const s = open(2, 4);
+	assert s !== null;
+	if (s !== null) {
+		assert s.step("a\r\nb\r\nc\r\nd.");
+		assert s.lines() == "a\nb\nc\nd." && cursorAt(s, 1, 3);
+		assert s.step("\x1bM") && cursorAt(s, 1, 2);
+		assert s.step("\x1bM") && cursorAt(s, 1, 1);
+		assert s.step("\x1bM") && cursorAt(s, 1, 0);
+		assert s.step("\x1bM") && cursorAt(s, 1, 0);
+		assert s.lines() == "\na\nb\nc";
+		s.close();
+	}
+}
+
+test "a tab stop set with HTS is dropped when the column count changes" {
+	const s = open(25, 3);
+	assert s !== null;
+	if (s !== null) {
+		assert s.step("boo\x1bH\r\n") && cursorAt(s, 0, 1);
+		assert s.step("\t") && cursorAt(s, 3, 1);
+		assert s.step("\t") && cursorAt(s, 8, 1);
+		assert s.resize(80, 4) && s.mismatch() == "";
+		assert s.step(cup(0, 1) + "\t") && cursorAt(s, 8, 1);
+		assert s.step("\t") && cursorAt(s, 16, 1);
+		assert s.step("\t") && cursorAt(s, 24, 1);
+		assert s.step("\t") && cursorAt(s, 32, 1);
+		s.close();
+	}
+}

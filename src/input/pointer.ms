@@ -24,6 +24,10 @@ export function spotAt(x: float64, y: float64, cellWidth: float64, rowHeight: fl
 	return { col: Math.max(0, Math.min(col, cols - 1)), row: Math.max(0, Math.min(row, rows - 1)) };
 }
 
+export function claimsMouse(tracking: boolean, shift: boolean): boolean {
+	return tracking && !shift;
+}
+
 export function selected(this p: Pointer): boolean {
 	const sel = p.sel;
 	return sel !== null && !sel.collapsed();
@@ -294,4 +298,11 @@ test "a selection the terminal let go of is dropped here too" {
 		assert !p.dragging;
 		vt.free();
 	}
+}
+
+test "an app that tracks the mouse owns it unless shift is held" {
+	assert claimsMouse(true, false);
+	assert !claimsMouse(true, true);
+	assert !claimsMouse(false, false);
+	assert !claimsMouse(false, true);
 }

@@ -38,6 +38,7 @@ export interface Held {
 export const LARGE_UNITS: int32 = 5 * 1024;
 const END_MARKER = "\x1b[201~";
 const TAB = "    ";
+const ASK_BODY = "A program is attempting to read from the clipboard. The current clipboard contents are shown below.";
 
 export function warningFor(text: string, bracketed: boolean): Warning {
 	if (text.indexOf(END_MARKER) >= 0) { return Warning.EndMarker; }
@@ -51,6 +52,14 @@ export function replyTo(code: string, mods: number): Reply {
 	if (code == "Escape" && held == 0) { return Reply.Cancel; }
 	if ((code == "Enter" || code == "NumpadEnter") && held == 0) { return Reply.Confirm; }
 	if (resolve(code, mods, false) == Action.Paste) { return Reply.Confirm; }
+	return Reply.Ignore;
+}
+
+export function replyToRead(code: string, mods: number): Reply {
+	const held = (mods as int32) & 15;
+	if (code == "Escape" && held == 0) { return Reply.Cancel; }
+	if ((code == "Enter" || code == "NumpadEnter") && held == 0) { return Reply.Cancel; }
+	if ((code == "Enter" || code == "NumpadEnter") && held == 2) { return Reply.Confirm; }
 	return Reply.Ignore;
 }
 
@@ -112,19 +121,37 @@ function body(warning: Warning): string {
 	};
 }
 
-export function dialogOf(warning: Warning, text: string, cols: int32, maxCode: int32): Dialog {
-	const all = text.split("\n");
+export function previewOf(text: string, cols: int32, maxCode: int32): Vec<Line> {
+	const all = text.split("
+");
 	const total = all.length as int32;
-	let top: Vec<Line> = [{ text: title(warning), tone: Tone.Title }];
-	for (const row of wrap(body(warning), cols)) { top.push({ text: row, tone: Tone.Body }); }
-	const count = total == 1 ? "1 line" : `${total} lines`;
-	top.push({ text: `${count}, ${sizeOf(text.length as int32)}`, tone: Tone.Dim });
 	let code: Vec<Line> = [];
 	const shown = Math.min(total, maxCode);
 	for (let i = 0; i < shown; i++) { code.push({ text: visible(all[i], cols), tone: Tone.Code }); }
 	const more = total - shown;
 	if (more > 0) { code.push({ text: more == 1 ? "… 1 more line" : `… ${more} more lines`, tone: Tone.Dim }); }
-	return { top: top, code: code };
+	return code;
+}
+
+function measure(text: string): string {
+	const total = text.split("
+").length as int32;
+	const count = total == 1 ? "1 line" : `${total} lines`;
+	return `${count}, ${sizeOf(text.length as int32)}`;
+}
+
+export function dialogOf(warning: Warning, text: string, cols: int32, maxCode: int32): Dialog {
+	let top: Vec<Line> = [{ text: title(warning), tone: Tone.Title }];
+	for (const row of wrap(body(warning), cols)) { top.push({ text: row, tone: Tone.Body }); }
+	top.push({ text: measure(text), tone: Tone.Dim });
+	return { top: top, code: previewOf(text, cols, maxCode) };
+}
+
+export function askDialogOf(text: string, cols: int32, maxCode: int32): Dialog {
+	let top: Vec<Line> = [{ text: "Authorize clipboard access", tone: Tone.Title }];
+	for (const row of wrap(ASK_BODY, cols)) { top.push({ text: row, tone: Tone.Body }); }
+	top.push({ text: measure(text), tone: Tone.Dim });
+	return { top: top, code: previewOf(text, cols, maxCode) };
 }
 
 function line(text: string, tone: Tone): Line {
@@ -209,4 +236,22 @@ test "a preview that fits shows no more-lines row and a large text says its size
 	const many = dialogOf(Warning.MultiLine, "a\nb\nc\nd\ne\nf\ng\nh\ni\nj", 30, 8);
 	assert many.code.length == 9;
 	assert many.code[8].text == "… 2 more lines";
+}
+
+test "a clipboard read is denied by escape or enter and allowed only by ctrl enter" {
+	assert replyToRead("Escape", 0) == Reply.Cancel;
+	assert replyToRead("Enter", 0) == Reply.Cancel;
+	assert replyToRead("NumpadEnter", 0) == Reply.Cancel;
+	assert replyToRead("Enter", 2) == Reply.Confirm;
+	assert replyToRead("Enter", 3) == Reply.Ignore;
+	assert replyToRead("KeyV", 3) == Reply.Ignore;
+	assert replyToRead("KeyY", 0) == Reply.Ignore;
+}
+
+test "the read dialog names the access, says how big the clipboard is and previews it" {
+	const d = askDialogOf("secret\ntoken", 40, 8);
+	assert d.top[0] == line("Authorize clipboard access", Tone.Title);
+	assert d.top[d.top.length - 1] == line("2 lines, 12 characters", Tone.Dim);
+	assert d.code.length == 2;
+	assert d.code[1] == line("token", Tone.Code);
 }

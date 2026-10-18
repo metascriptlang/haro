@@ -64,6 +64,8 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	const [foreground, setForeground] = createSignal<string>(hexOf(started.foreground));
 	let notice = "";
 	const [noticed, setNoticed] = createSignal<boolean>(false);
+	const [preedit, setPreedit] = createSignal<string>("");
+	const [composing, setComposing] = createSignal<boolean>(false);
 	const noticeRows = createList<string>([]);
 	let themed = false;
 
@@ -352,7 +354,13 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		if (sent.value > 0) { afterInput(); }
 	};
 
+	const compose = (text: string): void => {
+		setPreedit(text);
+		setComposing(text != "");
+	};
+
 	const committed = (e: NeonEvent): void => {
+		compose("");
 		if (controls.holding()) { return; }
 		const sent = t.sendText(e.text);
 		if (!sent.ok) {
@@ -501,6 +509,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 				onLayout={layout}
 				onKeyDown={typed}
 				onTextInput={committed}
+				onPreedit={(e: NeonEvent): void => { compose(e.text); }}
 				onPointerDown={pressed}
 				onPointerMove={dragged}
 				onPointerUp={released}
@@ -510,6 +519,22 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 				{ForList<RowSlot>({ each: t.grid, children: lineRow })}
 				{ForList<Block>({ each: shades, children: shadeBox })}
 				{ForList<Box>({ each: cursorBoxes, children: cursorBox })}
+				{Show({
+					when: composing,
+					children: element(
+						<View
+							style={{
+								position: "absolute", left: cursorCol() * cellWidth(), top: cursorRow() * rowHeight(),
+								backgroundColor: background(), pointerEvents: "none",
+							}}>
+							<Text
+								style={{ fontSize: fontSize, color: foreground(), height: rowHeight(), textDecorationLine: "underline" }}
+								cellWidth={cellWidth()}>
+								{preedit()}
+							</Text>
+						</View>
+					),
+				})}
 			</View>
 			{PasteDialog(dialog, look)}
 			{Show({

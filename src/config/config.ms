@@ -1,11 +1,12 @@
 import { JSON, JsonKind, JsonValue } from "std/core/json";
-import { Rgb } from "../vt/vt";
+import { Rgb, SCROLLBACK_LINES } from "../vt/vt";
 import { Keybind, keybind } from "../input/bindings";
 
 export interface Config {
 	fontFamily: string | null;
 	fontSize: number;
 	command: string;
+	scrollback: int64;
 	foreground: Rgb;
 	background: Rgb;
 	palette: Vec<Rgb>;
@@ -15,12 +16,14 @@ export interface Config {
 const SCREEN_DPI: number = 96;
 const POINTS_PER_INCH: number = 72;
 const PALETTE_SIZE = 256;
+const MAX_SCROLLBACK: int64 = 100000;
 
 export function defaults(): Config {
 	return {
 		fontFamily: null,
 		fontSize: 10.5,
 		command: "pwsh.exe -NoLogo",
+		scrollback: SCROLLBACK_LINES,
 		foreground: { r: 204, g: 204, b: 204 },
 		background: { r: 12, g: 12, b: 12 },
 		palette: [],
@@ -106,6 +109,12 @@ export function parse(json: string): Result<Config, string> {
 				if (c.fontSize <= 0) { return Result.err(`fontSize ${c.fontSize} must be above 0`); }
 			},
 			"command" => { c.command = try text(v, key); },
+			"scrollback" => {
+				if (v.kind != JsonKind.Int || v.intVal < 0 || v.intVal > MAX_SCROLLBACK) {
+					return Result.err(`scrollback must be a whole number of lines from 0 to ${MAX_SCROLLBACK}`);
+				}
+				c.scrollback = v.intVal;
+			},
 			"foreground" => { c.foreground = try color(v, key); },
 			"background" => { c.background = try color(v, key); },
 			"palette" => {
@@ -136,13 +145,14 @@ test "an empty config keeps every default" {
 	assert c.value.fontSize == 10.5;
 	assert c.value.fontPx() == 14;
 	assert c.value.command == "pwsh.exe -NoLogo";
+	assert c.value.scrollback == SCROLLBACK_LINES;
 	assert c.value.palette.length == 0;
 	assert c.value.keybinds.length == 0;
 }
 
 test "the fields a config gives replace the defaults" {
 	const c = parse(
-		`{"fontFamily":"Operator Saigon","fontSize":10.8,"command":"cmd.exe","background":"#1a1b26",` +
+		`{"fontFamily":"Operator Saigon","fontSize":10.8,"command":"cmd.exe","scrollback":50000,"background":"#1a1b26",` +
 			`"foreground":"#A9B1D6","palette":["#32344a","#f7768e"],` +
 			`"keybinds":[{"keys":"shift+enter","text":"\\u001b[13;2u"}]}`,
 	);
@@ -150,6 +160,7 @@ test "the fields a config gives replace the defaults" {
 	assert c.value.fontFamily == "Operator Saigon";
 	assert c.value.fontSize == 10.8;
 	assert c.value.command == "cmd.exe";
+	assert c.value.scrollback == 50000;
 	const background: Rgb = { r: 26, g: 27, b: 38 };
 	const foreground: Rgb = { r: 169, g: 177, b: 214 };
 	const red: Rgb = { r: 247, g: 118, b: 142 };
@@ -173,5 +184,7 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"keybinds":[{"keys":"a","txt":"x"}]}`) ==
 		`keybinds[0]: unknown field "txt", expected keys and text`;
 	assert refusal(`{"keybinds":[{"keys":"a"}]}`) == "keybinds[0] must give both keys and text";
+	assert refusal(`{"scrollback":100001}`) == "scrollback must be a whole number of lines from 0 to 100000";
+	assert refusal(`{"scrollback":1.5}`) == "scrollback must be a whole number of lines from 0 to 100000";
 	assert refusal("[]") == "config must be an object";
 }

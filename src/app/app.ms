@@ -226,11 +226,13 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		setNoticed(text != "");
 	}
 
-	function theme(): boolean {
+	function applySettings(): boolean {
 		const s = t.session;
 		if (s === null) { return true; }
-		if (!s.vt.setDefaultColors(settings.foreground, settings.background).ok || !s.vt.setPalette(settings.palette).ok) {
-			entry.fail("the configured colours were refused");
+		const vt = s.vt;
+		if (!vt.setDefaultColors(settings.foreground, settings.background).ok || !vt.setPalette(settings.palette).ok
+			|| !vt.setScrollback(settings.scrollback).ok) {
+			entry.fail("the terminal refused the configured colours or scrollback");
 			return false;
 		}
 		return true;
@@ -244,7 +246,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		settings = c;
 		controls.keybinds = c.keybinds;
 		showNotice(restartNeeded(c, started) ? "config.ms: fontFamily, fontSize and command apply when Haro restarts" : "");
-		if (themed && theme()) { refresh(); }
+		if (themed && applySettings()) { refresh(); }
 	});
 
 	entry.onWake((): void => {
@@ -313,7 +315,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		}
 		if (!themed) {
 			themed = true;
-			if (!theme()) { return; }
+			if (!applySettings()) { return; }
 		}
 		if (fitted.value) { refresh(); }
 	};

@@ -112,6 +112,7 @@ extern function vtSetDefaultColors(
 	bgG: int32,
 	bgB: int32,
 ): int32;
+extern function vtSetPalette(terminal: GhosttyTerminal, rgb: Readonly<Span<uint8>>): int32;
 extern function vtSetPullScrollback(terminal: GhosttyTerminal, pull: int32): int32;
 extern function vtLinkAt(terminal: GhosttyTerminal, x: int32, y: int32, buf: Span<uint8>): int64;
 extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
@@ -439,6 +440,18 @@ export function setDefaultColors(this vt: Vt, fg: Rgb, bg: Rgb): Result<Vt, VtEr
 		vt.terminal, fg.r as int32, fg.g as int32, fg.b as int32, bg.r as int32, bg.g as int32, bg.b as int32,
 	);
 	if (set != 0) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(vt);
+}
+
+export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<Vt, VtError> {
+	let rgb: Vec<uint8> = [];
+	for (const c of colors) {
+		rgb.push(c.r);
+		rgb.push(c.g);
+		rgb.push(c.b);
+	}
+	if (vtSetPalette(vt.terminal, rgb) != 0) { return Result.err(VtError.ReadFailed); }
+	vt.painted.rows = [];
 	return Result.ok(vt);
 }
 

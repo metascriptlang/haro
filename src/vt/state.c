@@ -25,6 +25,23 @@ int vtSetDefaultColors(GhosttyTerminal terminal, int fgR, int fgG, int fgB, int 
 	return 0;
 }
 
+/* The built-in palette with its first count/3 entries replaced by the rgb triples, as the colours a
+   program's SGR 30-37, 90-97 and 38;5 indices name. */
+int vtSetPalette(GhosttyTerminal terminal, const uint8_t* rgb, int64_t count) {
+	if (count % 3 != 0 || count / 3 > 256) return -1;
+	GhosttyColorRgb palette[256];
+	if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, NULL) != GHOSTTY_SUCCESS
+		|| ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_COLOR_PALETTE_DEFAULT, palette) != GHOSTTY_SUCCESS) {
+		return -1;
+	}
+	for (int64_t i = 0; i < count / 3; i++) {
+		palette[i].r = rgb[i * 3];
+		palette[i].g = rgb[i * 3 + 1];
+		palette[i].b = rgb[i * 3 + 2];
+	}
+	return ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palette) == GHOSTTY_SUCCESS ? 0 : -1;
+}
+
 int vtSetPullScrollback(GhosttyTerminal terminal, int pull) {
 	bool on = pull != 0;
 	return ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_RESIZE_PULL_SCROLLBACK, &on) == GHOSTTY_SUCCESS ? 0 : -1;

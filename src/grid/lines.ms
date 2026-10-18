@@ -91,6 +91,13 @@ export function line(this row: Row, cursorCell: int32): Result<GridLine, GridErr
 			pushUnits(runs, run, 1);
 			continue;
 		}
+		if (cell.flags.has(CellFlag.Invisible)) {
+			const blank = cell.flags.has(CellFlag.Wide) ? "  " : " ";
+			text += blank;
+			pushUnits(runs, { ...run, underline: Underline.None, strikethrough: false }, blank.length as int32);
+			extra += cell.extra as int32;
+			continue;
+		}
 		let cps: Vec<uint32> = [cell.cp];
 		for (let k = 0; k < (cell.extra as int32); k++) { cps.push(row.extra[extra + k]); }
 		extra += cell.extra as int32;
@@ -239,6 +246,31 @@ test "strikethrough is part of the run" {
 			if (line.ok) {
 				assert line.value.runs[0].strikethrough;
 				assert !line.value.runs[1].strikethrough;
+			}
+		}
+		vt.free();
+	}
+}
+
+test "a concealed cell keeps its background and draws no text or line, as xterm does" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("[8;4;9;41mab[0mc[8m中");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const line = rows.value[0].line(-1);
+			assert line.ok;
+			if (line.ok) {
+				assert line.value.text.startsWith("  c   ");
+				const hidden = line.value.runs[0];
+				assert hidden.units == 2;
+				assert hidden.underline == Underline.None;
+				assert !hidden.strikethrough;
+				assert hidden.bg != line.value.runs[1].bg;
 			}
 		}
 		vt.free();

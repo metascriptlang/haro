@@ -43,9 +43,10 @@ const PREVIEW_ROWS: int32 = 8;
 
 const SCRIM = "#000000";
 const FRAME = "#3f3f3f";
+const RADIUS: number = 6;
+const SHADOW = "0 8px 24px rgba(0, 0, 0, 0.55)";
 const CARD = "#1c1c1c";
 const WELL = "#0c0c0c";
-const ACCENT = "#c19c00";
 const TEXT = "#cccccc";
 const WARNING = "#f9f1a5";
 const DIM = "#7a7a7a";
@@ -176,41 +177,38 @@ export function PasteDialog(v: PasteView, look: Look): NeonNode {
 						position: "absolute", left: 0, top: 0, right: 0, bottom: 0,
 						alignItems: "center", justifyContent: "center",
 					}}>
-					<View style={{ backgroundColor: FRAME, padding: 1 }}>
-						<View style={{ backgroundColor: ACCENT, height: 3 }} />
-						<View
-							style={{
-								backgroundColor: CARD, padding: PADDING, gap: 12,
-								width: v.cols() * look.cellWidth() + 2 * PADDING,
-							}}>
-							{ForList<Shown>({ each: v.top, children: row })}
-							<View style={{ backgroundColor: FRAME, padding: 1 }}>
-								<View style={{ backgroundColor: WELL, padding: 8 }}>
-									{ForList<Shown>({ each: v.code, children: row })}
-								</View>
-							</View>
-							<View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 12 }}>
-								<Pressable
-									style={{
-										backgroundColor: cancelHeld() ? SECONDARY_HELD : SECONDARY,
-										paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6,
-									}}
-									onPressIn={(): void => { setCancelHeld(true); }}
-									onPressOut={(): void => { setCancelHeld(false); }}
-									onPress={(): void => { look.onCancel(); }}>
-									{label(v.cancelLabel, CANCEL_STYLE)}
-								</Pressable>
-								<Pressable
-									style={{
-										backgroundColor: confirmHeld() ? PRIMARY_HELD : PRIMARY,
-										paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6,
-									}}
-									onPressIn={(): void => { setConfirmHeld(true); }}
-									onPressOut={(): void => { setConfirmHeld(false); }}
-									onPress={(): void => { look.onConfirm(); }}>
-									{label(v.confirmLabel, CONFIRM_STYLE)}
-								</Pressable>
-							</View>
+					<View
+						style={{
+							backgroundColor: CARD, padding: PADDING, gap: 12,
+							width: v.cols() * look.cellWidth() + 2 * PADDING + 2,
+							borderWidth: 1, borderColor: FRAME, borderRadius: RADIUS,
+							boxShadow: SHADOW,
+						}}>
+						{ForList<Shown>({ each: v.top, children: row })}
+						<View style={{ backgroundColor: WELL, padding: 8, borderWidth: 1, borderColor: FRAME, borderRadius: RADIUS }}>
+							{ForList<Shown>({ each: v.code, children: row })}
+						</View>
+						<View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 12 }}>
+							<Pressable
+								style={{
+									backgroundColor: cancelHeld() ? SECONDARY_HELD : SECONDARY,
+									paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6, borderRadius: 4,
+								}}
+								onPressIn={(): void => { setCancelHeld(true); }}
+								onPressOut={(): void => { setCancelHeld(false); }}
+								onPress={(): void => { look.onCancel(); }}>
+								{label(v.cancelLabel, CANCEL_STYLE)}
+							</Pressable>
+							<Pressable
+								style={{
+									backgroundColor: confirmHeld() ? PRIMARY_HELD : PRIMARY,
+									paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6, borderRadius: 4,
+								}}
+								onPressIn={(): void => { setConfirmHeld(true); }}
+								onPressOut={(): void => { setConfirmHeld(false); }}
+								onPress={(): void => { look.onConfirm(); }}>
+								{label(v.confirmLabel, CONFIRM_STYLE)}
+							</Pressable>
 						</View>
 					</View>
 				</View>

@@ -10,6 +10,7 @@ export struct LineRun {
 	fg: Rgb;
 	bg: Rgb;
 	underline: Underline;
+	underlineColor: Rgb | null;
 	bold: boolean;
 	italic: boolean;
 	strikethrough: boolean;
@@ -25,6 +26,7 @@ function sameStyle(this a: LineRun, b: LineRun): boolean {
 	return a.fg == b.fg &&
 		a.bg == b.bg &&
 		a.underline == b.underline &&
+		a.underlineColor == b.underlineColor &&
 		a.bold == b.bold &&
 		a.italic == b.italic &&
 		a.strikethrough == b.strikethrough;
@@ -49,6 +51,7 @@ function lineRun(this cell: Cell): LineRun {
 		fg: cell.flags.has(CellFlag.Faint) ? faded(fg, bg) : fg,
 		bg: bg,
 		underline: cell.underline,
+		underlineColor: cell.underlineColor,
 		bold: cell.flags.has(CellFlag.Bold),
 		italic: cell.flags.has(CellFlag.Italic),
 		strikethrough: cell.flags.has(CellFlag.Strikethrough),

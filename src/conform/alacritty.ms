@@ -58,6 +58,7 @@ function expectedRuns(line: string, own: boolean): Vec<LineRun> {
 			fg: inverse ? bg : fg,
 			bg: inverse ? fg : bg,
 			underline: underlineOf(flags),
+			underlineColor: null,
 			bold: flags.includes("B"),
 			italic: flags.includes("I"),
 			strikethrough: flags.includes("S"),
@@ -67,6 +68,19 @@ function expectedRuns(line: string, own: boolean): Vec<LineRun> {
 			out[last - 1].units += run.units;
 		} else {
 			out.push(run);
+		}
+	}
+	return out;
+}
+
+function recordedFields(runs: Vec<LineRun>): Vec<LineRun> {
+	let out: Vec<LineRun> = [];
+	for (const run of runs) {
+		const last = out.length as int32;
+		if (last > 0 && sameRun(out[last - 1], run)) {
+			out[last - 1].units += run.units;
+		} else {
+			out.push({ ...run, underlineColor: null });
 		}
 	}
 	return out;
@@ -120,8 +134,9 @@ function conforms(name: string, chunk: int32, compare: Compare, skipRunsRow: int
 			failure = `row ${y}: expected "${expectText[y]}" got "${s.text(y)}"`;
 		} else if (compare != Compare.Text && y != skipRunsRow) {
 			const want = expectedRuns(expectAttrs[y], own);
-			if (!runsEqual(s.runs(y), want)) {
-				failure = `row ${y} runs: expected${showRuns(want)} got${showRuns(s.runs(y))}`;
+			const got = recordedFields(s.runs(y));
+			if (!runsEqual(got, want)) {
+				failure = `row ${y} runs: expected${showRuns(want)} got${showRuns(got)}`;
 			}
 		}
 	}

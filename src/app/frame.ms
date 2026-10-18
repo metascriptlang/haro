@@ -45,15 +45,14 @@ function styleOf(styles: Map<string, Style>, run: LineRun, background: Rgb): Sty
 	const weight: "bold" | "normal" = run.bold ? "bold" : "normal";
 	const slant: "italic" | "normal" = run.italic ? "italic" : "normal";
 	const line: "wavy" | "solid" = run.underline == Underline.Curly ? "wavy" : "solid";
-	const key = fg + bg + decoration + weight + slant + line;
+	const tint = run.underlineColor;
+	const lineColor = tint !== null && run.underline != Underline.None ? hexOf(tint) : "";
+	const key = fg + bg + decoration + weight + slant + line + lineColor;
 	const known = styles.get(key);
 	if (known !== undefined) { return known; }
-	const style: Style = bg == ""
-		? { color: fg, textDecorationLine: decoration, textDecorationStyle: line, fontWeight: weight, fontStyle: slant }
-		: {
-			color: fg, backgroundColor: bg, textDecorationLine: decoration, textDecorationStyle: line,
-			fontWeight: weight, fontStyle: slant,
-		};
+	const style: Style = { color: fg, textDecorationLine: decoration, textDecorationStyle: line, fontWeight: weight, fontStyle: slant };
+	if (bg != "") { style.backgroundColor = bg; }
+	if (lineColor != "") { style.textDecorationColor = lineColor; }
 	styles.set(key, style);
 	return style;
 }
@@ -107,7 +106,7 @@ const RED: Rgb = { r: 255, g: 0, b: 0 };
 
 function run(units: int32, fg: Rgb, bg: Rgb, underline: Underline): LineRun {
 	return {
-		units: units, fg: fg, bg: bg, underline: underline,
+		units: units, fg: fg, bg: bg, underline: underline, underlineColor: null,
 		bold: false, italic: false, strikethrough: false,
 	};
 }
@@ -138,4 +137,15 @@ test "a background differs from the terminal's only where a run says so" {
 	assert spans[0].style!.textDecorationLine == "underline";
 	assert spans[1].style!.backgroundColor == "#ff0000";
 	assert spans[1].style!.color == "#ffffff";
+}
+
+test "an underline colour tints the line, and only while the run is underlined" {
+	const styles = new Map<string, Style>();
+	const curly: LineRun = { ...run(1, WHITE, BLACK, Underline.Curly), underlineColor: RED };
+	const plain: LineRun = { ...run(1, WHITE, BLACK, Underline.None), underlineColor: RED };
+	const l: GridLine = { text: "xy", runs: [curly, plain], cursorCell: -1 };
+	const spans = spansOf(styles, l, BLACK);
+	assert spans[0].style!.textDecorationColor == "#ff0000";
+	assert spans[0].style!.color == "#ffffff";
+	assert spans[1].style!.textDecorationColor === undefined;
 }

@@ -10,7 +10,7 @@ import {
 } from "../../../neon/src/platform/ion/window";
 import { onWake, openExternal } from "../../../ion/src/index";
 import { FontStyle, registerFace } from "../../../void/src/void2d/font";
-import { argv, exit } from "std/process";
+import { argv, env, exit } from "std/process";
 import { readFile } from "std/fs";
 import { Pty, PtyError } from "../pty/transport";
 import { ConPty } from "../pty/pty";
@@ -27,6 +27,7 @@ const FONT_PATH = "assets/JetBrainsMonoNL-Regular.ttf";
 const FONT_BOLD = "assets/JetBrainsMonoNL-Bold.ttf";
 const FONT_ITALIC = "assets/JetBrainsMonoNL-Italic.ttf";
 const FONT_BOLD_ITALIC = "assets/JetBrainsMonoNL-BoldItalic.ttf";
+const FONT_FAMILY = `${FONT_PATH}, Segoe UI Symbol, Microsoft YaHei`;
 
 const pace = Pace.start();
 
@@ -53,6 +54,9 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 	registerFace(FONT_BOLD, FONT_PATH, 700, FontStyle.Normal);
 	registerFace(FONT_ITALIC, FONT_PATH, 400, FontStyle.Italic);
 	registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
+	const systemFonts = `${env.get("WINDIR")}/Fonts`;
+	registerFace(`${systemFonts}/seguisym.ttf`, "Segoe UI Symbol", 400, FontStyle.Normal);
+	registerFace(`${systemFonts}/msyh.ttc`, "Microsoft YaHei", 400, FontStyle.Normal);
 	const entry: Entry = {
 		onWake: (handler: () => void): void => {
 			onWake((): void => {
@@ -72,7 +76,7 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 		fail: fail,
 		openLink: (uri: string): void => { openExternal(uri); },
 	};
-	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: FONT_PATH };
+	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: FONT_PATH, fontFamily: FONT_FAMILY };
 	const code = runWindow(opts, (): NeonNode => App(t, entry));
 	t.shutdown();
 	return code;

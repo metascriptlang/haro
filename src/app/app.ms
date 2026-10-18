@@ -309,6 +309,10 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 				`cell ${advance}x${lineHeight} grid ${size.value[0]}x${size.value[1]}`
 		);
 		const fitted = t.fit(size.value[0], size.value[1]);
+		if (!fitted.ok && fitted.error == TermError.PtyOpenFailed) {
+			showNotice("the shell did not start: check command in config.ms, or --shell");
+			return;
+		}
 		if (!fitted.ok) {
 			fatal("fit", fitted.error);
 			return;

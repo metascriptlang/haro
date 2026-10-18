@@ -79,10 +79,10 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	let cursorLook: CursorLook = { visible: false, shape: CursorShape.Block, blinking: false };
 	let focused = true;
 	let blinkOn = true;
-	let blinkTimer = -1;
+	let blinkTimer: number = -1;
 	let lastReset = 0.0;
-	let heldTimer = -1;
-	let scrollTimer = -1;
+	let heldTimer: number = -1;
+	let scrollTimer: number = -1;
 	let geometry: MouseGeometry = { cellWidth: 1, cellHeight: 1, width: 1, height: 1 };
 
 	const fatal = (what: string, error: TermError): void => {
@@ -133,7 +133,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			blinkOn = !blinkOn;
 			paintCursor();
 			if (blinks(cursorLook, focused)) { armBlink(); }
-		}, BLINK_MS) as int32;
+		}, BLINK_MS);
 	}
 
 	function syncBlink(): void {
@@ -155,7 +155,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		heldTimer = setTimeout((): void => {
 			heldTimer = -1;
 			refresh();
-		}, HOLD_RECHECK_MS) as int32;
+		}, HOLD_RECHECK_MS);
 	}
 
 	function clipWrite(text: string): void {
@@ -389,7 +389,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			if (!ticked.value) { return; }
 			refresh();
 			autoscroll();
-		}, AUTOSCROLL_MS) as int32;
+		}, AUTOSCROLL_MS);
 	};
 
 	const dragged = (e: NeonEvent): void => {

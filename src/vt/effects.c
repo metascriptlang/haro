@@ -149,7 +149,6 @@ static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const Gho
 			}
 			memcpy(copy, c->data.ptr, c->data.len);
 			free(e->clip);
-	free(e->readReply);
 			e->clip = copy;
 			e->clipLen = (int64_t)c->data.len;
 			e->clipPending = 1;
@@ -354,6 +353,7 @@ void vtEffectsClose(int id, GhosttyTerminal terminal) {
 	if (e->mouse) ghostty_mouse_encoder_free(e->mouse);
 	if (e->mouseEvent) ghostty_mouse_event_free(e->mouseEvent);
 	free(e->clip);
+	free(e->readReply);
 	free(e->data);
 	memset(e, 0, sizeof *e);
 }

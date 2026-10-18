@@ -2420,6 +2420,20 @@ test "base64 in an OSC 52 answer pads one and two leftover bytes" {
 	}
 }
 
+test "clipboard writes while a read waits leave the waiting answer intact" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("\x1b]52;c;?\x1b\\");
+		assert vt.clipboardAsked();
+		vt.writeText("\x1b]52;c;YQ==\x1b\\\x1b]52;c;Yg==\x1b\\");
+		assert vt.answerClipboard("hello", true).ok;
+		assert pending(vt) == "\x1b]52;c;aGVsbG8=\x1b\\";
+		vt.free();
+	}
+}
+
 test "a second read while one waits, and a read of the primary selection, get an empty answer at once" {
 	const created = Vt.create(20, 4);
 	assert created.ok;

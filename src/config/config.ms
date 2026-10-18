@@ -3,7 +3,7 @@ import { Rgb, SCROLLBACK_LINES } from "../vt/vt";
 import { Keybind, keybind } from "../input/bindings";
 
 export interface Config {
-	fontFamily: string | null;
+	fontFamily: Vec<string>;
 	fontSize: number;
 	command: string;
 	scrollback: int64;
@@ -28,7 +28,7 @@ when (windows) {
 
 export function defaults(): Config {
 	return {
-		fontFamily: null,
+		fontFamily: [],
 		fontSize: 10.5,
 		command: DEFAULT_COMMAND,
 		scrollback: SCROLLBACK_LINES,
@@ -82,6 +82,14 @@ function items(v: JsonValue, key: string): Result<Vec<JsonValue>, string> {
 	return Result.ok(out);
 }
 
+function families(v: JsonValue, key: string): Result<Vec<string>, string> {
+	if (v.kind == JsonKind.String) { return Result.ok([v.strVal]); }
+	if (v.kind != JsonKind.Array) { return Result.err(`${key} must be a family name or a list of them`); }
+	let out: Vec<string> = [];
+	for (let n = 0; n < v.items.length; n++) { out.push(try text(v.items[n], `${key}[${n}]`)); }
+	return Result.ok(out);
+}
+
 function bindOf(v: JsonValue, key: string): Result<Keybind, string> {
 	if (v.kind != JsonKind.Object) { return Result.err(`${key} must be { keys, text }`); }
 	let keys: string | null = null;
@@ -110,7 +118,7 @@ export function parse(json: string): Result<Config, string> {
 		const key = root.keys[i];
 		const v = root.values[i];
 		match (key) {
-			"fontFamily" => { c.fontFamily = try text(v, key); },
+			"fontFamily" => { c.fontFamily = try families(v, key); },
 			"fontSize" => {
 				if (v.kind != JsonKind.Number && v.kind != JsonKind.Int) { return Result.err("fontSize must be a number"); }
 				c.fontSize = v.asNumber();
@@ -149,7 +157,7 @@ function refusal(json: string): string {
 test "an empty config keeps every default" {
 	const c = parse("{}");
 	assert c.ok;
-	assert c.value.fontFamily === null;
+	assert c.value.fontFamily.length == 0;
 	assert c.value.fontSize == 10.5;
 	assert c.value.fontPx() == 14;
 	assert c.value.command == DEFAULT_COMMAND;
@@ -165,7 +173,8 @@ test "the fields a config gives replace the defaults" {
 			`"keybinds":[{"keys":"shift+enter","text":"\\u001b[13;2u"}]}`,
 	);
 	assert c.ok;
-	assert c.value.fontFamily == "Operator Saigon";
+	assert c.value.fontFamily.length == 1;
+	assert c.value.fontFamily[0] == "Operator Saigon";
 	assert c.value.fontSize == 10.8;
 	assert c.value.command == "cmd.exe";
 	assert c.value.scrollback == 50000;
@@ -181,7 +190,17 @@ test "the fields a config gives replace the defaults" {
 	assert c.value.keybinds[0].text == "\x1b[13;2u";
 }
 
+test "a list of font families keeps its order, the first one primary and the rest its fallbacks" {
+	const c = parse(`{"fontFamily":["Operator Saigon","OperatorMono Nerd Font Mono"]}`);
+	assert c.ok;
+	assert c.value.fontFamily.length == 2;
+	assert c.value.fontFamily[0] == "Operator Saigon";
+	assert c.value.fontFamily[1] == "OperatorMono Nerd Font Mono";
+}
+
 test "a field the config cannot use is refused by name" {
+	assert refusal(`{"fontFamily":12}`) == "fontFamily must be a family name or a list of them";
+	assert refusal(`{"fontFamily":["Operator Saigon",12]}`) == "fontFamily[1] must be a string";
 	assert refusal(`{"fontsize":10}`) == `unknown config field "fontsize"`;
 	assert refusal(`{"fontSize":"10"}`) == "fontSize must be a number";
 	assert refusal(`{"fontSize":0}`) == "fontSize 0 must be above 0";

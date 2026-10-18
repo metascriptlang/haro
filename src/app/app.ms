@@ -49,7 +49,7 @@ export interface Entry {
 }
 
 function restartNeeded(now: Config, started: Config): boolean {
-	return now.fontFamily != started.fontFamily || now.fontSize != started.fontSize || now.command != started.command;
+	return now.fontFamily.join("\n") != started.fontFamily.join("\n") || now.fontSize != started.fontSize || now.command != started.command;
 }
 
 export function App(t: Term, entry: Entry, started: Config): NeonNode {

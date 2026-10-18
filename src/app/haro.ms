@@ -19,6 +19,7 @@ import { App, Entry } from "./app";
 import { Pace } from "./pace";
 import { Config, defaults } from "../config/config";
 import { Loaded, cacheDir, configPath, load, stampOf } from "../config/source";
+import { Faces } from "../config/fonts";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { Term, openTerm, shutdown } from "./term";
 
@@ -59,7 +60,7 @@ const CONFIG_POLL_MS = 1000;
 
 const pace = Pace.start();
 const configFile = valueOf("--config") ?? configPath();
-let loaded: Loaded = { config: defaults(), faces: null, stamp: "" };
+let loaded: Loaded = { config: defaults(), faces: [], stamp: "" };
 let configError = "";
 
 function note(line: string): void {
@@ -121,30 +122,33 @@ function registerBuiltIn(): void {
 	registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
 }
 
-function registerFaces(): string {
-	registerBuiltIn();
-	const faces = loaded.faces;
-	if (faces === null) { return FONT_PATH; }
-	registerFace(FONT_PATH, FONT_PATH, 400, FontStyle.Normal);
+function registerFamily(faces: Faces): string {
 	const family = faces.regular;
 	const bold = faces.bold;
 	const italic = faces.italic;
 	const boldItalic = faces.boldItalic;
+	registerFace(family, family, 400, FontStyle.Normal);
 	if (bold !== null) { registerFace(bold, family, 700, FontStyle.Normal); }
 	if (italic !== null) { registerFace(italic, family, 400, FontStyle.Italic); }
 	if (boldItalic !== null) { registerFace(boldItalic, family, 700, FontStyle.Italic); }
 	return family;
 }
 
-function familiesAfter(font: string): string {
-	const families = font == FONT_PATH ? [font] : [font, FONT_PATH];
-	for (const face of fallbackFaces()) { families.push(face.family); }
-	return families.join(", ");
+function registerFamilies(): string[] {
+	registerBuiltIn();
+	registerFace(FONT_PATH, FONT_PATH, 400, FontStyle.Normal);
+	let families: string[] = [];
+	for (const faces of loaded.faces) { families.push(registerFamily(faces)); }
+	families.push(FONT_PATH);
+	for (const face of fallbackFaces()) {
+		registerFace(face.path, face.family, 400, FontStyle.Normal);
+		families.push(face.family);
+	}
+	return families;
 }
 
 function show(t: Term, exited: (code: int32) => void): int32 {
-	const font = registerFaces();
-	for (const face of fallbackFaces()) { registerFace(face.path, face.family, 400, FontStyle.Normal); }
+	const families = registerFamilies();
 	const entry: Entry = {
 		onWake: (handler: () => void): void => {
 			onWake((): void => {
@@ -168,7 +172,7 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 			watchConfig(handler);
 		},
 	};
-	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: font, fontFamily: familiesAfter(font) };
+	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: families[0], fontFamily: families.join(", ") };
 	const code = runWindow(opts, (): NeonNode => App(t, entry, loaded.config));
 	note("the window closed");
 	t.shutdown();

@@ -10,7 +10,7 @@ import { Faces, installedFaces } from "./fonts";
 
 export interface Loaded {
 	config: Config;
-	faces: Faces | null;
+	faces: Vec<Faces>;
 	stamp: string;
 }
 
@@ -55,8 +55,9 @@ function lastLine(text: string): string {
 }
 
 function evaluate(path: string, dir: string): Result<string, string> {
-	const msc = findOnPath("msc");
-	if (msc == "") { return Result.err("running config.ms needs msc on PATH"); }
+	const installed = `${homeDir()}/.metascript/bin/msc`;
+	const msc = findOnPath("msc") != "" ? findOnPath("msc") : exists(installed) ? installed : "";
+	if (msc == "") { return Result.err(`running config.ms needs msc on PATH or at ${installed}`); }
 	const target = relative(dir, path);
 	const from = target.startsWith(".") || target.indexOf(":") > 0 ? target : `./${target}`;
 	const runner = `import { config } from ${JSON.stringify(from)};\nconsole.log(JSON.stringify(config));\n`;
@@ -66,32 +67,41 @@ function evaluate(path: string, dir: string): Result<string, string> {
 	return Result.ok(lastLine(ran.value));
 }
 
-function facesFor(c: Config): Result<Faces | null, string> {
-	const family = c.fontFamily;
-	if (family === null) { return Result.ok(null); }
-	const found = installedFaces(family);
-	if (!found.ok) { return Result.err(found.error); }
-	return Result.ok(found.value);
+function facesFor(c: Config): Result<Vec<Faces>, string> {
+	let faces: Vec<Faces> = [];
+	for (const family of c.fontFamily) { faces.push(try installedFaces(family)); }
+	return Result.ok(faces);
+}
+
+const LINES_PER_FAMILY = 4;
+
+function record(stamp: string, json: string, faces: Vec<Faces>): string {
+	let lines = [stamp, json];
+	for (const f of faces) {
+		for (const path of [f.regular, f.bold ?? "", f.italic ?? "", f.boldItalic ?? ""]) { lines.push(path); }
+	}
+	return lines.join("\n");
 }
 
 function cached(lines: string[], stamp: string): Loaded | null {
-	if (lines.length != 6 || lines[0] != stamp) { return null; }
+	if (lines.length < 2 || lines[0] != stamp) { return null; }
 	const c = parse(lines[1]);
-	if (!c.ok) { return null; }
-	const regular = lines[2];
-	if (regular == "") { return { config: c.value, faces: null, stamp: stamp }; }
-	const faces: Faces = {
-		regular: regular,
-		bold: lines[3] == "" ? null : lines[3],
-		italic: lines[4] == "" ? null : lines[4],
-		boldItalic: lines[5] == "" ? null : lines[5],
-	};
+	if (!c.ok || lines.length != 2 + c.value.fontFamily.length * LINES_PER_FAMILY) { return null; }
+	let faces: Vec<Faces> = [];
+	for (let at = 2; at < lines.length; at += LINES_PER_FAMILY) {
+		faces.push({
+			regular: lines[at],
+			bold: lines[at + 1] == "" ? null : lines[at + 1],
+			italic: lines[at + 2] == "" ? null : lines[at + 2],
+			boldItalic: lines[at + 3] == "" ? null : lines[at + 3],
+		});
+	}
 	return { config: c.value, faces: faces, stamp: stamp };
 }
 
 export function load(path: string): Result<Loaded, string> {
 	const stamp = stampOf(path);
-	if (stamp == "") { return Result.ok({ config: defaults(), faces: null, stamp: "" }); }
+	if (stamp == "") { return Result.ok({ config: defaults(), faces: [], stamp: "" }); }
 	const dir = cacheDir();
 	const cacheFile = `${dir}/config.cache`;
 	const previous = readFile(cacheFile);
@@ -104,10 +114,7 @@ export function load(path: string): Result<Loaded, string> {
 	const c = parse(json);
 	if (!c.ok) { return Result.err(c.error); }
 	const faces = try facesFor(c.value);
-	const record = [
-		stamp, json, faces?.regular ?? "", faces?.bold ?? "", faces?.italic ?? "", faces?.boldItalic ?? "",
-	];
-	if (!writeFile(cacheFile, record.join("\n")).ok) { return Result.err(`cannot write ${cacheFile}`); }
+	if (!writeFile(cacheFile, record(stamp, json, faces)).ok) { return Result.err(`cannot write ${cacheFile}`); }
 	return Result.ok({ config: c.value, faces: faces, stamp: stamp });
 }
 
@@ -119,4 +126,22 @@ test "styles in the compiler's diagnostics are dropped, the text kept" {
 test "the evaluated config is the last line printed" {
 	assert lastLine("note\n{\"a\":1}\n") == "{\"a\":1}";
 	assert lastLine("{}") == "{}";
+}
+
+test "a cached record gives back each family's faces in order" {
+	const json = "{\"fontFamily\":[\"A\",\"B\"]}";
+	const faces: Vec<Faces> = [
+		{ regular: "/a.otf", bold: null, italic: "/ai.otf", boldItalic: null },
+		{ regular: "/b.otf", bold: "/bb.otf", italic: null, boldItalic: "/bbi.otf" },
+	];
+	const hit = cached(record("s1", json, faces).split("\n"), "s1");
+	assert hit !== null;
+	if (hit !== null) {
+		assert hit.faces.length == 2;
+		assert hit.faces[0].italic == "/ai.otf";
+		assert hit.faces[0].bold === null;
+		assert hit.faces[1].boldItalic == "/bbi.otf";
+	}
+	assert cached(record("s1", json, faces).split("\n"), "s2") === null;
+	assert cached(record("s1", json, [faces[0]]).split("\n"), "s1") === null;
 }

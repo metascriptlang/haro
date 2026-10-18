@@ -8,7 +8,7 @@ import {
 	DesktopOptions,
 	desktopOptions,
 } from "../../../neon/src/platform/ion/window";
-import { onWake, openExternal } from "../../../ion/src/index";
+import { onWake, openExternal, resourcePath } from "../../../ion/src/index";
 import { FontStyle, registerFace } from "../../../void/src/void2d/font";
 import { argv, env, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
@@ -24,10 +24,11 @@ import { Term, openTerm, shutdown } from "./term";
 
 extern function appWireWake(): void;
 
-const FONT_PATH = "assets/JetBrainsMonoNL-Regular.ttf";
-const FONT_BOLD = "assets/JetBrainsMonoNL-Bold.ttf";
-const FONT_ITALIC = "assets/JetBrainsMonoNL-Italic.ttf";
-const FONT_BOLD_ITALIC = "assets/JetBrainsMonoNL-BoldItalic.ttf";
+const ASSETS = resourcePath() == "" ? "assets" : `${resourcePath().replaceAll("\\", "/")}/assets`;
+const FONT_PATH = `${ASSETS}/JetBrainsMonoNL-Regular.ttf`;
+const FONT_BOLD = `${ASSETS}/JetBrainsMonoNL-Bold.ttf`;
+const FONT_ITALIC = `${ASSETS}/JetBrainsMonoNL-Italic.ttf`;
+const FONT_BOLD_ITALIC = `${ASSETS}/JetBrainsMonoNL-BoldItalic.ttf`;
 
 interface SystemFace {
 	path: string;

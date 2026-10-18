@@ -1,6 +1,8 @@
 @include("./conpty.h");
 @compile("./conpty.c");
 
+import { remove, writeFile } from "std/fs";
+import { env } from "std/process";
 import { Pty, PtyError } from "./transport";
 
 extern function ptyOpen(commandLine: cstring, cols: int32, rows: int32): int32;
@@ -212,4 +214,56 @@ test "a line written to the child reaches it" {
 		assert p.toPty().drain().includes("[hi]");
 		p.close();
 	}
+}
+
+struct LineCheck { next: int32; digits: string; inCsi: boolean; bytes: int64; }
+
+function feed(this before: LineCheck, bytes: Span<uint8>): LineCheck {
+	let c = before;
+	c.bytes += bytes.length;
+	for (const b of bytes) {
+		if (c.inCsi) {
+			c.inCsi = b < 0x40 || b > 0x7E || b == 0x5B;
+		} else if (b == 0x1B) {
+			c.inCsi = true;
+		} else if (b == 0x0A) {
+			if (c.digits == `${c.next}`) { c.next++; }
+			c.digits = "";
+		} else if (b >= 0x30 && b <= 0x39) {
+			c.digits += String.fromCharCode(b as int32);
+		} else if (b != 0x0D) {
+			c.digits = "";
+		}
+	}
+	return c;
+}
+
+test "output past the read buffer's limit arrives whole and in order while the app reads late" {
+	const path = `${env.get("TEMP")}/haroPtyFlood.txt`;
+	let text = "";
+	const count = 400000;
+	for (let i = 0; i < count; i++) { text += `line ${i}\r\n`; }
+	text += "end";
+	assert writeFile(path, text).ok;
+	const opened = ConPty.open(`cmd.exe /c type "${path.replaceAll("/", "\\")}"`, 80, 24);
+	assert opened.ok;
+	if (opened.ok) {
+		const p = opened.value;
+		const late: float64 = performance.now();
+		while (performance.now() - late < 1500) {}
+		let buf: Vec<uint8> = new Array(65536);
+		let check: LineCheck = { next: 0, digits: "", inCsi: false, bytes: 0 };
+		while (true) {
+			const ready = p.wait(10000);
+			if (!ready.ok || !ready.value) { break; }
+			const r = p.read(buf);
+			if (!r.ok) { break; }
+			check = check.feed(buf[0..r.value]);
+		}
+		console.log(`flood: ${check.bytes} bytes, ${check.next} of ${count} lines in order`);
+		assert check.bytes > 4194304;
+		assert check.next == count;
+		p.close();
+	}
+	const _gone = remove(path);
 }

@@ -88,7 +88,11 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
 - conhost takes input only as fast as the child reads it: one 1 MiB `WriteFile` to `ping`, which
   never reads, blocked 1060 ms (`probe/writeBlock.ms`, 2026-10-19). So `ptyWrite` queues and a
   writer thread writes, as Alacritty's `UnblockedWriter` does; a failed write surfaces on the next
-  `ptyWrite`.
+  `ptyWrite`. The reader parks at 4 MiB unread so a flood pushes back on the child; closing while it
+  is parked took 5 ms (`probe/closeParked.ms`).
+- conhost may send `ESC[1C` for a space inside a line (`line ESC[1C3971`) and puts its exit-time
+  mode resets between CR and LF, so a check over captured output skips CSI (the flood test in
+  `src/pty/pty.ms`).
 
 - conhost answers a cursor position query (`ESC[6n`) and DA1 (`ESC[c`) itself: a child's query
   never reaches Haro. It forwards XTVERSION (`ESC[>q`), OSC 11 (`ESC]11;?`) and the colour

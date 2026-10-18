@@ -9,6 +9,7 @@
 #include "conpty.h"
 
 #define PTY_MAX 16
+#define READ_LIMIT (4 << 20)
 #define BATCH_KEEP (4 << 20)
 
 typedef struct {
@@ -22,8 +23,10 @@ typedef struct {
 	HANDLE writer;
 	HANDLE ready;
 	CRITICAL_SECTION lock;
+	CONDITION_VARIABLE space;
 	CONDITION_VARIABLE pending;
 	uint8_t* data;
+	int64_t head;
 	int64_t len;
 	int64_t cap;
 	uint8_t* out;
@@ -51,6 +54,18 @@ static void wake(void) {
 
 static int append(Pty* p, const uint8_t* bytes, int64_t n) {
 	EnterCriticalSection(&p->lock);
+	while (!p->stopping && p->len - p->head + n > READ_LIMIT) {
+		SleepConditionVariableCS(&p->space, &p->lock, INFINITE);
+	}
+	if (p->stopping) {
+		LeaveCriticalSection(&p->lock);
+		return 1;
+	}
+	if (p->head > 0 && p->len + n > p->cap) {
+		memmove(p->data, p->data + p->head, (size_t)(p->len - p->head));
+		p->len -= p->head;
+		p->head = 0;
+	}
 	if (p->len + n > p->cap) {
 		int64_t cap = p->cap ? p->cap : 65536;
 		while (cap < p->len + n) cap *= 2;
@@ -222,6 +237,7 @@ int ptyOpen(const char* commandLine, int cols, int rows) {
 	p->process = pi.hProcess;
 	p->exitCode = -1;
 	InitializeCriticalSection(&p->lock);
+	InitializeConditionVariable(&p->space);
 	InitializeConditionVariable(&p->pending);
 	p->ready = CreateEventW(NULL, TRUE, FALSE, NULL);
 	if (p->ready) p->reader = CreateThread(NULL, 0, readLoop, p, 0, NULL);
@@ -242,11 +258,13 @@ int64_t ptyRead(int id, uint8_t* buf, int64_t cap) {
 		LeaveCriticalSection(&p->lock);
 		return -2;
 	}
-	int64_t n = p->len < cap ? p->len : cap;
+	int64_t held = p->len - p->head;
+	int64_t n = held < cap ? held : cap;
 	if (n > 0) {
-		memcpy(buf, p->data, (size_t)n);
-		memmove(p->data, p->data + n, (size_t)(p->len - n));
-		p->len -= n;
+		memcpy(buf, p->data + p->head, (size_t)n);
+		p->head += n;
+		if (p->head == p->len) p->head = p->len = 0;
+		WakeConditionVariable(&p->space);
 	}
 	int ended = p->closed && p->len == 0;
 	if (p->len == 0 && !p->closed) ResetEvent(p->ready);
@@ -320,6 +338,7 @@ void ptyClose(int id) {
 	if (!p) return;
 	EnterCriticalSection(&p->lock);
 	p->stopping = 1;
+	WakeAllConditionVariable(&p->space);
 	WakeAllConditionVariable(&p->pending);
 	LeaveCriticalSection(&p->lock);
 	TerminateProcess(p->process, 1);

@@ -42,6 +42,15 @@ int vtSetPalette(GhosttyTerminal terminal, const uint8_t* rgb, int64_t count) {
 	return ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palette) == GHOSTTY_SUCCESS ? 0 : -1;
 }
 
+#define SCROLLBACK_MAX_BYTES 50000000
+
+int vtSetScrollback(GhosttyTerminal terminal, int64_t lines) {
+	size_t bytes = SCROLLBACK_MAX_BYTES;
+	size_t kept = (size_t)lines;
+	if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, &bytes) != GHOSTTY_SUCCESS) return -1;
+	return ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &kept) == GHOSTTY_SUCCESS ? 0 : -1;
+}
+
 int vtSetPullScrollback(GhosttyTerminal terminal, int pull) {
 	bool on = pull != 0;
 	return ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_RESIZE_PULL_SCROLLBACK, &on) == GHOSTTY_SUCCESS ? 0 : -1;

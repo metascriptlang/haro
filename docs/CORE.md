@@ -72,8 +72,9 @@ from a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree `504771cca46c2
   `y + N`; a kept row edited in the same frame shows only by comparing cells. That is why
   `src/screen/plan.ms` keeps the rows it last planned (`Vt.painted`) and diffs on a scroll frame.
 - Reverse index at the top, and any scroll inside the alternate screen, gives N = 0 with all rows
-  dirty: a rows frame, never a scroll. The scrollback cap is byte-based: 5000 lines prune the ref at
-  80 columns but not at 10.
+  dirty: a rows frame, never a scroll. These probes ran on the library's default cap, 10 000 bytes
+  (`Terminal.zig`), under which 5000 lines prune the ref at 80 columns but not at 10; `Vt.create` now
+  sets a line cap and a byte cap instead.
 
 `GhosttyPoint` is built in C (`probe/scrollRefShim.h`) because msc cannot import a C aggregate with
 a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-sizedarray.md`).

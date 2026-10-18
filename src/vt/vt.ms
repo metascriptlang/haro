@@ -113,6 +113,7 @@ extern function vtSetDefaultColors(
 	bgB: int32,
 ): int32;
 extern function vtSetPalette(terminal: GhosttyTerminal, rgb: Readonly<Span<uint8>>): int32;
+extern function vtSetScrollback(terminal: GhosttyTerminal, lines: int64): int32;
 extern function vtSetPullScrollback(terminal: GhosttyTerminal, pull: int32): int32;
 extern function vtLinkAt(terminal: GhosttyTerminal, x: int32, y: int32, buf: Span<uint8>): int64;
 extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
@@ -327,6 +328,8 @@ function ok(r: GhosttyResult): boolean {
 	return r == GhosttyResult.GHOSTTY_SUCCESS;
 }
 
+export const SCROLLBACK_LINES: int64 = 10000;
+
 export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtError> {
 	let terminal: GhosttyTerminal;
 	if (!ok(ghostty_terminal_new(vtAllocator(), terminal, cols as uint16, rows as uint16))) {
@@ -346,7 +349,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 	const effects = vtEffectsOpen(terminal, state);
 	let top: GhosttyTrackedGridRef;
 	if (effects < 0 || vtTopTrack(terminal, top) != 0 || vtSetDefaultColors(terminal, 255, 255, 255, 0, 0, 0) != 0
-		|| vtSetBlinkDefault(terminal, 1) != 0) {
+		|| vtSetBlinkDefault(terminal, 1) != 0 || vtSetScrollback(terminal, SCROLLBACK_LINES) != 0) {
 		if (effects >= 0) { vtEffectsClose(effects, terminal); }
 		ghostty_render_state_row_cells_free(cells);
 		ghostty_render_state_row_iterator_free(iterator);
@@ -452,6 +455,11 @@ export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<Vt,
 	}
 	if (vtSetPalette(vt.terminal, rgb) != 0) { return Result.err(VtError.ReadFailed); }
 	vt.painted.rows = [];
+	return Result.ok(vt);
+}
+
+export function setScrollback(this vt: Vt, lines: int64): Result<Vt, VtError> {
+	if (vtSetScrollback(vt.terminal, lines) != 0) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(vt);
 }
 
@@ -1618,6 +1626,26 @@ function rowsAfterGrowing(pull: boolean): string {
 	return lines.value.join("|");
 }
 
+function keptAfter(lines: int32, keep: int64): int32 {
+	const created = Vt.create(20, 4);
+	if (!created.ok) { return -1; }
+	const vt = created.value;
+	if (keep != SCROLLBACK_LINES && !vt.setScrollback(keep).ok) { return -1; }
+	vt.writeText(numbered(lines));
+	vt.scrollTop();
+	if (!vt.update().ok) { return -1; }
+	const oldest = top(vt);
+	vt.free();
+	return lines - (oldest.slice(1).parseInt() as int32);
+}
+
+test "scrollback keeps about ten thousand lines by default, and a set limit replaces it" {
+	const byDefault = keptAfter(30000, SCROLLBACK_LINES);
+	assert byDefault > 9000 && byDefault < 12000;
+	const set = keptAfter(30000, 500);
+	assert set > 400 && set < 2500;
+}
+
 test "growing the grid reveals scrollback unless the pty keeps its own screen" {
 	assert rowsAfterGrowing(true) == "l1|l2|l3|l4|l5";
 	assert rowsAfterGrowing(false) == "l3|l4|l5||";
@@ -2303,6 +2331,7 @@ test "a selection follows its text when scrollback is pruned" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
+		assert vt.setScrollback(1000).ok;
 		vt.writeText(numbered(6000));
 		assert vt.update().ok;
 		const row = (try vt.scrollOffset() catch 0) + 3;

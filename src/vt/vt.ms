@@ -2502,9 +2502,9 @@ test "a kitty OSC 5522 read is refused at once rather than waiting for an OSC 52
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("]5522;type=read:id=r1;dGV4dC9wbGFpbg==\\");
+		vt.writeText("\x1b]5522;type=read:id=r1;dGV4dC9wbGFpbg==\x1b\\");
 		assert !vt.clipboardAsked();
-		assert pending(vt) == "]5522;type=read:status=EPERM:id=r1\\";
+		assert pending(vt) == "\x1b]5522;type=read:status=EPERM:id=r1\x1b\\";
 		vt.free();
 	}
 }

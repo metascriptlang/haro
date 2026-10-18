@@ -257,7 +257,7 @@ test "a concealed cell keeps its background and draws no text or line, as xterm 
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("[8;4;9;41mab[0mc[8m中");
+		vt.writeText("\x1b[8;4;9;41mab\x1b[0mc\x1b[8m\u4e2d");
 		assert vt.update().ok;
 		const rows = vt.rows();
 		assert rows.ok;

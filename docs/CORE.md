@@ -85,6 +85,11 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
   lands through the normal output path (test "a resize reaches a live child as its console size",
   which also shows `[Console]::WindowWidth/Height` inside the child tracking the new grid).
 
+- conhost takes input only as fast as the child reads it: one 1 MiB `WriteFile` to `ping`, which
+  never reads, blocked 1060 ms (`probe/writeBlock.ms`, 2026-10-19). So `ptyWrite` queues and a
+  writer thread writes, as Alacritty's `UnblockedWriter` does; a failed write surfaces on the next
+  `ptyWrite`.
+
 - conhost answers a cursor position query (`ESC[6n`) and DA1 (`ESC[c`) itself: a child's query
   never reaches Haro. It forwards XTVERSION (`ESC[>q`), OSC 11 (`ESC]11;?`) and the colour
   scheme query (`ESC[?996n`). On POSIX every query reaches the terminal.

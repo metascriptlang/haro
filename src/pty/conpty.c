@@ -9,6 +9,7 @@
 #include "conpty.h"
 
 #define PTY_MAX 16
+#define BATCH_KEEP (4 << 20)
 
 typedef struct {
 	int used;
@@ -18,11 +19,18 @@ typedef struct {
 	HANDLE process;
 	HANDLE reader;
 	HANDLE waiter;
+	HANDLE writer;
 	HANDLE ready;
 	CRITICAL_SECTION lock;
+	CONDITION_VARIABLE pending;
 	uint8_t* data;
 	int64_t len;
 	int64_t cap;
+	uint8_t* out;
+	int64_t outLen;
+	int64_t outCap;
+	int writeFailed;
+	int stopping;
 	int closed;
 	int outOfMemory;
 	int exited;
@@ -77,6 +85,45 @@ static DWORD WINAPI readLoop(LPVOID arg) {
 	SetEvent(p->ready);
 	LeaveCriticalSection(&p->lock);
 	wake();
+	return 0;
+}
+
+static DWORD WINAPI writeLoop(LPVOID arg) {
+	Pty* p = arg;
+	uint8_t* batch = NULL;
+	int64_t batchCap = 0;
+	EnterCriticalSection(&p->lock);
+	for (;;) {
+		while (!p->stopping && p->outLen == 0) {
+			SleepConditionVariableCS(&p->pending, &p->lock, INFINITE);
+		}
+		if (p->stopping) break;
+		uint8_t* full = p->out;
+		int64_t fullCap = p->outCap;
+		int64_t n = p->outLen;
+		p->out = batch;
+		p->outCap = batchCap;
+		p->outLen = 0;
+		batch = full;
+		batchCap = fullCap;
+		LeaveCriticalSection(&p->lock);
+		int ok = 1;
+		for (int64_t done = 0; ok && done < n;) {
+			DWORD wrote = 0;
+			DWORD want = n - done > (1 << 30) ? (1 << 30) : (DWORD)(n - done);
+			ok = WriteFile(p->input, batch + done, want, &wrote, NULL);
+			done += wrote;
+		}
+		if (batchCap > BATCH_KEEP) {
+			free(batch);
+			batch = NULL;
+			batchCap = 0;
+		}
+		EnterCriticalSection(&p->lock);
+		if (!ok) p->writeFailed = 1;
+	}
+	LeaveCriticalSection(&p->lock);
+	free(batch);
 	return 0;
 }
 
@@ -174,10 +221,16 @@ int ptyOpen(const char* commandLine, int cols, int rows) {
 	p->output = outRead;
 	p->process = pi.hProcess;
 	p->exitCode = -1;
-	p->ready = CreateEventW(NULL, TRUE, FALSE, NULL);
 	InitializeCriticalSection(&p->lock);
-	p->reader = CreateThread(NULL, 0, readLoop, p, 0, NULL);
-	p->waiter = CreateThread(NULL, 0, waitLoop, p, 0, NULL);
+	InitializeConditionVariable(&p->pending);
+	p->ready = CreateEventW(NULL, TRUE, FALSE, NULL);
+	if (p->ready) p->reader = CreateThread(NULL, 0, readLoop, p, 0, NULL);
+	if (p->reader) p->waiter = CreateThread(NULL, 0, waitLoop, p, 0, NULL);
+	if (p->waiter) p->writer = CreateThread(NULL, 0, writeLoop, p, 0, NULL);
+	if (!p->writer) {
+		ptyClose(id);
+		return -1;
+	}
 	return id;
 }
 
@@ -214,9 +267,27 @@ int ptyWait(int id, int timeoutMs) {
 int64_t ptyWrite(int id, const uint8_t* data, int64_t len) {
 	Pty* p = slot(id);
 	if (!p) return -1;
-	DWORD wrote = 0;
-	if (!WriteFile(p->input, data, (DWORD)len, &wrote, NULL)) return -1;
-	return wrote;
+	EnterCriticalSection(&p->lock);
+	if (p->writeFailed) {
+		LeaveCriticalSection(&p->lock);
+		return -1;
+	}
+	if (p->outLen + len > p->outCap) {
+		int64_t cap = p->outCap ? p->outCap : 4096;
+		while (cap < p->outLen + len) cap *= 2;
+		uint8_t* grown = realloc(p->out, (size_t)cap);
+		if (!grown) {
+			LeaveCriticalSection(&p->lock);
+			return -2;
+		}
+		p->out = grown;
+		p->outCap = cap;
+	}
+	memcpy(p->out + p->outLen, data, (size_t)len);
+	p->outLen += len;
+	WakeConditionVariable(&p->pending);
+	LeaveCriticalSection(&p->lock);
+	return len;
 }
 
 int ptyResize(int id, int cols, int rows) {
@@ -247,16 +318,27 @@ int ptyExitCode(int id) {
 void ptyClose(int id) {
 	Pty* p = slot(id);
 	if (!p) return;
+	EnterCriticalSection(&p->lock);
+	p->stopping = 1;
+	WakeAllConditionVariable(&p->pending);
+	LeaveCriticalSection(&p->lock);
 	TerminateProcess(p->process, 1);
-	WaitForSingleObject(p->waiter, INFINITE);
+	if (p->waiter) {
+		WaitForSingleObject(p->waiter, INFINITE);
+	} else {
+		closeConsole(p);
+	}
+	if (p->writer) WaitForSingleObject(p->writer, INFINITE);
 	CloseHandle(p->input);
-	WaitForSingleObject(p->reader, INFINITE);
+	if (p->reader) WaitForSingleObject(p->reader, INFINITE);
 	CloseHandle(p->output);
-	CloseHandle(p->reader);
-	CloseHandle(p->waiter);
+	if (p->reader) CloseHandle(p->reader);
+	if (p->waiter) CloseHandle(p->waiter);
+	if (p->writer) CloseHandle(p->writer);
 	CloseHandle(p->process);
-	CloseHandle(p->ready);
+	if (p->ready) CloseHandle(p->ready);
 	DeleteCriticalSection(&p->lock);
 	free(p->data);
+	free(p->out);
 	memset(p, 0, sizeof *p);
 }

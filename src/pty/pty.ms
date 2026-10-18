@@ -187,3 +187,29 @@ test "a resize through the Pty interface reaches a live ConPTY" {
 		pty.close();
 	}
 }
+
+test "a write to a child that does not read its input returns at once" {
+	const opened = ConPty.open("cmd.exe /c ping -n 4 127.0.0.1 > nul", 80, 24);
+	assert opened.ok;
+	if (opened.ok) {
+		const p = opened.value;
+		let chunk: Vec<uint8> = new Array(1048576);
+		for (let i = 0; i < chunk.length; i++) { chunk[i] = 97 + (i % 26) as uint8; }
+		const start: float64 = performance.now();
+		for (let i = 0; i < 4; i++) { assert p.write(chunk[0..chunk.length]).ok; }
+		assert performance.now() - start < 200;
+		p.close();
+	}
+}
+
+test "a line written to the child reaches it" {
+	const opened = ConPty.open("cmd.exe /v:on /c \"set /p line=& echo [!line!]\"", 80, 24);
+	assert opened.ok;
+	if (opened.ok) {
+		const p = opened.value;
+		let line: Vec<uint8> = [0x68, 0x69, 0x0D];
+		assert p.write(line[0..line.length]).ok;
+		assert p.toPty().drain().includes("[hi]");
+		p.close();
+	}
+}

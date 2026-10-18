@@ -161,9 +161,9 @@ test "a replay drops the answer to a terminal query and the screen carries on" {
 }
 
 // msc compiles the C file of every module a build imports, test-only imports included: keep
-// ConPTY out of non-test builds so a web build of this module never needs conpty.c.
+// the native pty out of non-test builds so a web build of this module never needs its C file.
 when (testBuild) {
-	import { ConPty } from "../pty/pty";
+	import { NativePty } from "../pty/pty";
 	import { readFile } from "std/fs";
 
 	test "a recorded Get-ChildItem replays to the table pwsh drew" {
@@ -194,16 +194,29 @@ when (testBuild) {
 		}
 	}
 
-	function conPtySession(commandLine: string, cols: int32, rows: int32): Session | null {
-		const pty = ConPty.spawn(commandLine, cols, rows);
+	when (windows) {
+		const ECHO_HELLO = "cmd.exe /c echo hello";
+		const ASK_XTVERSION = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File src/session/xtversion.ps1";
+		const PRINT_SIZE_LATE = "powershell.exe -NoProfile -Command " +
+			"Start-Sleep -Milliseconds 900; " +
+			"[Console]::WriteLine([Console]::WindowWidth.ToString() + 'x' + " +
+			"[Console]::WindowHeight.ToString())";
+	} else {
+		const ECHO_HELLO = "echo hello";
+		const ASK_XTVERSION = "sh src/session/xtversion.sh";
+		const PRINT_SIZE_LATE = "sh -c 'sleep 0.9; stty size | while read r c; do echo \"${c}x$r\"; done'";
+	}
+
+	function nativePtySession(commandLine: string, cols: int32, rows: int32): Session | null {
+		const pty = NativePty.spawn(commandLine, cols, rows);
 		if (!pty.ok) { return null; }
 		const started = Session.start(pty.value, cols, rows);
 		if (!started.ok) { return null; }
 		return started.value;
 	}
 
-	test "a real command's output, run through ConPTY, lands on the VT screen" {
-		const s = conPtySession("cmd.exe /c echo hello", 40, 5);
+	test "a real command's output, run through the native pty, lands on the VT screen" {
+		const s = nativePtySession(ECHO_HELLO, 40, 5);
 		assert s !== null;
 		if (s !== null) {
 			const ended = s.runToExit(10000);
@@ -219,11 +232,7 @@ when (testBuild) {
 	}
 
 	test "a program's terminal query gets an answer back through the pty" {
-		const s = conPtySession(
-			"powershell.exe -NoProfile -ExecutionPolicy Bypass -File src/session/xtversion.ps1",
-			60,
-			5,
-		);
+		const s = nativePtySession(ASK_XTVERSION, 60, 5);
 		assert s !== null;
 		if (s !== null) {
 			const ended = s.runToExit(10000);
@@ -240,14 +249,7 @@ when (testBuild) {
 	}
 
 	test "a resize reaches a live child as its console size" {
-		const s = conPtySession(
-			"powershell.exe -NoProfile -Command " +
-				"Start-Sleep -Milliseconds 900; " +
-				"[Console]::WriteLine([Console]::WindowWidth.ToString() + 'x' + " +
-				"[Console]::WindowHeight.ToString())",
-			80,
-			24,
-		);
+		const s = nativePtySession(PRINT_SIZE_LATE, 80, 24);
 		assert s !== null;
 		if (s !== null) {
 			const ready = s.pty.wait(300);

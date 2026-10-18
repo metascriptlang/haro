@@ -1,5 +1,5 @@
-#ifndef HARO_CONPTY_H
-#define HARO_CONPTY_H
+#ifndef HARO_NATIVE_PTY_H
+#define HARO_NATIVE_PTY_H
 
 #include <stdint.h>
 

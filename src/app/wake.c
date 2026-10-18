@@ -1,5 +1,5 @@
 #include "wake.h"
-#include "../pty/conpty.h"
+#include "../pty/nativePty.h"
 
 void ionWakeLoop(void);
 

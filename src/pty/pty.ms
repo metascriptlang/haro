@@ -1,8 +1,15 @@
-@include("./conpty.h");
-@compile("./conpty.c");
+@include("./nativePty.h");
+when (windows) {
+	@compile("./conpty.c");
+} else {
+	@compile("./posixPty.c");
+}
+when (linux) {
+	@passL("-lutil");
+}
 
 import { remove, writeFile } from "std/fs";
-import { env } from "std/process";
+import { tmpDir } from "std/os";
 import { Pty, PtyError } from "./transport";
 
 extern function ptyOpen(commandLine: cstring, cols: int32, rows: int32): int32;
@@ -14,54 +21,54 @@ extern function ptyExited(id: int32): int32;
 extern function ptyExitCode(id: int32): int32;
 extern function ptyClose(id: int32): void;
 
-export struct ConPty { id: int32; }
+export struct NativePty { id: int32; }
 
 export function open(
-	this typeof ConPty,
+	this typeof NativePty,
 	commandLine: string,
 	cols: int32,
 	rows: int32,
-): Result<ConPty, PtyError> {
+): Result<NativePty, PtyError> {
 	const id = ptyOpen(commandLine, cols, rows);
 	if (id < 0) { return Result.err(PtyError.OpenFailed); }
 	return Result.ok({ id: id });
 }
 
-export function read(this p: ConPty, buf: Span<uint8>): Result<int32, PtyError> {
+export function read(this p: NativePty, buf: Span<uint8>): Result<int32, PtyError> {
 	const n = ptyRead(p.id, buf);
 	if (n == -2) { return Result.err(PtyError.OutOfMemory); }
 	if (n < 0) { return Result.err(PtyError.Closed); }
 	return Result.ok(n as int32);
 }
 
-export function wait(this p: ConPty, timeoutMs: int32): Result<boolean, PtyError> {
+export function wait(this p: NativePty, timeoutMs: int32): Result<boolean, PtyError> {
 	const r = ptyWait(p.id, timeoutMs);
 	if (r == -2) { return Result.err(PtyError.WaitFailed); }
 	if (r < 0) { return Result.err(PtyError.Closed); }
 	return Result.ok(r == 1);
 }
 
-export function write(this p: ConPty, data: Span<uint8>): Result<int32, PtyError> {
+export function write(this p: NativePty, data: Span<uint8>): Result<int32, PtyError> {
 	const n = ptyWrite(p.id, data);
 	if (n < 0) { return Result.err(PtyError.Closed); }
 	return Result.ok(n as int32);
 }
 
-export function resize(this p: ConPty, cols: int32, rows: int32): Result<ConPty, PtyError> {
+export function resize(this p: NativePty, cols: int32, rows: int32): Result<NativePty, PtyError> {
 	if (ptyResize(p.id, cols, rows) != 0) { return Result.err(PtyError.ResizeFailed); }
 	return Result.ok(p);
 }
 
-export function exitCode(this p: ConPty): int32 | null {
+export function exitCode(this p: NativePty): int32 | null {
 	if (ptyExited(p.id) == 0) { return null; }
 	return ptyExitCode(p.id);
 }
 
-export function close(this p: ConPty): void {
+export function close(this p: NativePty): void {
 	ptyClose(p.id);
 }
 
-export function toPty(this p: ConPty): Pty {
+export function toPty(this p: NativePty): Pty {
 	return {
 		wait: (timeoutMs: int32): Result<boolean, PtyError> => { return p.wait(timeoutMs); },
 		read: (buf: Span<uint8>): Result<int32, PtyError> => { return p.read(buf); },
@@ -77,13 +84,27 @@ export function toPty(this p: ConPty): Pty {
 }
 
 export function spawn(
-	this typeof ConPty,
+	this typeof NativePty,
 	commandLine: string,
 	cols: int32,
 	rows: int32,
 ): Result<Pty, PtyError> {
-	const opened = try ConPty.open(commandLine, cols, rows);
+	const opened = try NativePty.open(commandLine, cols, rows);
 	return Result.ok(opened.toPty());
+}
+
+when (windows) {
+	const ECHO_HELLO = "cmd.exe /c echo hello";
+	const QUIET_FOR_3S = "cmd.exe /c ping -n 4 127.0.0.1 > nul";
+	const MISSING_PROGRAM = "no-such-program-haro.exe";
+	const ECHO_LINE_READ = "cmd.exe /v:on /c \"set /p line=& echo [!line!]\"";
+	function printFile(path: string): string { return `cmd.exe /c type "${path.replaceAll("/", "\\")}"`; }
+} else {
+	const ECHO_HELLO = "echo hello";
+	const QUIET_FOR_3S = "sleep 3";
+	const MISSING_PROGRAM = "no-such-program-haro";
+	const ECHO_LINE_READ = "sh -c 'read line; echo \"[$line]\"'";
+	function printFile(path: string): string { return `cat "${path}"`; }
 }
 
 function drain(this p: Pty): string {
@@ -100,7 +121,7 @@ function drain(this p: Pty): string {
 	}
 }
 
-function quietWaitMs(this p: ConPty, timeoutMs: int32): Result<float64, PtyError> {
+function quietWaitMs(this p: NativePty, timeoutMs: int32): Result<float64, PtyError> {
 	let buf: Vec<uint8> = new Array(4096);
 	while (true) {
 		const start: float64 = performance.now();
@@ -110,8 +131,8 @@ function quietWaitMs(this p: ConPty, timeoutMs: int32): Result<float64, PtyError
 	}
 }
 
-test "a ConPTY child's output reaches read and its exit ends the stream" {
-	const opened = ConPty.open("cmd.exe /c echo hello", 80, 24);
+test "a child's output reaches read and its exit ends the stream" {
+	const opened = NativePty.open(ECHO_HELLO, 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const p = opened.value;
@@ -125,7 +146,7 @@ test "a ConPTY child's output reaches read and its exit ends the stream" {
 }
 
 test "a wait returns as soon as the child writes" {
-	const opened = ConPty.open("cmd.exe /c echo hello", 80, 24);
+	const opened = NativePty.open(ECHO_HELLO, 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const p = opened.value;
@@ -139,7 +160,7 @@ test "a wait returns as soon as the child writes" {
 }
 
 test "a wait on a quiet child sleeps until its timeout" {
-	const opened = ConPty.open("cmd.exe /c ping -n 4 127.0.0.1 > nul", 80, 24);
+	const opened = NativePty.open(QUIET_FOR_3S, 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const p = opened.value;
@@ -152,7 +173,7 @@ test "a wait on a quiet child sleeps until its timeout" {
 }
 
 test "a resize of a live console succeeds and hands the pty back" {
-	const opened = ConPty.open("cmd.exe /c echo hello", 80, 24);
+	const opened = NativePty.open(ECHO_HELLO, 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const resized = opened.value.resize(120, 40);
@@ -163,12 +184,12 @@ test "a resize of a live console succeeds and hands the pty back" {
 }
 
 test "a command that cannot start is an error" {
-	const opened = ConPty.open("no-such-program-haro.exe", 80, 24);
+	const opened = NativePty.open(MISSING_PROGRAM, 80, 24);
 	assert !opened.ok;
 }
 
-test "a ConPTY spawned as a Pty reads its output and reports its exit through the interface" {
-	const spawned = ConPty.spawn("cmd.exe /c echo hello", 80, 24);
+test "a native pty spawned as a Pty reads its output and reports its exit through the interface" {
+	const spawned = NativePty.spawn(ECHO_HELLO, 80, 24);
 	assert spawned.ok;
 	if (spawned.ok) {
 		const pty = spawned.value;
@@ -180,8 +201,8 @@ test "a ConPTY spawned as a Pty reads its output and reports its exit through th
 	}
 }
 
-test "a resize through the Pty interface reaches a live ConPTY" {
-	const spawned = ConPty.spawn("cmd.exe /c ping -n 4 127.0.0.1 > nul", 80, 24);
+test "a resize through the Pty interface reaches a live native pty" {
+	const spawned = NativePty.spawn(QUIET_FOR_3S, 80, 24);
 	assert spawned.ok;
 	if (spawned.ok) {
 		const pty = spawned.value;
@@ -191,7 +212,7 @@ test "a resize through the Pty interface reaches a live ConPTY" {
 }
 
 test "a write to a child that does not read its input returns at once" {
-	const opened = ConPty.open("cmd.exe /c ping -n 4 127.0.0.1 > nul", 80, 24);
+	const opened = NativePty.open(QUIET_FOR_3S, 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const p = opened.value;
@@ -205,7 +226,7 @@ test "a write to a child that does not read its input returns at once" {
 }
 
 test "a line written to the child reaches it" {
-	const opened = ConPty.open("cmd.exe /v:on /c \"set /p line=& echo [!line!]\"", 80, 24);
+	const opened = NativePty.open(ECHO_LINE_READ, 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const p = opened.value;
@@ -239,13 +260,13 @@ function feed(this before: LineCheck, bytes: Span<uint8>): LineCheck {
 }
 
 test "output past the read buffer's limit arrives whole and in order while the app reads late" {
-	const path = `${env.get("TEMP")}/haroPtyFlood.txt`;
+	const path = `${tmpDir()}/haroPtyFlood.txt`;
 	let text = "";
 	const count = 400000;
 	for (let i = 0; i < count; i++) { text += `line ${i}\r\n`; }
 	text += "end";
 	assert writeFile(path, text).ok;
-	const opened = ConPty.open(`cmd.exe /c type "${path.replaceAll("/", "\\")}"`, 80, 24);
+	const opened = NativePty.open(printFile(path), 80, 24);
 	assert opened.ok;
 	if (opened.ok) {
 		const p = opened.value;

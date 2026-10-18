@@ -1,8 +1,8 @@
 import { Session } from "../src/session/session";
-import { ConPty } from "../src/pty/pty";
+import { NativePty } from "../src/pty/pty";
 
 function main(): int32 {
-	const pty = ConPty.spawn("cmd.exe /c echo mutable-buffer-smoke", 40, 5);
+	const pty = NativePty.spawn("cmd.exe /c echo mutable-buffer-smoke", 40, 5);
 	if (!pty.ok) {
 		console.log("FAIL: ConPTY did not open");
 		return 1;

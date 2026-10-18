@@ -1,12 +1,12 @@
 import { argv } from "std/process";
-import { ConPty } from "../../src/pty/pty";
+import { NativePty } from "../../src/pty/pty";
 import { Vt, CellFlag, Underline, palette } from "../../src/vt/vt";
 import { line } from "../../src/grid/lines";
 import { spansOf } from "../../src/app/frame";
 import { Style } from "../../../neon/src/render/style";
 
 const command = argv[1];
-const opened = ConPty.spawn(command, 105, 30);
+const opened = NativePty.spawn(command, 105, 30);
 if (opened.ok) {
 	const p = opened.value;
 	let buf: Vec<uint8> = new Array(65536);

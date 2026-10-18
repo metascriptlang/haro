@@ -1,9 +1,9 @@
-import { ConPty } from "../src/pty/pty";
+import { NativePty } from "../src/pty/pty";
 import { argv, exit } from "std/process";
 
 function main(): int32 {
 	const mb = argv.length > 1 ? argv[1].parseInt() as int32 : 16;
-	const spawned = ConPty.spawn("cmd /c ping -n 8 127.0.0.1 >nul", 80, 24);
+	const spawned = NativePty.spawn("cmd /c ping -n 8 127.0.0.1 >nul", 80, 24);
 	if (!spawned.ok) {
 		console.log("writeBlock: the command did not start");
 		return 1;

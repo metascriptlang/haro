@@ -13,7 +13,7 @@ import { FontStyle, registerFace } from "../../../void/src/void2d/font";
 import { argv, env, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
 import { Pty, PtyError } from "../pty/transport";
-import { ConPty } from "../pty/pty";
+import { NativePty } from "../pty/pty";
 import { Replay } from "../pty/replay";
 import { App, Entry } from "./app";
 import { Pace } from "./pace";
@@ -151,7 +151,7 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 
 function runShell(shell: string): int32 {
 	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
-		return ConPty.spawn(shell, cols, rows);
+		return NativePty.spawn(shell, cols, rows);
 	});
 	if (!opened.ok) {
 		fail(`open: ${opened.error.toString()}`);

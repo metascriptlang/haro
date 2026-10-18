@@ -1,4 +1,4 @@
-import { ConPty } from "../src/pty/pty";
+import { NativePty } from "../src/pty/pty";
 import { writeFile } from "std/fs";
 import { env, exit } from "std/process";
 
@@ -7,7 +7,7 @@ function main(): int32 {
 	let text = "";
 	for (let i = 0; i < 1600000; i++) { text += `line ${i}\r\n`; }
 	const _w = writeFile(path, text);
-	const opened = ConPty.open(`cmd.exe /c type "${path.replaceAll("/", "\\")}"`, 80, 24);
+	const opened = NativePty.open(`cmd.exe /c type "${path.replaceAll("/", "\\")}"`, 80, 24);
 	if (!opened.ok) { return 1; }
 	const p = opened.value;
 	const late: float64 = performance.now();

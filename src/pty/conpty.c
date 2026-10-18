@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "conpty.h"
+#include "nativePty.h"
 
 #define PTY_MAX 16
 #define READ_LIMIT (4 << 20)

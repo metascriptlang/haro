@@ -1,4 +1,4 @@
-import { ConPty } from "../src/pty/pty";
+import { NativePty } from "../src/pty/pty";
 import { argv, exit } from "std/process";
 import { writeFile } from "std/fs";
 
@@ -11,7 +11,7 @@ function main(): int32 {
 	const rows = argv[3].parseInt() as int32;
 	let command = argv[4];
 	for (let i = 5; i < argv.length; i++) { command += " " + argv[i]; }
-	const spawned = ConPty.spawn(command, cols, rows);
+	const spawned = NativePty.spawn(command, cols, rows);
 	if (!spawned.ok) {
 		console.log("recordPty: the command did not start");
 		return 1;

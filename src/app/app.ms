@@ -34,7 +34,6 @@ const NOTICE_BACKGROUND = "#5c1f24";
 const NOTICE_TEXT = "#ffffff";
 const NOTICE_PADDING: number = 8;
 const NOTICE_FALLBACK_COLS: int32 = 80;
-const PADDING: number = 6;
 const PROBE = "MMMMMMMMMM";
 const SHADES = 3;
 const HOLD_RECHECK_MS = 100;
@@ -64,6 +63,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	const [cursorRow, setCursorRow] = createSignal<number>(0);
 	const [background, setBackground] = createSignal<string>(hexOf(started.background));
 	const [foreground, setForeground] = createSignal<string>(hexOf(started.foreground));
+	const [padding, setPadding] = createSignal<number>(started.padding);
 	let notice = "";
 	const [noticed, setNoticed] = createSignal<boolean>(false);
 	const [preedit, setPreedit] = createSignal<string>("");
@@ -229,7 +229,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 
 	function showNotice(text: string): void {
 		notice = text;
-		const room = viewWidth() - 2 * PADDING - 2 * NOTICE_PADDING;
+		const room = viewWidth() - 2 * padding() - 2 * NOTICE_PADDING;
 		const cols = cellWidth() > 0 ? Math.max(1, Math.floor(room / cellWidth())) as int32 : NOTICE_FALLBACK_COLS;
 		noticeRows.replaceAll(noticeLines(text, cols));
 		setNoticed(text != "");
@@ -254,6 +254,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		}
 		settings = c;
 		controls.keybinds = c.keybinds;
+		setPadding(c.padding);
 		showNotice(restartNeeded(c, started) ? "config.ms: fontFamily, fontSize and command apply when Haro restarts" : "");
 		if (themed && applySettings()) { refresh(); }
 	});
@@ -504,7 +505,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	};
 
 	return element(
-		<Void style={{ backgroundColor: background(), padding: PADDING }}>
+		<Void style={{ backgroundColor: background(), padding: padding() }}>
 			<View
 				style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, pointerEvents: "box-only" }}
 				focusable
@@ -554,7 +555,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 				children: element(
 					<View
 						style={{
-							position: "absolute", left: PADDING, right: PADDING, top: PADDING, padding: NOTICE_PADDING,
+							position: "absolute", left: padding(), right: padding(), top: padding(), padding: NOTICE_PADDING,
 							backgroundColor: NOTICE_BACKGROUND, borderRadius: 4,
 						}}
 						onPointerDown={(e: NeonEvent): void => { showNotice(""); }}>

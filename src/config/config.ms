@@ -5,6 +5,7 @@ import { Keybind, keybind } from "../input/bindings";
 export interface Config {
 	fontFamily: Vec<string>;
 	fontSize: number;
+	padding: number;
 	command: string;
 	scrollback: int64;
 	foreground: Rgb;
@@ -30,6 +31,7 @@ export function defaults(): Config {
 	return {
 		fontFamily: [],
 		fontSize: 10.5,
+		padding: 0,
 		command: DEFAULT_COMMAND,
 		scrollback: SCROLLBACK_LINES,
 		foreground: { r: 204, g: 204, b: 204 },
@@ -124,6 +126,11 @@ export function parse(json: string): Result<Config, string> {
 				c.fontSize = v.asNumber();
 				if (c.fontSize <= 0) { return Result.err(`fontSize ${c.fontSize} must be above 0`); }
 			},
+			"padding" => {
+				if (v.kind != JsonKind.Number && v.kind != JsonKind.Int) { return Result.err("padding must be a number"); }
+				c.padding = v.asNumber();
+				if (c.padding < 0) { return Result.err(`padding ${c.padding} must be 0 or more`); }
+			},
 			"command" => { c.command = try text(v, key); },
 			"scrollback" => {
 				if (v.kind != JsonKind.Int || v.intVal < 0 || v.intVal > MAX_SCROLLBACK) {
@@ -160,6 +167,7 @@ test "an empty config keeps every default" {
 	assert c.value.fontFamily.length == 0;
 	assert c.value.fontSize == 10.5;
 	assert c.value.fontPx() == 14;
+	assert c.value.padding == 0;
 	assert c.value.command == DEFAULT_COMMAND;
 	assert c.value.scrollback == SCROLLBACK_LINES;
 	assert c.value.palette.length == 0;
@@ -168,7 +176,7 @@ test "an empty config keeps every default" {
 
 test "the fields a config gives replace the defaults" {
 	const c = parse(
-		`{"fontFamily":"Operator Saigon","fontSize":10.8,"command":"cmd.exe","scrollback":50000,"background":"#1a1b26",` +
+		`{"fontFamily":"Operator Saigon","fontSize":10.8,"padding":6,"command":"cmd.exe","scrollback":50000,"background":"#1a1b26",` +
 			`"foreground":"#A9B1D6","palette":["#32344a","#f7768e"],` +
 			`"keybinds":[{"keys":"shift+enter","text":"\\u001b[13;2u"}]}`,
 	);
@@ -176,6 +184,7 @@ test "the fields a config gives replace the defaults" {
 	assert c.value.fontFamily.length == 1;
 	assert c.value.fontFamily[0] == "Operator Saigon";
 	assert c.value.fontSize == 10.8;
+	assert c.value.padding == 6;
 	assert c.value.command == "cmd.exe";
 	assert c.value.scrollback == 50000;
 	const background: Rgb = { r: 26, g: 27, b: 38 };
@@ -204,6 +213,8 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"fontsize":10}`) == `unknown config field "fontsize"`;
 	assert refusal(`{"fontSize":"10"}`) == "fontSize must be a number";
 	assert refusal(`{"fontSize":0}`) == "fontSize 0 must be above 0";
+	assert refusal(`{"padding":"6"}`) == "padding must be a number";
+	assert refusal(`{"padding":-1}`) == "padding -1 must be 0 or more";
 	assert refusal(`{"background":"#12345"}`) == `background: "#12345" is not a #rrggbb colour`;
 	assert refusal(`{"palette":["#000000","red"]}`) == `palette[1]: "red" is not a #rrggbb colour`;
 	assert refusal(`{"keybinds":[{"keys":"shift+entre","text":"x"}]}`) ==

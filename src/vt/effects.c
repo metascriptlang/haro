@@ -173,8 +173,10 @@ static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const Gho
    returns. So the callback answers "denied", which makes libghostty write an empty clipboard reply
    ("ESC ] 52 ; c ;" and the terminator the program used), takes those bytes back out of the reply
    queue and keeps them. vtClipboardAnswer later writes the same frame with the clipboard in it, or
-   empty. A request while one is pending, or for a clipboard Windows has no equivalent of, keeps its
-   empty reply. */
+   empty. A request while one is pending, for a clipboard Windows has no equivalent of, or in kitty's
+   OSC 5522 protocol, whose answer is not this frame, keeps its refusal. */
+#define OSC52_REPLY "\x1b]52;"
+
 static void onClipboardRead(GhosttyTerminal terminal, void* userdata, const GhosttyClipboardRead* read) {
 	(void)terminal;
 	Effects* e = userdata;
@@ -183,7 +185,7 @@ static void onClipboardRead(GhosttyTerminal terminal, void* userdata, const Ghos
 	read->reply(read, &reply);
 	if (e->readPending || read->location != GHOSTTY_CLIPBOARD_LOCATION_STANDARD || e->outOfMemory) return;
 	int64_t n = e->len - mark;
-	if (n < 8) return;
+	if (n < 8 || memcmp(e->data + mark, OSC52_REPLY, sizeof OSC52_REPLY - 1) != 0) return;
 	uint8_t* copy = malloc((size_t)n);
 	if (!copy) return;
 	memcpy(copy, e->data + mark, (size_t)n);

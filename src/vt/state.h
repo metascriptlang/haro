@@ -15,6 +15,7 @@ int vtSetScrollback(GhosttyTerminal terminal, int64_t lines);
 int vtSetPullScrollback(GhosttyTerminal terminal, int pull);
 int64_t vtLinkAt(GhosttyTerminal terminal, int x, int y, uint8_t* buf, int64_t cap);
 int vtCursorLook(GhosttyRenderState state, int32_t* out, int64_t cap);
+int vtCursorWide(GhosttyRenderState state, GhosttyTerminal terminal, int x, int y);
 int vtSetBlinkDefault(GhosttyTerminal terminal, int on);
 int64_t vtString(GhosttyTerminal terminal, int which, uint8_t* buf, int64_t cap);
 

@@ -117,6 +117,7 @@ extern function vtSetScrollback(terminal: GhosttyTerminal, lines: int64): int32;
 extern function vtSetPullScrollback(terminal: GhosttyTerminal, pull: int32): int32;
 extern function vtLinkAt(terminal: GhosttyTerminal, x: int32, y: int32, buf: Span<uint8>): int64;
 extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
+extern function vtCursorWide(state: GhosttyRenderState, terminal: GhosttyTerminal, x: int32, y: int32): int32;
 extern function vtSetBlinkDefault(terminal: GhosttyTerminal, on: int32): int32;
 extern function vtClipboardReadTake(id: int32): int32;
 extern function vtClipboardAnswer(id: int32, text: Readonly<Span<uint8>>, allow: int32): int32;
@@ -518,6 +519,7 @@ export function size(this vt: Vt): Result<[int32, int32], VtError> {
 export struct Cursor {
 	x: int32;
 	y: int32;
+	wide: boolean;
 }
 
 export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
@@ -534,7 +536,9 @@ export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	if (!ok(stateCursorX(vt.state, xKey, x)) || !ok(stateCursorY(vt.state, yKey, y))) {
 		return Result.err(VtError.ReadFailed);
 	}
-	const at: Cursor | null = { x: x as int32, y: y as int32 };
+	const wide = vtCursorWide(vt.state, vt.terminal, x as int32, y as int32);
+	if (wide < 0) { return Result.err(VtError.ReadFailed); }
+	const at: Cursor | null = { x: wide == 2 ? (x as int32) - 1 : x as int32, y: y as int32, wide: wide > 0 };
 	return Result.ok(at);
 }
 
@@ -2118,6 +2122,27 @@ test "a committed grapheme arrives as its utf-8 bytes" {
 		}
 		vt.free();
 	}
+}
+
+function cursorAfter(text: string): string {
+	const created = Vt.create(20, 4);
+	if (!created.ok) { return "create failed"; }
+	const vt = created.value;
+	vt.writeText(text);
+	const updated = vt.update();
+	const at = vt.cursor();
+	vt.free();
+	if (!updated.ok || !at.ok) { return "read failed"; }
+	const c = at.value;
+	if (c === null) { return "none"; }
+	return `${c.x}${c.wide ? " wide" : ""}`;
+}
+
+test "a cursor on a wide character covers both its cells, from the character or its tail, as ghostty draws it" {
+	assert cursorAfter("\u4e2d\x1b[1G") == "0 wide";
+	assert cursorAfter("\u4e2d\x1b[2G") == "0 wide";
+	assert cursorAfter("\u4e2d") == "2";
+	assert cursorAfter("ab\x1b[2G") == "1";
 }
 
 test "the cursor reports where the next write lands" {

@@ -73,6 +73,31 @@ int64_t vtLinkAt(GhosttyTerminal terminal, int x, int y, uint8_t* buf, int64_t c
 	return (int64_t)len;
 }
 
+/* Where the cursor at viewport x, y sits on a wide character: 2 on its tail, 1 on the character
+   itself, 0 on a narrow cell, -1 on error. */
+int vtCursorWide(GhosttyRenderState state, GhosttyTerminal terminal, int x, int y) {
+	bool tail = false;
+	if (ghostty_render_state_get(state, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_WIDE_TAIL, &tail)
+		!= GHOSTTY_SUCCESS) {
+		return -1;
+	}
+	if (tail) return 2;
+	GhosttyPoint at;
+	memset(&at, 0, sizeof at);
+	at.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+	at.value.coordinate.x = (uint16_t)x;
+	at.value.coordinate.y = (uint32_t)y;
+	GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+	GhosttyCell cell = 0;
+	GhosttyCellWide wide = GHOSTTY_CELL_WIDE_NARROW;
+	if (ghostty_terminal_grid_ref(terminal, at, &ref) != GHOSTTY_SUCCESS
+		|| ghostty_grid_ref_cell(&ref, &cell) != GHOSTTY_SUCCESS
+		|| ghostty_cell_get(cell, GHOSTTY_CELL_DATA_WIDE, &wide) != GHOSTTY_SUCCESS) {
+		return -1;
+	}
+	return wide == GHOSTTY_CELL_WIDE_WIDE ? 1 : 0;
+}
+
 /* out: visible (DECTCEM), shape (GhosttyRenderStateCursorVisualStyle), blinking. Reads the render
    state, so it describes the frame the last update captured. */
 int vtCursorLook(GhosttyRenderState state, int32_t* out, int64_t cap) {

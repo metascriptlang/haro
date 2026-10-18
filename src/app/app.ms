@@ -111,7 +111,8 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		let next: Vec<Box> = [];
 		const at = cursorAt;
 		if (at !== null && drawn(cursorLook, focused, blinkOn)) {
-			next = boxes(shapeOf(cursorLook, focused), at.x, at.y, cellWidth(), rowHeight(), 1 / PixelRatio.get());
+			const width = at.wide ? 2 * cellWidth() : cellWidth();
+			next = boxes(shapeOf(cursorLook, focused), at.x, at.y, width, rowHeight(), 1 / PixelRatio.get());
 		}
 		for (let i = 0; i < BOX_SLOTS; i++) {
 			const box = i < next.length ? next[i] : NO_BOX;

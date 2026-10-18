@@ -210,15 +210,22 @@ function sameLook(a: Look, b: Look): boolean {
 		a.style.fontStyle == b.style.fontStyle;
 }
 
-test "known gap: blink, invisible and overline do not reach the span" {
+test "known gap: blink and overline do not reach the span" {
 	const plain = look("0");
 	const blink = look("5");
-	const hidden = look("8");
 	const over = look("53");
-	assert plain !== null && blink !== null && hidden !== null && over !== null;
-	if (plain !== null && blink !== null && hidden !== null && over !== null) {
+	assert plain !== null && blink !== null && over !== null;
+	if (plain !== null && blink !== null && over !== null) {
 		assert sameLook(blink, plain);
-		assert sameLook(hidden, plain) && hidden.text.startsWith("X");
 		assert sameLook(over, plain);
+	}
+}
+
+test "concealed text reaches the span as blanks in the plain look" {
+	const plain = look("0");
+	const hidden = look("8");
+	assert plain !== null && hidden !== null;
+	if (plain !== null && hidden !== null) {
+		assert sameLook(hidden, plain) && !hidden.text.startsWith("X");
 	}
 }

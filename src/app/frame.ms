@@ -18,6 +18,7 @@ export enum FrameError {
 }
 
 const HEX = "0123456789abcdef";
+export const STYLE_CACHE_LIMIT = 4096;
 
 function hexByte(v: uint8): string {
 	const n = v as int32;
@@ -53,6 +54,7 @@ function styleOf(styles: Map<string, Style>, run: LineRun, background: Rgb): Sty
 	const style: Style = { color: fg, textDecorationLine: decoration, textDecorationStyle: line, fontWeight: weight, fontStyle: slant };
 	if (bg != "") { style.backgroundColor = bg; }
 	if (lineColor != "") { style.textDecorationColor = lineColor; }
+	if (styles.size >= STYLE_CACHE_LIMIT) { styles.clear(); }
 	styles.set(key, style);
 	return style;
 }
@@ -123,6 +125,17 @@ test "each run becomes a span over its own text, sharing one style per look" {
 	assert spans[0].text == "ab" && spans[1].text == " " && spans[2].text == "cd";
 	assert spans[0].style === spans[2].style;
 	assert styles.size == 2;
+}
+
+test "truecolour output that never repeats a look keeps the style cache bounded" {
+	const styles = new Map<string, Style>();
+	for (let i = 0; i < STYLE_CACHE_LIMIT * 3; i++) {
+		const fg: Rgb = { r: (i & 255) as uint8, g: ((i >> 8) & 255) as uint8, b: 7 };
+		const l: GridLine = { text: "x", runs: [run(1, fg, BLACK, Underline.None)], cursorCell: -1 };
+		const spans = spansOf(styles, l, BLACK);
+		assert spans[0].style!.color == hexOf(fg);
+	}
+	assert styles.size <= STYLE_CACHE_LIMIT;
 }
 
 test "a background differs from the terminal's only where a run says so" {

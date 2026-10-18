@@ -412,7 +412,10 @@ export function App(t: Term, entry: Entry): NeonNode {
 			<View
 				style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, pointerEvents: "box-only" }}
 				focusable
-				ref={(h: ViewHandle): void => { grid = h; }}
+				ref={(h: ViewHandle): void => {
+					grid = h;
+					h.focus();
+				}}
 				imeRect={{
 					x: cursorCol() * cellWidth(),
 					y: cursorRow() * rowHeight(),

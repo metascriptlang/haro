@@ -9,10 +9,8 @@ when (emcc) {
 }
 @include("./effects.h");
 @compile("./effects.c");
-@include("./select.h");
-@compile("./select.c");
-@include("./state.h");
-@compile("./state.c");
+@include("./shim.h");
+@compile("./shim.c");
 
 import {
 	ghostty_terminal_new,
@@ -40,13 +38,34 @@ import {
 	ghostty_render_state_row_cells_new,
 	ghostty_render_state_row_cells_free,
 	ghostty_render_state_row_cells_next,
+	ghostty_mouse_encoder_new,
+	ghostty_mouse_encoder_free,
+	ghostty_mouse_encoder_setopt_from_terminal,
+	ghostty_mouse_event_new,
+	ghostty_mouse_event_free,
+	ghostty_mouse_event_clear_button,
+	ghostty_mouse_event_set_position,
 	GhosttyAllocator,
 	GhosttyResult,
 	GhosttyTerminal,
 	GhosttyTerminalData,
+	GhosttyTerminalOption,
+	GhosttyTerminalModeConfig,
+	GhosttyFocusEvent,
 	GhosttyTerminalScreen,
 	GhosttyTerminalScrollbar,
 	GhosttyTrackedGridRef,
+	GhosttyGridRef,
+	GhosttySelection,
+	GhosttySelectionOrder,
+	GhosttyTerminalSelectWordOptions,
+	GhosttyTerminalSelectLineOptions,
+	GhosttyTerminalSelectionFormatOptions,
+	GhosttyFormatterFormat,
+	GhosttyTerminalScrollViewportTag,
+	GhosttyRow,
+	GhosttyRowData,
+	GhosttyRowSemanticPrompt,
 	GhosttyPointCoordinate,
 	GhosttyPointTag,
 	GhosttyRenderState,
@@ -57,10 +76,16 @@ import {
 	GhosttyRenderStateRowCellsData,
 	GhosttyColorRgb,
 	GhosttyStyle,
+	GhosttyStyleColorTag,
+	GhosttyRenderStateCursorVisualStyle,
 	GhosttyCell,
 	GhosttyCellData,
 	GhosttyCellWide,
 	GhosttyKeyEncoder,
+	GhosttyMouseEncoder,
+	GhosttyMouseEncoderOption,
+	GhosttyMouseEncoderSize,
+	GhosttyMouseEvent,
 	GhosttyKeyEvent,
 	GhosttyKeyAction,
 	GhosttyKey,
@@ -68,62 +93,35 @@ import {
 import { fromCodePoint } from "std/core/string";
 import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe, withoutAltGr } from "../keys/keys";
 import { Marked, Point, Range, Selection, Unit } from "../select/select";
+import { Handle } from "std/ffi";
 
 struct Graphemes { cp: uint32[16]; }
+struct Colors256 { c: GhosttyColorRgb[256]; }
 
 extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<Span<uint8>>): void
 	from "ghostty_terminal_vt_write";
 extern function vtAllocator(): Ptr<GhosttyAllocator>;
-extern function vtEffectsOpen(terminal: GhosttyTerminal, state: GhosttyRenderState): int32;
-extern function vtClipboardTake(id: int32, buf: Span<uint8>): int64;
-extern function vtClipboardSize(id: int32): int64;
-extern function vtHoldLimit(id: int32, ms: int64): void;
-extern function vtHeld(id: int32, terminal: GhosttyTerminal): int32;
-extern function vtRepliesTake(id: int32, buf: Span<uint8>): int64;
-extern function vtEffectsClose(id: int32, terminal: GhosttyTerminal): void;
-extern function vtEventsTake(id: int32, out: Span<int32>): int32;
-extern function vtModes(terminal: GhosttyTerminal, out: Span<int32>): int32;
-extern function vtFocusEncode(terminal: GhosttyTerminal, gained: int32, buf: Span<uint8>): int64;
-extern function vtMouseEncode(
-	id: int32,
-	terminal: GhosttyTerminal,
-	action: int32,
-	button: int32,
-	mods: int32,
-	x: float32,
-	y: float32,
-	cellWidth: int32,
-	cellHeight: int32,
-	width: int32,
-	height: int32,
-	anyPressed: int32,
+extern function vtEffectsWire(terminal: GhosttyTerminal, effects: Ptr<void> | null): int32;
+extern function mouseSetFlag(
+	encoder: GhosttyMouseEncoder,
+	option: GhosttyMouseEncoderOption,
+	ref value: boolean,
+): void from "ghostty_mouse_encoder_setopt";
+extern function mouseSetSize(
+	encoder: GhosttyMouseEncoder,
+	option: GhosttyMouseEncoderOption,
+	ref size: GhosttyMouseEncoderSize,
+): void from "ghostty_mouse_encoder_setopt";
+extern function mouseSetAction(event: GhosttyMouseEvent, action: int32): void from "ghostty_mouse_event_set_action";
+extern function mouseSetButton(event: GhosttyMouseEvent, button: int32): void from "ghostty_mouse_event_set_button";
+extern function mouseSetMods(event: GhosttyMouseEvent, mods: uint16): void from "ghostty_mouse_event_set_mods";
+extern function mouseEncode(
+	encoder: GhosttyMouseEncoder,
+	event: GhosttyMouseEvent,
 	buf: Span<uint8>,
-): int64;
-extern function vtGraphemes(cells: GhosttyRenderStateRowCells, buf: Span<uint32>): int64;
-extern function vtUnderlineColor(
-	state: GhosttyRenderState,
-	cells: GhosttyRenderStateRowCells,
-	rgb: Span<uint8>,
-): int32;
-extern function vtSetDefaultColors(
-	terminal: GhosttyTerminal,
-	fgR: int32,
-	fgG: int32,
-	fgB: int32,
-	bgR: int32,
-	bgG: int32,
-	bgB: int32,
-): int32;
-extern function vtSetPalette(terminal: GhosttyTerminal, rgb: Readonly<Span<uint8>>): int32;
-extern function vtSetScrollback(terminal: GhosttyTerminal, lines: int64): int32;
-extern function vtSetPullScrollback(terminal: GhosttyTerminal, pull: int32): int32;
-extern function vtLinkAt(terminal: GhosttyTerminal, x: int32, y: int32, buf: Span<uint8>): int64;
-extern function vtCursorLook(state: GhosttyRenderState, out: Span<int32>): int32;
-extern function vtCursorWide(state: GhosttyRenderState, terminal: GhosttyTerminal, x: int32, y: int32): int32;
-extern function vtSetBlinkDefault(terminal: GhosttyTerminal, on: int32): int32;
-extern function vtClipboardReadTake(id: int32): int32;
-extern function vtClipboardAnswer(id: int32, text: Readonly<Span<uint8>>, allow: int32): int32;
-extern function vtString(terminal: GhosttyTerminal, which: int32, buf: Span<uint8>): int64;
+	out written: uint64,
+): GhosttyResult from "ghostty_mouse_encoder_encode";
+extern function vtString(terminal: GhosttyTerminal, key: GhosttyTerminalData, buf: Span<uint8>): int64;
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
 extern function vtTopAnchor(ref: GhosttyTrackedGridRef, terminal: GhosttyTerminal): int32;
 extern function terminalScrollbar(
@@ -136,6 +134,56 @@ extern function terminalScreen(
 	key: GhosttyTerminalData,
 	out screen: GhosttyTerminalScreen,
 ): GhosttyResult from "ghostty_terminal_get";
+extern function terminalFlag(
+	terminal: GhosttyTerminal,
+	key: GhosttyTerminalData,
+	out value: boolean,
+): GhosttyResult from "ghostty_terminal_get";
+extern function terminalMode(
+	terminal: GhosttyTerminal,
+	key: GhosttyTerminalData,
+	ref mode: GhosttyTerminalModeConfig,
+): GhosttyResult from "ghostty_terminal_get";
+extern function terminalColors(
+	terminal: GhosttyTerminal,
+	key: GhosttyTerminalData,
+	out colors: Colors256,
+): GhosttyResult from "ghostty_terminal_get";
+extern function setColor(
+	terminal: GhosttyTerminal,
+	option: GhosttyTerminalOption,
+	ref color: GhosttyColorRgb,
+): GhosttyResult from "ghostty_terminal_set";
+extern function setColors(
+	terminal: GhosttyTerminal,
+	option: GhosttyTerminalOption,
+	ref colors: Colors256,
+): GhosttyResult from "ghostty_terminal_set";
+extern function setSize(
+	terminal: GhosttyTerminal,
+	option: GhosttyTerminalOption,
+	ref value: uint64,
+): GhosttyResult from "ghostty_terminal_set";
+extern function setFlag(
+	terminal: GhosttyTerminal,
+	option: GhosttyTerminalOption,
+	ref value: boolean,
+): GhosttyResult from "ghostty_terminal_set";
+extern function setMode(
+	terminal: GhosttyTerminal,
+	option: GhosttyTerminalOption,
+	ref mode: GhosttyTerminalModeConfig,
+): GhosttyResult from "ghostty_terminal_set";
+extern function unset(
+	terminal: GhosttyTerminal,
+	option: GhosttyTerminalOption,
+	value: Ptr<void> | null,
+): GhosttyResult from "ghostty_terminal_set";
+extern function focusEncode(
+	event: GhosttyFocusEvent,
+	buf: Span<uint8>,
+	out written: uint64,
+): GhosttyResult from "ghostty_focus_encode";
 extern function eventSetMods(event: GhosttyKeyEvent, mods: uint16): void
 	from "ghostty_key_event_set_mods";
 extern function eventSetConsumedMods(event: GhosttyKeyEvent, mods: uint16): void
@@ -182,15 +230,30 @@ extern function cellGraphemes(
 	key: GhosttyRenderStateRowCellsData,
 	out graphemes: Graphemes,
 ): GhosttyResult from "ghostty_render_state_row_cells_get";
+extern function cellGraphemesInto(
+	cells: GhosttyRenderStateRowCells,
+	key: GhosttyRenderStateRowCellsData,
+	buf: Ptr<uint32>,
+): GhosttyResult from "ghostty_render_state_row_cells_get";
 extern function stateColor(
 	s: GhosttyRenderState,
 	key: GhosttyRenderStateData,
 	out color: GhosttyColorRgb,
 ): GhosttyResult from "ghostty_render_state_get";
-extern function stateCursorHasValue(
+extern function stateFlag(
 	s: GhosttyRenderState,
 	key: GhosttyRenderStateData,
-	out hasValue: boolean,
+	out value: boolean,
+): GhosttyResult from "ghostty_render_state_get";
+extern function stateCursorStyle(
+	s: GhosttyRenderState,
+	key: GhosttyRenderStateData,
+	out style: GhosttyRenderStateCursorVisualStyle,
+): GhosttyResult from "ghostty_render_state_get";
+extern function stateColors(
+	s: GhosttyRenderState,
+	key: GhosttyRenderStateData,
+	out colors: Colors256,
 ): GhosttyResult from "ghostty_render_state_get";
 extern function stateCursorX(
 	s: GhosttyRenderState,
@@ -229,27 +292,73 @@ extern function cellWide(
 	out wide: GhosttyCellWide,
 ): GhosttyResult from "ghostty_cell_get";
 
-extern function vtScroll(terminal: GhosttyTerminal, tag: int32, amount: int64): void;
-extern function vtPromptJump(terminal: GhosttyTerminal, delta: int32): int32;
-extern function vtSelSet(
+extern function vtGridRef(
 	terminal: GhosttyTerminal,
-	sx: int32,
-	sy: int32,
-	ex: int32,
-	ey: int32,
-	rectangle: int32,
-): int32;
-extern function vtSelClear(terminal: GhosttyTerminal): void;
-extern function vtSelGet(terminal: GhosttyTerminal, out: Span<int32>): int32;
-extern function vtSelWord(terminal: GhosttyTerminal, x: int32, y: int32, out: Span<int32>): int32;
-extern function vtSelLine(terminal: GhosttyTerminal, x: int32, y: int32, out: Span<int32>): int32;
-extern function vtSelText(terminal: GhosttyTerminal, buf: Span<uint8>): int64;
-extern function vtPasteEncode(
+	tag: GhosttyPointTag,
+	x: int32,
+	y: int32,
+	out gridRef: GhosttyGridRef,
+): GhosttyResult;
+extern function vtScroll(terminal: GhosttyTerminal, tag: GhosttyTerminalScrollViewportTag, amount: int64): void;
+extern function gridRefLink(
+	ref gridRef: GhosttyGridRef,
+	buf: Span<uint8>,
+	out len: uint64,
+): GhosttyResult from "ghostty_grid_ref_hyperlink_uri";
+extern function gridRefCell(ref gridRef: GhosttyGridRef, out cell: GhosttyCell): GhosttyResult
+	from "ghostty_grid_ref_cell";
+extern function gridRefRow(ref gridRef: GhosttyGridRef, out row: GhosttyRow): GhosttyResult
+	from "ghostty_grid_ref_row";
+extern function rowPrompt(
+	row: GhosttyRow,
+	key: GhosttyRowData,
+	out prompt: GhosttyRowSemanticPrompt,
+): GhosttyResult from "ghostty_row_get";
+extern function pointOf(
 	terminal: GhosttyTerminal,
-	data: Readonly<Span<uint8>>,
-	allowUnsafe: int32,
-	out: Span<uint8>,
-): int64;
+	ref gridRef: GhosttyGridRef,
+	tag: GhosttyPointTag,
+	out at: GhosttyPointCoordinate,
+): GhosttyResult from "ghostty_terminal_point_from_grid_ref";
+extern function terminalSelection(
+	terminal: GhosttyTerminal,
+	key: GhosttyTerminalData,
+	ref selection: GhosttySelection,
+): GhosttyResult from "ghostty_terminal_get";
+extern function setSelection(
+	terminal: GhosttyTerminal,
+	option: GhosttyTerminalOption,
+	ref selection: GhosttySelection,
+): GhosttyResult from "ghostty_terminal_set";
+extern function selectionOrdered(
+	terminal: GhosttyTerminal,
+	ref selection: GhosttySelection,
+	order: GhosttySelectionOrder,
+	ref ordered: GhosttySelection,
+): GhosttyResult from "ghostty_terminal_selection_ordered";
+extern function selectWord(
+	terminal: GhosttyTerminal,
+	ref options: GhosttyTerminalSelectWordOptions,
+	ref selection: GhosttySelection,
+): GhosttyResult from "ghostty_terminal_select_word";
+extern function selectLine(
+	terminal: GhosttyTerminal,
+	ref options: GhosttyTerminalSelectLineOptions,
+	ref selection: GhosttySelection,
+): GhosttyResult from "ghostty_terminal_select_line";
+extern function selectionFormat(
+	terminal: GhosttyTerminal,
+	options: GhosttyTerminalSelectionFormatOptions,
+	buf: Span<uint8>,
+	out written: uint64,
+): GhosttyResult from "ghostty_terminal_selection_format_buf";
+extern function pasteSafe(data: Readonly<Span<uint8>>): boolean from "ghostty_paste_is_safe";
+extern function pasteEncode(
+	data: Span<uint8>,
+	bracketed: boolean,
+	buf: Span<uint8>,
+	out written: uint64,
+): GhosttyResult from "ghostty_paste_encode";
 
 const MAX_GRAPHEMES: uint32 = 16;
 const MAX_CELL_EXTRA: uint32 = 65536;
@@ -261,7 +370,6 @@ export enum VtError {
 	ReadFailed,
 	GraphemeTooLong,
 	CodepointInvalid,
-	OutOfMemory,
 	SelectFailed,
 }
 
@@ -275,9 +383,20 @@ export struct Vt {
 	state: GhosttyRenderState;
 	rows: GhosttyRenderStateRowIterator;
 	cells: GhosttyRenderStateRowCells;
-	effects: int32;
+	effects: Effects;
+	mouse: Mouse;
 	top: GhosttyTrackedGridRef;
 	painted: Painted;
+}
+
+// The mouse encoder, opened on the first report, and the modes and geometry it was last given: it
+// forgets the last cell it reported on every setopt_from_terminal and size, so each is set only when
+// its value changed.
+export interface Mouse {
+	encoder: GhosttyMouseEncoder | null;
+	event: GhosttyMouseEvent | null;
+	signature: int32;
+	geometry: MouseGeometry | null;
 }
 
 export struct Rgb { r: uint8; g: uint8; b: uint8; }
@@ -331,7 +450,214 @@ function ok(r: GhosttyResult): boolean {
 	return r == GhosttyResult.GHOSTTY_SUCCESS;
 }
 
+const HOLD_LIMIT_MS = 1000;
+
+// What the terminal's callbacks leave for the host: the replies to send to the pty, the events since
+// the last take, an OSC 52 write and an OSC 52 read waiting for its answer.
+export interface Effects {
+	state: GhosttyRenderState;
+	replies: Vec<uint8>;
+	bells: int32;
+	titleChanged: boolean;
+	pwdChanged: boolean;
+	held: boolean;
+	heldAtMs: number;
+	holdLimitMs: number;
+	clipboard: string | null;
+	readFrame: Vec<uint8> | null;
+	readAsked: boolean;
+}
+
+export function openEffects(terminal: GhosttyTerminal, state: GhosttyRenderState): Effects | null {
+	const e: Effects = {
+		state: state,
+		replies: [],
+		bells: 0,
+		titleChanged: false,
+		pwdChanged: false,
+		held: false,
+		heldAtMs: 0,
+		holdLimitMs: HOLD_LIMIT_MS,
+		clipboard: null,
+		readFrame: null,
+		readAsked: false,
+	};
+	if (vtEffectsWire(terminal, Handle.borrow(e).ptr) != 0) {
+		closeEffects(terminal);
+		return null;
+	}
+	return e;
+}
+
+export function closeEffects(terminal: GhosttyTerminal): void {
+	const _cleared = vtEffectsWire(terminal, null);
+}
+
+function effectsAt(p: Ptr<void>): Effects {
+	return Handle.at<Effects>(p).value();
+}
+
+@exportName("haroVtWritePty")
+function writePty(effects: Ptr<void>, bytes: Ptr<uint8>, n: uint64): void {
+	const e = effectsAt(effects);
+	for (let i = 0; i < (n as int32); i++) { e.replies.push(bytes[i]); }
+}
+
+@exportName("haroVtBell")
+function bell(terminal: GhosttyTerminal, effects: Ptr<void>): void {
+	effectsAt(effects).bells += 1;
+}
+
+@exportName("haroVtTitleChanged")
+function titleChanged(terminal: GhosttyTerminal, effects: Ptr<void>): void {
+	effectsAt(effects).titleChanged = true;
+}
+
+@exportName("haroVtPwdChanged")
+function pwdChanged(terminal: GhosttyTerminal, effects: Ptr<void>): void {
+	effectsAt(effects).pwdChanged = true;
+}
+
+@exportName("haroVtRenderHold")
+function renderHold(terminal: GhosttyTerminal, effects: Ptr<void>, held: boolean): void {
+	const e = effectsAt(effects);
+	e.held = held;
+	if (!held) { return; }
+	const _captured = ghostty_render_state_update(e.state, terminal);
+	e.heldAtMs = performance.now();
+}
+
+@exportName("haroVtClipboardWritten")
+function clipboardWritten(effects: Ptr<void>, text: Ptr<uint8>, n: uint64): void {
+	let bytes: Vec<uint8> = [];
+	for (let i = 0; i < (n as int32); i++) { bytes.push(text[i]); }
+	effectsAt(effects).clipboard = bytes[0..bytes.length].asString();
+}
+
+@exportName("haroVtRepliesLength")
+function repliesLength(effects: Ptr<void>): int64 {
+	return effectsAt(effects).replies.length;
+}
+
+const OSC52_REPLY = "\x1b]52;";
+
+// An OSC 52 read cannot wait for the user inside vt_write: the reply must be given before the callback
+// returns. So the callback answers "denied", which makes libghostty write an empty clipboard reply
+// ("ESC ] 52 ; c ;" and the terminator the program used) after mark; this takes those bytes back out
+// of the replies and keeps them, and answerClipboard later writes the same frame with the clipboard in
+// it, or empty. A request while one is pending, or one whose reply is not that frame (kitty's OSC 5522
+// protocol), keeps its refusal.
+@exportName("haroVtClipboardRead")
+function clipboardRead(effects: Ptr<void>, mark: int64): void {
+	const e = effectsAt(effects);
+	const from = mark as int32;
+	if (e.readFrame !== null || e.replies.length - from < 8) { return; }
+	const prefix = OSC52_REPLY.asBytes();
+	for (let i = 0; i < prefix.length; i++) {
+		if (e.replies[from + i] != prefix[i]) { return; }
+	}
+	let frame: Vec<uint8> = [];
+	for (let i = from; i < e.replies.length; i++) { frame.push(e.replies[i]); }
+	e.replies.shrink(from);
+	e.readFrame = frame;
+	e.readAsked = true;
+}
+
+// Moves up to buf.length reply bytes into buf, oldest first.
+export function takeReplies(this e: Effects, buf: Span<uint8>): int32 {
+	const n = e.replies.length < buf.length ? e.replies.length : buf.length;
+	for (let i = 0; i < n; i++) { buf[i] = e.replies[i]; }
+	let rest: Vec<uint8> = [];
+	for (let i = n; i < e.replies.length; i++) { rest.push(e.replies[i]); }
+	e.replies = rest;
+	return n;
+}
+
+// The text of the last OSC 52 write to the standard clipboard that the host has not taken.
+export function takeClipboard(this e: Effects): string | null {
+	const text = e.clipboard;
+	e.clipboard = null;
+	return text;
+}
+
+// True once per OSC 52 read that waits for an answer.
+export function clipboardAsked(this e: Effects): boolean {
+	const asked = e.readAsked;
+	e.readAsked = false;
+	return asked;
+}
+
+const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".asBytes();
+const PAD: uint8 = 0x3d;
+const SEMICOLON: uint8 = 0x3b;
+
+function pushBase64(ref out: Vec<uint8>, bytes: Readonly<Span<uint8>>): void {
+	for (let i = 0; i < bytes.length; i += 3) {
+		let v = (bytes[i] as uint32) << 16;
+		if (i + 1 < bytes.length) { v |= (bytes[i + 1] as uint32) << 8; }
+		if (i + 2 < bytes.length) { v |= bytes[i + 2] as uint32; }
+		out.push(BASE64[((v >> 18) & 63) as int32]);
+		out.push(BASE64[((v >> 12) & 63) as int32]);
+		out.push(i + 1 < bytes.length ? BASE64[((v >> 6) & 63) as int32] : PAD);
+		out.push(i + 2 < bytes.length ? BASE64[(v & 63) as int32] : PAD);
+	}
+}
+
+// Writes the reply the waiting read expects: the clipboard text when allow is set, else empty. False
+// when no read waits.
+export function answerClipboard(this e: Effects, text: string, allow: boolean): boolean {
+	const frame = e.readFrame;
+	if (frame === null) { return false; }
+	let head = 0;
+	let semicolons = 0;
+	while (head < frame.length && semicolons < 2) {
+		if (frame[head] == SEMICOLON) { semicolons++; }
+		head++;
+	}
+	for (let i = 0; i < head; i++) { e.replies.push(frame[i]); }
+	if (allow) { pushBase64(e.replies, text.asBytes()); }
+	for (let i = head; i < frame.length; i++) { e.replies.push(frame[i]); }
+	e.readFrame = null;
+	return true;
+}
+
 export const SCROLLBACK_LINES: int64 = 10000;
+const SCROLLBACK_MAX_BYTES: uint64 = 50000000;
+
+const MODE_DECCKM: uint16 = 1;
+const MODE_CURSOR_BLINKING: uint16 = 12;
+const MODE_FOCUS_EVENT: uint16 = 1004;
+const MODE_ALT_SCROLL: uint16 = 1007;
+const MODE_BRACKETED_PASTE: uint16 = 2004;
+
+function colorsSet(terminal: GhosttyTerminal, fg: Rgb, bg: Rgb): boolean {
+	let f: GhosttyColorRgb = { r: fg.r, g: fg.g, b: fg.b };
+	let b: GhosttyColorRgb = { r: bg.r, g: bg.g, b: bg.b };
+	return ok(setColor(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, f))
+		&& ok(setColor(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, b));
+}
+
+// Blinking is what a fresh terminal starts in and what DECSCUSR 0 returns to. The blink mode is not
+// configurable as a reset default, so a full reset (RIS) goes back to a steady cursor.
+function blinkDefaultSet(terminal: GhosttyTerminal, on: boolean): boolean {
+	let mode: GhosttyTerminalModeConfig = { mode: MODE_CURSOR_BLINKING, value: on };
+	let blink = on;
+	return ok(setMode(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode))
+		&& ok(setFlag(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK, blink));
+}
+
+function scrollbackSet(terminal: GhosttyTerminal, lines: int64): boolean {
+	let bytes = SCROLLBACK_MAX_BYTES;
+	let kept = lines as uint64;
+	return ok(setSize(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, bytes))
+		&& ok(setSize(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, kept));
+}
+
+function modeOn(terminal: GhosttyTerminal, mode: uint16): boolean | null {
+	let m: GhosttyTerminalModeConfig = { mode: mode, value: false };
+	if (!ok(terminalMode(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MODE, m))) { return null; }
+	return m.value;
+}
 
 export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtError> {
 	let terminal: GhosttyTerminal;
@@ -349,11 +675,12 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		ghostty_terminal_free(terminal);
 		return Result.err(VtError.CreateFailed);
 	}
-	const effects = vtEffectsOpen(terminal, state);
+	const effects = openEffects(terminal, state);
 	let top: GhosttyTrackedGridRef;
-	if (effects < 0 || vtTopTrack(terminal, top) != 0 || vtSetDefaultColors(terminal, 255, 255, 255, 0, 0, 0) != 0
-		|| vtSetBlinkDefault(terminal, 1) != 0 || vtSetScrollback(terminal, SCROLLBACK_LINES) != 0) {
-		if (effects >= 0) { vtEffectsClose(effects, terminal); }
+	if (effects === null || vtTopTrack(terminal, top) != 0
+		|| !colorsSet(terminal, { r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 })
+		|| !blinkDefaultSet(terminal, true) || !scrollbackSet(terminal, SCROLLBACK_LINES)) {
+		if (effects !== null) { closeEffects(terminal); }
 		ghostty_render_state_row_cells_free(cells);
 		ghostty_render_state_row_iterator_free(iterator);
 		ghostty_render_state_free(state);
@@ -366,6 +693,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		rows: iterator,
 		cells: cells,
 		effects: effects,
+		mouse: { encoder: null, event: null, signature: -1, geometry: null },
 		top: top,
 		painted: { alternate: false, rows: [], palette: null },
 	});
@@ -380,10 +708,7 @@ export function writeText(this vt: Vt, text: string): void {
 }
 
 export function replies(this vt: Vt, buf: Span<uint8>): Result<int32, VtError> {
-	const n = vtRepliesTake(vt.effects, buf);
-	if (n == -2) { return Result.err(VtError.OutOfMemory); }
-	if (n < 0) { return Result.err(VtError.ReadFailed); }
-	return Result.ok(n as int32);
+	return Result.ok(vt.effects.takeReplies(buf));
 }
 
 export struct VtEvents {
@@ -393,44 +718,50 @@ export struct VtEvents {
 }
 
 export function takeEvents(this vt: Vt): Result<VtEvents, VtError> {
-	let out: Vec<int32> = new Array(3);
-	if (vtEventsTake(vt.effects, out) != 0) { return Result.err(VtError.ReadFailed); }
-	return Result.ok({ bells: out[0], titleChanged: out[1] != 0, pwdChanged: out[2] != 0 });
+	const e = vt.effects;
+	const events: VtEvents = { bells: e.bells, titleChanged: e.titleChanged, pwdChanged: e.pwdChanged };
+	e.bells = 0;
+	e.titleChanged = false;
+	e.pwdChanged = false;
+	return Result.ok(events);
 }
 
-const STRING_TITLE: int32 = 0;
-const STRING_PWD: int32 = 1;
-
-function stringOf(terminal: GhosttyTerminal, which: int32): Result<string, VtError> {
+function stringOf(terminal: GhosttyTerminal, key: GhosttyTerminalData): Result<string, VtError> {
 	let buf: Vec<uint8> = new Array(256);
-	let n = vtString(terminal, which, buf);
+	let n = vtString(terminal, key, buf);
 	if (n > (buf.length as int64)) {
 		buf = new Array(n as int32);
-		n = vtString(terminal, which, buf);
+		n = vtString(terminal, key, buf);
 	}
 	if (n < 0) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(buf[0..(n as int32)].asString());
 }
 
 export function title(this vt: Vt): Result<string, VtError> {
-	return stringOf(vt.terminal, STRING_TITLE);
+	return stringOf(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_TITLE);
 }
 
+// The OSC 8 URI of the viewport cell at x, y, or null when the cell has none.
 export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, VtError> {
-	let buf: Vec<uint8> = new Array(256);
-	let n = vtLinkAt(vt.terminal, x, y, buf);
-	if (n > (buf.length as int64)) {
-		buf = new Array(n as int32);
-		n = vtLinkAt(vt.terminal, x, y, buf);
+	let at: GhosttyGridRef;
+	if (!ok(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, x, y, at))) {
+		return Result.err(VtError.ReadFailed);
 	}
-	if (n < 0) { return Result.err(VtError.ReadFailed); }
-	if (n == 0) { return Result.ok(null); }
-	const uri: string | null = buf[0..(n as int32)].asString();
+	let buf: Vec<uint8> = new Array(256);
+	let len: uint64 = 0;
+	let r = gridRefLink(at, buf, len);
+	if (r == GhosttyResult.GHOSTTY_OUT_OF_SPACE) {
+		buf = new Array(len as int32);
+		r = gridRefLink(at, buf, len);
+	}
+	if (!ok(r)) { return Result.err(VtError.ReadFailed); }
+	if (len == 0) { return Result.ok(null); }
+	const uri: string | null = buf[0..(len as int32)].asString();
 	return Result.ok(uri);
 }
 
 export function pwd(this vt: Vt): Result<string, VtError> {
-	return stringOf(vt.terminal, STRING_PWD);
+	return stringOf(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_PWD);
 }
 
 export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtError> {
@@ -442,60 +773,67 @@ export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtErro
 }
 
 export function setDefaultColors(this vt: Vt, fg: Rgb, bg: Rgb): Result<Vt, VtError> {
-	const set = vtSetDefaultColors(
-		vt.terminal, fg.r as int32, fg.g as int32, fg.b as int32, bg.r as int32, bg.g as int32, bg.b as int32,
-	);
-	if (set != 0) { return Result.err(VtError.ReadFailed); }
+	if (!colorsSet(vt.terminal, fg, bg)) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(vt);
 }
 
+// The built-in palette with its first entries replaced by colors, as the colours a program's SGR 30-37,
+// 90-97 and 38;5 indices name.
 export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<Vt, VtError> {
-	let rgb: Vec<uint8> = [];
-	for (const c of colors) {
-		rgb.push(c.r);
-		rgb.push(c.g);
-		rgb.push(c.b);
+	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_PALETTE;
+	let palette: Colors256;
+	if (colors.length > 256 || !ok(unset(vt.terminal, option, null))
+		|| !ok(terminalColors(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_COLOR_PALETTE_DEFAULT, palette))) {
+		return Result.err(VtError.ReadFailed);
 	}
-	if (vtSetPalette(vt.terminal, rgb) != 0) { return Result.err(VtError.ReadFailed); }
+	for (let i = 0; i < colors.length; i++) { palette.c[i] = { r: colors[i].r, g: colors[i].g, b: colors[i].b }; }
+	if (!ok(setColors(vt.terminal, option, palette))) { return Result.err(VtError.ReadFailed); }
 	vt.painted.rows = [];
 	return Result.ok(vt);
 }
 
 export function setScrollback(this vt: Vt, lines: int64): Result<Vt, VtError> {
-	if (vtSetScrollback(vt.terminal, lines) != 0) { return Result.err(VtError.ReadFailed); }
+	if (!scrollbackSet(vt.terminal, lines)) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(vt);
 }
 
 export function setPullScrollback(this vt: Vt, pull: boolean): Result<Vt, VtError> {
-	if (vtSetPullScrollback(vt.terminal, pull ? 1 : 0) != 0) { return Result.err(VtError.ReadFailed); }
+	let on = pull;
+	if (!ok(setFlag(vt.terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_RESIZE_PULL_SCROLLBACK, on))) {
+		return Result.err(VtError.ReadFailed);
+	}
 	return Result.ok(vt);
 }
 
 export function takeClipboard(this vt: Vt): Result<string | null, VtError> {
-	const size = vtClipboardSize(vt.effects);
-	if (size < 0) { return Result.ok(null); }
-	let buf: Vec<uint8> = new Array((size as int32) + 1);
-	const n = vtClipboardTake(vt.effects, buf);
-	if (n < 0) { return Result.err(VtError.ReadFailed); }
-	const text: string | null = buf[0..(n as int32)].asString();
-	return Result.ok(text);
+	return Result.ok(vt.effects.takeClipboard());
 }
 
 export function clipboardAsked(this vt: Vt): boolean {
-	return vtClipboardReadTake(vt.effects) != 0;
+	return vt.effects.clipboardAsked();
 }
 
 export function answerClipboard(this vt: Vt, text: string, allow: boolean): Result<Vt, VtError> {
-	if (vtClipboardAnswer(vt.effects, text.asBytes(), allow ? 1 : 0) != 0) { return Result.err(VtError.ReadFailed); }
+	if (!vt.effects.answerClipboard(text, allow)) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(vt);
 }
 
+const MODE_SYNC_OUTPUT: uint16 = 2026;
+
+// Whether synchronized output holds the screen. A hold older than the limit ends here: the terminal has
+// no clock and a program that never releases would freeze the screen (terminal.h, "Timeouts").
 export function holding(this vt: Vt): boolean {
-	return vtHeld(vt.effects, vt.terminal) != 0;
+	const e = vt.effects;
+	if (!e.held) { return false; }
+	if (performance.now() - e.heldAtMs < e.holdLimitMs) { return true; }
+	let mode: GhosttyTerminalModeConfig = { mode: MODE_SYNC_OUTPUT, value: false };
+	const _released = setMode(vt.terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode);
+	e.held = false;
+	return false;
 }
 
 export function holdLimit(this vt: Vt, ms: int64): void {
-	vtHoldLimit(vt.effects, ms);
+	vt.effects.holdLimitMs = ms as number;
 }
 
 export function update(this vt: Vt): Result<Vt, VtError> {
@@ -527,7 +865,7 @@ export struct Cursor {
 export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	const hasKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE;
 	let hasValue = false;
-	if (!ok(stateCursorHasValue(vt.state, hasKey, hasValue))) {
+	if (!ok(stateFlag(vt.state, hasKey, hasValue))) {
 		return Result.err(VtError.ReadFailed);
 	}
 	if (!hasValue) { return Result.ok(null); }
@@ -538,9 +876,21 @@ export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	if (!ok(stateCursorX(vt.state, xKey, x)) || !ok(stateCursorY(vt.state, yKey, y))) {
 		return Result.err(VtError.ReadFailed);
 	}
-	const wide = vtCursorWide(vt.state, vt.terminal, x as int32, y as int32);
-	if (wide < 0) { return Result.err(VtError.ReadFailed); }
-	const at: Cursor | null = { x: wide == 2 ? (x as int32) - 1 : x as int32, y: y as int32, wide: wide > 0 };
+	let tail = false;
+	const tailKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_WIDE_TAIL;
+	if (!ok(stateFlag(vt.state, tailKey, tail))) { return Result.err(VtError.ReadFailed); }
+	if (tail) {
+		const onTail: Cursor | null = { x: (x as int32) - 1, y: y as int32, wide: true };
+		return Result.ok(onTail);
+	}
+	let under: GhosttyGridRef;
+	let cell: GhosttyCell = 0;
+	let wide = GhosttyCellWide.GHOSTTY_CELL_WIDE_NARROW;
+	if (!ok(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, x as int32, y as int32, under))
+		|| !ok(gridRefCell(under, cell)) || !ok(cellWide(cell, GhosttyCellData.GHOSTTY_CELL_DATA_WIDE, wide))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	const at: Cursor | null = { x: x as int32, y: y as int32, wide: wide == GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE };
 	return Result.ok(at);
 }
 
@@ -557,12 +907,19 @@ export struct CursorLook {
 	blinking: boolean;
 }
 
+// Reads the render state, so it describes the frame the last update captured.
 export function cursorLook(this vt: Vt): Result<CursorLook, VtError> {
-	let out: Vec<int32> = new Array(3);
-	if (vtCursorLook(vt.state, out) != 0 || out[1] < 0 || out[1] > (CursorShape.BlockHollow as int32)) {
+	let visible = false;
+	let blinking = false;
+	let style: GhosttyRenderStateCursorVisualStyle;
+	if (!ok(stateFlag(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VISIBLE, visible))
+		|| !ok(stateCursorStyle(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VISUAL_STYLE, style))
+		|| !ok(stateFlag(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_BLINKING, blinking))) {
 		return Result.err(VtError.ReadFailed);
 	}
-	return Result.ok({ visible: out[0] != 0, shape: out[1] as CursorShape, blinking: out[2] != 0 });
+	const shape = style as int32;
+	if (shape < 0 || shape > (CursorShape.BlockHollow as int32)) { return Result.err(VtError.ReadFailed); }
+	return Result.ok({ visible: visible, shape: shape as CursorShape, blinking: blinking });
 }
 
 export struct Modes {
@@ -574,21 +931,33 @@ export struct Modes {
 }
 
 export function modes(this vt: Vt): Result<Modes, VtError> {
-	let out: Vec<int32> = new Array(5);
-	if (vtModes(vt.terminal, out) != 0) { return Result.err(VtError.ReadFailed); }
+	const focusEvents = modeOn(vt.terminal, MODE_FOCUS_EVENT);
+	const bracketedPaste = modeOn(vt.terminal, MODE_BRACKETED_PASTE);
+	const altScroll = modeOn(vt.terminal, MODE_ALT_SCROLL);
+	const cursorKeys = modeOn(vt.terminal, MODE_DECCKM);
+	let tracking = false;
+	if (focusEvents === null || bracketedPaste === null || altScroll === null || cursorKeys === null
+		|| !ok(terminalFlag(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, tracking))) {
+		return Result.err(VtError.ReadFailed);
+	}
 	return Result.ok({
-		focusEvents: out[0] != 0,
-		bracketedPaste: out[1] != 0,
-		altScroll: out[2] != 0,
-		cursorKeys: out[3] != 0,
-		mouseTracking: out[4] != 0,
+		focusEvents: focusEvents,
+		bracketedPaste: bracketedPaste,
+		altScroll: altScroll,
+		cursorKeys: cursorKeys,
+		mouseTracking: tracking,
 	});
 }
 
+// 0 bytes when the program has not asked for focus events.
 export function focusReport(this vt: Vt, gained: boolean, buf: Span<uint8>): Result<int32, VtError> {
-	const n = vtFocusEncode(vt.terminal, gained ? 1 : 0, buf);
-	if (n < 0) { return Result.err(VtError.ReadFailed); }
-	return Result.ok(n as int32);
+	const on = modeOn(vt.terminal, MODE_FOCUS_EVENT);
+	if (on === null) { return Result.err(VtError.ReadFailed); }
+	if (!on) { return Result.ok(0); }
+	const event = gained ? GhosttyFocusEvent.GHOSTTY_FOCUS_GAINED : GhosttyFocusEvent.GHOSTTY_FOCUS_LOST;
+	let written: uint64 = 0;
+	if (!ok(focusEncode(event, buf, written))) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(written as int32);
 }
 
 export enum MouseAction {
@@ -612,6 +981,47 @@ export struct MouseGeometry {
 	height: int32;
 }
 
+const MOUSE_MODES: uint16[] = [9, 1000, 1002, 1003, 1005, 1006, 1015, 1016];
+
+// Which mouse modes are on, as bits: changes exactly when the encoder's options would.
+function mouseSignature(terminal: GhosttyTerminal): int32 | null {
+	let signature = 0;
+	for (let i = 0; i < MOUSE_MODES.length; i++) {
+		const on = modeOn(terminal, MOUSE_MODES[i]);
+		if (on === null) { return null; }
+		if (on) { signature |= 1 << i; }
+	}
+	let tracking = false;
+	if (!ok(terminalFlag(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, tracking))) {
+		return null;
+	}
+	return tracking ? signature | (1 << MOUSE_MODES.length) : signature;
+}
+
+function mouseOpen(m: Mouse): boolean {
+	if (m.encoder !== null && m.event !== null) { return true; }
+	let encoder: GhosttyMouseEncoder;
+	let event: GhosttyMouseEvent;
+	if (!ok(ghostty_mouse_encoder_new(vtAllocator(), encoder))) { return false; }
+	if (!ok(ghostty_mouse_event_new(vtAllocator(), event))) {
+		ghostty_mouse_encoder_free(encoder);
+		return false;
+	}
+	let track = true;
+	mouseSetFlag(encoder, GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL, track);
+	m.encoder = encoder;
+	m.event = event;
+	return true;
+}
+
+function sameGeometry(a: MouseGeometry | null, b: MouseGeometry): boolean {
+	return a !== null && a.cellWidth == b.cellWidth && a.cellHeight == b.cellHeight && a.width == b.width
+		&& a.height == b.height;
+}
+
+// The report for one pointer event under the modes the program set: 0 bytes when the mode reports
+// nothing for it (a motion within the cell it last reported, for one). x and y are surface pixels with
+// the grid at the origin.
 export function mouseReport(
 	this vt: Vt,
 	e: MouseInput,
@@ -619,12 +1029,40 @@ export function mouseReport(
 	anyPressed: boolean,
 	buf: Span<uint8>,
 ): Result<int32, VtError> {
-	const n = vtMouseEncode(
-		vt.effects, vt.terminal, e.action as int32, e.button, modsMask(e.mods) as int32, e.x, e.y,
-		g.cellWidth, g.cellHeight, g.width, g.height, anyPressed ? 1 : 0, buf,
-	);
-	if (n < 0) { return Result.err(VtError.ReadFailed); }
-	return Result.ok(n as int32);
+	const m = vt.mouse;
+	const signature = mouseSignature(vt.terminal);
+	if (signature === null || !mouseOpen(m)) { return Result.err(VtError.ReadFailed); }
+	const encoder = m.encoder;
+	const event = m.event;
+	if (encoder === null || event === null) { return Result.err(VtError.ReadFailed); }
+	if (signature != m.signature) {
+		ghostty_mouse_encoder_setopt_from_terminal(encoder, vt.terminal);
+		m.signature = signature;
+	}
+	if (!sameGeometry(m.geometry, g)) {
+		let size: GhosttyMouseEncoderSize = {
+			size: sizeof GhosttyMouseEncoderSize,
+			screen_width: g.width as uint32,
+			screen_height: g.height as uint32,
+			cell_width: g.cellWidth as uint32,
+			cell_height: g.cellHeight as uint32,
+		};
+		mouseSetSize(encoder, GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_SIZE, size);
+		m.geometry = g;
+	}
+	let pressed = anyPressed;
+	mouseSetFlag(encoder, GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, pressed);
+	mouseSetAction(event, e.action as int32);
+	if (e.button == 0) {
+		ghostty_mouse_event_clear_button(event);
+	} else {
+		mouseSetButton(event, e.button);
+	}
+	mouseSetMods(event, modsMask(e.mods) as uint16);
+	ghostty_mouse_event_set_position(event, { x: e.x, y: e.y });
+	let written: uint64 = 0;
+	if (!ok(mouseEncode(encoder, event, buf, written))) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(written as int32);
 }
 
 function rgb(c: GhosttyColorRgb): Rgb {
@@ -690,21 +1128,27 @@ function graphemesOf(
 	}
 	if (count > MAX_CELL_EXTRA) { return Result.err(VtError.GraphemeTooLong); }
 	let all: Vec<uint32> = new Array(count as int32);
-	if (vtGraphemes(cells, all) != (count as int64)) { return Result.err(VtError.ReadFailed); }
+	const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
+	if (!ok(cellGraphemesInto(cells, bufKey, all as Span<uint32> as Ptr<uint32>))) { return Result.err(VtError.ReadFailed); }
 	for (let i = 1; i < (count as int32); i++) { extra.push(all[i]); }
 	return Result.ok(all[0]);
 }
 
-function underlineColorOf(
-	state: GhosttyRenderState,
-	cells: GhosttyRenderStateRowCells,
-): Result<Rgb | null, VtError> {
-	let rgb: Vec<uint8> = new Array(3);
-	const found = vtUnderlineColor(state, cells, rgb);
-	if (found < 0) { return Result.err(VtError.ReadFailed); }
-	if (found == 0) { return Result.ok(null); }
-	const color: Rgb | null = { r: rgb[0], g: rgb[1], b: rgb[2] };
-	return Result.ok(color);
+// The cell's SGR 58 underline colour with a palette index resolved, or null when the cell has none
+// (the text colour applies, generic.zig `underlineColor(...) orelse fg`).
+function underlineColorOf(state: GhosttyRenderState, style: GhosttyStyle): Result<Rgb | null, VtError> {
+	const color = style.underline_color;
+	if (color.tag == GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_RGB) {
+		const found: Rgb | null = rgb(color.value.rgb);
+		return Result.ok(found);
+	}
+	if (color.tag != GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_PALETTE) { return Result.ok(null); }
+	let palette: Colors256;
+	if (!ok(stateColors(state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLOR_PALETTE, palette))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	const found: Rgb | null = rgb(palette.c[color.value.palette]);
+	return Result.ok(found);
 }
 
 function readCell(
@@ -735,6 +1179,7 @@ function readCell(
 	const fg = colorOr(cells, fgKey, colors.fg);
 	let flags = none;
 	let underline = Underline.None;
+	let underlineColor: Rgb | null = null;
 	let styled = false;
 	const styledKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_HAS_STYLING;
 	if (!ok(cellHasStyling(cells, styledKey, styled))) { return Result.err(VtError.ReadFailed); }
@@ -746,9 +1191,8 @@ function readCell(
 		if (!ok(cellStyle(cells, styleKey, style))) { return Result.err(VtError.ReadFailed); }
 		flags = styleFlags(style);
 		underline = underlineOf(style);
+		if (underline != Underline.None) { underlineColor = try underlineColorOf(state, style); }
 	}
-	let underlineColor: Rgb | null = null;
-	if (underline != Underline.None) { underlineColor = try underlineColorOf(state, cells); }
 	let raw: GhosttyCell = 0;
 	const rawKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW;
 	if (!ok(cellRaw(cells, rawKey, raw))) { return Result.err(VtError.ReadFailed); }
@@ -877,7 +1321,11 @@ export function clean(this vt: Vt): void {
 
 export function free(this vt: Vt): void {
 	ghostty_tracked_grid_ref_free(vt.top);
-	vtEffectsClose(vt.effects, vt.terminal);
+	closeEffects(vt.terminal);
+	const encoder = vt.mouse.encoder;
+	const event = vt.mouse.event;
+	if (encoder !== null) { ghostty_mouse_encoder_free(encoder); }
+	if (event !== null) { ghostty_mouse_event_free(event); }
 	ghostty_render_state_row_cells_free(vt.cells);
 	ghostty_render_state_row_iterator_free(vt.rows);
 	ghostty_render_state_free(vt.state);
@@ -1126,34 +1574,49 @@ export function freeKeys(this k: Keys): void {
 	ghostty_key_encoder_free(k.encoder);
 }
 
-const SCROLL_TOP: int32 = 0;
-const SCROLL_BOTTOM: int32 = 1;
-const SCROLL_DELTA: int32 = 2;
-
 export function scrollLines(this vt: Vt, rows: int32): void {
-	vtScroll(vt.terminal, SCROLL_DELTA, rows as int64);
+	vtScroll(vt.terminal, GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_DELTA, rows as int64);
 }
 
 export function scrollPages(this vt: Vt, pages: int32): Result<Vt, VtError> {
 	let bar: GhosttyTerminalScrollbar;
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
 	if (!ok(terminalScrollbar(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
-	vtScroll(vt.terminal, SCROLL_DELTA, (pages as int64) * (bar.len as int64));
+	const delta = (pages as int64) * (bar.len as int64);
+	vtScroll(vt.terminal, GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_DELTA, delta);
 	return Result.ok(vt);
 }
 
+// Scroll the viewport so the nearest prompt (OSC 133 A) above (delta < 0) or below (delta > 0) its top
+// row is the top row, as Surface.zig `jump_to_prompt` does. False when there is no such prompt.
 export function jumpToPrompt(this vt: Vt, delta: int32): Result<boolean, VtError> {
-	const r = vtPromptJump(vt.terminal, delta);
-	if (r < 0) { return Result.err(VtError.ReadFailed); }
-	return Result.ok(r == 1);
+	let bar: GhosttyTerminalScrollbar;
+	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
+	if (delta == 0 || !ok(terminalScrollbar(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
+	const step: int64 = delta < 0 ? -1 : 1;
+	for (let y = (bar.offset as int64) + step; y >= 0 && y < (bar.total as int64); y += step) {
+		let at: GhosttyGridRef;
+		let row: GhosttyRow = 0;
+		let prompt = GhosttyRowSemanticPrompt.GHOSTTY_ROW_SEMANTIC_NONE;
+		if (!ok(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, 0, y as int32, at))
+			|| !ok(gridRefRow(at, row))
+			|| !ok(rowPrompt(row, GhosttyRowData.GHOSTTY_ROW_DATA_SEMANTIC_PROMPT, prompt))) {
+			return Result.err(VtError.ReadFailed);
+		}
+		if (prompt == GhosttyRowSemanticPrompt.GHOSTTY_ROW_SEMANTIC_PROMPT) {
+			vtScroll(vt.terminal, GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_ROW, y);
+			return Result.ok(true);
+		}
+	}
+	return Result.ok(false);
 }
 
 export function scrollTop(this vt: Vt): void {
-	vtScroll(vt.terminal, SCROLL_TOP, 0);
+	vtScroll(vt.terminal, GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_TOP, 0);
 }
 
 export function scrollBottom(this vt: Vt): void {
-	vtScroll(vt.terminal, SCROLL_BOTTOM, 0);
+	vtScroll(vt.terminal, GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_BOTTOM, 0);
 }
 
 export function atBottom(this vt: Vt): Result<boolean, VtError> {
@@ -1163,51 +1626,82 @@ export function atBottom(this vt: Vt): Result<boolean, VtError> {
 	return Result.ok(bar.offset + bar.len >= bar.total);
 }
 
-function rangeOf(c: Vec<int32>): Range {
-	return {
-		start: { row: c[1], col: c[0] },
-		end: { row: c[3], col: c[2] },
-	};
+function screenRef(terminal: GhosttyTerminal, at: Point): Result<GhosttyGridRef, VtError> {
+	let gridRef: GhosttyGridRef;
+	const r = vtGridRef(terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, at.col, at.row, gridRef);
+	if (!ok(r)) { return Result.err(VtError.SelectFailed); }
+	return Result.ok(gridRef);
+}
+
+function screenPoint(terminal: GhosttyTerminal, gridRef: GhosttyGridRef): Result<Point, VtError> {
+	let at = gridRef;
+	let c: GhosttyPointCoordinate;
+	if (!ok(pointOf(terminal, at, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, c))) {
+		return Result.err(VtError.SelectFailed);
+	}
+	return Result.ok({ row: c.y as int32, col: c.x as int32 });
+}
+
+function markedOf(terminal: GhosttyTerminal, selection: GhosttySelection): Result<Marked, VtError> {
+	let given = selection;
+	let ordered: GhosttySelection = { size: sizeof GhosttySelection };
+	const forward = GhosttySelectionOrder.GHOSTTY_SELECTION_ORDER_FORWARD;
+	if (!ok(selectionOrdered(terminal, given, forward, ordered))) { return Result.err(VtError.SelectFailed); }
+	const start = try screenPoint(terminal, ordered.start);
+	const end = try screenPoint(terminal, ordered.end);
+	return Result.ok({ range: { start: start, end: end }, block: selection.rectangle });
+}
+
+function rangeFound(terminal: GhosttyTerminal, r: GhosttyResult, selection: GhosttySelection): Result<Range | null, VtError> {
+	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
+	if (!ok(r)) { return Result.err(VtError.SelectFailed); }
+	const m = try markedOf(terminal, selection);
+	const found: Range | null = m.range;
+	return Result.ok(found);
 }
 
 export function selectionSet(this vt: Vt, m: Marked): Result<Vt, VtError> {
-	const r = m.range;
-	const block = m.block ? 1 : 0;
-	if (vtSelSet(vt.terminal, r.start.col, r.start.row, r.end.col, r.end.row, block) != 0) {
-		return Result.err(VtError.SelectFailed);
-	}
+	let selection: GhosttySelection = {
+		size: sizeof GhosttySelection,
+		start: try screenRef(vt.terminal, m.range.start),
+		end: try screenRef(vt.terminal, m.range.end),
+		rectangle: m.block,
+	};
+	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SELECTION;
+	if (!ok(setSelection(vt.terminal, option, selection))) { return Result.err(VtError.SelectFailed); }
 	return Result.ok(vt);
 }
 
 export function selectionClear(this vt: Vt): void {
-	vtSelClear(vt.terminal);
+	const _cleared = unset(vt.terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SELECTION, null);
 }
 
 export function selection(this vt: Vt): Result<Marked | null, VtError> {
-	let c: Vec<int32> = new Array(5);
-	const r = vtSelGet(vt.terminal, c);
-	if (r < 0) { return Result.err(VtError.SelectFailed); }
-	if (r > 0) { return Result.ok(null); }
-	const got: Marked | null = { range: rangeOf(c), block: c[4] != 0 };
+	let selection: GhosttySelection = { size: sizeof GhosttySelection };
+	const r = terminalSelection(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SELECTION, selection);
+	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
+	if (!ok(r)) { return Result.err(VtError.SelectFailed); }
+	const got: Marked | null = try markedOf(vt.terminal, selection);
 	return Result.ok(got);
 }
 
 export function wordAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
-	let c: Vec<int32> = new Array(5);
-	const r = vtSelWord(vt.terminal, at.col, at.row, c);
-	if (r < 0) { return Result.err(VtError.SelectFailed); }
-	if (r > 0) { return Result.ok(null); }
-	const got: Range | null = rangeOf(c);
-	return Result.ok(got);
+	let options: GhosttyTerminalSelectWordOptions = {
+		size: sizeof GhosttyTerminalSelectWordOptions,
+		ref: try screenRef(vt.terminal, at),
+	};
+	let selection: GhosttySelection = { size: sizeof GhosttySelection };
+	return rangeFound(vt.terminal, selectWord(vt.terminal, options, selection), selection);
 }
 
 export function lineAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
-	let c: Vec<int32> = new Array(5);
-	const r = vtSelLine(vt.terminal, at.col, at.row, c);
-	if (r < 0) { return Result.err(VtError.SelectFailed); }
-	if (r > 0) { return Result.ok(null); }
-	const got: Range | null = rangeOf(c);
-	return Result.ok(got);
+	let options: GhosttyTerminalSelectLineOptions = {
+		size: sizeof GhosttyTerminalSelectLineOptions,
+		ref: try screenRef(vt.terminal, at),
+		semantic_prompt_boundary: true,
+	};
+	let selection: GhosttySelection = { size: sizeof GhosttySelection };
+	return rangeFound(vt.terminal, selectLine(vt.terminal, options, selection), selection);
 }
 
 export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtError> {
@@ -1227,27 +1721,42 @@ export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtErro
 	return Result.ok(here);
 }
 
+// The active selection as plain text, the way Ghostty's Screen.selectionString copies it (unwrap and
+// trim), or null when there is none.
 export function selectedText(this vt: Vt): Result<string | null, VtError> {
+	const options: GhosttyTerminalSelectionFormatOptions = {
+		size: sizeof GhosttyTerminalSelectionFormatOptions,
+		emit: GhosttyFormatterFormat.GHOSTTY_FORMATTER_FORMAT_PLAIN,
+		unwrap: true,
+		trim: true,
+	};
 	let buf: Vec<uint8> = new Array(4096);
-	let n = vtSelText(vt.terminal, buf);
-	if (n > (buf.length as int64)) {
-		buf = new Array(n as int32);
-		n = vtSelText(vt.terminal, buf);
+	let written: uint64 = 0;
+	let r = selectionFormat(vt.terminal, options, buf, written);
+	if (r == GhosttyResult.GHOSTTY_OUT_OF_SPACE) {
+		buf = new Array(written as int32);
+		r = selectionFormat(vt.terminal, options, buf, written);
 	}
-	if (n < 0) { return Result.ok(null); }
-	const text: string | null = buf[0..(n as int32)].asString();
+	if (!ok(r)) { return Result.ok(null); }
+	const text: string | null = buf[0..(written as int32)].asString();
 	return Result.ok(text);
 }
 
+const PASTE_END = "\x1b[201~";
+
+// Surface.zig completeClipboardPaste with its defaults: bracketed, the data is unsafe only when it holds
+// the end marker; unbracketed, it is unsafe when it holds a newline.
 export function pasteBytes(this vt: Vt, text: string, allowUnsafe: boolean): Result<Vec<uint8>, PasteError> {
-	const data = text.asBytes();
-	let out: Vec<uint8> = new Array((data.length as int32) + 16);
-	const n = vtPasteEncode(vt.terminal, data, allowUnsafe ? 1 : 0, out);
-	if (n == -1) { return Result.err(PasteError.Unsafe); }
-	if (n < 0) { return Result.err(PasteError.EncodeFailed); }
-	let bytes: Vec<uint8> = [];
-	for (let i = 0; i < (n as int32); i++) { bytes.push(out[i]); }
-	return Result.ok(bytes);
+	const bracketed = modeOn(vt.terminal, MODE_BRACKETED_PASTE) == true;
+	const unsafe = bracketed ? text.includes(PASTE_END) : !pasteSafe(text.asBytes());
+	if (unsafe && !allowUnsafe) { return Result.err(PasteError.Unsafe); }
+	let data: Vec<uint8> = [];
+	for (const b of text.asBytes()) { data.push(b); }
+	let out: Vec<uint8> = new Array(data.length + 16);
+	let written: uint64 = 0;
+	if (!ok(pasteEncode(data, bracketed, out, written))) { return Result.err(PasteError.EncodeFailed); }
+	out.shrink(written as int32);
+	return Result.ok(out);
 }
 
 test "written text lands on the rows the render state reports" {
@@ -1918,6 +2427,27 @@ test "a combining mark joins its base cell" {
 			assert row.cells[0].extra == 1;
 			assert row.extra.length == 1;
 			assert row.extra[0] == 0x301;
+			assert row.cells[1].cp == 0x78;
+		}
+		vt.free();
+	}
+}
+
+test "a grapheme longer than the inline buffer arrives whole" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText(`e${"\u0301".repeat(20)}x`);
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const row = rows.value[0];
+			assert row.cells[0].cp == 0x65;
+			assert row.cells[0].extra == 20;
+			assert row.extra.length == 20;
+			assert row.extra[19] == 0x301;
 			assert row.cells[1].cp == 0x78;
 		}
 		vt.free();

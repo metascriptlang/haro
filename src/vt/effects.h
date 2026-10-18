@@ -5,22 +5,6 @@
 #include <ghostty/vt.h>
 
 const GhosttyAllocator* vtAllocator(void);
-
-int vtEffectsOpen(GhosttyTerminal terminal, GhosttyRenderState state);
-int64_t vtClipboardTake(int id, uint8_t* buf, int64_t cap);
-int64_t vtClipboardSize(int id);
-void vtHoldLimit(int id, int64_t ms);
-int vtHeld(int id, GhosttyTerminal terminal);
-int vtClipboardReadTake(int id);
-int vtClipboardAnswer(int id, const uint8_t* text, int64_t len, int allow);
-int64_t vtRepliesTake(int id, uint8_t* buf, int64_t cap);
-int64_t vtMouseEncode(int id, GhosttyTerminal terminal, int action, int button, int mods,
-	float x, float y, int cellWidth, int cellHeight, int width, int height, int anyPressed,
-	uint8_t* buf, int64_t cap);
-int vtEventsTake(int id, int32_t* out, int64_t cap);
-void vtEffectsClose(int id, GhosttyTerminal terminal);
-
-int vtTopTrack(GhosttyTerminal terminal, GhosttyTrackedGridRef* out);
-int vtTopAnchor(GhosttyTrackedGridRef ref, GhosttyTerminal terminal);
+int vtEffectsWire(GhosttyTerminal terminal, void* effects);
 
 #endif

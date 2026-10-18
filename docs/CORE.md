@@ -108,8 +108,12 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
   never sees Haro's answer and stays in legacy key encoding.
 - nvim 0.12 with the person's config, 30 presses of `j` (release Haro, 2026-10-17): nvim's first
   output follows the key in 4 ms (median), and the last frame applies 48 ms after the key (median,
-  126 ms max). Haro's pacing timer adds a median 13 ms (max 32 ms) to each later chunk, because
-  Ion's timers step by `GetTickCount64`, about 16 ms (`.inbox/neon/2026-10-16-ion-window-frame-callback-for-apps.md`).
+  126 ms max). Haro's old pacing timer added a median 13 ms (max 32 ms) to each later chunk, because
+  Ion's timers step by `GetTickCount64`, about 16 ms. Since output applies in the window's frame
+  callback (`ea961a7`), the last chunk lands in the frame drawn a median 3.3 ms after its wake
+  (max 7.7 ms in the quieter run), measured 2026-10-18 by interleaving the two builds under the same load.
+  The machine was at 54-100 % CPU, so nvim's own response (key to first output) was not comparable
+  between runs and is not restated.
 
 ## First window, smoke-run
 

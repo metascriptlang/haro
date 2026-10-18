@@ -1,4 +1,4 @@
-import { List } from "../../../neon/src/core/list";
+import { List, createList } from "../../../neon/src/core/list";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style } from "../../../neon/src/render/style";
 import { GridLine, LineRun, line } from "../grid/lines";
@@ -98,6 +98,10 @@ export function applyFrame(
 		chars += slot.line.text.length as int32;
 		grid.set(row.y, slot);
 	}
+	for (const row of vt.painted.rows) {
+		const cursorCell = cursor !== null && cursor.y == row.y ? cursor.x : -1;
+		if (grid.at(row.y).line.cursorCell != cursorCell) { grid.set(row.y, try slotOf(styles, row, cursor, colors.value.bg)); }
+	}
 	stats.noteApplied(p.rows.length as int32, p.scrolled, chars, performance.now());
 	return Result.ok(cursor);
 }
@@ -161,4 +165,28 @@ test "an underline colour tints the line, and only while the run is underlined" 
 	assert spans[0].style!.textDecorationColor == "#ff0000";
 	assert spans[0].style!.color == "#ffffff";
 	assert spans[1].style!.textDecorationColor === undefined;
+}
+
+test "a cursor that moves along its row rebuilds that row, so a ligature under it splits" {
+	const created = Vt.create(12, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const blank: RowSlot = { line: { text: "", runs: [], cursorCell: -1 }, spans: [] };
+		const grid = createList<RowSlot>([blank, blank]);
+		const styles = new Map<string, Style>();
+		vt.writeText("a->b");
+		assert applyFrame(grid, styles, vt).ok;
+		assert grid.at(0).spans[0].text == "a->b";
+		vt.writeText("\x1b[1;3H");
+		assert applyFrame(grid, styles, vt).ok;
+		assert grid.at(0).line.cursorCell == 2;
+		assert grid.at(0).spans.length == 3;
+		assert grid.at(0).spans[1].text == ">";
+		vt.writeText("\x1b[2;1H");
+		assert applyFrame(grid, styles, vt).ok;
+		assert grid.at(0).line.cursorCell == -1;
+		assert grid.at(0).spans.length == 1;
+		vt.free();
+	}
 }

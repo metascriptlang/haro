@@ -323,6 +323,7 @@ test "a top row pruned from scrollback repaints and anchors again" {
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
+		assert vt.setScrollback(1000).ok;
 		vt.writeText(newLines(24, 5000));
 		const lost = vt.anchoredRow();
 		assert lost.ok;

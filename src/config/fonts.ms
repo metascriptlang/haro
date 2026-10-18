@@ -1,4 +1,6 @@
-import { env, execFileCapture } from "std/process";
+when (windows) {
+	import { env, execFileCapture } from "std/process";
+}
 
 export interface Faces {
 	regular: string;
@@ -39,12 +41,16 @@ export function facesIn(listing: string, family: string, fontsDir: string): Resu
 }
 
 export function installedFaces(family: string): Result<Faces, string> {
-	let listing = "";
-	for (const key of [USER_FONTS, MACHINE_FONTS]) {
-		const out = execFileCapture("reg.exe", ["query", key]);
-		if (out.ok) { listing += out.value; }
+	when (windows) {
+		let listing = "";
+		for (const key of [USER_FONTS, MACHINE_FONTS]) {
+			const out = execFileCapture("reg.exe", ["query", key]);
+			if (out.ok) { listing += out.value; }
+		}
+		return facesIn(listing, family, `${env.get("WINDIR")}/Fonts`);
+	} else {
+		return Result.err(`font family "${family}" cannot be looked up: installed fonts are found by family on Windows only`);
 	}
-	return facesIn(listing, family, `${env.get("WINDIR")}/Fonts`);
 }
 
 const LISTING = [

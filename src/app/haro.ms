@@ -2,6 +2,7 @@
 @compile("./wake.c");
 
 import { NeonNode } from "../../../neon/src/render/node";
+import { requestFrame } from "../../../neon/src/animation/frame";
 import {
 	runWindow,
 	DesktopOptions,
@@ -15,7 +16,7 @@ import { Pty, PtyError } from "../pty/transport";
 import { ConPty } from "../pty/pty";
 import { Replay } from "../pty/replay";
 import { App, Entry } from "./app";
-import { Cue, FRAME_MS, Pace } from "./pace";
+import { Pace } from "./pace";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { Term, openTerm, shutdown } from "./term";
 
@@ -27,7 +28,7 @@ const FONT_BOLD = "assets/JetBrainsMonoNL-Bold.ttf";
 const FONT_ITALIC = "assets/JetBrainsMonoNL-Italic.ttf";
 const FONT_BOLD_ITALIC = "assets/JetBrainsMonoNL-BoldItalic.ttf";
 
-const pace = Pace.start(FRAME_MS);
+const pace = Pace.start();
 
 function fail(message: string): void {
 	console.log(`haro: ${message}`);
@@ -54,22 +55,17 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 	registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
 	const entry: Entry = {
 		onWake: (handler: () => void): void => {
-			const apply = (): void => {
-				pace.applied(performance.now());
-				handler();
-			};
 			onWake((): void => {
 				const drained = t.drain();
 				if (!drained.ok) {
 					fail(`drain: ${drained.error.toString()}`);
 					return;
 				}
-				const now = performance.now();
-				match (pace.wake(now)) {
-					Cue.Now => { apply(); },
-					Cue.Later => { setTimeout(apply, pace.wait(now)); },
-					Cue.Hold => {},
-				}
+				if (!pace.asksFrame()) { return; }
+				const _id = requestFrame((time: number): void => {
+					pace.applied();
+					handler();
+				});
 			});
 		},
 		exited: exited,

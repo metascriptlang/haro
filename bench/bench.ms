@@ -256,7 +256,7 @@ function main(): int32 {
 	};
 	const stages = [Stage.Write, Stage.Lines, Stage.Spans, Stage.Apply];
 	const frames = paced
-		? `a frame once ${fixed(FRAME_MS, 0)} ms have passed since the last (src/app/pace.ms)`
+		? `a frame every ${fixed(FRAME_MS, 0)} ms, one apply per window frame (src/app/pace.ms)`
 		: `a frame every ${cadence.frameBytes / 1024} KiB`;
 	console.log(`# haroBench reps=${reps} (median, plus 1 warm-up), ${frames}`);
 	console.log(`# the vt is written ${CHUNK_BYTES} B at a time`);

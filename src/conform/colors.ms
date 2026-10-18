@@ -53,15 +53,20 @@ test "a new default colour (OSC 10, OSC 11, DECSCNM) repaints rows already drawn
 	}
 }
 
-function red(s: Screen, y: int32, from: int32, units: int32): boolean {
+function redAt(s: Screen, y: int32, unit: int32): boolean {
 	let at = 0;
 	for (const r of s.runs(y)) {
-		if (at == from) {
-			return r.units == units && r.bg.r == 255 && r.bg.g == 0 && r.bg.b == 0;
-		}
+		if (unit < at + r.units) { return r.bg.r == 255 && r.bg.g == 0 && r.bg.b == 0; }
 		at += r.units;
 	}
 	return false;
+}
+
+function red(s: Screen, y: int32, from: int32, units: int32): boolean {
+	for (let u = from; u < from + units; u++) {
+		if (!redAt(s, y, u)) { return false; }
+	}
+	return !redAt(s, y, from + units);
 }
 
 test "erasing, inserting and deleting fill the vacated cells with the current background" {

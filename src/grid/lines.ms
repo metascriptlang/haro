@@ -62,13 +62,25 @@ function isWideSpacer(this row: Row, i: int32): boolean {
 	return row.cells[i].cp == 0 && i > 0 && row.cells[i - 1].flags.has(CellFlag.Wide);
 }
 
-function pushUnits(ref runs: Vec<LineRun>, run: LineRun, units: int32): void {
+function pushUnits(ref runs: Vec<LineRun>, run: LineRun, units: int32, split: boolean): void {
 	const last = runs.length;
-	if (last > 0 && runs[last - 1].sameStyle(run)) {
+	if (!split && last > 0 && runs[last - 1].sameStyle(run)) {
 		runs[last - 1].units += units;
 		return;
 	}
 	runs.push({ ...run, units: units });
+}
+
+function ligatesBadly(a: uint32, b: uint32): boolean {
+	return (a == 0x66 && (b == 0x69 || b == 0x6C)) || (a == 0x73 && b == 0x74);
+}
+
+function breaksShapingBefore(this row: Row, i: int32, cursorCell: int32): boolean {
+	if (i == 0) { return false; }
+	const cell = row.cells[i];
+	const prev = row.cells[i - 1];
+	if (cell.extra == 0 && (i == cursorCell || i == cursorCell + 1)) { return true; }
+	return cell.extra == 0 && prev.extra == 0 && ligatesBadly(prev.cp, cell.cp);
 }
 
 function isScalar(cp: uint32): boolean {
@@ -94,26 +106,27 @@ export function line(this row: Row, cursorCell: int32, background: Rgb): Result<
 			continue;
 		}
 		const run = cell.lineRun();
+		const split = row.breaksShapingBefore(i, cursorCell);
 		if (cell.cp == 0) {
 			text += " ";
-			pushUnits(runs, run, 1);
+			pushUnits(runs, run, 1, split);
 			continue;
 		}
 		if (cell.flags.has(CellFlag.Invisible)) {
 			const blank = cell.flags.has(CellFlag.Wide) ? "  " : " ";
 			text += blank;
-			pushUnits(runs, { ...run, underline: Underline.None, strikethrough: false }, blank.length as int32);
+			pushUnits(runs, { ...run, underline: Underline.None, strikethrough: false }, blank.length as int32, split);
 			extra += cell.extra as int32;
 			continue;
 		}
 		let cps: Vec<uint32> = [cell.cp];
 		for (let k = 0; k < (cell.extra as int32); k++) { cps.push(row.extra[extra + k]); }
 		extra += cell.extra as int32;
-		for (const cp of cps) {
-			if (!isScalar(cp)) { return Result.err(GridError.CodepointInvalid); }
-			const unit = fromCodePoint(cp as number);
+		for (let k = 0; k < (cps.length as int32); k++) {
+			if (!isScalar(cps[k])) { return Result.err(GridError.CodepointInvalid); }
+			const unit = fromCodePoint(cps[k] as number);
 			text += unit;
-			pushUnits(runs, run, unit.length as int32);
+			pushUnits(runs, run, unit.length as int32, split && k == 0);
 		}
 	}
 	return Result.ok({ text: text, runs: runs, cursorCell: cursorCell });
@@ -206,13 +219,12 @@ test "a wide cell carries no spacer text and holds its run" {
 		const rows = vt.rows();
 		assert colors.ok && rows.ok;
 		if (colors.ok && rows.ok) {
-			const line = rows.value[0].line(2, colors.value.bg);
+			const line = rows.value[0].line(-1, colors.value.bg);
 			assert line.ok;
 			if (line.ok) {
 				assert line.value.text == "中a";
 				assert line.value.runs.length == 1;
 				assert line.value.runs[0].units == 2;
-				assert line.value.cursorCell == 2;
 			}
 		}
 		vt.free();
@@ -384,4 +396,35 @@ test "a trailing blank that shows a background, an underline or a strikethrough 
 		}
 		vt.free();
 	}
+}
+
+function unitsOf(text: string, cursorCell: int32): string {
+	const created = Vt.create(12, 2);
+	if (!created.ok) { return "create failed"; }
+	const vt = created.value;
+	vt.writeText(text);
+	const updated = vt.update();
+	const colors = vt.palette();
+	const rows = vt.rows();
+	let out: string[] = [];
+	if (updated.ok && colors.ok && rows.ok) {
+		const line = rows.value[0].line(cursorCell, colors.value.bg);
+		if (line.ok) {
+			for (const run of line.value.runs) { out.push(`${run.units}`); }
+		}
+	}
+	vt.free();
+	return out.join(",");
+}
+
+test "the cursor's cell is a run of its own, so a ligature under it shows its parts" {
+	assert unitsOf("a->b", -1) == "4";
+	assert unitsOf("a->b", 2) == "2,1,1";
+	assert unitsOf("a->b", 0) == "1,3";
+}
+
+test "fi, fl and st never share a run, as Ghostty keeps them unligated" {
+	assert unitsOf("fifl", -1) == "1,2,1";
+	assert unitsOf("ast", -1) == "2,1";
+	assert unitsOf("ft", -1) == "2";
 }

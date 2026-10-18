@@ -170,8 +170,11 @@ export function mismatch(this s: Screen): string {
 	if (!colors.ok) { return "the palette read failed"; }
 	const all = fresh.value;
 	if ((all.length as int32) != s.rows) { return `the vt has ${all.length} rows, the screen ${s.rows}`; }
+	const at = s.vt.cursor();
+	if (!at.ok) { return "the cursor read failed"; }
+	const c = at.value;
 	for (let y = 0; y < s.rows; y++) {
-		const l = all[y].line(-1, colors.value.bg);
+		const l = all[y].line(c !== null && c.y == y ? c.x : -1, colors.value.bg);
 		if (!l.ok) { return `row ${y}: no line`; }
 		if (l.value.text != s.raw(y)) { return `row ${y}: text [${s.raw(y)}] but the vt has [${l.value.text}]`; }
 		const have = runsText(s.runs(y));
@@ -184,9 +187,6 @@ export function mismatch(this s: Screen): string {
 			return `row ${y}: spans do not cover the line`;
 		}
 	}
-	const at = s.vt.cursor();
-	if (!at.ok) { return "the cursor read failed"; }
-	const c = at.value;
 	const shown = s.cursor;
 	if ((c === null) != (shown === null)) { return "the cursor's presence differs"; }
 	if (c !== null && shown !== null && (c.x != shown.x || c.y != shown.y)) {

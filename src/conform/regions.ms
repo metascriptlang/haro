@@ -1,6 +1,15 @@
 import { defaultIndexed } from "./palette";
 import { Screen, joined } from "./screen";
-import { size } from "../vt/vt";
+import { Rgb, size } from "../vt/vt";
+
+function filled(s: Screen, y: int32, units: int32, bg: Rgb): boolean {
+	let total = 0;
+	for (const r of s.runs(y)) {
+		if (r.bg != bg) { return false; }
+		total += r.units;
+	}
+	return total == units;
+}
 
 function open(cols: int32, rows: int32): Screen | null {
 	const opened = Screen.open(cols, rows);
@@ -106,9 +115,7 @@ test "deleting characters fills the vacated cells with the current background" {
 	if (s !== null) {
 		assert s.step("\x1b[40m\x1b[Kfoo\x1b[2P");
 		assert s.text(0) == "foo";
-		assert s.runs(0).length == 1;
-		assert s.runs(0)[0].units == 8;
-		assert s.runs(0)[0].bg == defaultIndexed(0);
+		assert filled(s, 0, 8, defaultIndexed(0));
 		s.close();
 	}
 }
@@ -122,8 +129,7 @@ test "ED erases below the cursor, and 2J fills the whole screen with the current
 		assert s.step("\x1b[44m\x1b[2J");
 		for (let y = 0; y < 3; y++) {
 			assert s.text(y) == "";
-			assert s.runs(y).length == 1;
-			assert s.runs(y)[0].units == 3 && s.runs(y)[0].bg == defaultIndexed(4);
+			assert filled(s, y, 3, defaultIndexed(4));
 		}
 		s.close();
 	}

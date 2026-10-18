@@ -295,8 +295,8 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		const advance = probe.width / PROBE.length;
 		const lineHeight = probe.height;
 		const ratio = PixelRatio.get();
-		const cellPx = Math.round(advance * ratio) as int32;
-		const rowPx = Math.round(lineHeight * ratio) as int32;
+		const cellPx = Math.ceil(advance * ratio) as int32;
+		const rowPx = Math.ceil(lineHeight * ratio) as int32;
 		const widthPx = PixelRatio.getPixelSizeForLayoutSize(e.width) as int32;
 		const heightPx = PixelRatio.getPixelSizeForLayoutSize(e.height) as int32;
 		const size = gridSize(widthPx, heightPx, cellPx, rowPx);

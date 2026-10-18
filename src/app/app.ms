@@ -33,6 +33,7 @@ const PADDING: number = 6;
 const PROBE = "MMMMMMMMMM";
 const SHADES = 3;
 const HOLD_RECHECK_MS = 100;
+const AUTOSCROLL_MS = 15;
 const NO_SHADE: Block = { row: 0, col: 0, rows: 0, cols: 0 };
 
 export interface Entry {
@@ -66,6 +67,7 @@ export function App(t: Term, entry: Entry): NeonNode {
 	let blinkTimer = -1;
 	let lastReset = 0.0;
 	let heldTimer = -1;
+	let scrollTimer = -1;
 	let geometry: MouseGeometry = { cellWidth: 1, cellHeight: 1, width: 1, height: 1 };
 
 	const fatal = (what: string, error: TermError): void => {
@@ -332,6 +334,21 @@ export function App(t: Term, entry: Entry): NeonNode {
 		repaint();
 	};
 
+	const autoscroll = (): void => {
+		if (scrollTimer >= 0 || controls.autoscroll == 0) { return; }
+		scrollTimer = setTimeout((): void => {
+			scrollTimer = -1;
+			const ticked = controls.autoscrollTick(t);
+			if (!ticked.ok) {
+				fatalControl("autoscroll", ticked.error);
+				return;
+			}
+			if (!ticked.value) { return; }
+			refresh();
+			autoscroll();
+		}, AUTOSCROLL_MS) as int32;
+	};
+
 	const dragged = (e: NeonEvent): void => {
 		if (cellWidth() <= 0) { return; }
 		const handled = controls.move(t, hit(e), e.pressed);
@@ -340,6 +357,7 @@ export function App(t: Term, entry: Entry): NeonNode {
 			return;
 		}
 		if (handled.value) { repaint(); }
+		autoscroll();
 	};
 
 	const released = (e: NeonEvent): void => {

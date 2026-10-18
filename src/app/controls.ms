@@ -2,7 +2,7 @@ import { NeonEvent, neonEvent } from "../../../neon/src/render/event";
 import { KeyMod } from "../keys/keys";
 import { Block } from "../select/select";
 import { Action, resolve } from "../input/bindings";
-import { Pointer, Spot, claimsMouse } from "../input/pointer";
+import { Pointer, Spot, autoscrollOf, claimsMouse } from "../input/pointer";
 import { ROWS_PER_NOTCH, Wheel, WheelRoute, reportButton, route } from "../input/wheel";
 import { Held, Reply, replyTo, replyToRead, warningFor, Warning } from "../input/paste";
 import { openable } from "../term/link";
@@ -46,6 +46,7 @@ export interface Controls {
 	held: Held | null;
 	reading: string | null;
 	button: int32;
+	autoscroll: int32;
 }
 
 const LEFT: int32 = 1;
@@ -55,7 +56,7 @@ const CTRL: int32 = 2;
 const KEYBOARD_ROWS: int32 = ROWS_PER_NOTCH as int32;
 
 export function open(this typeof Controls): Controls {
-	return { pointer: Pointer.open(), wheel: Wheel.open(), held: null, reading: null, button: 0 };
+	return { pointer: Pointer.open(), wheel: Wheel.open(), held: null, reading: null, button: 0, autoscroll: 0 };
 }
 
 function vtOf(t: Term): Vt | null {
@@ -287,11 +288,16 @@ export function move(this c: Controls, t: Term, h: Hit, pressed: boolean): Resul
 		const _reported = try c.report(t, MouseAction.Motion, c.button, h, c.button != 0);
 		return Result.ok(false);
 	}
-	if (!c.pointer.dragging) { return Result.ok(false); }
-	if (!pressed) {
-		c.pointer.release();
+	if (!c.pointer.dragging) {
+		c.autoscroll = 0;
 		return Result.ok(false);
 	}
+	if (!pressed) {
+		c.pointer.release();
+		c.autoscroll = 0;
+		return Result.ok(false);
+	}
+	c.autoscroll = autoscrollOf(h.y * h.scale, h.cell.height);
 	const dragged = c.pointer.drag(vt, h.at);
 	if (!dragged.ok) { return Result.err(ControlError.VtFailed); }
 	return Result.ok(dragged.value);
@@ -300,9 +306,22 @@ export function move(this c: Controls, t: Term, h: Hit, pressed: boolean): Resul
 export function up(this c: Controls, t: Term, button: int32, h: Hit): Result<boolean, ControlError> {
 	const reported = c.button != 0;
 	c.pointer.release();
+	c.autoscroll = 0;
 	if (!reported || c.holding()) { return Result.ok(false); }
 	c.button = 0;
 	return c.report(t, MouseAction.Release, button, h, false);
+}
+
+export function autoscrollTick(this c: Controls, t: Term): Result<boolean, ControlError> {
+	const vt = vtOf(t);
+	if (vt === null || !c.pointer.dragging || c.autoscroll == 0) {
+		c.autoscroll = 0;
+		return Result.ok(false);
+	}
+	vt.scrollLines(c.autoscroll);
+	const dragged = c.pointer.drag(vt, c.pointer.last);
+	if (!dragged.ok) { return Result.err(ControlError.VtFailed); }
+	return Result.ok(true);
 }
 
 export function roll(this c: Controls, t: Term, notches: float64, h: Hit): Result<boolean, ControlError> {
@@ -937,6 +956,31 @@ test "ctrl alt up and down move the viewport between prompts the shell marked" {
 		assert offsetOf(t) < bottom;
 		assert handled(c.keyDown(t, key("ArrowDown", 6), clip));
 		assert sink.sent == "";
+		t.shutdown();
+	}
+}
+
+test "a drag held past the top edge scrolls back a row per tick, and the release stops it" {
+	const sink: Sink = { sent: "" };
+	const t = termOf(lines(30), 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf(""));
+		const bottom = offsetOf(t);
+		assert c.down(t, clip, 1, hitAt(3, 2), 0).ok;
+		const above: Hit = { ...hitAt(3, 0), y: -12 };
+		assert c.move(t, above, true).ok;
+		assert c.autoscroll == -1;
+		assert handled(c.autoscrollTick(t));
+		assert handled(c.autoscrollTick(t));
+		assert offsetOf(t) == bottom - 2;
+		const kept = c.pointer.sel;
+		assert kept !== null;
+		if (kept !== null) { assert kept.bounds().start.row == bottom - 2; }
+		assert c.up(t, 1, above).ok;
+		assert !handled(c.autoscrollTick(t));
+		assert offsetOf(t) == bottom - 2;
 		t.shutdown();
 	}
 }

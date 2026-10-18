@@ -24,6 +24,14 @@ export function spotAt(x: float64, y: float64, cellWidth: float64, rowHeight: fl
 	return { col: Math.max(0, Math.min(col, cols - 1)), row: Math.max(0, Math.min(row, rows - 1)) };
 }
 
+const AUTOSCROLL_EDGE_PX: float64 = 1;
+
+export function autoscrollOf(yPx: float64, heightPx: float64): int32 {
+	if (yPx <= AUTOSCROLL_EDGE_PX) { return -1; }
+	if (yPx > heightPx - AUTOSCROLL_EDGE_PX) { return 1; }
+	return 0;
+}
+
 export function claimsMouse(tracking: boolean, shift: boolean): boolean {
 	return tracking && !shift;
 }
@@ -305,4 +313,13 @@ test "an app that tracks the mouse owns it unless shift is held" {
 	assert !claimsMouse(true, true);
 	assert !claimsMouse(false, false);
 	assert !claimsMouse(false, true);
+}
+
+test "a drag within a pixel of the top or the bottom scrolls that way, as Ghostty's edge does" {
+	assert autoscrollOf(-40, 300) == -1;
+	assert autoscrollOf(1, 300) == -1;
+	assert autoscrollOf(2, 300) == 0;
+	assert autoscrollOf(299, 300) == 0;
+	assert autoscrollOf(299.5, 300) == 1;
+	assert autoscrollOf(420, 300) == 1;
 }

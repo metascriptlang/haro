@@ -1,4 +1,8 @@
-import { env, execFileCapture, findOnPath } from "std/process";
+import { execFileCapture, findOnPath } from "std/process";
+when (!macos) {
+	import { env } from "std/process";
+}
+import { homeDir } from "std/os";
 import { changeStamp, ensureDir, exists, readFile, writeFile } from "std/fs";
 import { relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
@@ -11,11 +15,18 @@ export interface Loaded {
 }
 
 export function configPath(): string {
-	return `${env.get("USERPROFILE").replaceAll("\\", "/")}/.config/haro/config.ms`;
+	return `${homeDir().replaceAll("\\", "/")}/.config/haro/config.ms`;
 }
 
 export function cacheDir(): string {
-	return `${env.get("LOCALAPPDATA").replaceAll("\\", "/")}/haro`;
+	when (windows) {
+		return `${env.get("LOCALAPPDATA").replaceAll("\\", "/")}/haro`;
+	} else when (macos) {
+		return `${homeDir()}/Library/Caches/haro`;
+	} else {
+		const xdg = env.get("XDG_CACHE_HOME");
+		return `${xdg != "" ? xdg : `${homeDir()}/.cache`}/haro`;
+	}
 }
 
 export function stampOf(path: string): string {

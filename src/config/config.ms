@@ -18,11 +18,19 @@ const POINTS_PER_INCH: number = 72;
 const PALETTE_SIZE = 256;
 const MAX_SCROLLBACK: int64 = 100000;
 
+when (windows) {
+	const DEFAULT_COMMAND = "pwsh.exe -NoLogo";
+} else when (macos) {
+	const DEFAULT_COMMAND = "${SHELL:-/bin/zsh} -l";
+} else {
+	const DEFAULT_COMMAND = "${SHELL:-/bin/sh}";
+}
+
 export function defaults(): Config {
 	return {
 		fontFamily: null,
 		fontSize: 10.5,
-		command: "pwsh.exe -NoLogo",
+		command: DEFAULT_COMMAND,
 		scrollback: SCROLLBACK_LINES,
 		foreground: { r: 204, g: 204, b: 204 },
 		background: { r: 12, g: 12, b: 12 },
@@ -144,7 +152,7 @@ test "an empty config keeps every default" {
 	assert c.value.fontFamily === null;
 	assert c.value.fontSize == 10.5;
 	assert c.value.fontPx() == 14;
-	assert c.value.command == "pwsh.exe -NoLogo";
+	assert c.value.command == DEFAULT_COMMAND;
 	assert c.value.scrollback == SCROLLBACK_LINES;
 	assert c.value.palette.length == 0;
 	assert c.value.keybinds.length == 0;

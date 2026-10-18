@@ -41,8 +41,8 @@ measured numbers, platform behaviour found by probing, and paths that were rejec
 - ion marks Ctrl+Alt consumed exactly when AltGr produced text ≥ 0x20
   (`ion/src/platform/windows/input/input.c`, `ionWinKeyFlush`). An AltGr key fed to
   `Keys.encode` unchanged therefore leaves as `CSI 123;7u`-style fixterms bytes, which conhost
-  shells do not parse. Whether the phase-B wiring strips consumed Ctrl+Alt first is open
-  (card step 7).
+  shells do not parse, so `sendKey` drops a consumed Ctrl+Alt first (`withoutAltGr`), as wezterm
+  (`window/src/os/windows/window.rs`) and Windows Terminal (`terminalInput.cpp`) clear both.
 - ion's `ION_MOD_*` bits and ghostty's `GHOSTTY_MODS_*` bits are the same order, including the
   side bits (`src/keys/keys.ms` `modsMask` passes the mask through).
 - `\xNN` inside a `.ms` string literal is the *codepoint* NN, not a raw byte: `"\xef"` is "ï"

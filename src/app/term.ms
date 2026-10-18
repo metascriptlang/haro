@@ -1,7 +1,7 @@
 import { createList, List } from "../../../neon/src/core/list";
 import { NeonEvent } from "../../../neon/src/render/event";
 import { Style } from "../../../neon/src/render/style";
-import { KeyAction, KeyEvent, KeyMod } from "../keys/keys";
+import { KeyAction, KeyEvent, KeyMod, withoutAltGr } from "../keys/keys";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
 import { Session } from "../session/session";
@@ -192,7 +192,7 @@ export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
 		unshifted: e.unshifted as uint32,
 		text: e.text,
 	};
-	const encoded = t.keys.encode(s.vt, key, t.buf);
+	const encoded = t.keys.encode(s.vt, key.withoutAltGr(), t.buf);
 	if (!encoded.ok) { return Result.err(TermError.EncodeFailed); }
 	if (encoded.value == 0) { return Result.ok(0); }
 	if (!s.pty.write(t.buf[0..encoded.value]).ok) { return Result.err(TermError.WriteFailed); }

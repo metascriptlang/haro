@@ -26,6 +26,13 @@ export struct KeyEvent {
 	text: string;
 }
 
+const ALT_GR: BitSet<KeyMod> = KeyMod.Ctrl | KeyMod.Alt | KeyMod.CtrlRight | KeyMod.AltRight;
+
+export function withoutAltGr(this e: KeyEvent): KeyEvent {
+	if (!e.consumedMods.has(KeyMod.Ctrl) || !e.consumedMods.has(KeyMod.Alt)) { return e; }
+	return { ...e, mods: e.mods.difference(ALT_GR), consumedMods: e.consumedMods.difference(ALT_GR) };
+}
+
 export function modsMask(mods: BitSet<KeyMod>): uint16 {
 	return (mods as uint32) as uint16;
 }
@@ -57,6 +64,20 @@ test "macOS private-use function key codes are not passed on as text" {
 	assert !textSafe(String.fromCharCode(0xF700));
 	assert !textSafe(String.fromCharCode(0xF8FF));
 	assert textSafe(String.fromCharCode(0xF00F));
+}
+
+test "a key whose Ctrl+Alt the layout consumed for AltGr text drops both, and a plain Ctrl+Alt keeps them" {
+	const none = 0 as BitSet<KeyMod>;
+	const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt).incl(KeyMod.AltRight);
+	const altGr: KeyEvent = {
+		action: KeyAction.Press, key: "KeyQ", mods: ctrlAlt.incl(KeyMod.Shift), consumedMods: ctrlAlt,
+		unshifted: 0x71, text: "@",
+	};
+	const typed = altGr.withoutAltGr();
+	assert typed.mods == none.incl(KeyMod.Shift);
+	assert typed.consumedMods == none;
+	const chord: KeyEvent = { ...altGr, consumedMods: none, text: "" };
+	assert chord.withoutAltGr().mods == chord.mods;
 }
 
 test "the modifier mask keeps the ghostty bit order" {

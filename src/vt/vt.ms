@@ -64,7 +64,7 @@ import {
 	GhosttyKey,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { fromCodePoint } from "std/core/string";
-import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe } from "../keys/keys";
+import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe, withoutAltGr } from "../keys/keys";
 import { Marked, Point, Range, Selection, Unit } from "../select/select";
 
 struct Graphemes { cp: uint32[16]; }
@@ -1948,6 +1948,29 @@ function encoded(k: Keys, vt: Vt, e: KeyEvent): string {
 	let out = "";
 	for (let i = 0; i < r.value; i++) { out += String.fromCharCode(buf[i] as int32); }
 	return out;
+}
+
+test "AltGr text reaches the program as the text once the consumed Ctrl+Alt is dropped" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const opened = Keys.openKeys();
+		assert opened.ok;
+		if (opened.ok) {
+			const k = opened.value;
+			const none = 0 as BitSet<KeyMod>;
+			const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt);
+			const brace: KeyEvent = {
+				action: KeyAction.Press, key: "Digit7", mods: ctrlAlt, consumedMods: ctrlAlt, unshifted: 0x37, text: "{",
+			};
+			assert encoded(k, vt, brace.withoutAltGr()) == "{";
+			const polish: KeyEvent = { ...brace, key: "KeyA", unshifted: 0x61, text: "ą" };
+			assert encoded(k, vt, polish.withoutAltGr()) == "Ä";
+			k.freeKeys();
+		}
+		vt.free();
+	}
 }
 
 test "enter encodes as a carriage return" {

@@ -3,7 +3,7 @@ import { NeonNode } from "../../../neon/src/render/node";
 import { NeonEvent } from "../../../neon/src/render/event";
 import { Accessor, createSignal } from "../../../neon/src/core/signal";
 import { createList } from "../../../neon/src/core/list";
-import { ForList } from "../../../neon/src/macros/ui/flow";
+import { ForList, Show } from "../../../neon/src/macros/ui/flow";
 import { PixelRatio } from "../../../neon/src/api/pixelRatio";
 import { Clipboard } from "../../../neon/src/api/clipboard";
 import { Void, View, Text, ViewHandle } from "../../../neon/src/components/primitives";
@@ -15,7 +15,8 @@ import { Cursor, CursorLook, CursorShape, MouseGeometry } from "../vt/vt";
 import { BLINK_MS, BOX_SLOTS, Box, NO_BOX, blinks, boxes, drawn, resets, shapeOf } from "../term/cursor";
 import { applyTitle, ringBell } from "./chrome";
 import { hexOf } from "./frame";
-import { BACKGROUND, FOREGROUND, THEME_BG, THEME_FG } from "./theme";
+import { Config, fontPx } from "../config/config";
+import { noticeLines } from "./notice";
 import { Bridge, ControlError, Controls, Hit } from "./controls";
 import { PasteDialog, PasteView, Look } from "./pasteDialog";
 import {
@@ -28,7 +29,10 @@ import {
 	sendText,
 } from "./term";
 
-const FONT_SIZE: number = 14;
+const NOTICE_BACKGROUND = "#5c1f24";
+const NOTICE_TEXT = "#ffffff";
+const NOTICE_PADDING: number = 8;
+const NOTICE_FALLBACK_COLS: int32 = 80;
 const PADDING: number = 6;
 const PROBE = "MMMMMMMMMM";
 const SHADES = 3;
@@ -41,19 +45,30 @@ export interface Entry {
 	exited: (code: int32) => void;
 	fail: (message: string) => void;
 	openLink: (uri: string) => void;
+	onConfig: (handler: (c: Config | null, error: string) => void) => void;
 }
 
-export function App(t: Term, entry: Entry): NeonNode {
+function restartNeeded(now: Config, started: Config): boolean {
+	return now.fontFamily != started.fontFamily || now.fontSize != started.fontSize || now.command != started.command;
+}
+
+export function App(t: Term, entry: Entry, started: Config): NeonNode {
+	const fontSize = started.fontPx();
+	let settings = started;
 	let grid: ViewHandle | null = null;
 	const [cellWidth, setCellWidth] = createSignal<number>(0);
 	const [rowHeight, setRowHeight] = createSignal<number>(0);
 	const [cursorCol, setCursorCol] = createSignal<number>(0);
 	const [cursorRow, setCursorRow] = createSignal<number>(0);
-	const [background, setBackground] = createSignal<string>(BACKGROUND);
-	const [foreground, setForeground] = createSignal<string>(FOREGROUND);
+	const [background, setBackground] = createSignal<string>(hexOf(started.background));
+	const [foreground, setForeground] = createSignal<string>(hexOf(started.foreground));
+	let notice = "";
+	const [noticed, setNoticed] = createSignal<boolean>(false);
+	const noticeRows = createList<string>([]);
 	let themed = false;
 
 	const controls = Controls.open();
+	controls.keybinds = started.keybinds;
 	const dialog = PasteView.open();
 	const [viewWidth, setViewWidth] = createSignal<number>(0);
 	const shades = createList<Block>([NO_SHADE, NO_SHADE, NO_SHADE]);
@@ -203,6 +218,35 @@ export function App(t: Term, entry: Entry): NeonNode {
 
 	const clip: Bridge = bridge();
 
+	function showNotice(text: string): void {
+		notice = text;
+		const room = viewWidth() - 2 * PADDING - 2 * NOTICE_PADDING;
+		const cols = cellWidth() > 0 ? Math.max(1, Math.floor(room / cellWidth())) as int32 : NOTICE_FALLBACK_COLS;
+		noticeRows.replaceAll(noticeLines(text, cols));
+		setNoticed(text != "");
+	}
+
+	function theme(): boolean {
+		const s = t.session;
+		if (s === null) { return true; }
+		if (!s.vt.setDefaultColors(settings.foreground, settings.background).ok || !s.vt.setPalette(settings.palette).ok) {
+			entry.fail("the configured colours were refused");
+			return false;
+		}
+		return true;
+	}
+
+	entry.onConfig((c: Config | null, error: string): void => {
+		if (c === null) {
+			showNotice(`config.ms: ${error}`);
+			return;
+		}
+		settings = c;
+		controls.keybinds = c.keybinds;
+		showNotice(restartNeeded(c, started) ? "config.ms: fontFamily, fontSize and command apply when Haro restarts" : "");
+		if (themed && theme()) { refresh(); }
+	});
+
 	entry.onWake((): void => {
 		const now = Date.now() as float64;
 		if (resets(lastReset, now)) {
@@ -215,7 +259,7 @@ export function App(t: Term, entry: Entry): NeonNode {
 	const lineRow = (item: Accessor<RowSlot>): NeonNode => {
 		return element(
 			<Text
-				style={{ fontSize: FONT_SIZE, color: foreground(), height: rowHeight() }}
+				style={{ fontSize: fontSize, color: foreground(), height: rowHeight() }}
 				cellWidth={cellWidth()}
 				spans={item().spans}
 			/>
@@ -236,7 +280,7 @@ export function App(t: Term, entry: Entry): NeonNode {
 			entry.fail("the grid laid out before its handle arrived");
 			return;
 		}
-		const probe = handle.measureText(PROBE, { fontSize: FONT_SIZE });
+		const probe = handle.measureText(PROBE, { fontSize: fontSize });
 		const advance = probe.width / PROBE.length;
 		const lineHeight = probe.height;
 		const ratio = PixelRatio.get();
@@ -250,6 +294,7 @@ export function App(t: Term, entry: Entry): NeonNode {
 			return;
 		}
 		setViewWidth(e.width);
+		showNotice(notice);
 		dialog.shownFor = null;
 		geometry = {
 			cellWidth: cellPx, cellHeight: rowPx, width: size.value[0] * cellPx, height: size.value[1] * rowPx,
@@ -268,11 +313,7 @@ export function App(t: Term, entry: Entry): NeonNode {
 		}
 		if (!themed) {
 			themed = true;
-			const s = t.session;
-			if (s !== null && !s.vt.setDefaultColors(THEME_FG, THEME_BG).ok) {
-				entry.fail("the default colours were refused");
-				return;
-			}
+			if (!theme()) { return; }
 		}
 		if (fitted.value) { refresh(); }
 	};
@@ -378,7 +419,7 @@ export function App(t: Term, entry: Entry): NeonNode {
 	const look: Look = {
 		cellWidth: cellWidth,
 		rowHeight: rowHeight,
-		fontSize: FONT_SIZE,
+		fontSize: fontSize,
 		onConfirm: (): void => {
 			const sent = controls.confirm(t);
 			if (!sent.ok) { fatalControl("paste", sent.error); }
@@ -389,6 +430,16 @@ export function App(t: Term, entry: Entry): NeonNode {
 			if (!dropped.ok) { fatalControl("clipboard", dropped.error); }
 			refresh();
 		},
+	};
+
+	const noticeRow = (item: Accessor<string>): NeonNode => {
+		return element(
+			<Text
+				style={{ fontSize: fontSize, color: NOTICE_TEXT, height: rowHeight() }}
+				cellWidth={cellWidth()}
+				spans={[{ text: item(), style: {} }]}
+			/>
+		);
 	};
 
 	const cursorBox = (item: Accessor<Box>): NeonNode => {
@@ -454,6 +505,19 @@ export function App(t: Term, entry: Entry): NeonNode {
 				{ForList<Box>({ each: cursorBoxes, children: cursorBox })}
 			</View>
 			{PasteDialog(dialog, look)}
+			{Show({
+				when: noticed,
+				children: element(
+					<View
+						style={{
+							position: "absolute", left: PADDING, right: PADDING, top: PADDING, padding: NOTICE_PADDING,
+							backgroundColor: NOTICE_BACKGROUND, borderRadius: 4,
+						}}
+						onPointerDown={(e: NeonEvent): void => { showNotice(""); }}>
+						{ForList<string>({ each: noticeRows, children: noticeRow })}
+					</View>
+				),
+			})}
 		</Void>
 	);
 }

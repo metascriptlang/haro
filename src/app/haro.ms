@@ -17,19 +17,24 @@ import { ConPty } from "../pty/pty";
 import { Replay } from "../pty/replay";
 import { App, Entry } from "./app";
 import { Pace } from "./pace";
+import { Config, defaults } from "../config/config";
+import { Loaded, configPath, load, stampOf } from "../config/source";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { Term, openTerm, shutdown } from "./term";
 
 extern function appWireWake(): void;
 
-const SHELL = "pwsh.exe -NoLogo";
 const FONT_PATH = "assets/JetBrainsMonoNL-Regular.ttf";
 const FONT_BOLD = "assets/JetBrainsMonoNL-Bold.ttf";
 const FONT_ITALIC = "assets/JetBrainsMonoNL-Italic.ttf";
 const FONT_BOLD_ITALIC = "assets/JetBrainsMonoNL-BoldItalic.ttf";
-const FONT_FAMILY = `${FONT_PATH}, Segoe UI Symbol, Microsoft YaHei`;
+const FALLBACK_FAMILIES = "Segoe UI Symbol, Microsoft YaHei";
+const CONFIG_POLL_MS = 1000;
 
 const pace = Pace.start();
+const configFile = valueOf("--config") ?? configPath();
+let loaded: Loaded = { config: defaults(), faces: null, stamp: "" };
+let configError = "";
 
 function fail(message: string): void {
 	console.log(`haro: ${message}`);
@@ -50,10 +55,53 @@ function has(flag: string): boolean {
 	return false;
 }
 
+function readConfig(): void {
+	const got = load(configFile);
+	if (got.ok) {
+		loaded = got.value;
+		return;
+	}
+	configError = got.error;
+	loaded.stamp = stampOf(configFile);
+}
+
+function watchConfig(handler: (c: Config | null, error: string) => void): void {
+	setTimeout((): void => {
+		const stamp = stampOf(configFile);
+		if (stamp != loaded.stamp) {
+			const got = load(configFile);
+			if (got.ok) {
+				loaded = got.value;
+				handler(got.value.config, "");
+			} else {
+				loaded.stamp = stamp;
+				handler(null, got.error);
+			}
+		}
+		watchConfig(handler);
+	}, CONFIG_POLL_MS);
+}
+
+function registerFaces(): string {
+	const faces = loaded.faces;
+	if (faces === null) {
+		registerFace(FONT_BOLD, FONT_PATH, 700, FontStyle.Normal);
+		registerFace(FONT_ITALIC, FONT_PATH, 400, FontStyle.Italic);
+		registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
+		return FONT_PATH;
+	}
+	const family = faces.regular;
+	const bold = faces.bold;
+	const italic = faces.italic;
+	const boldItalic = faces.boldItalic;
+	if (bold !== null) { registerFace(bold, family, 700, FontStyle.Normal); }
+	if (italic !== null) { registerFace(italic, family, 400, FontStyle.Italic); }
+	if (boldItalic !== null) { registerFace(boldItalic, family, 700, FontStyle.Italic); }
+	return family;
+}
+
 function show(t: Term, exited: (code: int32) => void): int32 {
-	registerFace(FONT_BOLD, FONT_PATH, 700, FontStyle.Normal);
-	registerFace(FONT_ITALIC, FONT_PATH, 400, FontStyle.Italic);
-	registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
+	const font = registerFaces();
 	const systemFonts = `${env.get("WINDIR")}/Fonts`;
 	registerFace(`${systemFonts}/seguisym.ttf`, "Segoe UI Symbol", 400, FontStyle.Normal);
 	registerFace(`${systemFonts}/msyh.ttc`, "Microsoft YaHei", 400, FontStyle.Normal);
@@ -75,9 +123,13 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 		exited: exited,
 		fail: fail,
 		openLink: (uri: string): void => { openExternal(uri); },
+		onConfig: (handler: (c: Config | null, error: string) => void): void => {
+			if (configError != "") { handler(null, configError); }
+			watchConfig(handler);
+		},
 	};
-	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: FONT_PATH, fontFamily: FONT_FAMILY };
-	const code = runWindow(opts, (): NeonNode => App(t, entry));
+	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: font, fontFamily: `${font}, ${FALLBACK_FAMILIES}` };
+	const code = runWindow(opts, (): NeonNode => App(t, entry, loaded.config));
 	t.shutdown();
 	return code;
 }
@@ -123,9 +175,10 @@ function runReplay(path: string): int32 {
 }
 
 function main(): int32 {
+	readConfig();
 	const replayPath = valueOf("--replay");
 	if (replayPath !== null) { return runReplay(replayPath); }
-	return runShell(valueOf("--shell") ?? SHELL);
+	return runShell(valueOf("--shell") ?? loaded.config.command);
 }
 
 exit(main());

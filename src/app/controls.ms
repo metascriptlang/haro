@@ -1,7 +1,7 @@
 import { NeonEvent, neonEvent } from "../../../neon/src/render/event";
 import { KeyMod } from "../keys/keys";
 import { Block } from "../select/select";
-import { Action, resolve } from "../input/bindings";
+import { Action, Keybind, resolve, textFor } from "../input/bindings";
 import { Pointer, Spot, autoscrollOf, claimsMouse } from "../input/pointer";
 import { ROWS_PER_NOTCH, Wheel, WheelRoute, reportButton, route } from "../input/wheel";
 import { Held, Reply, replyTo, replyToRead, warningFor, Warning } from "../input/paste";
@@ -47,6 +47,7 @@ export interface Controls {
 	reading: string | null;
 	button: int32;
 	autoscroll: int32;
+	keybinds: Vec<Keybind>;
 }
 
 const LEFT: int32 = 1;
@@ -56,7 +57,7 @@ const CTRL: int32 = 2;
 const KEYBOARD_ROWS: int32 = ROWS_PER_NOTCH as int32;
 
 export function open(this typeof Controls): Controls {
-	return { pointer: Pointer.open(), wheel: Wheel.open(), held: null, reading: null, button: 0, autoscroll: 0 };
+	return { pointer: Pointer.open(), wheel: Wheel.open(), held: null, reading: null, button: 0, autoscroll: 0, keybinds: [] };
 }
 
 function vtOf(t: Term): Vt | null {
@@ -177,6 +178,12 @@ export function keyDown(this c: Controls, t: Term, e: NeonEvent, host: Bridge): 
 	if (c.holding()) { return c.answer(t, e); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
+	const sends = textFor(c.keybinds, e.code, e.mods);
+	if (sends !== null) {
+		if (!t.sendText(sends).ok) { return Result.err(ControlError.WriteFailed); }
+		const _snapped = try c.typed(t);
+		return Result.ok(true);
+	}
 	const alt = vt.alternateScreen();
 	if (!alt.ok) { return Result.err(ControlError.VtFailed); }
 	const action = resolve(e.code, e.mods, alt.value);
@@ -981,6 +988,25 @@ test "a drag held past the top edge scrolls back a row per tick, and the release
 		assert c.up(t, 1, above).ok;
 		assert !handled(c.autoscrollTick(t));
 		assert offsetOf(t) == bottom - 2;
+		t.shutdown();
+	}
+}
+
+test "a configured keybind sends its text, ahead of a built-in chord on the same keys" {
+	const sink: Sink = { sent: "" };
+	const t = termOf(lines(30), 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		c.keybinds = [{ code: "Enter", mods: SHIFT, text: "[13;2u" }, { code: "KeyC", mods: CTRL | SHIFT, text: "c" }];
+		const clip = clipOf(boardOf(""));
+		assert handled(c.keyDown(t, key("PageUp", 3), clip));
+		assert handled(c.keyDown(t, key("Enter", 1), clip));
+		assert sink.sent == "[13;2u";
+		assert atBottomOf(t);
+		assert handled(c.keyDown(t, key("KeyC", 3), clip));
+		assert sink.sent == "[13;2uc";
+		assert !handled(c.keyDown(t, key("Enter", 2), clip));
 		t.shutdown();
 	}
 }

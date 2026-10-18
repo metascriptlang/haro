@@ -28,7 +28,32 @@ const FONT_PATH = "assets/JetBrainsMonoNL-Regular.ttf";
 const FONT_BOLD = "assets/JetBrainsMonoNL-Bold.ttf";
 const FONT_ITALIC = "assets/JetBrainsMonoNL-Italic.ttf";
 const FONT_BOLD_ITALIC = "assets/JetBrainsMonoNL-BoldItalic.ttf";
-const FALLBACK_FAMILIES = "Segoe UI Symbol, Microsoft YaHei";
+
+interface SystemFace {
+	path: string;
+	family: string;
+}
+
+when (windows) {
+	function fallbackFaces(): SystemFace[] {
+		const fonts = `${env.get("WINDIR")}/Fonts`;
+		return [
+			{ path: `${fonts}/seguisym.ttf`, family: "Segoe UI Symbol" },
+			{ path: `${fonts}/msyh.ttc`, family: "Microsoft YaHei" },
+		];
+	}
+} else when (macos) {
+	function fallbackFaces(): SystemFace[] {
+		return [
+			{ path: "/System/Library/Fonts/Apple Symbols.ttf", family: "Apple Symbols" },
+			{ path: "/System/Library/Fonts/Hiragino Sans GB.ttc", family: "Hiragino Sans GB" },
+		];
+	}
+} else {
+	function fallbackFaces(): SystemFace[] {
+		return [];
+	}
+}
 const CONFIG_POLL_MS = 1000;
 
 const pace = Pace.start();
@@ -111,14 +136,14 @@ function registerFaces(): string {
 }
 
 function familiesAfter(font: string): string {
-	return font == FONT_PATH ? `${font}, ${FALLBACK_FAMILIES}` : `${font}, ${FONT_PATH}, ${FALLBACK_FAMILIES}`;
+	const families = font == FONT_PATH ? [font] : [font, FONT_PATH];
+	for (const face of fallbackFaces()) { families.push(face.family); }
+	return families.join(", ");
 }
 
 function show(t: Term, exited: (code: int32) => void): int32 {
 	const font = registerFaces();
-	const systemFonts = `${env.get("WINDIR")}/Fonts`;
-	registerFace(`${systemFonts}/seguisym.ttf`, "Segoe UI Symbol", 400, FontStyle.Normal);
-	registerFace(`${systemFonts}/msyh.ttc`, "Microsoft YaHei", 400, FontStyle.Normal);
+	for (const face of fallbackFaces()) { registerFace(face.path, face.family, 400, FontStyle.Normal); }
 	const entry: Entry = {
 		onWake: (handler: () => void): void => {
 			onWake((): void => {

@@ -53,7 +53,7 @@ function answer(this s: Session, buf: Span<uint8>): Result<int32, SessionError> 
 		const n = s.vt.replies(buf);
 		if (!n.ok) { return Result.err(SessionError.VtReadFailed); }
 		if (n.value == 0) { return Result.ok(total); }
-		if (!s.pty.write(buf[0..n.value]).ok) { return Result.err(SessionError.PtyWriteFailed); }
+		const _sent = try s.send(buf[0..n.value]);
 		total += n.value;
 	}
 }
@@ -65,11 +65,18 @@ export function screen(this s: Session): Result<Vec<string>, SessionError> {
 	return Result.ok(lines.value);
 }
 
+export function send(this s: Session, data: Span<uint8>): Result<int32, SessionError> {
+	const wrote = s.pty.write(data);
+	if (wrote.ok) { return Result.ok(wrote.value); }
+	if (s.pty.exitCode() !== null) { return Result.ok(0); }
+	return Result.err(SessionError.PtyWriteFailed);
+}
+
 export function resize(this s: Session, cols: int32, rows: int32): Result<Session, SessionError> {
 	const resizedVt = s.vt.resize(cols, rows);
 	if (!resizedVt.ok) { return Result.err(SessionError.ResizeFailed); }
 	const resizedPty = s.pty.resize(cols, rows);
-	if (!resizedPty.ok) { return Result.err(SessionError.ResizeFailed); }
+	if (!resizedPty.ok && s.pty.exitCode() === null) { return Result.err(SessionError.ResizeFailed); }
 	return Result.ok(s);
 }
 
@@ -266,6 +273,29 @@ when (testBuild) {
 			s.close();
 		}
 	}
+}
+
+function sentAfterExit(running: boolean): string {
+	const base = Replay.ofText("bye").toPty();
+	const pty: Pty = {
+		...base,
+		write: (data: Span<uint8>): Result<int32, PtyError> => { return Result.err(PtyError.Closed); },
+		resize: (cols: int32, rows: int32): Result<void, PtyError> => { return Result.err(PtyError.Closed); },
+		exitCode: (): int32 | null => { return running ? null : 0; },
+	};
+	const started = Session.start(pty, 10, 3);
+	if (!started.ok) { return "start failed"; }
+	const s = started.value;
+	let bytes: Vec<uint8> = [0x61];
+	const sent = s.send(bytes[0..1]);
+	const resized = s.resize(12, 4);
+	s.close();
+	return `${sent.ok ? `sent ${sent.value}` : "send failed"}, ${resized.ok ? "resized" : "resize failed"}`;
+}
+
+test "input and a resize after the shell exited are dropped, and still fail while it runs" {
+	assert sentAfterExit(false) == "sent 0, resized";
+	assert sentAfterExit(true) == "send failed, resize failed";
 }
 
 function rowsAfterGrowing(ownsScreen: boolean): string {

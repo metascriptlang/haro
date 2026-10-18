@@ -195,7 +195,7 @@ export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
 	const encoded = t.keys.encode(s.vt, key.withoutAltGr(), t.buf);
 	if (!encoded.ok) { return Result.err(TermError.EncodeFailed); }
 	if (encoded.value == 0) { return Result.ok(0); }
-	if (!s.pty.write(t.buf[0..encoded.value]).ok) { return Result.err(TermError.WriteFailed); }
+	if (!s.send(t.buf[0..encoded.value]).ok) { return Result.err(TermError.WriteFailed); }
 	return Result.ok(encoded.value);
 }
 
@@ -207,7 +207,7 @@ export function sendText(this t: Term, text: string): Result<int32, TermError> {
 	if (n == 0) { return Result.ok(0); }
 	const bytes: Readonly<Span<char>> = text;
 	for (let i = 0; i < n; i++) { t.buf[i] = bytes[i] as uint8; }
-	if (!s.pty.write(t.buf[0..n]).ok) { return Result.err(TermError.WriteFailed); }
+	if (!s.send(t.buf[0..n]).ok) { return Result.err(TermError.WriteFailed); }
 	return Result.ok(n);
 }
 
@@ -220,7 +220,7 @@ export function sendPaste(this t: Term, text: string, allowUnsafe: boolean): Res
 	}
 	const n = bytes.value.length as int32;
 	if (n == 0) { return Result.ok(0); }
-	if (!s.pty.write(bytes.value[0..n]).ok) { return Result.err(TermError.WriteFailed); }
+	if (!s.send(bytes.value[0..n]).ok) { return Result.err(TermError.WriteFailed); }
 	return Result.ok(n);
 }
 
@@ -230,7 +230,7 @@ export function sendFocus(this t: Term, gained: boolean): Result<int32, TermErro
 	const n = s.vt.focusReport(gained, t.buf);
 	if (!n.ok) { return Result.err(TermError.FocusFailed); }
 	if (n.value == 0) { return Result.ok(0); }
-	if (!s.pty.write(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
+	if (!s.send(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
 	return Result.ok(n.value);
 }
 
@@ -242,7 +242,7 @@ export function sendMouse(
 	const n = s.vt.mouseReport(e, g, anyPressed, t.buf);
 	if (!n.ok) { return Result.err(TermError.MouseFailed); }
 	if (n.value == 0) { return Result.ok(0); }
-	if (!s.pty.write(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
+	if (!s.send(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
 	return Result.ok(n.value);
 }
 
@@ -254,7 +254,7 @@ export function sendReplies(this t: Term): Result<int32, TermError> {
 		const n = s.vt.replies(t.buf);
 		if (!n.ok) { return Result.err(TermError.RepliesFailed); }
 		if (n.value == 0) { return Result.ok(total); }
-		if (!s.pty.write(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
+		if (!s.send(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
 		total += n.value;
 	}
 }

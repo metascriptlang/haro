@@ -43,6 +43,79 @@ const BINDINGS: Vec<Binding> = [
 	{ code: "PageDown", mods: SHIFT, action: Action.PageDown, primaryOnly: true },
 ];
 
+export struct Keybind {
+	code: string;
+	mods: int32;
+	text: string;
+}
+
+function modOf(name: string): int32 {
+	return match (name) {
+		"shift" => SHIFT,
+		"ctrl" | "control" => CTRL,
+		"alt" | "opt" | "option" => ALT,
+		"super" | "cmd" | "command" => SUPER,
+		_ => 0,
+	};
+}
+
+const KEY_NAMES: Vec<string> = [
+	"backquote", "backslash", "bracket_left", "bracket_right", "comma", "equal", "minus", "period", "quote",
+	"semicolon", "slash", "backspace", "enter", "space", "tab", "escape", "delete", "end", "home", "insert",
+	"page_down", "page_up", "arrow_down", "arrow_left", "arrow_right", "arrow_up", "numpad_add",
+	"numpad_decimal", "numpad_divide", "numpad_enter", "numpad_multiply", "numpad_subtract",
+];
+
+function pascal(snake: string): string {
+	let out = "";
+	for (const part of snake.split("_")) {
+		if (part.length > 0) { out += part[0].toUpperCase() + part.slice(1); }
+	}
+	return out;
+}
+
+function codeOf(name: string): string | null {
+	if (name.length == 1 && name >= "a" && name <= "z") { return `Key${name.toUpperCase()}`; }
+	if (name.length == 1 && name >= "0" && name <= "9") { return `Digit${name}`; }
+	if (name.startsWith("key_") && name.length == 5) { return codeOf(name.slice(4)); }
+	if (name.startsWith("digit_") && name.length == 7) { return codeOf(name.slice(6)); }
+	if (name.startsWith("numpad_") && name.length == 8 && name[7] >= "0" && name[7] <= "9") { return pascal(name); }
+	if (name.length >= 2 && name.length <= 3 && name[0] == "f") {
+		const n = name.slice(1).parseInt();
+		if (n >= 1 && n <= 24 && `f${n}` == name) { return `F${n}`; }
+	}
+	for (const known of KEY_NAMES) {
+		if (known == name) { return pascal(name); }
+	}
+	return null;
+}
+
+export function keybind(keys: string, text: string): Result<Keybind, string> {
+	let mods = 0;
+	let code: string | null = null;
+	for (const part of keys.split("+")) {
+		const mod = modOf(part);
+		if (mod != 0) {
+			if ((mods & mod) != 0) { return Result.err(`"${keys}" names ${part} twice`); }
+			mods = mods | mod;
+			continue;
+		}
+		if (code !== null) { return Result.err(`"${keys}" names more than one key`); }
+		code = codeOf(part);
+		if (code === null) { return Result.err(`"${keys}": "${part}" is not a key or modifier name`); }
+	}
+	if (code === null) { return Result.err(`"${keys}" names no key`); }
+	return Result.ok({ code: code, mods: mods, text: text });
+}
+
+export function textFor(binds: Readonly<Span<Keybind>>, code: string, mods: number): string | null {
+	const held = (mods as int32) & CHORD;
+	for (const b of binds) {
+		if (b.code == code && b.mods == held) { return b.text; }
+	}
+	return null;
+}
+
 export function resolve(code: string, mods: number, altScreen: boolean): Action {
 	const held = (mods as int32) & CHORD;
 	for (const b of BINDINGS) {
@@ -103,4 +176,42 @@ test "a key with no binding resolves to nothing" {
 	assert resolve("KeyA", 0, false) == Action.None;
 	assert resolve("KeyC", 0, false) == Action.None;
 	assert resolve("", 0, false) == Action.None;
+}
+
+function bound(keys: string): string {
+	const b = keybind(keys, "x");
+	if (!b.ok) { return b.error; }
+	return `${b.value.code} ${b.value.mods}`;
+}
+
+test "a keybind names its modifiers and one key the way ghostty's triggers do" {
+	assert bound("shift+enter") == "Enter 1";
+	assert bound("ctrl+shift+h") == "KeyH 3";
+	assert bound("control+key_h") == "KeyH 2";
+	assert bound("alt+digit_1") == "Digit1 4";
+	assert bound("super+arrow_up") == "ArrowUp 8";
+	assert bound("page_down") == "PageDown 0";
+	assert bound("f12") == "F12 0";
+	assert bound("numpad_7") == "Numpad7 0";
+}
+
+test "a keybind that is not a trigger is refused by name" {
+	assert bound("shift+entre") == `"shift+entre": "entre" is not a key or modifier name`;
+	assert bound("ctrl+ctrl+a") == `"ctrl+ctrl+a" names ctrl twice`;
+	assert bound("a+b") == `"a+b" names more than one key`;
+	assert bound("ctrl+shift") == `"ctrl+shift" names no key`;
+	assert !keybind("f25", "x").ok;
+	assert !keybind("f01", "x").ok;
+}
+
+test "a keybind's text answers exactly its chord, side and lock bits aside" {
+	const binds: Vec<Keybind> = [
+		{ code: "Enter", mods: SHIFT, text: "a" },
+		{ code: "KeyH", mods: CTRL | SHIFT, text: "b" },
+	];
+	assert textFor(binds, "Enter", SHIFT) == "a";
+	assert textFor(binds, "Enter", SHIFT | 64 | 32) == "a";
+	assert textFor(binds, "Enter", 0) === null;
+	assert textFor(binds, "Enter", SHIFT | CTRL) === null;
+	assert textFor(binds, "KeyH", CTRL | SHIFT) == "b";
 }

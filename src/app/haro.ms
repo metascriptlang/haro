@@ -11,14 +11,14 @@ import {
 import { onWake, openExternal } from "../../../ion/src/index";
 import { FontStyle, registerFace } from "../../../void/src/void2d/font";
 import { argv, env, exit } from "std/process";
-import { readFile } from "std/fs";
+import { appendFile, ensureDir, readFile } from "std/fs";
 import { Pty, PtyError } from "../pty/transport";
 import { ConPty } from "../pty/pty";
 import { Replay } from "../pty/replay";
 import { App, Entry } from "./app";
 import { Pace } from "./pace";
 import { Config, defaults } from "../config/config";
-import { Loaded, configPath, load, stampOf } from "../config/source";
+import { Loaded, cacheDir, configPath, load, stampOf } from "../config/source";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { Term, openTerm, shutdown } from "./term";
 
@@ -36,8 +36,15 @@ const configFile = valueOf("--config") ?? configPath();
 let loaded: Loaded = { config: defaults(), faces: null, stamp: "" };
 let configError = "";
 
+function note(line: string): void {
+	console.log(`haro: ${line}`);
+	const dir = cacheDir();
+	if (ensureDir(dir).ok) { const _logged = appendFile(`${dir}/haro.log`, `${Date.now()} ${line}
+`); }
+}
+
 function fail(message: string): void {
-	console.log(`haro: ${message}`);
+	note(message);
 	exit(1);
 }
 
@@ -137,6 +144,7 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 	};
 	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: font, fontFamily: familiesAfter(font) };
 	const code = runWindow(opts, (): NeonNode => App(t, entry, loaded.config));
+	note("the window closed");
 	t.shutdown();
 	return code;
 }
@@ -154,7 +162,7 @@ function runShell(shell: string): int32 {
 	if (has("--smoke")) { smoke(t); }
 	if (has("--flood")) { smokeFlood(t, pace); }
 	return show(t, (code: int32): void => {
-		console.log(`haro: the shell exited with code ${code}`);
+		note(`the shell exited with code ${code}`);
 		t.shutdown();
 		exit(0);
 	});

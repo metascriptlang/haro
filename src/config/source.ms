@@ -14,7 +14,7 @@ export function configPath(): string {
 	return `${env.get("USERPROFILE").replaceAll("\\", "/")}/.config/haro/config.ms`;
 }
 
-function cacheDir(): string {
+export function cacheDir(): string {
 	return `${env.get("LOCALAPPDATA").replaceAll("\\", "/")}/haro`;
 }
 

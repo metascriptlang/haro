@@ -2,6 +2,10 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "effects.h"
 #include "state.h"
 
@@ -102,11 +106,17 @@ static Effects* slot(int id) {
 	return &effects[id];
 }
 
+#ifdef _WIN32
+static int64_t nowMs(void) {
+	return (int64_t)GetTickCount64();
+}
+#else
 static int64_t nowMs(void) {
 	struct timespec t;
-	timespec_get(&t, TIME_UTC);
+	clock_gettime(CLOCK_MONOTONIC, &t);
 	return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
+#endif
 
 static void onRenderHold(GhosttyTerminal terminal, void* userdata, bool held) {
 	Effects* e = userdata;

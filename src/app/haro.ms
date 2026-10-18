@@ -82,14 +82,17 @@ function watchConfig(handler: (c: Config | null, error: string) => void): void {
 	}, CONFIG_POLL_MS);
 }
 
+function registerBuiltIn(): void {
+	registerFace(FONT_BOLD, FONT_PATH, 700, FontStyle.Normal);
+	registerFace(FONT_ITALIC, FONT_PATH, 400, FontStyle.Italic);
+	registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
+}
+
 function registerFaces(): string {
+	registerBuiltIn();
 	const faces = loaded.faces;
-	if (faces === null) {
-		registerFace(FONT_BOLD, FONT_PATH, 700, FontStyle.Normal);
-		registerFace(FONT_ITALIC, FONT_PATH, 400, FontStyle.Italic);
-		registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
-		return FONT_PATH;
-	}
+	if (faces === null) { return FONT_PATH; }
+	registerFace(FONT_PATH, FONT_PATH, 400, FontStyle.Normal);
 	const family = faces.regular;
 	const bold = faces.bold;
 	const italic = faces.italic;
@@ -98,6 +101,10 @@ function registerFaces(): string {
 	if (italic !== null) { registerFace(italic, family, 400, FontStyle.Italic); }
 	if (boldItalic !== null) { registerFace(boldItalic, family, 700, FontStyle.Italic); }
 	return family;
+}
+
+function familiesAfter(font: string): string {
+	return font == FONT_PATH ? `${font}, ${FALLBACK_FAMILIES}` : `${font}, ${FONT_PATH}, ${FALLBACK_FAMILIES}`;
 }
 
 function show(t: Term, exited: (code: int32) => void): int32 {
@@ -128,7 +135,7 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 			watchConfig(handler);
 		},
 	};
-	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: font, fontFamily: `${font}, ${FALLBACK_FAMILIES}` };
+	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: font, fontFamily: familiesAfter(font) };
 	const code = runWindow(opts, (): NeonNode => App(t, entry, loaded.config));
 	t.shutdown();
 	return code;

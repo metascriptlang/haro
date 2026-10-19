@@ -91,8 +91,10 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
   `ptyWrite`. The reader parks at 4 MiB unread so a flood pushes back on the child; closing while it
   is parked took 5 ms (`probe/closeParked.ms`).
 - conhost may send `ESC[1C` for a space inside a line (`line ESC[1C3971`) and puts its exit-time
-  mode resets between CR and LF, so a check over captured output skips CSI (the flood test in
-  `src/pty/pty.ms`).
+  mode resets between CR and LF. Under 90 % machine load a check that took LF as the end of each
+  line stopped at line 23, the first scroll of an 80x24 screen, with every byte present (two gate
+  runs, 2026-10-19). So the flood test in `src/pty/pty.ms` reads each number between `L` and `.`
+  and skips CSI, wherever conhost ends the line.
 
 - conhost answers a cursor position query (`ESC[6n`) and DA1 (`ESC[c`) itself: a child's query
   never reaches Haro. It forwards XTVERSION (`ESC[>q`), OSC 11 (`ESC]11;?`) and the colour

@@ -237,7 +237,7 @@ test "a line written to the child reaches it" {
 	}
 }
 
-struct LineCheck { next: int32; digits: string; inCsi: boolean; bytes: int64; }
+struct LineCheck { next: int32; digits: string; inNumber: boolean; inCsi: boolean; bytes: int64; }
 
 function feed(this before: LineCheck, bytes: Span<uint8>): LineCheck {
 	let c = before;
@@ -247,23 +247,34 @@ function feed(this before: LineCheck, bytes: Span<uint8>): LineCheck {
 			c.inCsi = b < 0x40 || b > 0x7E || b == 0x5B;
 		} else if (b == 0x1B) {
 			c.inCsi = true;
-		} else if (b == 0x0A) {
-			if (c.digits == `${c.next}`) { c.next++; }
+		} else if (b == 0x4C) {
+			c.inNumber = true;
 			c.digits = "";
-		} else if (b >= 0x30 && b <= 0x39) {
+		} else if (c.inNumber && b >= 0x30 && b <= 0x39) {
 			c.digits += String.fromCharCode(b as int32);
-		} else if (b != 0x0D) {
-			c.digits = "";
+		} else if (c.inNumber) {
+			if (b == 0x2E && c.digits == `${c.next}`) { c.next++; }
+			c.inNumber = false;
 		}
 	}
 	return c;
+}
+
+test "the flood check counts a line ended by a cursor move, not a newline, and skips escapes inside it" {
+	let check: LineCheck = { next: 0, digits: "", inNumber: false, inCsi: false, bytes: 0 };
+	const text = "\x1b]0;cmd\x07line L0.\x1b[2;1Hline\x1b[1CL1.\x1b[K\r\nline L3.\r\nline L2.\r\n";
+	const view = text.asBytes();
+	let bytes: Vec<uint8> = new Array(view.length);
+	for (let i = 0; i < view.length; i++) { bytes[i] = view[i]; }
+	check = check.feed(bytes[0..bytes.length]);
+	assert check.next == 3;
 }
 
 test "output past the read buffer's limit arrives whole and in order while the app reads late" {
 	const path = `${tmpDir()}/haroPtyFlood.txt`;
 	let text = "";
 	const count = 400000;
-	for (let i = 0; i < count; i++) { text += `line ${i}\r\n`; }
+	for (let i = 0; i < count; i++) { text += `line L${i}.\r\n`; }
 	text += "end";
 	assert writeFile(path, text).ok;
 	const opened = NativePty.open(printFile(path), 80, 24);
@@ -273,7 +284,7 @@ test "output past the read buffer's limit arrives whole and in order while the a
 		const late: float64 = performance.now();
 		while (performance.now() - late < 1500) {}
 		let buf: Vec<uint8> = new Array(65536);
-		let check: LineCheck = { next: 0, digits: "", inCsi: false, bytes: 0 };
+		let check: LineCheck = { next: 0, digits: "", inNumber: false, inCsi: false, bytes: 0 };
 		while (true) {
 			const ready = p.wait(10000);
 			if (!ready.ok || !ready.value) { break; }

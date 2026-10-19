@@ -232,6 +232,11 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 		exited: exited,
 		fail: fail,
 		openLink: (uri: string): void => { openExternal(uri); },
+		close: (): void => {
+			note("a keybind closed the window");
+			t.shutdown();
+			exit(0);
+		},
 		onConfig: (handler: (c: Config | null, error: string) => void): void => {
 			if (configError != "") { handler(null, configError); }
 			watchConfig(handler);

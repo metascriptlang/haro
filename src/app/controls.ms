@@ -1,7 +1,7 @@
 import { NeonEvent, neonEvent } from "../../../neon/src/render/event";
 import { KeyMod } from "../keys/keys";
 import { Block } from "../select/select";
-import { Action, CLIPBOARD_MODS, Keybind, resolve, textFor } from "../input/bindings";
+import { Action, BindAction, CLIPBOARD_MODS, Keybind, Screen, bindFor, resolve } from "../input/bindings";
 import { Pointer, Spot, autoscrollOf, claimsMouse } from "../input/pointer";
 import { ROWS_PER_NOTCH, Wheel, WheelRoute, reportButton, route } from "../input/wheel";
 import { Held, Reply, replyTo, replyToRead, warningFor, Warning } from "../input/paste";
@@ -29,6 +29,7 @@ export interface Bridge {
 	write: (text: string) => void;
 	read: (done: (text: string) => void) => void;
 	open: (uri: string) => void;
+	close: () => void;
 }
 
 export struct Hit {
@@ -54,6 +55,7 @@ const LEFT: int32 = 1;
 const RIGHT: int32 = 2;
 const SHIFT: int32 = 1;
 const CTRL: int32 = 2;
+const SUPER: int32 = 8;
 const KEYBOARD_ROWS: int32 = ROWS_PER_NOTCH as int32;
 
 export function open(this typeof Controls): Controls {
@@ -178,14 +180,18 @@ export function keyDown(this c: Controls, t: Term, e: NeonEvent, host: Bridge): 
 	if (c.holding()) { return c.answer(t, e); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
-	const sends = textFor(c.keybinds, e.code, e.mods);
-	if (sends !== null) {
-		if (!t.sendText(sends).ok) { return Result.err(ControlError.WriteFailed); }
+	const alt = vt.alternateScreen();
+	if (!alt.ok) { return Result.err(ControlError.VtFailed); }
+	const bind = bindFor(c.keybinds, e.code, e.mods, alt.value);
+	if (bind !== null && bind.action == BindAction.CloseWindow) {
+		host.close();
+		return Result.ok(true);
+	}
+	if (bind !== null) {
+		if (!t.sendText(bind.text).ok) { return Result.err(ControlError.WriteFailed); }
 		const _snapped = try c.typed(t);
 		return Result.ok(true);
 	}
-	const alt = vt.alternateScreen();
-	if (!alt.ok) { return Result.err(ControlError.VtFailed); }
 	const action = resolve(e.code, e.mods, alt.value);
 	if (action == Action.None) { return Result.ok(false); }
 	if (action == Action.Copy) { return c.copy(t, host); }
@@ -381,17 +387,19 @@ interface Board {
 	copied: string;
 	offer: string;
 	reads: int32;
+	closed: int32;
 }
 
 
 function boardOf(offer: string): Board {
-	return { opened: "", copied: "", offer: offer, reads: 0 };
+	return { opened: "", copied: "", offer: offer, reads: 0, closed: 0 };
 }
 
 function clipOf(board: Board): Bridge {
 	return {
 		write: (text: string): void => { board.copied = text; },
 		open: (uri: string): void => { board.opened = uri; },
+		close: (): void => { board.closed += 1; },
 		read: (done: (text: string) => void): void => {
 			board.reads += 1;
 			done(board.offer);
@@ -1003,7 +1011,10 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 	assert t !== null;
 	if (t !== null) {
 		const c = Controls.open();
-		c.keybinds = [{ code: "Enter", mods: SHIFT, text: "[13;2u" }, { code: "KeyC", mods: CTRL | SHIFT, text: "c" }];
+		c.keybinds = [
+			{ code: "Enter", mods: SHIFT, text: "[13;2u", action: BindAction.SendText, screen: Screen.Any },
+			{ code: "KeyC", mods: CTRL | SHIFT, text: "c", action: BindAction.SendText, screen: Screen.Any },
+		];
 		const clip = clipOf(boardOf(""));
 		assert handled(c.keyDown(t, key("PageUp", 3), clip));
 		assert handled(c.keyDown(t, key("Enter", 1), clip));
@@ -1013,5 +1024,31 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 		assert sink.sent == "[13;2uc";
 		assert !handled(c.keyDown(t, key("Enter", 2), clip));
 		t.shutdown();
+	}
+}
+
+test "a keybind with a mode sends to a full-screen program and closes the window at the shell" {
+	const binds: Vec<Keybind> = [
+		{ code: "KeyW", mods: SUPER, text: "\x1b[119;9u", action: BindAction.SendText, screen: Screen.Alternate },
+		{ code: "KeyW", mods: SUPER, text: "", action: BindAction.CloseWindow, screen: Screen.Primary },
+	];
+	const atShell: Sink = { sent: "" };
+	const shell = termOf("$ ", 20, 5, atShell);
+	const inApp: Sink = { sent: "" };
+	const app = termOf("\x1b[?1049h", 20, 5, inApp);
+	assert shell !== null && app !== null;
+	if (shell !== null && app !== null) {
+		const c = Controls.open();
+		c.keybinds = binds;
+		const board = boardOf("");
+		const clip = clipOf(board);
+		assert handled(c.keyDown(app, key("KeyW", SUPER), clip));
+		assert inApp.sent == "\x1b[119;9u";
+		assert board.closed == 0;
+		assert handled(c.keyDown(shell, key("KeyW", SUPER), clip));
+		assert atShell.sent == "";
+		assert board.closed == 1;
+		shell.shutdown();
+		app.shutdown();
 	}
 }

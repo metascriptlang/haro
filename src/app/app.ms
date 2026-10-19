@@ -46,6 +46,7 @@ export interface Entry {
 	exited: (code: int32) => void;
 	fail: (message: string) => void;
 	openLink: (uri: string) => void;
+	close: () => void;
 	onConfig: (handler: (c: Config | null, error: string) => void) => void;
 }
 
@@ -180,7 +181,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	}
 
 	function bridge(): Bridge {
-		return { write: clipWrite, read: clipRead, open: entry.openLink };
+		return { write: clipWrite, read: clipRead, open: entry.openLink, close: entry.close };
 	}
 
 	function refresh(): void {

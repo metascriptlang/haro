@@ -52,10 +52,23 @@ const BINDINGS: Vec<Binding> = [
 	{ code: "PageDown", mods: SHIFT, action: Action.PageDown, primaryOnly: true },
 ];
 
+export enum BindAction {
+	SendText,
+	CloseWindow,
+}
+
+export enum Screen {
+	Any,
+	Alternate,
+	Primary,
+}
+
 export struct Keybind {
 	code: string;
 	mods: int32;
 	text: string;
+	action: BindAction;
+	screen: Screen;
 }
 
 function modOf(name: string): int32 {
@@ -99,7 +112,7 @@ function codeOf(name: string): string | null {
 	return null;
 }
 
-export function keybind(keys: string, text: string): Result<Keybind, string> {
+export function keybind(keys: string, text: string, action: BindAction, screen: Screen): Result<Keybind, string> {
 	let mods = 0;
 	let code: string | null = null;
 	for (const part of keys.split("+")) {
@@ -114,13 +127,14 @@ export function keybind(keys: string, text: string): Result<Keybind, string> {
 		if (code === null) { return Result.err(`"${keys}": "${part}" is not a key or modifier name`); }
 	}
 	if (code === null) { return Result.err(`"${keys}" names no key`); }
-	return Result.ok({ code: code, mods: mods, text: text });
+	return Result.ok({ code: code, mods: mods, text: text, action: action, screen: screen });
 }
 
-export function textFor(binds: Readonly<Span<Keybind>>, code: string, mods: number): string | null {
+export function bindFor(binds: Readonly<Span<Keybind>>, code: string, mods: number, altScreen: boolean): Keybind | null {
 	const held = (mods as int32) & CHORD;
+	const here = altScreen ? Screen.Alternate : Screen.Primary;
 	for (const b of binds) {
-		if (b.code == code && b.mods == held) { return b.text; }
+		if (b.code == code && b.mods == held && (b.screen == Screen.Any || b.screen == here)) { return b; }
 	}
 	return null;
 }
@@ -205,7 +219,7 @@ test "a key with no binding resolves to nothing" {
 }
 
 function bound(keys: string): string {
-	const b = keybind(keys, "x");
+	const b = keybind(keys, "x", BindAction.SendText, Screen.Any);
 	if (!b.ok) { return b.error; }
 	return `${b.value.code} ${b.value.mods}`;
 }
@@ -226,18 +240,35 @@ test "a keybind that is not a trigger is refused by name" {
 	assert bound("ctrl+ctrl+a") == `"ctrl+ctrl+a" names ctrl twice`;
 	assert bound("a+b") == `"a+b" names more than one key`;
 	assert bound("ctrl+shift") == `"ctrl+shift" names no key`;
-	assert !keybind("f25", "x").ok;
-	assert !keybind("f01", "x").ok;
+	assert !keybind("f25", "x", BindAction.SendText, Screen.Any).ok;
+	assert !keybind("f01", "x", BindAction.SendText, Screen.Any).ok;
+}
+
+function textOf(b: Keybind | null): string | null {
+	return b === null ? null : b.text;
 }
 
 test "a keybind's text answers exactly its chord, side and lock bits aside" {
 	const binds: Vec<Keybind> = [
-		{ code: "Enter", mods: SHIFT, text: "a" },
-		{ code: "KeyH", mods: CTRL | SHIFT, text: "b" },
+		{ code: "Enter", mods: SHIFT, text: "a", action: BindAction.SendText, screen: Screen.Any },
+		{ code: "KeyH", mods: CTRL | SHIFT, text: "b", action: BindAction.SendText, screen: Screen.Any },
 	];
-	assert textFor(binds, "Enter", SHIFT) == "a";
-	assert textFor(binds, "Enter", SHIFT | 64 | 32) == "a";
-	assert textFor(binds, "Enter", 0) === null;
-	assert textFor(binds, "Enter", SHIFT | CTRL) === null;
-	assert textFor(binds, "KeyH", CTRL | SHIFT) == "b";
+	assert textOf(bindFor(binds, "Enter", SHIFT, false)) == "a";
+	assert textOf(bindFor(binds, "Enter", SHIFT | 64 | 32, true)) == "a";
+	assert bindFor(binds, "Enter", 0, false) === null;
+	assert bindFor(binds, "Enter", SHIFT | CTRL, false) === null;
+	assert textOf(bindFor(binds, "KeyH", CTRL | SHIFT, false)) == "b";
+}
+
+test "a keybind with a mode answers only on its screen, the way alacritty's alt and ~alt do" {
+	const binds: Vec<Keybind> = [
+		{ code: "KeyW", mods: SUPER, text: "\x1b[119;9u", action: BindAction.SendText, screen: Screen.Alternate },
+		{ code: "KeyW", mods: SUPER, text: "", action: BindAction.CloseWindow, screen: Screen.Primary },
+	];
+	const inApp = bindFor(binds, "KeyW", SUPER, true);
+	assert inApp !== null;
+	if (inApp !== null) { assert inApp.action == BindAction.SendText && inApp.text == "\x1b[119;9u"; }
+	const atShell = bindFor(binds, "KeyW", SUPER, false);
+	assert atShell !== null;
+	if (atShell !== null) { assert atShell.action == BindAction.CloseWindow; }
 }

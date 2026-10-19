@@ -1,7 +1,7 @@
 import { JSON, JsonKind, JsonValue } from "std/core/json";
 import { isAbsolute } from "std/fs/path";
 import { Rgb, SCROLLBACK_LINES } from "../vt/vt";
-import { Keybind, keybind } from "../input/bindings";
+import { BindAction, Keybind, Screen, keybind } from "../input/bindings";
 
 export interface Config {
 	fontFamily: Vec<string>;
@@ -102,20 +102,40 @@ function families(v: JsonValue, key: string): Result<Vec<string>, string> {
 	return Result.ok(out);
 }
 
+function actionOf(name: string, key: string): Result<BindAction, string> {
+	return match (name) {
+		"close_window" => Result.ok(BindAction.CloseWindow),
+		_ => Result.err(`${key}.action: "${name}" is not an action; close_window is`),
+	};
+}
+
+function screenOf(name: string, key: string): Result<Screen, string> {
+	return match (name) {
+		"alt" => Result.ok(Screen.Alternate),
+		"~alt" => Result.ok(Screen.Primary),
+		_ => Result.err(`${key}.mode: "${name}" must be alt or ~alt`),
+	};
+}
+
 function bindOf(v: JsonValue, key: string): Result<Keybind, string> {
-	if (v.kind != JsonKind.Object) { return Result.err(`${key} must be { keys, text }`); }
+	if (v.kind != JsonKind.Object) { return Result.err(`${key} must be { keys, text } or { keys, action }`); }
 	let keys: string | null = null;
 	let sends: string | null = null;
+	let action: BindAction | null = null;
+	let screen = Screen.Any;
 	for (let i = 0; i < v.keys.length; i++) {
 		const name = v.keys[i];
 		match (name) {
 			"keys" => { keys = try text(v.values[i], `${key}.keys`); },
 			"text" => { sends = try text(v.values[i], `${key}.text`); },
-			_ => { return Result.err(`${key}: unknown field "${name}", expected keys and text`); },
+			"action" => { action = try actionOf(try text(v.values[i], `${key}.action`), key); },
+			"mode" => { screen = try screenOf(try text(v.values[i], `${key}.mode`), key); },
+			_ => { return Result.err(`${key}: unknown field "${name}", expected keys, text, action and mode`); },
 		}
 	}
-	if (keys === null || sends === null) { return Result.err(`${key} must give both keys and text`); }
-	const b = keybind(keys, sends);
+	if (sends !== null && action !== null) { return Result.err(`${key} gives both text and action; a keybind does one`); }
+	if (keys === null || (sends === null && action === null)) { return Result.err(`${key} must give keys and either text or action`); }
+	const b = keybind(keys, sends ?? "", action ?? BindAction.SendText, screen);
 	if (!b.ok) { return Result.err(`${key}: ${b.error}`); }
 	return Result.ok(b.value);
 }
@@ -214,6 +234,20 @@ test "the fields a config gives replace the defaults" {
 	assert c.value.keybinds[0].code == "Enter";
 	assert c.value.keybinds[0].mods == 1;
 	assert c.value.keybinds[0].text == "\x1b[13;2u";
+	assert c.value.keybinds[0].screen == Screen.Any;
+}
+
+test "a keybind runs an action or keeps to one screen when its config says so" {
+	const c = parse(
+		`{"keybinds":[{"keys":"super+w","text":"\\u001b[119;9u","mode":"alt"},{"keys":"super+w","action":"close_window","mode":"~alt"}]}`,
+	);
+	assert c.ok;
+	assert c.value.keybinds.length == 2;
+	assert c.value.keybinds[0].action == BindAction.SendText;
+	assert c.value.keybinds[0].text == "\x1b[119;9u";
+	assert c.value.keybinds[0].screen == Screen.Alternate;
+	assert c.value.keybinds[1].action == BindAction.CloseWindow;
+	assert c.value.keybinds[1].screen == Screen.Primary;
 }
 
 test "a list of font families keeps its order, the first one primary and the rest its fallbacks" {
@@ -239,8 +273,13 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"keybinds":[{"keys":"shift+entre","text":"x"}]}`) ==
 		`keybinds[0]: "shift+entre": "entre" is not a key or modifier name`;
 	assert refusal(`{"keybinds":[{"keys":"a","txt":"x"}]}`) ==
-		`keybinds[0]: unknown field "txt", expected keys and text`;
-	assert refusal(`{"keybinds":[{"keys":"a"}]}`) == "keybinds[0] must give both keys and text";
+		`keybinds[0]: unknown field "txt", expected keys, text, action and mode`;
+	assert refusal(`{"keybinds":[{"keys":"a"}]}`) == "keybinds[0] must give keys and either text or action";
+	assert refusal(`{"keybinds":[{"keys":"a","text":"x","action":"close_window"}]}`) ==
+		"keybinds[0] gives both text and action; a keybind does one";
+	assert refusal(`{"keybinds":[{"keys":"a","action":"quit"}]}`) ==
+		`keybinds[0].action: "quit" is not an action; close_window is`;
+	assert refusal(`{"keybinds":[{"keys":"a","text":"x","mode":"Alt"}]}`) == `keybinds[0].mode: "Alt" must be alt or ~alt`;
 	assert refusal(`{"scrollback":100001}`) == "scrollback must be a whole number of lines from 0 to 100000";
 	assert refusal(`{"scrollback":1.5}`) == "scrollback must be a whole number of lines from 0 to 100000";
 	assert refusal("[]") == "config must be an object";

@@ -4,6 +4,7 @@ import { Style } from "../../../neon/src/render/style";
 import { GridLine, LineRun, line } from "../grid/lines";
 import { PlanKind, plan } from "../screen/plan";
 import { Cursor, Rgb, Row, Underline, Vt, palette } from "../vt/vt";
+import { stats, noteApplied } from "./stats";
 
 export struct RowSlot {
 	line: GridLine;
@@ -90,15 +91,18 @@ export function applyFrame(
 	const cursor = at.value;
 	const p = planned.value;
 	const kept = (grid.length() as int32) - p.scrolled;
+	let chars: int32 = 0;
 	for (let i = 0; i < p.scrolled; i++) { grid.remove(0); }
 	for (const row of p.rows) {
 		const slot = try slotOf(styles, row, cursor, colors.value.bg);
+		chars += slot.line.text.length as int32;
 		if (p.kind == PlanKind.Scroll && row.y >= kept) {
 			grid.push(slot);
 		} else {
 			grid.set(row.y, slot);
 		}
 	}
+	stats.noteApplied(p.rows.length as int32, p.scrolled, chars, performance.now());
 	return Result.ok(cursor);
 }
 

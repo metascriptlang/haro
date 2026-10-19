@@ -8,6 +8,7 @@ import { PixelRatio } from "../../../neon/src/api/pixelRatio";
 import { Clipboard } from "../../../neon/src/api/clipboard";
 import { Void, View, Text, ViewHandle } from "../../../neon/src/components/primitives";
 import { RowSlot } from "./frame";
+import { stats, noteKey } from "./stats";
 import { gridSize } from "../grid/size";
 import { Spot, spotAt } from "../input/pointer";
 import { Block } from "../select/select";
@@ -181,6 +182,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	}
 
 	function refresh(): void {
+		stats.refreshes += 1;
 		const frame = t.pumpFrame();
 		if (!frame.ok) {
 			fatal("frame", frame.error);
@@ -215,7 +217,10 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			repaint();
 		}
 		dialog.show(controls.held, controls.reading, cellWidth(), viewWidth());
-		if (frame.value.more) { setTimeout((): void => { refresh(); }, 0); }
+		if (frame.value.more) {
+			stats.more += 1;
+			setTimeout((): void => { refresh(); }, 0);
+		}
 		if (frame.value.ended) { entry.exited(t.shellExitCode()); }
 	}
 
@@ -351,7 +356,10 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			fatal("key", sent.error);
 			return;
 		}
-		if (sent.value > 0) { afterInput(); }
+		if (sent.value > 0) {
+			stats.noteKey(performance.now());
+			afterInput();
+		}
 	};
 
 	const compose = (text: string): void => {
@@ -367,7 +375,10 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			fatal("text", sent.error);
 			return;
 		}
-		if (sent.value > 0) { afterInput(); }
+		if (sent.value > 0) {
+			stats.noteKey(performance.now());
+			afterInput();
+		}
 	};
 
 	const spot = (e: NeonEvent): Spot => {

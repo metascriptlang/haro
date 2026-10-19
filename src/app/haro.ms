@@ -7,7 +7,12 @@ import {
 	runWindow,
 	DesktopOptions,
 	desktopOptions,
+	frameCounts,
 } from "../../../neon/src/platform/ion/window";
+when (voidProfiler) {
+	import { frameStats } from "../../../void/src/void2d/frameMarks";
+	import { ringCount, ringPercentile } from "../../../void/src/void2d/profiler";
+}
 import { onWake, openExternal, resourcePath } from "../../../ion/src/index";
 import { FontStyle, registerFace } from "../../../void/src/void2d/font";
 import { argv, env, exit } from "std/process";
@@ -17,6 +22,7 @@ import { NativePty } from "../pty/pty";
 import { Replay } from "../pty/replay";
 import { App, Entry } from "./app";
 import { Pace } from "./pace";
+import { stats, line, noteWake, reset } from "./stats";
 import { Config, defaults } from "../config/config";
 import { Loaded, cacheDir, configPath, load, stampOf } from "../config/source";
 import { Faces } from "../config/fonts";
@@ -57,6 +63,7 @@ when (windows) {
 	}
 }
 const CONFIG_POLL_MS = 1000;
+const STATS_MS = 1000;
 
 const pace = Pace.start();
 const configFile = valueOf("--config") ?? configPath();
@@ -115,6 +122,36 @@ function watchConfig(handler: (c: Config | null, error: string) => void): void {
 	}, CONFIG_POLL_MS);
 }
 
+function milliseconds(ns: int64): float64 {
+	return Math.round((ns as float64) / 10000.0) / 100;
+}
+
+function voidLine(): string {
+	when (voidProfiler) {
+		const draws = frameStats.draws;
+		if (draws.ringCount() == 0) { return "void frames=0"; }
+		const dirty = frameStats.dirtyToPresent;
+		const d2p = dirty.ringCount() == 0
+			? ""
+			: ` d2p p50=${milliseconds(dirty.ringPercentile(50))} p99=${milliseconds(dirty.ringPercentile(99))}`;
+		return `void frames=${frameStats.frames} draw p50=${milliseconds(draws.ringPercentile(50))} p99=${milliseconds(draws.ringPercentile(99))}${d2p}`;
+	} else {
+		return "";
+	}
+}
+
+function logStats(wakes: int32, applies: int32, requested: number, drawn: number): void {
+	setTimeout((): void => {
+		const counts = frameCounts();
+		console.log(
+			`haro stats: ${stats.line()} wakes=${pace.wakes - wakes} applies=${pace.applies - applies} ` +
+			`requested=${counts[0] - requested} drawn=${counts[1] - drawn} ${voidLine()}`,
+		);
+		stats.reset();
+		logStats(pace.wakes, pace.applies, counts[0], counts[1]);
+	}, STATS_MS);
+}
+
 function registerBuiltIn(): void {
 	registerFace(FONT_BOLD, FONT_PATH, 700, FontStyle.Normal);
 	registerFace(FONT_ITALIC, FONT_PATH, 400, FontStyle.Italic);
@@ -151,6 +188,7 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 	const entry: Entry = {
 		onWake: (handler: () => void): void => {
 			onWake((): void => {
+				stats.noteWake(performance.now());
 				const drained = t.drain();
 				if (!drained.ok) {
 					fail(`drain: ${drained.error.toString()}`);
@@ -171,6 +209,7 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 			watchConfig(handler);
 		},
 	};
+	if (has("--stats")) { logStats(0, 0, 0, 0); }
 	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: families[0], fontFamily: families.join(", ") };
 	const code = runWindow(opts, (): NeonNode => App(t, entry, loaded.config));
 	note("the window closed");

@@ -172,3 +172,20 @@ Flood and pipeline, 2026-10-16 (msc `5631dd3e5`, release):
 
 What the numbers decided: per-key getters stay. A full redraw costs about 3.5% of a 60 Hz frame,
 so neither `get_multi` nor a C row reader is needed until a measurement says otherwise.
+
+Live window, 2026-10-19 (msc `4fe2a5eec`, neon `7675ed3`, void `a38429c8`, ion `0cac3a0`, release
+with `-d:voidProfiler`, 165 Hz display, 105x30 cells; other sessions held the machine at 41–60 % CPU).
+`pwsh bench/live/drive.ps1 -Exe <haro> -Work <work>` reads `--stats`; echo runs from the key to the
+first apply that changes rows, settle from the last wake before that apply.
+
+| work | Haro CPU | what the counters show |
+|---|---|---|
+| flood: `cmd /c type` of 10 MB plain | 57–67 %, 9.4–15.5 s, four runs | every frame a Repaint of all 30 rows at 165 frames/s; ~5,500 wakes/s; Void draw p50 1.75 ms; the profiler build costs nothing measurable |
+| colour: 10 MB of truecolour cells | 34–50 %, 7.4–21 s, three runs | a Scroll frame per frame, ~6 new rows each; Void draw p50 0.65 ms |
+| echo: `a` into `cmd /k`, 120 keys 40 ms apart | 2–3 % | echo p50 3.8–66 ms; settle p50 3.7–19 ms; the quietest run 3.8 ms echo, 7.9 ms max |
+| nvim: `j` in `nvim --clean -n`, 120 keys | 6–8 % | echo p50 50–80 ms against settle p50 4.7–6.4 ms; each frame sends ~28 of 30 rows |
+
+What the numbers say: flood CPU is three times the 17–25 % of 2026-10-16 (frames then rode a timer;
+since `ea961a7` each applies in a 165 Hz frame callback), unconfirmed against that build. In nvim
+about nine tenths of a key's echo passes before its output reaches Haro, so ConPTY and the child
+own the latency, not Haro's frame path. An idle focused window draws 1–2 frames a second: the blink.

@@ -4,6 +4,7 @@
 # flood and color wait for the shell to come up, then time `cmd /c type` of 10 MB inside Haro.
 # echo types keys into cmd's prompt; nvim presses j in `nvim --clean` over the plain file.
 # replay plays the plain file through --replay, from launch to the end of the recording.
+# launch starts the configured shell and prints each launch mark in ms after the process was created.
 param(
 	[string]$Exe,
 	[string]$Work,
@@ -98,10 +99,11 @@ $shell = switch ($Work) {
 	'echo' { 'cmd.exe /k' }
 	'nvim' { "nvim --clean -n $data\plain.txt" }
 	'replay' { '' }
-	default { throw "unknown workload ${Work}; use flood, color, echo, nvim or replay" }
+	'launch' { '' }
+	default { throw "unknown workload ${Work}; use flood, color, echo, nvim, replay or launch" }
 }
 foreach ($v in 'NO_COLOR', 'HERDR_ENV', 'HERDR_PANE_ID', 'HERDR_SOCKET') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
-$haroArgs = if ($Work -eq 'replay') { @('--stats', '--replay', "$data\plain.txt") } else { @('--stats', '--shell', "`"$shell`"") }
+$haroArgs = if ($Work -eq 'replay') { @('--stats', '--replay', "$data\plain.txt") } elseif ($Work -eq 'launch') { @('--stats') } else { @('--stats', '--shell', "`"$shell`"") }
 $launched = Get-Date
 $p = Start-Process $exePath -WorkingDirectory $Cwd -ArgumentList $haroArgs `
 	-RedirectStandardOutput "$out.out" -RedirectStandardError "$out.err" -PassThru
@@ -110,7 +112,20 @@ try {
 	$hwnd = [IntPtr]::Zero
 	for ($i = 0; $i -lt 100 -and $hwnd -eq [IntPtr]::Zero; $i++) { Start-Sleep -Milliseconds 100; $p.Refresh(); $hwnd = $p.MainWindowHandle }
 	if ($hwnd -eq [IntPtr]::Zero) { throw "Haro showed no window; see $out.err" }
-	if ($Work -eq 'replay') {
+	$marks = [ordered]@{}
+	if ($Work -eq 'launch') {
+		while (-not (Select-String -Path "$out.out" -Pattern '^haro launch:' -Quiet)) {
+			if (((Get-Date) - $launched).TotalSeconds -gt 30) { throw "no launch line in 30 s; see $out.out" }
+			Start-Sleep -Milliseconds 100
+		}
+		$created = ([DateTimeOffset]$p.StartTime).ToUnixTimeMilliseconds()
+		foreach ($pair in ((Select-String -Path "$out.out" -Pattern '^haro launch: (.*)$').Matches[0].Groups[1].Value -split ' ')) {
+			$kv = $pair.Split('=')
+			$marks[$kv[0]] = [double]$kv[1] - $created
+		}
+		$wall = $marks['painted']
+		$busy = 0; $idle = 0; $fromLine = 0
+	} elseif ($Work -eq 'replay') {
 		while (-not (Select-String -Path "$out.out" -Pattern 'the recording ended' -Quiet)) {
 			if (((Get-Date) - $launched).TotalSeconds -gt 120) { throw "the replay did not end in 120 s; see $out.out" }
 			Start-Sleep -Milliseconds 50
@@ -177,5 +192,6 @@ foreach ($pair in @(@('echo', $echo), @('settle', $settle))) {
 	$r["$($pair[0])_max_ms"] = $pair[1].max
 }
 $r['void'] = $voidLine
+if ($marks.Count -gt 0) { $r['launch_ms'] = $marks }
 $r['log'] = "$out.out"
 $r | ConvertTo-Json -Compress

@@ -189,3 +189,10 @@ What the numbers say: flood CPU is three times the 17–25 % of 2026-10-16 (fram
 since `ea961a7` each applies in a 165 Hz frame callback), unconfirmed against that build. In nvim
 about nine tenths of a key's echo passes before its output reaches Haro, so ConPTY and the child
 own the latency, not Haro's frame path. An idle focused window draws 1–2 frames a second: the blink.
+
+Changes measured against that baseline, builds interleaved, same day and load:
+
+| change | before → after | how |
+|---|---|---|
+| a scroll moves the kept rows to the bottom (`List.move`) instead of removing and pushing one per line | colour flood: Void draw p50 0.65–0.67 → 0.26–0.36 ms, Haro CPU per drawn frame 3.35–3.45 → 2.3–3.0 ms | `-Work color`, three pairs |
+| leftover output, wheel, key-bound and autoscroll refreshes wait for the next paced frame | replay of 10 MB: 10 of 10 applies ran outside any frame with dirty-to-present 20–24 ms → all 10 inside frames at 2.4–2.6 ms; 30 wheel records at once: 30 refreshes building 900 rows for one drawn frame → 1 refresh, 30 rows | `-Work replay`, three pairs; 30 `WM_MOUSEWHEEL` posted to the window |

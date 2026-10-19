@@ -47,6 +47,7 @@ when (windows) {
 	function fallbackFaces(): SystemFace[] {
 		const fonts = `${env.get("WINDIR")}/Fonts`;
 		return [
+			{ path: `${fonts}/seguiemj.ttf`, family: "Segoe UI Emoji" },
 			{ path: `${fonts}/seguisym.ttf`, family: "Segoe UI Symbol" },
 			{ path: `${fonts}/msyh.ttc`, family: "Microsoft YaHei" },
 		];
@@ -58,6 +59,7 @@ when (windows) {
 
 	function fallbackFaces(): SystemFace[] {
 		return [
+			{ path: "/System/Library/Fonts/Apple Color Emoji.ttc", family: "Apple Color Emoji" },
 			{ path: "/System/Library/Fonts/Apple Symbols.ttf", family: "Apple Symbols" },
 			{ path: "/System/Library/Fonts/Hiragino Sans GB.ttc", family: "Hiragino Sans GB" },
 		];

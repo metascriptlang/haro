@@ -2,7 +2,7 @@ import { List } from "../../../neon/src/core/list";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style } from "../../../neon/src/render/style";
 import { GridLine, LineRun, line } from "../grid/lines";
-import { PlanKind, plan } from "../screen/plan";
+import { plan } from "../screen/plan";
 import { Cursor, Rgb, Row, Underline, Vt, palette } from "../vt/vt";
 import { stats, noteApplied } from "./stats";
 
@@ -90,17 +90,13 @@ export function applyFrame(
 	if (!colors.ok) { return Result.err(FrameError.PaletteFailed); }
 	const cursor = at.value;
 	const p = planned.value;
-	const kept = (grid.length() as int32) - p.scrolled;
 	let chars: int32 = 0;
-	for (let i = 0; i < p.scrolled; i++) { grid.remove(0); }
+	const last = grid.length() - 1;
+	for (let i = 0; i < p.scrolled; i++) { grid.move(0, last); }
 	for (const row of p.rows) {
 		const slot = try slotOf(styles, row, cursor, colors.value.bg);
 		chars += slot.line.text.length as int32;
-		if (p.kind == PlanKind.Scroll && row.y >= kept) {
-			grid.push(slot);
-		} else {
-			grid.set(row.y, slot);
-		}
+		grid.set(row.y, slot);
 	}
 	stats.noteApplied(p.rows.length as int32, p.scrolled, chars, performance.now());
 	return Result.ok(cursor);

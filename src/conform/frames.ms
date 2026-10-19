@@ -1,3 +1,4 @@
+import { listInsert, listMove, listRemove } from "../../../neon/src/core/list";
 import { Vt } from "../vt/vt";
 import { Screen } from "./screen";
 
@@ -155,5 +156,28 @@ function playWithViewportAndResize(seed: int32, ops: int32): string {
 test "scrolling the viewport and resizing between operations keeps the grid in step" {
 	for (let seed = 1; seed <= 150; seed++) {
 		assert playWithViewportAndResize(seed, 70) == "";
+	}
+}
+
+test "a scroll moves the rows it keeps and builds none" {
+	const opened = Screen.open(10, 4);
+	assert opened.ok;
+	if (opened.ok) {
+		const s = opened.value;
+		assert s.feed("a\r\nb\r\nc\r\nd");
+		const q = s.grid.attach();
+		assert s.feed("\r\ne\r\nf");
+		let built = 0;
+		let moved = 0;
+		for (const o of q.ops) {
+			if (o.kind == listInsert || o.kind == listRemove) { built++; }
+			if (o.kind == listMove) { moved++; }
+		}
+		assert built == 0;
+		assert moved == 2;
+		assert s.lines() == "c\nd\ne\nf";
+		assert s.mismatch() == "";
+		s.grid.detach(q);
+		s.close();
 	}
 }

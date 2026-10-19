@@ -232,5 +232,17 @@ OpenConsole.exe and OpenConsole.exe; three interleaved rounds, machine at 15–5
 Neither OpenConsole moves throughput, echo or launch for Haro; both cost Haro more CPU per byte,
 and 1.25 stalled once. During an inbox flood no process saturates a core (cmd ~35 %, conhost
 45–55 %, Haro ~60 %), and HighQoS on conhost changed nothing, so the flood waits on something
-other than conhost's speed. What the new host does carry is passthrough of sequences the inbox
-one drops (Kitty graphics APC, sixel DCS): not measured here.
+other than conhost's speed.
+
+What the new host does carry is the sequences an app writes. `probe/recordPty.ms` recorded
+`cmd /c type` of one file holding 13 tagged sequences through each host. OpenConsole 1.25
+passed all 13 unchanged and in place. Inbox conhost re-renders its own buffer:
+
+- dropped: mouse modes `?1000h ?1006h`, focus `?1004h`, Kitty graphics APC and sixel DCS;
+- kept, but moved out of place: OSC 7, 52 and 0 (the title arrived only after the child exited);
+- kept: `?2026h/l`, but sent before the text it bracketed rather than around it, so nothing is synchronized;
+- kept: OSC 133, OSC 8 (with an `id=` added), `CSI >1u`, `?2004h` and the underline colour.
+
+This is the reason WezTerm gives for bundling (its issue #1927, mouse reporting) and the
+reason Alacritty gives in PR #6994: mouse in vim/tmux, and Windows 10 never getting host
+fixes.

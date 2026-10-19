@@ -66,8 +66,7 @@ let configError = "";
 function note(line: string): void {
 	console.log(`haro: ${line}`);
 	const dir = cacheDir();
-	if (ensureDir(dir).ok) { const _logged = appendFile(`${dir}/haro.log`, `${Date.now()} ${line}
-`); }
+	if (ensureDir(dir).ok) { const _logged = appendFile(`${dir}/haro.log`, `${Date.now()} ${line}\n`); }
 }
 
 function fail(message: string): void {

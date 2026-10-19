@@ -289,8 +289,7 @@ function tiny(cols: int32, rows: int32, text: string): Workload {
 }
 
 test "a write pass plans no frames and no rows" {
-	const r = runPass(tiny(10, 3, "hello
-world"), Stage.Write, once());
+	const r = runPass(tiny(10, 3, "hello\nworld"), Stage.Write, once());
 	assert r.ok;
 	if (r.ok) {
 		assert r.value.frames == 0;
@@ -300,8 +299,7 @@ world"), Stage.Write, once());
 }
 
 test "a lines pass reads the rows the bytes dirtied and splits the time" {
-	const r = runPass(tiny(10, 3, "hello
-world"), Stage.Lines, once());
+	const r = runPass(tiny(10, 3, "hello\nworld"), Stage.Lines, once());
 	assert r.ok;
 	if (r.ok) {
 		assert r.value.frames == 1;
@@ -313,7 +311,7 @@ world"), Stage.Lines, once());
 }
 
 test "a spans pass turns each styled stretch of a row into a span" {
-	const r = runPass(tiny(10, 3, "a[31mb[0mc"), Stage.Spans, once());
+	const r = runPass(tiny(10, 3, "a\x1b[31mb\x1b[0mc"), Stage.Spans, once());
 	assert r.ok;
 	if (r.ok) {
 		assert r.value.rows == 1;
@@ -324,19 +322,14 @@ test "a spans pass turns each styled stretch of a row into a span" {
 
 test "a frame every few bytes plans a frame each time" {
 	const every: Cadence = { frameBytes: 5, gapMs: 0.0 };
-	const r = runPass(tiny(10, 3, "ab
-cd
-ef
-gh
-"), Stage.Lines, every);
+	const r = runPass(tiny(10, 3, "ab\r\ncd\r\nef\r\ngh\r\n"), Stage.Lines, every);
 	assert r.ok;
 	if (r.ok) { assert r.value.frames == 4; }
 }
 
 test "a paced pass still ends on a frame" {
 	const paced: Cadence = { frameBytes: 0, gapMs: 1000000.0 };
-	const r = runPass(tiny(10, 3, "hello
-world"), Stage.Lines, paced);
+	const r = runPass(tiny(10, 3, "hello\nworld"), Stage.Lines, paced);
 	assert r.ok;
 	if (r.ok) {
 		assert r.value.frames == 1;
@@ -355,8 +348,7 @@ test "a code point above U+FFFF is a line like any other" {
 }
 
 test "applyFrame runs headless on the same bytes" {
-	const r = runPass(tiny(10, 3, "hello
-world"), Stage.Apply, once());
+	const r = runPass(tiny(10, 3, "hello\nworld"), Stage.Apply, once());
 	assert r.ok;
 	if (r.ok) {
 		assert r.value.frames == 1;
@@ -366,12 +358,10 @@ world"), Stage.Apply, once());
 }
 
 test "a measured stage describes itself on one line" {
-	const m = measure(tiny(10, 3, "hello
-world"), Stage.Spans, 3, once());
+	const m = measure(tiny(10, 3, "hello\nworld"), Stage.Spans, 3, once());
 	assert m.ok;
 	if (m.ok) {
-		const text = describe(tiny(10, 3, "hello
-world"), Stage.Spans, m.value);
+		const text = describe(tiny(10, 3, "hello\nworld"), Stage.Spans, m.value);
 		assert text.includes("plan+lines+spans") && text.includes("MiB/s");
 		assert text.includes("spans ");
 		assert !text.includes("lineErrors");

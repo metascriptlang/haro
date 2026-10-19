@@ -270,7 +270,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	const lineRow = (item: Accessor<RowSlot>): NeonNode => {
 		return element(
 			<Text
-				style={{ fontSize: fontSize, color: foreground(), height: rowHeight() }}
+				style={{ fontSize: fontSize, height: rowHeight() }}
 				cellWidth={cellWidth()}
 				spans={item().spans}
 			/>

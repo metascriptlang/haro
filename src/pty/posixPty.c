@@ -198,7 +198,7 @@ static void closeOnExec(int fd) {
 	fcntl(fd, F_SETFD, FD_CLOEXEC);
 }
 
-static void execChild(char** argv, int failed) {
+static void execChild(char** argv, const char* cwd, int failed) {
 	sigset_t none;
 	sigemptyset(&none);
 	sigprocmask(SIG_SETMASK, &none, NULL);
@@ -206,6 +206,7 @@ static void execChild(char** argv, int failed) {
 	for (size_t i = 0; i < sizeof inherited / sizeof inherited[0]; i++) signal(inherited[i], SIG_DFL);
 	setenv("TERM", "xterm-256color", 1);
 	setenv("COLORTERM", "truecolor", 1);
+	if (cwd[0] != '\0' && chdir(cwd) == 0) setenv("PWD", cwd, 1);
 	execvp(argv[0], argv);
 	int err = errno;
 	ssize_t _wrote = write(failed, &err, sizeof err);
@@ -213,7 +214,7 @@ static void execChild(char** argv, int failed) {
 	_exit(127);
 }
 
-int ptyOpen(const char* commandLine, int cols, int rows) {
+int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows) {
 	int id = -1;
 	for (int i = 0; i < PTY_MAX; i++) {
 		if (!ptys[i].used) { id = i; break; }
@@ -237,7 +238,7 @@ int ptyOpen(const char* commandLine, int cols, int rows) {
 	struct winsize size = { (unsigned short)rows, (unsigned short)cols, 0, 0 };
 	int master = -1;
 	pid_t pid = forkpty(&master, NULL, NULL, &size);
-	if (pid == 0) execChild(words.we_wordv, failed[1]);
+	if (pid == 0) execChild(words.we_wordv, cwd, failed[1]);
 	wordfree(&words);
 	close(failed[1]);
 	if (pid < 0) {

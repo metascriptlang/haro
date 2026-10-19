@@ -12,7 +12,7 @@ import { remove, writeFile } from "std/fs";
 import { tmpDir } from "std/os";
 import { Pty, PtyError } from "./transport";
 
-extern function ptyOpen(commandLine: cstring, cols: int32, rows: int32): int32;
+extern function ptyOpen(commandLine: cstring, cwd: cstring, cols: int32, rows: int32): int32;
 extern function ptyRead(id: int32, buf: Span<uint8>): int64;
 extern function ptyWait(id: int32, timeoutMs: int32): int32;
 extern function ptyWrite(id: int32, data: Span<uint8>): int64;
@@ -28,8 +28,9 @@ export function open(
 	commandLine: string,
 	cols: int32,
 	rows: int32,
+	cwd: string | null = null,
 ): Result<NativePty, PtyError> {
-	const id = ptyOpen(commandLine, cols, rows);
+	const id = ptyOpen(commandLine, cwd ?? "", cols, rows);
 	if (id < 0) { return Result.err(PtyError.OpenFailed); }
 	return Result.ok({ id: id });
 }
@@ -88,8 +89,9 @@ export function spawn(
 	commandLine: string,
 	cols: int32,
 	rows: int32,
+	cwd: string | null = null,
 ): Result<Pty, PtyError> {
-	const opened = try NativePty.open(commandLine, cols, rows);
+	const opened = try NativePty.open(commandLine, cols, rows, cwd);
 	return Result.ok(opened.toPty());
 }
 
@@ -99,12 +101,14 @@ when (windows) {
 	const MISSING_PROGRAM = "no-such-program-haro.exe";
 	const ECHO_LINE_READ = "cmd.exe /v:on /c \"set /p line=& echo [!line!]\"";
 	function printFile(path: string): string { return `cmd.exe /c type "${path.replaceAll("/", "\\")}"`; }
+	const PRINT_DIRECTORY = "cmd.exe /c cd";
 } else {
 	const ECHO_HELLO = "echo hello";
 	const QUIET_FOR_3S = "sleep 3";
 	const MISSING_PROGRAM = "no-such-program-haro";
 	const ECHO_LINE_READ = "sh -c 'read line; echo \"[$line]\"'";
 	function printFile(path: string): string { return `cat "${path}"`; }
+	const PRINT_DIRECTORY = "sh -c 'echo \"[$PWD]\"'";
 }
 
 function drain(this p: Pty): string {
@@ -186,6 +190,32 @@ test "a resize of a live console succeeds and hands the pty back" {
 test "a command that cannot start is an error" {
 	const opened = NativePty.open(MISSING_PROGRAM, 80, 24);
 	assert !opened.ok;
+}
+
+test "a native pty starts its command in the directory it is given" {
+	const dir = tmpDir().replaceAll("\\", "/");
+	const spawned = NativePty.spawn(PRINT_DIRECTORY, 80, 24, dir);
+	assert spawned.ok;
+	if (spawned.ok) {
+		const out = spawned.value.drain().replaceAll("\\", "/");
+		when (windows) {
+			assert out.toLowerCase().includes(dir.toLowerCase());
+		} else {
+			assert out.includes(`[${dir}]`);
+		}
+		spawned.value.close();
+	}
+}
+
+when (!windows) {
+	test "a directory that does not exist is skipped and the command still runs, as Alacritty and Ghostty do" {
+		const spawned = NativePty.spawn(ECHO_HELLO, 80, 24, "/no/such/haro/directory");
+		assert spawned.ok;
+		if (spawned.ok) {
+			assert spawned.value.drain().includes("hello");
+			spawned.value.close();
+		}
+	}
 }
 
 test "a native pty spawned as a Pty reads its output and reports its exit through the interface" {

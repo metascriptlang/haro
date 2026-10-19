@@ -191,7 +191,17 @@ static Pty* slot(int id) {
 	return &ptys[id];
 }
 
-int ptyOpen(const char* commandLine, int cols, int rows) {
+static wchar_t* widened(const char* text) {
+	int len = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
+	wchar_t* wide = len > 0 ? malloc(sizeof(wchar_t) * (size_t)len) : NULL;
+	if (wide && !MultiByteToWideChar(CP_UTF8, 0, text, -1, wide, len)) {
+		free(wide);
+		return NULL;
+	}
+	return wide;
+}
+
+int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows) {
 	int id = -1;
 	for (int i = 0; i < PTY_MAX; i++) {
 		if (!ptys[i].used) { id = i; break; }
@@ -227,23 +237,23 @@ int ptyOpen(const char* commandLine, int cols, int rows) {
 	si.StartupInfo.cb = sizeof si;
 	si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
 	si.lpAttributeList = attrs;
-	int wideLen = MultiByteToWideChar(CP_UTF8, 0, commandLine, -1, NULL, 0);
-	wchar_t* wide = malloc(sizeof(wchar_t) * (size_t)wideLen);
+	wchar_t* wide = widened(commandLine);
+	wchar_t* wideCwd = cwd[0] != '\0' ? widened(cwd) : NULL;
 	PROCESS_INFORMATION pi;
 	memset(&pi, 0, sizeof pi);
-	int ok = attrs && wide
+	int ok = attrs && wide && (cwd[0] == '\0' || wideCwd)
 		&& InitializeProcThreadAttributeList(attrs, 1, 0, &attrSize)
 		&& UpdateProcThreadAttribute(
 			attrs, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console, sizeof console, NULL, NULL)
-		&& MultiByteToWideChar(CP_UTF8, 0, commandLine, -1, wide, wideLen)
 		&& CreateProcessW(
-			NULL, wide, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL,
+			NULL, wide, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT, NULL, wideCwd,
 			&si.StartupInfo, &pi);
 	if (attrs) {
 		DeleteProcThreadAttributeList(attrs);
 		free(attrs);
 	}
 	free(wide);
+	free(wideCwd);
 	if (!ok) {
 		api.close(console);
 		CloseHandle(inWrite);

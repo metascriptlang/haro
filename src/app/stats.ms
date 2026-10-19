@@ -8,15 +8,39 @@ export interface Stats {
 	wakeAt: float64;
 	echoes: Vec<float64>;
 	settles: Vec<float64>;
+	marks: Vec<Mark>;
 }
 
-export const stats: Stats = { refreshes: 0, more: 0, rows: 0, scrolled: 0, chars: 0, keyAt: -1, wakeAt: -1, echoes: [], settles: [] };
+export struct Mark { name: string; at: float64; }
+
+export const stats: Stats = { refreshes: 0, more: 0, rows: 0, scrolled: 0, chars: 0, keyAt: -1, wakeAt: -1, echoes: [], settles: [], marks: [] };
+
+export function mark(this s: Stats, name: string, at: float64): void {
+	for (const m of s.marks) {
+		if (m.name == name) { return; }
+	}
+	s.marks.push({ name: name, at: at });
+}
+
+export function launched(this s: Stats): boolean {
+	for (const m of s.marks) {
+		if (m.name == "painted") { return true; }
+	}
+	return false;
+}
+
+export function launchLine(this s: Stats): string {
+	let out = "";
+	for (const m of s.marks) { out += `${out == "" ? "" : " "}${m.name}=${m.at}`; }
+	return out;
+}
 
 export function noteKey(this s: Stats, at: float64): void {
 	if (s.keyAt < 0) { s.keyAt = at; }
 }
 
 export function noteWake(this s: Stats, at: float64): void {
+	s.mark("output", Date.now());
 	if (s.keyAt >= 0) { s.wakeAt = at; }
 }
 
@@ -24,6 +48,7 @@ export function noteApplied(this s: Stats, rows: int32, scrolled: int32, chars: 
 	s.rows += rows;
 	s.scrolled += scrolled;
 	s.chars += chars;
+	if (chars > 0) { s.mark("painted", Date.now()); }
 	if (rows > 0 && s.keyAt >= 0) {
 		s.echoes.push(at - s.keyAt);
 		if (s.wakeAt >= 0) { s.settles.push(at - s.wakeAt); }
@@ -59,7 +84,7 @@ export function reset(this s: Stats): void {
 }
 
 test "a key's echo runs to the first apply that changes rows, and its settle from the last wake before that apply" {
-	const s: Stats = { refreshes: 0, more: 0, rows: 0, scrolled: 0, chars: 0, keyAt: -1, wakeAt: -1, echoes: [], settles: [] };
+	const s: Stats = { refreshes: 0, more: 0, rows: 0, scrolled: 0, chars: 0, keyAt: -1, wakeAt: -1, echoes: [], settles: [], marks: [] };
 	s.noteWake(9);
 	s.noteKey(10);
 	s.noteKey(12);
@@ -71,4 +96,15 @@ test "a key's echo runs to the first apply that changes rows, and its settle fro
 	assert s.line() == "refreshes=0 more=0 rows=3 scrolled=0 chars=240 echo n=1 p50=5.5 max=5.5 settle n=1 p50=0.5 max=0.5";
 	s.reset();
 	assert s.line() == "refreshes=0 more=0 rows=0 scrolled=0 chars=0 echo n=0 settle n=0";
+}
+
+test "each launch mark keeps its first time, and the launch ends at the first painted rows" {
+	const s: Stats = { refreshes: 0, more: 0, rows: 0, scrolled: 0, chars: 0, keyAt: -1, wakeAt: -1, echoes: [], settles: [], marks: [] };
+	s.mark("config", 5);
+	s.mark("spawn", 9);
+	s.mark("config", 30);
+	assert !s.launched();
+	s.mark("painted", 40);
+	assert s.launched();
+	assert s.launchLine() == "config=5 spawn=9 painted=40";
 }

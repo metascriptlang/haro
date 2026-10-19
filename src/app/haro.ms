@@ -22,7 +22,7 @@ import { NativePty } from "../pty/pty";
 import { Replay } from "../pty/replay";
 import { App, Entry } from "./app";
 import { Pace } from "./pace";
-import { stats, line, noteWake, reset } from "./stats";
+import { stats, launched, launchLine, line, mark, noteWake, reset } from "./stats";
 import { Config, defaults } from "../config/config";
 import { Loaded, cacheDir, configPath, load, stampOf } from "../config/source";
 import { Faces } from "../config/fonts";
@@ -69,6 +69,7 @@ const pace = Pace.start();
 const configFile = valueOf("--config") ?? configPath();
 let loaded: Loaded = { config: defaults(), faces: [], stamp: "" };
 let configError = "";
+let launchShown = false;
 
 function note(line: string): void {
 	console.log(`haro: ${line}`);
@@ -148,6 +149,10 @@ function logStats(wakes: int32, applies: int32, requested: number, drawn: number
 			`requested=${counts[0] - requested} drawn=${counts[1] - drawn} ${voidLine()}`,
 		);
 		stats.reset();
+		if (!launchShown && stats.launched()) {
+			launchShown = true;
+			console.log(`haro launch: ${stats.launchLine()}`);
+		}
 		logStats(pace.wakes, pace.applies, counts[0], counts[1]);
 	}, STATS_MS);
 }
@@ -263,7 +268,9 @@ function runReplay(path: string): int32 {
 }
 
 function main(): int32 {
+	stats.mark("main", Date.now());
 	readConfig();
+	stats.mark("config", Date.now());
 	const replayPath = valueOf("--replay");
 	if (replayPath !== null) { return runReplay(replayPath); }
 	return runShell(valueOf("--shell") ?? loaded.config.command);

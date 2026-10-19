@@ -9,6 +9,7 @@ import {
 	Cursor, CursorLook, CursorShape, Keys, MouseGeometry, MouseInput, PasteError, Palette,
 } from "../vt/vt";
 import { FrameError, RowSlot, applyFrame } from "./frame";
+import { stats, mark } from "./stats";
 
 const BUFFER_BYTES = 65536;
 const DRAIN_LIMIT = 16;
@@ -104,8 +105,10 @@ function matchGrid(this t: Term, rows: int32): void {
 export function fit(this t: Term, cols: int32, rows: int32): Result<boolean, TermError> {
 	const s = t.session;
 	if (s === null) {
+		stats.mark("layout", Date.now());
 		const pty = t.open(cols, rows);
 		if (!pty.ok) { return Result.err(TermError.PtyOpenFailed); }
+		stats.mark("spawned", Date.now());
 		const started = Session.start(pty.value, cols, rows);
 		if (!started.ok) { return Result.err(TermError.SessionStartFailed); }
 		t.session = started.value;

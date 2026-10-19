@@ -238,11 +238,32 @@ What the new host does carry is the sequences an app writes. `probe/recordPty.ms
 `cmd /c type` of one file holding 13 tagged sequences through each host. OpenConsole 1.25
 passed all 13 unchanged and in place. Inbox conhost re-renders its own buffer:
 
-- dropped: mouse modes `?1000h ?1006h`, focus `?1004h`, Kitty graphics APC and sixel DCS;
+- dropped: Kitty graphics APC and sixel DCS;
 - kept, but moved out of place: OSC 7, 52 and 0 (the title arrived only after the child exited);
 - kept: `?2026h/l`, but sent before the text it bracketed rather than around it, so nothing is synchronized;
-- kept: OSC 133, OSC 8 (with an `id=` added), `CSI >1u`, `?2004h` and the underline colour.
+- kept: OSC 133, OSC 8 (with an `id=` added), `CSI >1u`, `?2004h` and the underline colour;
+- absent from the stream: mouse modes `?1000h ?1006h` and focus `?1004h`. The host takes these as
+  its own, so a recording of output cannot say whether the mouse works.
 
-This is the reason WezTerm gives for bundling (its issue #1927, mouse reporting) and the
-reason Alacritty gives in PR #6994: mouse in vim/tmux, and Windows 10 never getting host
-fixes.
+Clicks posted to a live Haro window (`WM_LBUTTONDOWN` at two rows, two runs per host) reached
+the app through both hosts alike. nvim `--clean` with `mouse=a` moved its cursor to rows 16
+and 24. A Python app that set VT input and wrote `?1000h ?1006h` read
+`\x1b[<0;36;16M\x1b[<0;36;16m` and the same for row 24. So on Windows 11 the inbox host does
+not cost Haro the mouse. That is the reason WezTerm gives for bundling (its issue #1927) and the
+first reason in Alacritty's PR #6994; both describe older hosts and Windows 10, which never
+receives host fixes.
+
+Keys go the other way, and neither host carries them better. `probe/keysPty.ms` sent 22 chords
+through Haro's own encoder (libghostty-vt) into pwsh `[Console]::ReadKey`. Both hosts gave
+the same result:
+
+- lost: Shift+Enter, Ctrl+Enter and Ctrl+Tab. Haro sends `CSI 27;<mod>;<key>~`, and ConPTY
+  drops it;
+- lost before ConPTY: Ctrl+Shift+A and Ctrl+. (the encoder writes nothing for them);
+- arrived as another key: Ctrl+Space as Ctrl+Shift+2 (NUL), Ctrl+/ as Ctrl+Shift+- (0x1F);
+- arrived intact: Ctrl+letters, Ctrl+Alt+A, Alt+F, Alt/Ctrl+Backspace, Shift+Tab, Ctrl+Left,
+  Shift+Home, F5 with each modifier, Escape.
+
+Both hosts ask the terminal for win32-input-mode at startup (`?9001h`, terminal `VtIo.cpp:201-203`).
+A terminal that answers it sends each key as a full Win32 key record, as WezTerm does
+(`keyevent.rs:191`, `encode_win32_input_mode`). libghostty-vt has no `?9001`.

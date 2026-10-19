@@ -17,6 +17,7 @@ import { onWake, openExternal, resourcePath } from "../../../ion/src/index";
 import { FontStyle, registerFace } from "../../../void/src/void2d/font";
 import { argv, env, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
+import { homeDir } from "std/os";
 import { Pty, PtyError } from "../pty/transport";
 import { NativePty } from "../pty/pty";
 import { Replay } from "../pty/replay";
@@ -51,6 +52,10 @@ when (windows) {
 		];
 	}
 } else when (macos) {
+	@include("unistd.h");
+
+	extern function getppid(): int32;
+
 	function fallbackFaces(): SystemFace[] {
 		return [
 			{ path: "/System/Library/Fonts/Apple Symbols.ttf", family: "Apple Symbols" },
@@ -94,6 +99,17 @@ function has(flag: string): boolean {
 		if (arg == flag) { return true; }
 	}
 	return false;
+}
+
+function probableCli(): boolean {
+	when (windows) {
+		return false;
+	} else {
+		when (macos) {
+			if (getppid() == 1) { return false; }
+		}
+		return (env.get("TERM_PROGRAM") ?? "") != "" || argv.length > 1;
+	}
 }
 
 function readConfig(): void {
@@ -228,8 +244,9 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 }
 
 function runShell(shell: string): int32 {
+	const cwd = loaded.config.startDirectory(probableCli(), homeDir());
 	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
-		return NativePty.spawn(shell, cols, rows);
+		return NativePty.spawn(shell, cols, rows, cwd);
 	});
 	if (!opened.ok) {
 		fail(`open: ${opened.error.toString()}`);

@@ -1,4 +1,5 @@
 import { JSON, JsonKind, JsonValue } from "std/core/json";
+import { isAbsolute } from "std/fs/path";
 import { Rgb, SCROLLBACK_LINES } from "../vt/vt";
 import { Keybind, keybind } from "../input/bindings";
 
@@ -7,6 +8,7 @@ export interface Config {
 	fontSize: number;
 	padding: number;
 	command: string;
+	workingDirectory: string | null;
 	scrollback: int64;
 	foreground: Rgb;
 	background: Rgb;
@@ -33,12 +35,20 @@ export function defaults(): Config {
 		fontSize: 10.5,
 		padding: 0,
 		command: DEFAULT_COMMAND,
+		workingDirectory: null,
 		scrollback: SCROLLBACK_LINES,
 		foreground: { r: 204, g: 204, b: 204 },
 		background: { r: 12, g: 12, b: 12 },
 		palette: [],
 		keybinds: [],
 	};
+}
+
+export function startDirectory(this c: Config, probableCli: boolean, home: string): string | null {
+	const dir = c.workingDirectory ?? (probableCli ? "inherit" : "home");
+	if (dir == "inherit") { return null; }
+	if (dir == "home") { return home; }
+	return dir.startsWith("~/") ? `${home}${dir.slice(1)}` : dir;
 }
 
 export function fontPx(this c: Config): number {
@@ -132,6 +142,13 @@ export function parse(json: string): Result<Config, string> {
 				if (c.padding < 0) { return Result.err(`padding ${c.padding} must be 0 or more`); }
 			},
 			"command" => { c.command = try text(v, key); },
+			"workingDirectory" => {
+				const dir = try text(v, key);
+				if (dir != "home" && dir != "inherit" && !dir.startsWith("~/") && !isAbsolute(dir)) {
+					return Result.err(`workingDirectory "${dir}" must be home, inherit, an absolute path or a path under ~/`);
+				}
+				c.workingDirectory = dir;
+			},
 			"scrollback" => {
 				if (v.kind != JsonKind.Int || v.intVal < 0 || v.intVal > MAX_SCROLLBACK) {
 					return Result.err(`scrollback must be a whole number of lines from 0 to ${MAX_SCROLLBACK}`);
@@ -215,6 +232,8 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"fontSize":0}`) == "fontSize 0 must be above 0";
 	assert refusal(`{"padding":"6"}`) == "padding must be a number";
 	assert refusal(`{"padding":-1}`) == "padding -1 must be 0 or more";
+	assert refusal(`{"workingDirectory":"projects"}`) ==
+		`workingDirectory "projects" must be home, inherit, an absolute path or a path under ~/`;
 	assert refusal(`{"background":"#12345"}`) == `background: "#12345" is not a #rrggbb colour`;
 	assert refusal(`{"palette":["#000000","red"]}`) == `palette[1]: "red" is not a #rrggbb colour`;
 	assert refusal(`{"keybinds":[{"keys":"shift+entre","text":"x"}]}`) ==
@@ -225,4 +244,21 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"scrollback":100001}`) == "scrollback must be a whole number of lines from 0 to 100000";
 	assert refusal(`{"scrollback":1.5}`) == "scrollback must be a whole number of lines from 0 to 100000";
 	assert refusal("[]") == "config must be an object";
+}
+
+test "the shell starts at home unless Haro was probably started from a command line, as Ghostty does" {
+	const c = defaults();
+	assert c.startDirectory(false, "/Users/me") == "/Users/me";
+	assert c.startDirectory(true, "/Users/me") === null;
+}
+
+test "a configured working directory wins, with ~/ under home" {
+	const at = (dir: string): string | null => {
+		const c = parse(`{"workingDirectory":${JSON.stringify(dir)}}`);
+		return c.ok ? c.value.startDirectory(true, "/Users/me") : "refused";
+	};
+	assert at("home") == "/Users/me";
+	assert at("inherit") === null;
+	assert at("~/code") == "/Users/me/code";
+	assert at("/srv/www") == "/srv/www";
 }

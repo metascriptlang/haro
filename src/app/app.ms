@@ -50,7 +50,8 @@ export interface Entry {
 }
 
 function restartNeeded(now: Config, started: Config): boolean {
-	return now.fontFamily.join("\n") != started.fontFamily.join("\n") || now.fontSize != started.fontSize || now.command != started.command;
+	return now.fontFamily.join("\n") != started.fontFamily.join("\n") || now.fontSize != started.fontSize || now.command != started.command ||
+		now.workingDirectory != started.workingDirectory;
 }
 
 export function App(t: Term, entry: Entry, started: Config): NeonNode {
@@ -255,7 +256,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		settings = c;
 		controls.keybinds = c.keybinds;
 		setPadding(c.padding);
-		showNotice(restartNeeded(c, started) ? "config.ms: fontFamily, fontSize and command apply when Haro restarts" : "");
+		showNotice(restartNeeded(c, started) ? "config.ms: fontFamily, fontSize, command and workingDirectory apply when Haro restarts" : "");
 		if (themed && applySettings()) { refresh(); }
 	});
 

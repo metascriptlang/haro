@@ -44,6 +44,29 @@ typedef struct {
 static Pty ptys[PTY_MAX];
 static void (*wakeApp)(void);
 
+typedef HRESULT (WINAPI *CreateFn)(COORD, HANDLE, HANDLE, DWORD, HPCON*);
+typedef HRESULT (WINAPI *ResizeFn)(HPCON, COORD);
+typedef void (WINAPI *CloseFn)(HPCON);
+
+static struct { CreateFn create; ResizeFn resize; CloseFn close; } api;
+
+static void loadApi(void) {
+	if (api.create) return;
+	HMODULE dll = LoadLibraryExW(L"conpty.dll", NULL, LOAD_LIBRARY_SEARCH_APPLICATION_DIR);
+	CreateFn create = dll ? (CreateFn)(void*)GetProcAddress(dll, "CreatePseudoConsole") : NULL;
+	ResizeFn resize = dll ? (ResizeFn)(void*)GetProcAddress(dll, "ResizePseudoConsole") : NULL;
+	CloseFn close = dll ? (CloseFn)(void*)GetProcAddress(dll, "ClosePseudoConsole") : NULL;
+	if (create && resize && close) {
+		api.resize = resize;
+		api.close = close;
+		api.create = create;
+		return;
+	}
+	api.resize = ResizePseudoConsole;
+	api.close = ClosePseudoConsole;
+	api.create = CreatePseudoConsole;
+}
+
 void ptySetWake(void (*wake)(void)) {
 	wakeApp = wake;
 }
@@ -147,7 +170,7 @@ static void closeConsole(Pty* p) {
 	int already = p->consoleClosed;
 	p->consoleClosed = 1;
 	LeaveCriticalSection(&p->lock);
-	if (!already) ClosePseudoConsole(p->console);
+	if (!already) api.close(p->console);
 }
 
 static DWORD WINAPI waitLoop(LPVOID arg) {
@@ -185,7 +208,8 @@ int ptyOpen(const char* commandLine, int cols, int rows) {
 
 	COORD size = { (SHORT)cols, (SHORT)rows };
 	HPCON console = NULL;
-	if (FAILED(CreatePseudoConsole(size, inRead, outWrite, 0, &console))) {
+	loadApi();
+	if (FAILED(api.create(size, inRead, outWrite, 0, &console))) {
 		CloseHandle(inRead);
 		CloseHandle(inWrite);
 		CloseHandle(outRead);
@@ -221,7 +245,7 @@ int ptyOpen(const char* commandLine, int cols, int rows) {
 	}
 	free(wide);
 	if (!ok) {
-		ClosePseudoConsole(console);
+		api.close(console);
 		CloseHandle(inWrite);
 		CloseHandle(outRead);
 		return -1;
@@ -312,7 +336,7 @@ int ptyResize(int id, int cols, int rows) {
 	Pty* p = slot(id);
 	if (!p) return -1;
 	COORD size = { (SHORT)cols, (SHORT)rows };
-	return SUCCEEDED(ResizePseudoConsole(p->console, size)) ? 0 : -1;
+	return SUCCEEDED(api.resize(p->console, size)) ? 0 : -1;
 }
 
 int ptyExited(int id) {

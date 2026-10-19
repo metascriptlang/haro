@@ -13,7 +13,17 @@ when (voidProfiler) {
 	import { frameStats } from "../../../void/src/void2d/frameMarks";
 	import { ringCount, ringPercentile } from "../../../void/src/void2d/profiler";
 }
-import { onWake, openExternal, resourcePath } from "../../../ion/src/index";
+import {
+	MenuItem,
+	MenuRole,
+	ModCmd,
+	Submenu,
+	listen,
+	onWake,
+	openExternal,
+	resourcePath,
+	setAppMenu,
+} from "../../../ion/src/index";
 import { FontStyle, registerFace } from "../../../void/src/void2d/font";
 import { argv, env, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
@@ -37,6 +47,7 @@ const FONT_PATH = `${ASSETS}/JetBrainsMonoNL-Regular.ttf`;
 const FONT_BOLD = `${ASSETS}/JetBrainsMonoNL-Bold.ttf`;
 const FONT_ITALIC = `${ASSETS}/JetBrainsMonoNL-Italic.ttf`;
 const FONT_BOLD_ITALIC = `${ASSETS}/JetBrainsMonoNL-BoldItalic.ttf`;
+const CLOSE_WINDOW = "close_window";
 
 interface SystemFace {
 	path: string;
@@ -62,6 +73,25 @@ when (windows) {
 			{ path: "/System/Library/Fonts/Apple Color Emoji.ttc", family: "Apple Color Emoji" },
 			{ path: "/System/Library/Fonts/Apple Symbols.ttf", family: "Apple Symbols" },
 			{ path: "/System/Library/Fonts/Hiragino Sans GB.ttc", family: "Hiragino Sans GB" },
+		];
+	}
+
+	function menuBar(): Submenu[] {
+		return [
+			{
+				title: "",
+				items: [
+					MenuItem.standard(MenuRole.About),
+					MenuItem.separator(),
+					MenuItem.standard(MenuRole.Hide),
+					MenuItem.standard(MenuRole.HideOthers),
+					MenuItem.standard(MenuRole.ShowAll),
+					MenuItem.separator(),
+					MenuItem.standard(MenuRole.Quit),
+				],
+			},
+			{ title: "File", items: [MenuItem.action(CLOSE_WINDOW, "Close Window", "w", ModCmd)] },
+			{ title: "Window", items: [MenuItem.standard(MenuRole.Minimize), MenuItem.standard(MenuRole.Zoom)] },
 		];
 	}
 } else {
@@ -233,9 +263,14 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 		fail: fail,
 		openLink: (uri: string): void => { openExternal(uri); },
 		close: (): void => {
-			note("a keybind closed the window");
+			note("Close Window or a keybind closed the window");
 			t.shutdown();
 			exit(0);
+		},
+		onCloseKey: (handler: () => void): void => {
+			listen((name: string, id: string): void => {
+				if (name == "menu.click" && id == CLOSE_WINDOW) { handler(); }
+			});
 		},
 		onConfig: (handler: (c: Config | null, error: string) => void): void => {
 			if (configError != "") { handler(null, configError); }
@@ -243,6 +278,10 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 		},
 	};
 	if (has("--stats")) { logStats(0, 0, 0, 0); }
+	when (macos) {
+		const bar = setAppMenu(menuBar());
+		if (!bar.ok) { fail(bar.error); }
+	}
 	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: families[0], fontFamily: families.join(", ") };
 	const code = runWindow(opts, (): NeonNode => App(t, entry, loaded.config));
 	note("the window closed");

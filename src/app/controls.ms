@@ -176,22 +176,35 @@ function pasteFrom(this c: Controls, t: Term, host: Bridge): void {
 	});
 }
 
+function run(this c: Controls, t: Term, bind: Keybind | null, host: Bridge): Result<boolean, ControlError> {
+	if (bind === null) { return Result.ok(false); }
+	if (bind.action == BindAction.CloseWindow) {
+		host.close();
+		return Result.ok(true);
+	}
+	if (!t.sendText(bind.text).ok) { return Result.err(ControlError.WriteFailed); }
+	const _snapped = try c.typed(t);
+	return Result.ok(true);
+}
+
+export function closeKey(this c: Controls, t: Term, host: Bridge): Result<boolean, ControlError> {
+	const vt = vtOf(t);
+	if (vt !== null) {
+		const alt = vt.alternateScreen();
+		if (!alt.ok) { return Result.err(ControlError.VtFailed); }
+		if (try c.run(t, bindFor(c.keybinds, "KeyW", SUPER, alt.value), host)) { return Result.ok(true); }
+	}
+	host.close();
+	return Result.ok(true);
+}
+
 export function keyDown(this c: Controls, t: Term, e: NeonEvent, host: Bridge): Result<boolean, ControlError> {
 	if (c.holding()) { return c.answer(t, e); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
 	if (!alt.ok) { return Result.err(ControlError.VtFailed); }
-	const bind = bindFor(c.keybinds, e.code, e.mods, alt.value);
-	if (bind !== null && bind.action == BindAction.CloseWindow) {
-		host.close();
-		return Result.ok(true);
-	}
-	if (bind !== null) {
-		if (!t.sendText(bind.text).ok) { return Result.err(ControlError.WriteFailed); }
-		const _snapped = try c.typed(t);
-		return Result.ok(true);
-	}
+	if (try c.run(t, bindFor(c.keybinds, e.code, e.mods, alt.value), host)) { return Result.ok(true); }
 	const action = resolve(e.code, e.mods, alt.value);
 	if (action == Action.None) { return Result.ok(false); }
 	if (action == Action.Copy) { return c.copy(t, host); }
@@ -1048,6 +1061,35 @@ test "a keybind with a mode sends to a full-screen program and closes the window
 		assert handled(c.keyDown(shell, key("KeyW", SUPER), clip));
 		assert atShell.sent == "";
 		assert board.closed == 1;
+		shell.shutdown();
+		app.shutdown();
+	}
+}
+
+test "close window from the menu runs a super w keybind for this screen and otherwise closes" {
+	const binds: Vec<Keybind> = [
+		{ code: "KeyW", mods: SUPER, text: "\x1b[119;9u", action: BindAction.SendText, screen: Screen.Alternate },
+	];
+	const atShell: Sink = { sent: "" };
+	const shell = termOf("$ ", 20, 5, atShell);
+	const inApp: Sink = { sent: "" };
+	const app = termOf("\x1b[?1049h", 20, 5, inApp);
+	assert shell !== null && app !== null;
+	if (shell !== null && app !== null) {
+		const c = Controls.open();
+		c.keybinds = binds;
+		const board = boardOf("");
+		const clip = clipOf(board);
+		assert handled(c.closeKey(app, clip));
+		assert inApp.sent == "\x1b[119;9u";
+		assert board.closed == 0;
+		assert handled(c.closeKey(shell, clip));
+		assert atShell.sent == "";
+		assert board.closed == 1;
+		c.keybinds = [];
+		assert handled(c.closeKey(app, clip));
+		assert inApp.sent == "\x1b[119;9u";
+		assert board.closed == 2;
 		shell.shutdown();
 		app.shutdown();
 	}

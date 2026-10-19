@@ -47,6 +47,7 @@ export interface Entry {
 	fail: (message: string) => void;
 	openLink: (uri: string) => void;
 	close: () => void;
+	onCloseKey: (handler: () => void) => void;
 	onConfig: (handler: (c: Config | null, error: string) => void) => void;
 }
 
@@ -259,6 +260,15 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		setPadding(c.padding);
 		showNotice(restartNeeded(c, started) ? "config.ms: fontFamily, fontSize, command and workingDirectory apply when Haro restarts" : "");
 		if (themed && applySettings()) { refresh(); }
+	});
+
+	entry.onCloseKey((): void => {
+		const done = controls.closeKey(t, clip);
+		if (!done.ok) {
+			fatalControl("close key", done.error);
+			return;
+		}
+		refresh();
 	});
 
 	entry.onWake((): void => {

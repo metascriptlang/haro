@@ -74,7 +74,7 @@ function slotOf(
 	styles: Map<string, Style>, row: Row, cursor: Cursor | null, background: Rgb,
 ): Result<RowSlot, FrameError> {
 	const cursorCell = cursor !== null && cursor.y == row.y ? cursor.x : -1;
-	const built = row.line(cursorCell);
+	const built = row.line(cursorCell, background);
 	if (!built.ok) { return Result.err(FrameError.LineFailed); }
 	return Result.ok({ line: built.value, spans: spansOf(styles, built.value, background) });
 }

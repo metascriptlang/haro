@@ -1,5 +1,6 @@
 import { defaultIndexed } from "./palette";
 import { Screen, joined } from "./screen";
+import { size } from "../vt/vt";
 
 function open(cols: int32, rows: int32): Screen | null {
 	const opened = Screen.open(cols, rows);
@@ -283,7 +284,8 @@ test "DECCOLM with mode 40 on resizes the terminal and the rows follow" {
 		assert s.step("ABCDE\x1b[?3l");
 		assert s.raw(0).length == 5;
 		assert s.step("\x1b[?40h\x1b[?3l");
-		assert s.raw(0).length == 80;
+		const size = s.vt.size();
+		assert size.ok && size.value[0] == 80;
 		assert s.lines() == "\n\n\n\n";
 		assert cursorAt(s, 0, 0);
 		assert s.step("x");

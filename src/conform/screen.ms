@@ -166,10 +166,12 @@ function runsText(runs: Vec<LineRun>): string {
 export function mismatch(this s: Screen): string {
 	const fresh = s.vt.rows();
 	if (!fresh.ok) { return "the fresh read failed"; }
+	const colors = s.vt.palette();
+	if (!colors.ok) { return "the palette read failed"; }
 	const all = fresh.value;
 	if ((all.length as int32) != s.rows) { return `the vt has ${all.length} rows, the screen ${s.rows}`; }
 	for (let y = 0; y < s.rows; y++) {
-		const l = all[y].line(-1);
+		const l = all[y].line(-1, colors.value.bg);
 		if (!l.ok) { return `row ${y}: no line`; }
 		if (l.value.text != s.raw(y)) { return `row ${y}: text [${s.raw(y)}] but the vt has [${l.value.text}]`; }
 		const have = runsText(s.runs(y));

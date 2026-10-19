@@ -31,10 +31,10 @@ test "a wide character is one unit of text on two cells and moves the cursor two
 		assert cursorAt(s, 3, 0);
 		s.close();
 	}
-	const narrow = run(6, 2, "中a");
+	const narrow = run(6, 2, "中a\x1b[1;6Hz\x1b[1;4H");
 	assert narrow !== null;
 	if (narrow !== null) {
-		assert narrow.raw(0) == "中a" + blanks(3);
+		assert narrow.raw(0) == "中a" + blanks(2) + "z";
 		assert cursorAt(narrow, 3, 0);
 		narrow.close();
 	}
@@ -44,7 +44,7 @@ test "a wide character that does not fit the last column wraps whole and leaves 
 	const s = run(10, 3, "\x1b[1;10H\u{1F600}");
 	assert s !== null;
 	if (s !== null) {
-		assert s.raw(0) == blanks(10);
+		assert s.raw(0) == "";
 		assert s.text(1) == "\u{1F600}";
 		assert cursorAt(s, 2, 1);
 		s.close();
@@ -191,7 +191,7 @@ test "VS16 widens a narrow symbol at the last column onto the next row" {
 	const s = run(3, 5, GRAPHEMES_ON + "\x1b[2C#\u{FE0F}");
 	assert s !== null;
 	if (s !== null) {
-		assert s.raw(0) == blanks(3);
+		assert s.raw(0) == "";
 		assert s.text(1) == "#\u{FE0F}";
 		assert cursorAt(s, 2, 1);
 		s.close();

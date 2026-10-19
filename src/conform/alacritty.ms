@@ -73,6 +73,24 @@ function expectedRuns(line: string, own: boolean): Vec<LineRun> {
 	return out;
 }
 
+function withoutTrailingEmpty(runs: Vec<LineRun>, textUnits: int32): Vec<LineRun> {
+	let out = runs;
+	let total = 0;
+	for (const run of out) { total += run.units; }
+	while (total > textUnits && out.length > 0) {
+		const last = out[out.length - 1];
+		if (last.bg != DEFAULT_BG || last.underline != Underline.None || last.strikethrough) { break; }
+		const cut = Math.min(last.units, total - textUnits) as int32;
+		total -= cut;
+		if (cut < last.units) {
+			out[out.length - 1].units -= cut;
+			break;
+		}
+		out.pop();
+	}
+	return out;
+}
+
 function recordedFields(runs: Vec<LineRun>): Vec<LineRun> {
 	let out: Vec<LineRun> = [];
 	for (const run of runs) {
@@ -133,7 +151,7 @@ function conforms(name: string, chunk: int32, compare: Compare, skipRunsRow: int
 		if (s.text(y) != expectText[y]) {
 			failure = `row ${y}: expected "${expectText[y]}" got "${s.text(y)}"`;
 		} else if (compare != Compare.Text && y != skipRunsRow) {
-			const want = expectedRuns(expectAttrs[y], own);
+			const want = withoutTrailingEmpty(expectedRuns(expectAttrs[y], own), expectText[y].length as int32);
 			const got = recordedFields(s.runs(y));
 			if (!runsEqual(got, want)) {
 				failure = `row ${y} runs: expected${showRuns(want)} got${showRuns(got)}`;

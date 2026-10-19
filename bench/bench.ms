@@ -98,7 +98,7 @@ function framePass(
 	let built: Vec<GridLine> = [];
 	for (const row of planned.value.rows) {
 		const cursorCell = cursor !== null && cursor.y == row.y ? cursor.x : -1;
-		const l = row.line(cursorCell);
+		const l = row.line(cursorCell, colors.value.bg);
 		if (l.ok) { built.push(l.value); } else { totals.lineErrors += 1; }
 	}
 	const t2: float64 = performance.now();

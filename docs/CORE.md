@@ -188,9 +188,9 @@ first apply that changes rows, settle from the last wake before that apply.
 | nvim: `j` in `nvim --clean -n`, 120 keys | 6–8 % | echo p50 50–80 ms against settle p50 4.7–6.4 ms; each frame sends ~28 of 30 rows |
 
 What the numbers say: flood CPU is three times the 17–25 % of 2026-10-16 (frames then rode a timer;
-since `ea961a7` each applies in a 165 Hz frame callback), unconfirmed against that build. In nvim
-about nine tenths of a key's echo passes before its output reaches Haro, so ConPTY and the child
-own the latency, not Haro's frame path. An idle focused window draws 1–2 frames a second: the blink.
+since `ea961a7` each applies in a 165 Hz frame callback), unconfirmed against that build. The nvim
+echo of 50–80 ms did not hold: the same builds gave 4.9–5.5 ms the same evening (settle 3.8–4.0 ms),
+so the afternoon figure came from the machine's state then, cause unknown. An idle focused window draws 1–2 frames a second: the blink.
 
 Changes measured against that baseline, builds interleaved, same day and load:
 
@@ -215,3 +215,22 @@ A config cache hit costs under 2 ms. The window, both devices and the first layo
 before the shell is spawned, and ConPTY needs 250–290 ms after the spawn before the first byte,
 whatever the shell. Alacritty spawns after its window too (`window_context.rs:201`); WezTerm spawns
 at the configured size while its window is still being built (`wezterm-gui/src/main.rs:334`).
+
+ConPTY host, 2026-10-19 evening (Haro `c6c96fd` loads a `conpty.dll` beside `haro.exe`; one
+binary copied beside nothing, beside WezTerm's 1.22.2502.04002 pair, and beside NuGet
+`Microsoft.Windows.Console.ConPTY` 1.25.260930003; the process tree confirmed conhost.exe,
+OpenConsole.exe and OpenConsole.exe; three interleaved rounds, machine at 15–57 % CPU):
+
+| work | inbox conhost 10.0.26100.1 | OpenConsole 1.22 | OpenConsole 1.25 |
+|---|---|---|---|
+| flood, 10 MB | 5.8–6.5 s, Haro 48–55 % | 5.1–6.4 s, 52–62 % | 5.4–5.9 s, 58–60 % |
+| colour, 10 MB | 4.7–7.0 s, Haro 45–48 % | 5.1–6.7 s, 56–67 % | 5.1–5.4 s, 59–66 %; one run 38 s, the host emitting 20–30 rows a second |
+| echo into `cmd /k`, p50 | 3.5–4.9 ms | 3.2–4.1 ms | 3.3–4.3 ms |
+| nvim `j`, echo p50 | 4.4–4.7 ms | 4.5–4.6 ms | 4.3–4.6 ms |
+| spawn to first byte | 226–262 ms | 221–460 ms | 228–455 ms |
+
+Neither OpenConsole moves throughput, echo or launch for Haro; both cost Haro more CPU per byte,
+and 1.25 stalled once. During an inbox flood no process saturates a core (cmd ~35 %, conhost
+45–55 %, Haro ~60 %), and HighQoS on conhost changed nothing, so the flood waits on something
+other than conhost's speed. What the new host does carry is passthrough of sequences the inbox
+one drops (Kitty graphics APC, sixel DCS): not measured here.

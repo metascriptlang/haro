@@ -1,7 +1,7 @@
 import { NeonEvent, neonEvent } from "../../../neon/src/render/event";
 import { KeyMod } from "../keys/keys";
 import { Block } from "../select/select";
-import { Action, Keybind, resolve, textFor } from "../input/bindings";
+import { Action, CLIPBOARD_MODS, Keybind, resolve, textFor } from "../input/bindings";
 import { Pointer, Spot, autoscrollOf, claimsMouse } from "../input/pointer";
 import { ROWS_PER_NOTCH, Wheel, WheelRoute, reportButton, route } from "../input/wheel";
 import { Held, Reply, replyTo, replyToRead, warningFor, Warning } from "../input/paste";
@@ -487,7 +487,7 @@ test "ctrl shift page, arrow, home and end keys move the viewport and say they d
 	}
 }
 
-test "copy takes the selected text to the clipboard and dismisses the selection, ctrl shift c and enter alike" {
+test "copy takes the selected text to the clipboard and dismisses the selection, the copy chord and enter alike" {
 	const sink: Sink = { sent: "" };
 	const t = termOf("alpha beta\r\ngamma", 20, 5, sink);
 	assert t !== null;
@@ -495,21 +495,23 @@ test "copy takes the selected text to the clipboard and dismisses the selection,
 		const c = Controls.open();
 		const board = boardOf("");
 		const clip = clipOf(board);
-		assert !handled(c.keyDown(t, key("KeyC", 3), clip));
+		assert !handled(c.keyDown(t, key("KeyC", CLIPBOARD_MODS), clip));
 		assert !handled(c.keyDown(t, key("Enter", 0), clip));
 		assert board.copied == "";
 		assert drag(c, t, clip, at(0, 0), at(4, 0));
 		assert c.pointer.selected();
-		assert handled(c.keyDown(t, key("KeyC", 3), clip));
+		assert handled(c.keyDown(t, key("KeyC", CLIPBOARD_MODS), clip));
 		assert board.copied == "alpha";
 		assert !c.pointer.selected();
-		assert !handled(c.keyDown(t, key("KeyC", 3), clip));
+		assert !handled(c.keyDown(t, key("KeyC", CLIPBOARD_MODS), clip));
 		assert drag(c, t, clip, at(6, 0), at(9, 0));
 		assert handled(c.keyDown(t, key("Enter", 0), clip));
 		assert board.copied == "beta";
-		assert drag(c, t, clip, at(0, 1), at(4, 1));
-		assert handled(c.keyDown(t, key("Insert", 2), clip));
-		assert board.copied == "gamma";
+		when (!macos) {
+			assert drag(c, t, clip, at(0, 1), at(4, 1));
+			assert handled(c.keyDown(t, key("Insert", 2), clip));
+			assert board.copied == "gamma";
+		}
 		t.shutdown();
 	}
 }
@@ -522,13 +524,16 @@ test "paste sends the clipboard through the terminal's paste encoding" {
 		const c = Controls.open();
 		const board = boardOf("echo hi\r\n");
 		const clip = clipOf(board);
-		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
 		assert board.reads == 1;
 		assert sink.sent == "echo hi";
-		assert handled(c.keyDown(t, key("Insert", 1), clip));
-		assert sink.sent == "echo hiecho hi";
+		when (!macos) {
+			assert handled(c.keyDown(t, key("Insert", 1), clip));
+			assert sink.sent == "echo hiecho hi";
+		}
+		const reads = board.reads;
 		assert !handled(c.keyDown(t, key("KeyV", 2), clip));
-		assert board.reads == 2;
+		assert board.reads == reads;
 		t.shutdown();
 	}
 }
@@ -540,7 +545,7 @@ test "a paste with a line break waits for an answer and sends nothing meanwhile"
 	if (t !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("one\r\ntwo"));
-		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
 		assert c.holding();
 		const held = c.held;
 		assert held !== null;
@@ -551,7 +556,7 @@ test "a paste with a line break waits for an answer and sends nothing meanwhile"
 		assert sink.sent == "";
 		assert handled(c.keyDown(t, key("KeyA", 0), clip));
 		assert handled(c.keyDown(t, key("ArrowUp", 3), clip));
-		assert handled(c.keyDown(t, key("KeyC", 3), clip));
+		assert handled(c.keyDown(t, key("KeyC", CLIPBOARD_MODS), clip));
 		assert sink.sent == "";
 		assert c.holding();
 		t.shutdown();
@@ -565,7 +570,7 @@ test "enter confirms a held paste and it goes out through the paste encoding" {
 	if (a !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("one\r\ntwo"));
-		assert handled(c.keyDown(a, key("KeyV", 3), clip));
+		assert handled(c.keyDown(a, key("KeyV", CLIPBOARD_MODS), clip));
 		assert handled(c.keyDown(a, key("Enter", 0), clip));
 		assert !c.holding();
 		assert plain.sent == "one\rtwo";
@@ -577,8 +582,8 @@ test "enter confirms a held paste and it goes out through the paste encoding" {
 	if (b !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("one\r\ntwo"));
-		assert handled(c.keyDown(b, key("KeyV", 3), clip));
-		assert handled(c.keyDown(b, key("KeyV", 3), clip));
+		assert handled(c.keyDown(b, key("KeyV", CLIPBOARD_MODS), clip));
+		assert handled(c.keyDown(b, key("KeyV", CLIPBOARD_MODS), clip));
 		assert chord.sent == "one\rtwo";
 		b.shutdown();
 	}
@@ -591,7 +596,7 @@ test "escape drops a held paste and the next key reaches the shell again" {
 	if (t !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("one\r\ntwo"));
-		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
 		assert handled(c.keyDown(t, key("Escape", 0), clip));
 		assert !c.holding();
 		assert sink.sent == "";
@@ -607,12 +612,12 @@ test "the buttons confirm and cancel through the same paths as the keys" {
 	if (t !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("a\nb"));
-		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
 		const _dropped = c.cancel(t);
 		assert !c.holding();
 		assert sink.sent == "";
 		assert !handled(c.confirm(t));
-		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
 		assert handled(c.confirm(t));
 		assert sink.sent == "a\rb";
 		t.shutdown();
@@ -625,7 +630,7 @@ test "bracketed paste takes line breaks as they are and an end marker or a large
 	assert a !== null;
 	if (a !== null) {
 		const c = Controls.open();
-		assert handled(c.keyDown(a, key("KeyV", 3), clipOf(boardOf("one\r\ntwo\r\n"))));
+		assert handled(c.keyDown(a, key("KeyV", CLIPBOARD_MODS), clipOf(boardOf("one\r\ntwo\r\n"))));
 		assert framed.sent == "\x1b[200~one\ntwo\n\x1b[201~";
 		assert !c.holding();
 		const marker = c.paste(a, "evil\x1b[201~rm");
@@ -678,7 +683,7 @@ test "while a paste is held the wheel, the buttons and the pointer do nothing" {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("a\nb"));
 		const bottom = offsetOf(t);
-		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
 		assert !handled(c.roll(t, 1, hitAt(0, 0)));
 		assert offsetOf(t) == bottom;
 		assert !handled(c.down(t, clip, 1, hitAt(0, 0), 0));
@@ -705,7 +710,7 @@ test "typing or pasting snaps the viewport to the bottom and drops the selection
 		assert !c.pointer.selected();
 		assert !handled(c.typed(t));
 		assert handled(c.keyDown(t, key("Home", 3), clip));
-		assert handled(c.keyDown(t, key("KeyV", 3), clip));
+		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
 		assert atBottomOf(t);
 		assert sink.sent == "x";
 		t.shutdown();

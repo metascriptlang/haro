@@ -25,12 +25,21 @@ struct Binding {
 	primaryOnly: boolean;
 }
 
+when (macos) {
+	export const CLIPBOARD_MODS: int32 = SUPER;
+	const INSERT_CHORDS: Vec<Binding> = [];
+} else {
+	export const CLIPBOARD_MODS: int32 = CTRL | SHIFT;
+	const INSERT_CHORDS: Vec<Binding> = [
+		{ code: "Insert", mods: CTRL, action: Action.Copy, primaryOnly: false },
+		{ code: "Insert", mods: SHIFT, action: Action.Paste, primaryOnly: false },
+	];
+}
+
 const BINDINGS: Vec<Binding> = [
-	{ code: "KeyC", mods: CTRL | SHIFT, action: Action.Copy, primaryOnly: false },
-	{ code: "Insert", mods: CTRL, action: Action.Copy, primaryOnly: false },
+	{ code: "KeyC", mods: CLIPBOARD_MODS, action: Action.Copy, primaryOnly: false },
 	{ code: "Enter", mods: 0, action: Action.Copy, primaryOnly: false },
-	{ code: "KeyV", mods: CTRL | SHIFT, action: Action.Paste, primaryOnly: false },
-	{ code: "Insert", mods: SHIFT, action: Action.Paste, primaryOnly: false },
+	{ code: "KeyV", mods: CLIPBOARD_MODS, action: Action.Paste, primaryOnly: false },
 	{ code: "ArrowUp", mods: CTRL | SHIFT, action: Action.LineUp, primaryOnly: false },
 	{ code: "ArrowDown", mods: CTRL | SHIFT, action: Action.LineDown, primaryOnly: false },
 	{ code: "PageUp", mods: CTRL | SHIFT, action: Action.PageUp, primaryOnly: false },
@@ -116,20 +125,36 @@ export function textFor(binds: Readonly<Span<Keybind>>, code: string, mods: numb
 	return null;
 }
 
-export function resolve(code: string, mods: number, altScreen: boolean): Action {
-	const held = (mods as int32) & CHORD;
-	for (const b of BINDINGS) {
+function lookup(table: Readonly<Span<Binding>>, code: string, held: int32, altScreen: boolean): Action {
+	for (const b of table) {
 		if (b.code == code && b.mods == held && !(b.primaryOnly && altScreen)) { return b.action; }
 	}
 	return Action.None;
 }
 
-test "windows terminal's copy, paste and scrollback chords resolve" {
-	assert resolve("KeyC", 3, false) == Action.Copy;
-	assert resolve("Insert", 2, false) == Action.Copy;
+export function resolve(code: string, mods: number, altScreen: boolean): Action {
+	const held = (mods as int32) & CHORD;
+	const found = lookup(BINDINGS, code, held, altScreen);
+	return found != Action.None ? found : lookup(INSERT_CHORDS, code, held, altScreen);
+}
+
+test "copy and paste take ghostty's chords: cmd on macos, ctrl shift and the insert pair elsewhere" {
+	assert resolve("KeyC", CLIPBOARD_MODS, false) == Action.Copy;
+	assert resolve("KeyV", CLIPBOARD_MODS, false) == Action.Paste;
 	assert resolve("Enter", 0, false) == Action.Copy;
-	assert resolve("KeyV", 3, false) == Action.Paste;
-	assert resolve("Insert", 1, false) == Action.Paste;
+	when (macos) {
+		assert resolve("KeyV", CTRL | SHIFT, false) == Action.None;
+		assert resolve("KeyC", CTRL | SHIFT, false) == Action.None;
+		assert resolve("Insert", SHIFT, false) == Action.None;
+		assert resolve("Insert", CTRL, false) == Action.None;
+	} else {
+		assert resolve("KeyV", SUPER, false) == Action.None;
+		assert resolve("Insert", CTRL, false) == Action.Copy;
+		assert resolve("Insert", SHIFT, false) == Action.Paste;
+	}
+}
+
+test "windows terminal's scrollback chords resolve" {
 	assert resolve("ArrowUp", 3, false) == Action.LineUp;
 	assert resolve("ArrowDown", 3, false) == Action.LineDown;
 	assert resolve("PageUp", 3, false) == Action.PageUp;
@@ -152,8 +177,9 @@ test "lock and side bits do not change the chord" {
 	const numLock = 32;
 	const shiftRight = 64;
 	const ctrlLeftShiftRight = 2 | shiftRight | 1;
-	assert resolve("KeyV", 3 | numLock, false) == Action.Paste;
-	assert resolve("KeyV", ctrlLeftShiftRight, false) == Action.Paste;
+	assert resolve("ArrowUp", 3 | numLock, false) == Action.LineUp;
+	assert resolve("ArrowUp", ctrlLeftShiftRight, false) == Action.LineUp;
+	assert resolve("KeyV", CLIPBOARD_MODS | numLock, false) == Action.Paste;
 	assert resolve("Enter", 16, false) == Action.Copy;
 }
 

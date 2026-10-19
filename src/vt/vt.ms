@@ -2227,12 +2227,7 @@ test "the viewport jumps between OSC 133 prompts" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("\x1b]133;A\x07p1
-\r\nout1
-\r\nout2
-\r\n\x1b]133;A\x07p2
-\r\nout3
-\r\n\x1b]133;A\x07p3");
+		vt.writeText("\x1b]133;A\x07p1\r\nout1\r\nout2\r\n\x1b]133;A\x07p2\r\nout3\r\n\x1b]133;A\x07p3");
 		vt.update();
 		assert vt.lines().ok;
 		assert topAfterJump(vt, -1) == "p1";
@@ -2247,11 +2242,7 @@ test "a screen without prompt marks has nothing to jump to" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("a
-\r\nb
-\r\nc
-\r\nd
-\r\ne");
+		vt.writeText("a\r\nb\r\nc\r\nd\r\ne");
 		assert topAfterJump(vt, -1) == "<none>";
 		assert topAfterJump(vt, 1) == "<none>";
 		vt.free();

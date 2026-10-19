@@ -200,3 +200,18 @@ Changes measured against that baseline, builds interleaved, same day and load:
 | leftover output, wheel, key-bound and autoscroll refreshes wait for the next paced frame | replay of 10 MB: 10 of 10 applies ran outside any frame with dirty-to-present 20–24 ms → all 10 inside frames at 2.4–2.6 ms; 30 wheel records at once: 30 refreshes building 900 rows for one drawn frame → 1 refresh, 30 rows | `-Work replay`, three pairs; 30 `WM_MOUSEWHEEL` posted to the window |
 | Neon `510b0c6` (no draw for a frame that changes nothing, window hidden until the first frame), with Haro `2d8cc6f` | none within noise: flood 7.1 → 7.3 s at 53.7 → 53.6 % CPU, colour 8.5 → 6.7 s at 38.8 → 40.6 %; an idle focused window still draws 1–2 frames a second, which is the cursor blink | `-Work flood` and `-Work color`, second of two interleaved rounds (the first ran under 40–60 % machine load from other jobs and varied 2–4×) |
 | a row leaves out its trailing empty cells (a blank with the default background, no underline or strikethrough, as alacritty `content.rs` skips them) | headless, short-line workloads: plan+lines 1.8–2.3 → 1.1–1.3 ms, applyFrame 5.1–8.6 → 4.3–6.6 ms; full rows unchanged. Live flood: 118 → 65 characters per row, Void draw p50 1.41–1.64 → 1.39–1.54 ms, wall and CPU unchanged (the flood waits on conhost); nvim unchanged, since its rows carry its own background | `bench/run.sh`, two interleaved rounds; `-Work flood` and `-Work nvim`, three interleaved pairs |
+
+Launch, 2026-10-19 (Haro `b5d2e7d`, same stack; `--stats` prints `haro launch:`, and
+`-Work launch` or a `--shell` override turns it into ms after the process was created; three
+launches each, machine at ~50 % CPU):
+
+| shell | main | layout | spawned | first output | first text |
+|---|---|---|---|---|---|
+| `cmd.exe` | 10–19 | 164–209 | 178–257 | 463–501 | 467–505 |
+| `pwsh -NoLogo -NoProfile` | 10–14 | 178–184 | 188–200 | 453–485 | 456–486 |
+| `pwsh -NoLogo` with the person's profile | 11–14 | 169–182 | 181–196 | 445–472 | 1312–1361 |
+
+A config cache hit costs under 2 ms. The window, both devices and the first layout take 150–190 ms
+before the shell is spawned, and ConPTY needs 250–290 ms after the spawn before the first byte,
+whatever the shell. Alacritty spawns after its window too (`window_context.rs:201`); WezTerm spawns
+at the configured size while its window is still being built (`wezterm-gui/src/main.rs:334`).

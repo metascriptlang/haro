@@ -168,8 +168,7 @@ Flood and pipeline, 2026-10-16 (msc `5631dd3e5`, release):
 | a full 40-row repaint through `applyFrame`, no window | about 0.5 ms (light_cells), 1.6 ms (dense_cells) | `sh bench/run.sh`, median of 7 |
 | `row.line()` | about 10 µs a row | same |
 | `spansOf` on a row whose every cell changes colour | about 57 µs a row; under 1 µs on plain rows | same |
-| libghostty-vt `write` of `y
-` scrolling | about 20 MiB/s | same |
+| libghostty-vt `write` of `y` and a newline, scrolling | about 20 MiB/s | same |
 
 What the numbers decided: per-key getters stay. A full redraw costs about 3.5% of a 60 Hz frame,
 so neither `get_multi` nor a C row reader is needed until a measurement says otherwise.

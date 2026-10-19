@@ -95,7 +95,7 @@ $shell = switch ($Work) {
 	'flood' { "pwsh.exe -NoLogo -NoProfile -File $PSCommandPath -Inner plain -Out $out" }
 	'color' { "pwsh.exe -NoLogo -NoProfile -File $PSCommandPath -Inner color -Out $out" }
 	'echo' { 'cmd.exe /k' }
-	'nvim' { "nvim --clean $data\plain.txt" }
+	'nvim' { "nvim --clean -n $data\plain.txt" }
 	default { throw "unknown workload ${Work}; use flood, color, echo or nvim" }
 }
 foreach ($v in 'NO_COLOR', 'HERDR_ENV', 'HERDR_PANE_ID', 'HERDR_SOCKET') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }

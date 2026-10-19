@@ -43,6 +43,7 @@ const NO_SHADE: Block = { row: 0, col: 0, rows: 0, cols: 0 };
 
 export interface Entry {
 	onWake: (handler: () => void) => void;
+	schedule: (run: () => void) => void;
 	exited: (code: int32) => void;
 	fail: (message: string) => void;
 	openLink: (uri: string) => void;
@@ -219,7 +220,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		dialog.show(controls.held, controls.reading, cellWidth(), viewWidth());
 		if (frame.value.more) {
 			stats.more += 1;
-			setTimeout((): void => { refresh(); }, 0);
+			entry.schedule(refresh);
 		}
 		if (frame.value.ended) { entry.exited(t.shellExitCode()); }
 	}
@@ -338,7 +339,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			fatalControl("typed", moved.error);
 			return;
 		}
-		if (moved.value) { refresh(); }
+		if (moved.value) { entry.schedule(refresh); }
 	};
 
 	const typed = (e: NeonEvent): void => {
@@ -348,7 +349,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			return;
 		}
 		if (handled.value) {
-			refresh();
+			entry.schedule(refresh);
 			return;
 		}
 		const sent = t.sendKey(e);
@@ -411,7 +412,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 				return;
 			}
 			if (!ticked.value) { return; }
-			refresh();
+			entry.schedule(refresh);
 			autoscroll();
 		}, AUTOSCROLL_MS);
 	};
@@ -439,7 +440,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			fatalControl("wheel", handled.error);
 			return;
 		}
-		if (handled.value) { refresh(); }
+		if (handled.value) { entry.schedule(refresh); }
 	};
 
 	const look: Look = {

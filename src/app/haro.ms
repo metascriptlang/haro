@@ -183,6 +183,14 @@ function registerFamilies(): string[] {
 	return families;
 }
 
+function inFrame(run: () => void): void {
+	if (!pace.asksFrame()) { return; }
+	const _id = requestFrame((time: number): void => {
+		pace.applied();
+		run();
+	});
+}
+
 function show(t: Term, exited: (code: int32) => void): int32 {
 	const families = registerFamilies();
 	const entry: Entry = {
@@ -194,13 +202,10 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 					fail(`drain: ${drained.error.toString()}`);
 					return;
 				}
-				if (!pace.asksFrame()) { return; }
-				const _id = requestFrame((time: number): void => {
-					pace.applied();
-					handler();
-				});
+				inFrame(handler);
 			});
 		},
+		schedule: inFrame,
 		exited: exited,
 		fail: fail,
 		openLink: (uri: string): void => { openExternal(uri); },

@@ -3,6 +3,7 @@
 # The exe must be built with --stats support; build it with -d:voidProfiler to get Void's draw times.
 # flood and color wait for the shell to come up, then time `cmd /c type` of 10 MB inside Haro.
 # echo types keys into cmd's prompt; nvim presses j in `nvim --clean` over the plain file.
+# replay plays the plain file through --replay, from launch to the end of the recording.
 param(
 	[string]$Exe,
 	[string]$Work,
@@ -96,40 +97,53 @@ $shell = switch ($Work) {
 	'color' { "pwsh.exe -NoLogo -NoProfile -File $PSCommandPath -Inner color -Out $out" }
 	'echo' { 'cmd.exe /k' }
 	'nvim' { "nvim --clean -n $data\plain.txt" }
-	default { throw "unknown workload ${Work}; use flood, color, echo or nvim" }
+	'replay' { '' }
+	default { throw "unknown workload ${Work}; use flood, color, echo, nvim or replay" }
 }
 foreach ($v in 'NO_COLOR', 'HERDR_ENV', 'HERDR_PANE_ID', 'HERDR_SOCKET') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
-$p = Start-Process $exePath -WorkingDirectory $Cwd -ArgumentList @('--stats', '--shell', "`"$shell`"") `
+$haroArgs = if ($Work -eq 'replay') { @('--stats', '--replay', "$data\plain.txt") } else { @('--stats', '--shell', "`"$shell`"") }
+$launched = Get-Date
+$p = Start-Process $exePath -WorkingDirectory $Cwd -ArgumentList $haroArgs `
 	-RedirectStandardOutput "$out.out" -RedirectStandardError "$out.err" -PassThru
 try {
 	$null = $p.Handle
 	$hwnd = [IntPtr]::Zero
 	for ($i = 0; $i -lt 100 -and $hwnd -eq [IntPtr]::Zero; $i++) { Start-Sleep -Milliseconds 100; $p.Refresh(); $hwnd = $p.MainWindowHandle }
 	if ($hwnd -eq [IntPtr]::Zero) { throw "Haro showed no window; see $out.err" }
-	if ($Work -eq 'flood' -or $Work -eq 'color') {
-		while (-not (Test-Path "$out.ready")) { if ($p.HasExited) { throw "Haro exited early; see $out.err" }; Start-Sleep -Milliseconds 200 }
-		Start-Sleep 2
+	if ($Work -eq 'replay') {
+		while (-not (Select-String -Path "$out.out" -Pattern 'the recording ended' -Quiet)) {
+			if (((Get-Date) - $launched).TotalSeconds -gt 120) { throw "the replay did not end in 120 s; see $out.out" }
+			Start-Sleep -Milliseconds 50
+		}
+		$wall = ((Get-Date) - $launched).TotalMilliseconds
+		$p.Refresh(); $busy = 100 * $p.TotalProcessorTime.TotalMilliseconds / $wall
+		$idle = 0; $fromLine = 0
 	} else {
+		if ($Work -eq 'flood' -or $Work -eq 'color') {
+			while (-not (Test-Path "$out.ready")) { if ($p.HasExited) { throw "Haro exited early; see $out.err" }; Start-Sleep -Milliseconds 200 }
+			Start-Sleep 2
+		} else {
+			Start-Sleep 3
+		}
+		$p.Refresh(); $c0 = $p.TotalProcessorTime.TotalMilliseconds; $w0 = Get-Date
 		Start-Sleep 3
+		$p.Refresh(); $idle = 100 * ($p.TotalProcessorTime.TotalMilliseconds - $c0) / ((Get-Date) - $w0).TotalMilliseconds
+		$fromLine = @(Get-Content "$out.out" -ErrorAction SilentlyContinue).Count
+		$p.Refresh(); $c0 = $p.TotalProcessorTime.TotalMilliseconds; $w0 = Get-Date
+		if ($Work -eq 'flood' -or $Work -eq 'color') {
+			New-Item "$out.go" -ItemType File | Out-Null
+			while (-not (Test-Path "$out.span") -and -not $p.HasExited) { Start-Sleep -Milliseconds 100 }
+			$span = (Get-Content "$out.span").Split(' ')
+			$wall = [double]$span[1] - [double]$span[0]
+		} else {
+			$vk = if ($Work -eq 'echo') { 0x41 } else { 0x4A }
+			$ch = if ($Work -eq 'echo') { 97 } else { 106 }
+			for ($k = 0; $k -lt $Keys; $k++) { Press $hwnd $vk $ch; Start-Sleep -Milliseconds $GapMs }
+			Start-Sleep 1
+			$wall = ((Get-Date) - $w0).TotalMilliseconds
+		}
+		$p.Refresh(); $busy = 100 * ($p.TotalProcessorTime.TotalMilliseconds - $c0) / ((Get-Date) - $w0).TotalMilliseconds
 	}
-	$p.Refresh(); $c0 = $p.TotalProcessorTime.TotalMilliseconds; $w0 = Get-Date
-	Start-Sleep 3
-	$p.Refresh(); $idle = 100 * ($p.TotalProcessorTime.TotalMilliseconds - $c0) / ((Get-Date) - $w0).TotalMilliseconds
-	$fromLine = @(Get-Content "$out.out" -ErrorAction SilentlyContinue).Count
-	$p.Refresh(); $c0 = $p.TotalProcessorTime.TotalMilliseconds; $w0 = Get-Date
-	if ($Work -eq 'flood' -or $Work -eq 'color') {
-		New-Item "$out.go" -ItemType File | Out-Null
-		while (-not (Test-Path "$out.span") -and -not $p.HasExited) { Start-Sleep -Milliseconds 100 }
-		$span = (Get-Content "$out.span").Split(' ')
-		$wall = [double]$span[1] - [double]$span[0]
-	} else {
-		$vk = if ($Work -eq 'echo') { 0x41 } else { 0x4A }
-		$ch = if ($Work -eq 'echo') { 97 } else { 106 }
-		for ($k = 0; $k -lt $Keys; $k++) { Press $hwnd $vk $ch; Start-Sleep -Milliseconds $GapMs }
-		Start-Sleep 1
-		$wall = ((Get-Date) - $w0).TotalMilliseconds
-	}
-	$p.Refresh(); $busy = 100 * ($p.TotalProcessorTime.TotalMilliseconds - $c0) / ((Get-Date) - $w0).TotalMilliseconds
 	Start-Sleep 1.2
 } finally {
 	if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }

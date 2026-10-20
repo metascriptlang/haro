@@ -53,11 +53,10 @@ if (opened.ok) {
 			}
 		}
 		const colors = vt.palette();
-		const spanRows = vt.rows();
-		if (colors.ok && spanRows.ok) {
+		if (colors.ok && rows.ok) {
 			const styles = new Map<string, Style>();
 			for (let y = 0; y < 3; y++) {
-				const l = spanRows.value[y].line(-1, colors.value.bg);
+				const l = rows.value[y].line(-1, colors.value.bg);
 				if (l.ok) {
 					for (const sp of spansOf(styles, l.value, colors.value.bg)) {
 						const st = sp.style;

@@ -99,9 +99,11 @@ $stamp = "$Work-$(Now)"
 $out = Join-Path $logs $stamp
 $exePath = (Resolve-Path $Exe).Path
 if ("$PSCommandPath$out" -match " ") { throw "--shell takes these paths unquoted; move the checkout or TEMP to a path with no spaces" }
+$floodFile = @{ flood = 'plain'; color = 'color' }[$Work]
 $shell = switch ($Work) {
-	'flood' { "pwsh.exe -NoLogo -NoProfile -File $PSCommandPath -Inner plain -Out $out" }
-	'color' { "pwsh.exe -NoLogo -NoProfile -File $PSCommandPath -Inner color -Out $out" }
+	{ $null -ne $floodFile } {
+		"pwsh.exe -NoLogo -NoProfile -File $PSCommandPath -Inner $floodFile -Out $out"
+	}
 	'echo' { 'cmd.exe /k' }
 	'nvim' { "nvim --clean -n $data\plain.txt" }
 	'replay' { '' }
@@ -140,7 +142,7 @@ try {
 		$p.Refresh(); $busy = 100 * $p.TotalProcessorTime.TotalMilliseconds / $wall
 		$idle = 0; $fromLine = 0
 	} else {
-		if ($Work -eq 'flood' -or $Work -eq 'color') {
+		if ($floodFile) {
 			while (-not (Test-Path "$out.ready")) { if ($p.HasExited) { throw "Haro exited early; see $out.err" }; Start-Sleep -Milliseconds 200 }
 			Start-Sleep 2
 		} else {
@@ -151,7 +153,7 @@ try {
 		$p.Refresh(); $idle = 100 * ($p.TotalProcessorTime.TotalMilliseconds - $c0) / ((Get-Date) - $w0).TotalMilliseconds
 		$fromLine = @(Get-Content "$out.out" -ErrorAction SilentlyContinue).Count
 		$p.Refresh(); $c0 = $p.TotalProcessorTime.TotalMilliseconds; $w0 = Get-Date
-		if ($Work -eq 'flood' -or $Work -eq 'color') {
+		if ($floodFile) {
 			New-Item "$out.go" -ItemType File | Out-Null
 			while (-not (Test-Path "$out.span") -and -not $p.HasExited) { Start-Sleep -Milliseconds 100 }
 			$span = (Get-Content "$out.span").Split(' ')

@@ -10,30 +10,20 @@ import { Style } from "../../../../neon/src/render/style";
 import {
 	VoidHost, VoidNode, createVoidHostWith, asFlexStyle, parseColor,
 } from "../../../../neon/src/platform/void/host";
-import { gfxSetup, fbWidth, fbHeight, dpiScale } from "../../../../void/src/sokol/gpu";
-import { setup2d } from "../../../../void/src/void2d/draw";
 import { addFont } from "../../../../void/src/void2d/font";
 import { Scene2D } from "../../../../void/src/void2d/node";
-import { create, present } from "../../../../void/src/void2d/scene";
+import { create } from "../../../../void/src/void2d/scene";
 import { Color, rgba } from "../../../../void/src/void2d/types";
 import { GridRow, FONT_PATH, BACKGROUND, PADDING, rows, lineRow } from "./rows";
+import { presentFrame, startGraphics } from "./present";
 
 extern function voidRun(w: int32, h: int32, init: () => void, frame: () => void): void;
 
 let _vh: VoidHost | null = null;
 
-function init(): void {
-	gfxSetup();
-	setup2d();
-}
-
 function frame(): void {
 	const vh = _vh;
-	if (vh === null) { return; }
-	const h = vh as VoidHost;
-	const scale = dpiScale();
-	h.layout((fbWidth() as float32) / scale, (fbHeight() as float32) / scale);
-	h.scene.present();
+	if (vh !== null) { presentFrame(vh as VoidHost); }
 }
 
 function main(): int32 {
@@ -54,7 +44,7 @@ function main(): int32 {
 		vh.root,
 	);
 	console.log("neonRows: mounted 4 rows on the Void host");
-	voidRun(800, 400, init, frame);
+	voidRun(800, 400, startGraphics, frame);
 	return 0;
 }
 

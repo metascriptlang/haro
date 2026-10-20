@@ -92,8 +92,8 @@ export function visible(line: string, cols: int32): string {
 	for (let i = 0; i < head.length; i++) {
 		const c = head.charCodeAt(i);
 		out += match (c) {
-			9 => TAB,
-			127 => "^?",
+			"\t".code => TAB,
+			"\x7f".code => "^?",
 			_ when c < 32 => "^" + String.fromCharCode(c + 64),
 			_ => head.charAt(i),
 		};

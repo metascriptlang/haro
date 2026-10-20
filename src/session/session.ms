@@ -74,7 +74,9 @@ export function resize(this s: Session, cols: int32, rows: int32): Result<Sessio
 	const resizedVt = s.vt.resize(cols, rows);
 	if (!resizedVt.ok) { return Result.err(SessionError.ResizeFailed); }
 	const resizedPty = s.pty.resize(cols, rows);
-	if (!resizedPty.ok && s.pty.exitCode() === null) { return Result.err(SessionError.ResizeFailed); }
+	if (!resizedPty.ok && s.pty.exitCode() === null) {
+		return Result.err(SessionError.ResizeFailed);
+	}
 	return Result.ok(s);
 }
 
@@ -180,7 +182,9 @@ when (testBuild) {
 					const rows = screen.value;
 					assert rows[1].startsWith("    Directory: ");
 					assert rows[3] == "Mode                 LastWriteTime         Length Name";
-					assert rows[4].startsWith("----                 -------------         ------ ----");
+					assert rows[4].startsWith(
+						"----                 -------------         ------ ----",
+					);
 					assert rows[5].startsWith("d----");
 					assert rows[5].endsWith("assets");
 					assert rows[13].startsWith("-a---");
@@ -194,7 +198,8 @@ when (testBuild) {
 
 	when (windows) {
 		const ECHO_HELLO = "cmd.exe /c echo hello";
-		const ASK_XTVERSION = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File src/session/xtversion.ps1";
+		const ASK_XTVERSION = "powershell.exe -NoProfile -ExecutionPolicy Bypass " +
+			"-File src/session/xtversion.ps1";
 		const PRINT_SIZE_LATE = "powershell.exe -NoProfile -Command " +
 			"Start-Sleep -Milliseconds 900; " +
 			"[Console]::WriteLine([Console]::WindowWidth.ToString() + 'x' + " +
@@ -202,7 +207,8 @@ when (testBuild) {
 	} else {
 		const ECHO_HELLO = "echo hello";
 		const ASK_XTVERSION = "sh src/session/xtversion.sh";
-		const PRINT_SIZE_LATE = "sh -c 'sleep 0.9; stty size | while read r c; do echo \"${c}x$r\"; done'";
+		const PRINT_SIZE_LATE = "sh -c 'sleep 0.9; " +
+			"stty size | while read r c; do echo \"${c}x$r\"; done'";
 	}
 
 	function nativePtySession(commandLine: string, cols: int32, rows: int32): Session | null {
@@ -279,8 +285,12 @@ function sentAfterExit(running: boolean): string {
 	const base = Replay.ofText("bye").toPty();
 	const pty: Pty = {
 		...base,
-		write: (data: Span<uint8>): Result<int32, PtyError> => { return Result.err(PtyError.Closed); },
-		resize: (cols: int32, rows: int32): Result<void, PtyError> => { return Result.err(PtyError.Closed); },
+		write: (data: Span<uint8>): Result<int32, PtyError> => {
+			return Result.err(PtyError.Closed);
+		},
+		resize: (cols: int32, rows: int32): Result<void, PtyError> => {
+			return Result.err(PtyError.Closed);
+		},
 		exitCode: (): int32 | null => { return running ? null : 0; },
 	};
 	const started = Session.start(pty, 10, 3);
@@ -290,7 +300,8 @@ function sentAfterExit(running: boolean): string {
 	const sent = s.send(bytes[0..1]);
 	const resized = s.resize(12, 4);
 	s.close();
-	return `${sent.ok ? `sent ${sent.value}` : "send failed"}, ${resized.ok ? "resized" : "resize failed"}`;
+	const sentText = sent.ok ? `sent ${sent.value}` : "send failed";
+	return `${sentText}, ${resized.ok ? "resized" : "resize failed"}`;
 }
 
 test "input and a resize after the shell exited are dropped, and still fail while it runs" {
@@ -299,7 +310,8 @@ test "input and a resize after the shell exited are dropped, and still fail whil
 }
 
 function rowsAfterGrowing(ownsScreen: boolean): string {
-	const pty: Pty = { ...Replay.ofText("l1\r\nl2\r\nl3\r\nl4\r\nl5").toPty(), ownsScreen: ownsScreen };
+	const replayed = Replay.ofText("l1\r\nl2\r\nl3\r\nl4\r\nl5").toPty();
+	const pty: Pty = { ...replayed, ownsScreen: ownsScreen };
 	const started = Session.start(pty, 10, 3);
 	if (!started.ok) { return "start failed"; }
 	const s = started.value;

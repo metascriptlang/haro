@@ -37,16 +37,20 @@ export function open(
 
 export function read(this p: NativePty, buf: Span<uint8>): Result<int32, PtyError> {
 	const n = ptyRead(p.id, buf);
-	if (n == -2) { return Result.err(PtyError.OutOfMemory); }
-	if (n < 0) { return Result.err(PtyError.Closed); }
-	return Result.ok(n as int32);
+	return match (n) {
+		-2 => Result.err(PtyError.OutOfMemory),
+		_ when n < 0 => Result.err(PtyError.Closed),
+		_ => Result.ok(n as int32),
+	};
 }
 
 export function wait(this p: NativePty, timeoutMs: int32): Result<boolean, PtyError> {
 	const r = ptyWait(p.id, timeoutMs);
-	if (r == -2) { return Result.err(PtyError.WaitFailed); }
-	if (r < 0) { return Result.err(PtyError.Closed); }
-	return Result.ok(r == 1);
+	return match (r) {
+		-2 => Result.err(PtyError.WaitFailed),
+		_ when r < 0 => Result.err(PtyError.Closed),
+		_ => Result.ok(r == 1),
+	};
 }
 
 export function write(this p: NativePty, data: Span<uint8>): Result<int32, PtyError> {
@@ -75,7 +79,7 @@ export function toPty(this p: NativePty): Pty {
 		read: (buf: Span<uint8>): Result<int32, PtyError> => { return p.read(buf); },
 		write: (data: Span<uint8>): Result<int32, PtyError> => { return p.write(data); },
 		resize: (cols: int32, rows: int32): Result<void, PtyError> => {
-			if (!p.resize(cols, rows).ok) { return Result.err(PtyError.ResizeFailed); }
+			const _resized = try p.resize(cols, rows);
 			return Result.ok(null);
 		},
 		exitCode: (): int32 | null => { return p.exitCode(); },
@@ -100,7 +104,9 @@ when (windows) {
 	const QUIET_FOR_3S = "cmd.exe /c ping -n 4 127.0.0.1 > nul";
 	const MISSING_PROGRAM = "no-such-program-haro.exe";
 	const ECHO_LINE_READ = "cmd.exe /v:on /c \"set /p line=& echo [!line!]\"";
-	function printFile(path: string): string { return `cmd.exe /c type "${path.replaceAll("/", "\\")}"`; }
+	function printFile(path: string): string {
+		return `cmd.exe /c type "${path.replaceAll("/", "\\")}"`;
+	}
 	const PRINT_DIRECTORY = "cmd.exe /c cd";
 } else {
 	const ECHO_HELLO = "echo hello";
@@ -290,7 +296,7 @@ function feed(this before: LineCheck, bytes: Span<uint8>): LineCheck {
 	return c;
 }
 
-test "the flood check counts a line ended by a cursor move, not a newline, and skips escapes inside it" {
+test "the flood check counts a line ended by a cursor move, not a newline, and skips its escapes" {
 	let check: LineCheck = { next: 0, digits: "", inNumber: false, inCsi: false, bytes: 0 };
 	const text = "\x1b]0;cmd\x07line L0.\x1b[2;1Hline\x1b[1CL1.\x1b[K\r\nline L3.\r\nline L2.\r\n";
 	const view = text.asBytes();

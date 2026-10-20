@@ -93,7 +93,7 @@ const KEY_NAMES: Vec<string> = [
 	"numpad_multiply", "numpad_subtract",
 ];
 
-function pascal(snake: string): string {
+function pascalCase(snake: string): string {
 	let out = "";
 	for (const part of snake.split("_")) {
 		if (part.length > 0) { out += part[0].toUpperCase() + part.slice(1); }
@@ -107,14 +107,14 @@ function codeOf(name: string): string | null {
 	if (name.startsWith("key_") && name.length == 5) { return codeOf(name.slice(4)); }
 	if (name.startsWith("digit_") && name.length == 7) { return codeOf(name.slice(6)); }
 	if (name.startsWith("numpad_") && name.length == 8 && name[7] >= "0" && name[7] <= "9") {
-		return pascal(name);
+		return pascalCase(name);
 	}
 	if (name.length >= 2 && name.length <= 3 && name[0] == "f") {
 		const n = name.slice(1).parseInt();
 		if (n >= 1 && n <= 24 && `f${n}` == name) { return `F${n}`; }
 	}
 	for (const known of KEY_NAMES) {
-		if (known == name) { return pascal(name); }
+		if (known == name) { return pascalCase(name); }
 	}
 	return null;
 }
@@ -195,47 +195,48 @@ test "copy and paste take cmd on macos, and ctrl shift or the insert pair elsewh
 }
 
 test "ctrl shift with an arrow, a page key, home or end scrolls the scrollback" {
-	assert resolve("ArrowUp", 3, false) == Action.LineUp;
-	assert resolve("ArrowDown", 3, false) == Action.LineDown;
-	assert resolve("PageUp", 3, false) == Action.PageUp;
-	assert resolve("PageDown", 3, false) == Action.PageDown;
-	assert resolve("Home", 3, false) == Action.Top;
-	assert resolve("End", 3, false) == Action.Bottom;
+	assert resolve("ArrowUp", CTRL | SHIFT, false) == Action.LineUp;
+	assert resolve("ArrowDown", CTRL | SHIFT, false) == Action.LineDown;
+	assert resolve("PageUp", CTRL | SHIFT, false) == Action.PageUp;
+	assert resolve("PageDown", CTRL | SHIFT, false) == Action.PageDown;
+	assert resolve("Home", CTRL | SHIFT, false) == Action.Top;
+	assert resolve("End", CTRL | SHIFT, false) == Action.Bottom;
 }
 
 test "a chord needs exactly its modifiers" {
-	assert resolve("KeyC", 2, false) == Action.None;
-	assert resolve("KeyC", 1, false) == Action.None;
-	assert resolve("KeyC", 7, false) == Action.None;
-	assert resolve("KeyV", 2, false) == Action.None;
-	assert resolve("Enter", 1, false) == Action.None;
+	assert resolve("KeyC", CTRL, false) == Action.None;
+	assert resolve("KeyC", SHIFT, false) == Action.None;
+	assert resolve("KeyC", SHIFT | CTRL | ALT, false) == Action.None;
+	assert resolve("KeyV", CTRL, false) == Action.None;
+	assert resolve("Enter", SHIFT, false) == Action.None;
 	assert resolve("ArrowUp", 0, false) == Action.None;
-	assert resolve("ArrowUp", 1, false) == Action.None;
+	assert resolve("ArrowUp", SHIFT, false) == Action.None;
 }
 
 test "lock and side bits do not change the chord" {
+	const capsLock = 16;
 	const numLock = 32;
 	const shiftRight = 64;
-	const ctrlLeftShiftRight = 2 | shiftRight | 1;
-	assert resolve("ArrowUp", 3 | numLock, false) == Action.LineUp;
+	const ctrlLeftShiftRight = CTRL | shiftRight | SHIFT;
+	assert resolve("ArrowUp", CTRL | SHIFT | numLock, false) == Action.LineUp;
 	assert resolve("ArrowUp", ctrlLeftShiftRight, false) == Action.LineUp;
 	assert resolve("KeyV", CLIPBOARD_MODS | numLock, false) == Action.Paste;
-	assert resolve("Enter", 16, false) == Action.Copy;
+	assert resolve("Enter", capsLock, false) == Action.Copy;
 }
 
 test "shift page keys scroll the primary screen and reach a full-screen app on the alternate" {
-	assert resolve("PageUp", 1, false) == Action.PageUp;
-	assert resolve("PageDown", 1, false) == Action.PageDown;
-	assert resolve("PageUp", 1, true) == Action.None;
-	assert resolve("PageUp", 3, true) == Action.PageUp;
+	assert resolve("PageUp", SHIFT, false) == Action.PageUp;
+	assert resolve("PageDown", SHIFT, false) == Action.PageDown;
+	assert resolve("PageUp", SHIFT, true) == Action.None;
+	assert resolve("PageUp", CTRL | SHIFT, true) == Action.PageUp;
 }
 
 test "ctrl alt up and down jump between prompts, ctrl shift up and down scroll by line" {
-	assert resolve("ArrowUp", 6, false) == Action.PromptUp;
-	assert resolve("ArrowDown", 6, false) == Action.PromptDown;
-	assert resolve("ArrowUp", 3, false) == Action.LineUp;
-	assert resolve("ArrowUp", 4, false) == Action.None;
-	assert resolve("ArrowUp", 2, false) == Action.None;
+	assert resolve("ArrowUp", CTRL | ALT, false) == Action.PromptUp;
+	assert resolve("ArrowDown", CTRL | ALT, false) == Action.PromptDown;
+	assert resolve("ArrowUp", CTRL | SHIFT, false) == Action.LineUp;
+	assert resolve("ArrowUp", ALT, false) == Action.None;
+	assert resolve("ArrowUp", CTRL, false) == Action.None;
 }
 
 test "a key with no binding resolves to nothing" {

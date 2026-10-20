@@ -31,14 +31,21 @@ export function resets(last: float64, now: float64): boolean {
 	return now - last > BLINK_RESET_MS;
 }
 
-export function boxes(shape: CursorShape, col: int32, row: int32, cw: float64, rh: float64, thick: float64): Vec<Box> {
+export function boxes(
+	shape: CursorShape,
+	col: int32,
+	row: int32,
+	cw: float64,
+	rh: float64,
+	thick: float64,
+): Vec<Box> {
 	const x = (col as float64) * cw;
 	const y = (row as float64) * rh;
 	return match (shape) {
 		CursorShape.Block => [{ x: x, y: y, w: cw, h: rh, alpha: 0.5 }],
 		CursorShape.Bar => [{ x: x - thick / 2, y: y, w: thick, h: rh, alpha: 1 }],
 		CursorShape.Underline => [{ x: x, y: y + rh - 2 * thick, w: cw, h: thick, alpha: 1 }],
-		_ => [
+		CursorShape.BlockHollow => [
 			{ x: x, y: y, w: cw, h: thick, alpha: 1 },
 			{ x: x, y: y + rh - thick, w: cw, h: thick, alpha: 1 },
 			{ x: x, y: y + thick, w: thick, h: rh - 2 * thick, alpha: 1 },
@@ -55,7 +62,7 @@ function look(visible: boolean, shape: CursorShape, blinking: boolean): CursorLo
 	return { visible: visible, shape: shape, blinking: blinking };
 }
 
-test "a hidden cursor is not drawn, a steady one always is, a blinking one only while its blink is on" {
+test "a hidden cursor is not drawn, a steady one always is, a blinking one only while blink is on" {
 	assert !drawn(look(false, CursorShape.Block, false), true, true);
 	assert !drawn(look(false, CursorShape.Block, false), false, true);
 	assert drawn(look(true, CursorShape.Bar, false), true, false);
@@ -74,12 +81,18 @@ test "an unfocused window shows a hollow block that does not blink" {
 	assert !blinks(look(false, CursorShape.Bar, true), true);
 }
 
-test "a block is one translucent box, a bar a thin one centred on the cell's left edge, an underline a thin one near the bottom" {
+test "a block cursor is one translucent box over its cell" {
 	const block = boxes(CursorShape.Block, 2, 1, 8, 16, 1);
 	assert block.length == 1;
 	assert block[0] == at(16, 16, 8, 16, 0.5);
+}
+
+test "a bar cursor is a thin box centred on the cell's left edge" {
 	const bar = boxes(CursorShape.Bar, 2, 1, 8, 16, 1);
 	assert bar[0] == at(15.5, 16, 1, 16, 1);
+}
+
+test "an underline cursor is a thin box near the cell's bottom" {
 	const underline = boxes(CursorShape.Underline, 2, 1, 8, 16, 1);
 	assert underline[0] == at(16, 30, 8, 1, 1);
 }

@@ -1,13 +1,15 @@
+const FILE_SCHEME = "file://";
+
 export struct FileUri {
 	host: string;
 	path: string;
 }
 
-function hexValue(c: int32): int32 {
-	if (c >= 0x30 && c <= 0x39) { return c - 0x30; }
-	if (c >= 0x61 && c <= 0x66) { return c - 0x61 + 10; }
-	if (c >= 0x41 && c <= 0x46) { return c - 0x41 + 10; }
-	return -1;
+function hexValue(c: int32): int32 | null {
+	if (c >= "0".code && c <= "9".code) { return c - "0".code; }
+	if (c >= "a".code && c <= "f".code) { return c - "a".code + 10; }
+	if (c >= "A".code && c <= "F".code) { return c - "A".code + 10; }
+	return null;
 }
 
 function unescape(text: string): string | null {
@@ -17,7 +19,7 @@ function unescape(text: string): string | null {
 	let i = 0;
 	while (i < n) {
 		const c = src[i] as int32;
-		if (c != 0x25) {
+		if (c != "%".code) {
 			out.push(c as uint8);
 			i++;
 			continue;
@@ -25,7 +27,7 @@ function unescape(text: string): string | null {
 		if (i + 2 >= n) { return null; }
 		const hi = hexValue(src[i + 1] as int32);
 		const lo = hexValue(src[i + 2] as int32);
-		if (hi < 0 || lo < 0) { return null; }
+		if (hi === null || lo === null) { return null; }
 		out.push((hi * 16 + lo) as uint8);
 		i += 3;
 	}
@@ -33,18 +35,18 @@ function unescape(text: string): string | null {
 	return decoded;
 }
 
+function isAsciiLetter(c: int32): boolean {
+	return (c >= "A".code && c <= "Z".code) || (c >= "a".code && c <= "z".code);
+}
+
 function drivePath(path: string): string {
-	const letter = path.charCodeAt(1);
-	const isLetter = (letter >= 0x41 && letter <= 0x5A) || (letter >= 0x61 && letter <= 0x7A);
-	if (path.length >= 3 && path.charCodeAt(0) == 0x2F && isLetter && path.charAt(2) == ":") {
-		return path.slice(1, path.length);
-	}
-	return path;
+	if (path.length < 3 || path.charAt(0) != "/" || path.charAt(2) != ":") { return path; }
+	return isAsciiLetter(path.charCodeAt(1)) ? path.slice(1, path.length) : path;
 }
 
 export function fileUri(uri: string): FileUri | null {
-	if (!uri.startsWith("file://")) { return null; }
-	const rest = uri.slice(7, uri.length);
+	if (!uri.startsWith(FILE_SCHEME)) { return null; }
+	const rest = uri.slice(FILE_SCHEME.length, uri.length);
 	const slash = rest.indexOf("/");
 	if (slash < 0) { return null; }
 	const path = unescape(rest.slice(slash, rest.length));
@@ -54,8 +56,8 @@ export function fileUri(uri: string): FileUri | null {
 }
 
 export function isLocalHost(host: string, machine: string): boolean {
-	if (host == "" || host.toLowerCase() == "localhost") { return true; }
-	return host.toLowerCase() == machine.toLowerCase();
+	const lower = host.toLowerCase();
+	return lower == "" || lower == "localhost" || lower == machine.toLowerCase();
 }
 
 test "a POSIX file URI gives its path with escapes decoded" {

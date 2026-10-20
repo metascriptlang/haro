@@ -97,16 +97,23 @@ export function spans(
 	return out;
 }
 
+function width(this s: RowSpan): int32 {
+	return s.to - s.from + 1;
+}
+
+function isContinuedBy(this b: Block, s: RowSpan): boolean {
+	return b.col == s.from && b.cols == s.width() && b.row + b.rows == s.row;
+}
+
 export function blocks(this m: Marked, top: int32, rows: int32, cols: int32): Vec<Block> {
 	let out: Vec<Block> = [];
 	for (const s of m.spans(top, rows, cols)) {
 		const n = out.length as int32;
-		const width = s.to - s.from + 1;
-		if (n > 0 && out[n - 1].col == s.from && out[n - 1].cols == width && out[n - 1].row + out[n - 1].rows == s.row) {
+		if (n > 0 && out[n - 1].isContinuedBy(s)) {
 			out[n - 1].rows += 1;
 			continue;
 		}
-		out.push({ row: s.row, col: s.from, rows: 1, cols: width });
+		out.push({ row: s.row, col: s.from, rows: 1, cols: s.width() });
 	}
 	return out;
 }
@@ -151,7 +158,8 @@ test "a press with no drag selects nothing for a cell and the unit for a word" {
 }
 
 test "a drag backwards normalises to reading order" {
-	const sel = Selection.press(Unit.Cell, pointRange(at(10, 5)), false).drag(pointRange(at(8, 20)));
+	const sel = Selection.press(Unit.Cell, pointRange(at(10, 5)), false)
+		.drag(pointRange(at(8, 20)));
 	assert !sel.collapsed();
 	assert sel.bounds() == range(8, 20, 10, 5);
 }
@@ -164,7 +172,7 @@ test "a drag after a word press keeps the whole word in either direction" {
 	assert backward.bounds() == range(4, 2, 5, 14);
 }
 
-test "a linear selection highlights the tail of the first row, whole middle rows and the head of the last" {
+test "a linear selection highlights the first row's tail, the middle rows and the last row's head" {
 	const m: Marked = { range: range(10, 5, 12, 3), block: false };
 	const all = m.spans(8, 6, 20);
 	assert all.length == 3;
@@ -209,7 +217,8 @@ test "a span stops at the last column" {
 }
 
 test "a rebase follows the terminal's shift and drops a selection the terminal lost" {
-	const sel = Selection.press(Unit.Cell, pointRange(at(10, 2)), false).drag(pointRange(at(12, 4)));
+	const sel = Selection.press(Unit.Cell, pointRange(at(10, 2)), false)
+		.drag(pointRange(at(12, 4)));
 	const was = sel.bounds();
 	const kept = sel.rebased(was, { range: range(10, 2, 12, 4), block: false });
 	assert kept !== null;
@@ -224,7 +233,7 @@ function block(row: int32, col: int32, rows: int32, cols: int32): Block {
 	return { row: row, col: col, rows: rows, cols: cols };
 }
 
-test "a linear selection draws as at most three rectangles: its head, the full rows between, its tail" {
+test "a linear selection draws as at most three rectangles: head, full middle rows, tail" {
 	const m: Marked = { range: range(10, 5, 14, 3), block: false };
 	const drawn = m.blocks(8, 10, 20);
 	assert drawn.length == 3;

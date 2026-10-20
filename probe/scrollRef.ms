@@ -101,8 +101,8 @@ function open(cap: int32): Rig {
 	if (cap >= 0) {
 		let v: uint64 = cap as uint64;
 		const maxLines = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES;
-		const sr = setUsize(term, maxLines, v);
-		console.log(`  set scrollback max lines ${cap}: r=${sr}`);
+		const setResult = setUsize(term, maxLines, v);
+		console.log(`  set scrollback max lines ${cap}: r=${setResult}`);
 	}
 	let state: GhosttyRenderState;
 	ghostty_render_state_new(null, state);
@@ -137,8 +137,8 @@ function frame(name: string, rig: Rig, expected: string): void {
 	getScrollbar(rig.term, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR, sb);
 	let c: GhosttyPointCoordinate;
 	const has = ghostty_tracked_grid_ref_has_value(rig.ref);
-	const rs = ghostty_tracked_grid_ref_point(rig.ref, SCREEN, c);
-	const measured = (rs as int32) == 0 ? `${(sb.offset as int64) - (c.y as int64)}` : "LOST";
+	const screenResult = ghostty_tracked_grid_ref_point(rig.ref, SCREEN, c);
+	const measured = (screenResult as int32) == 0 ? `${(sb.offset as int64) - (c.y as int64)}` : "LOST";
 	console.log(
 		`${name}: expected N=${expected} measured N=${measured} | has_value=${has} ` +
 		`refPoint viewport=${pointAt(rig.ref, VIEWPORT)} active=${pointAt(rig.ref, ACTIVE)} ` +
@@ -157,7 +157,7 @@ function scroll(name: string, k: int32, cap: int32): void {
 	close(rig);
 }
 
-function others(): void {
+function editsAndAltScreen(): void {
 	const rig = open(-1);
 	frame("baseline", rig, "0");
 	write(rig.term, "\x1b[6;1Hoverwrite");
@@ -188,7 +188,7 @@ function main(): int32 {
 	scroll("cap10", 100, 10);
 	scroll("cap0", 100, 0);
 	scroll("cap10", 5000, 10);
-	others();
+	editsAndAltScreen();
 	return 0;
 }
 

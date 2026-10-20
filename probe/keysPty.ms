@@ -68,7 +68,7 @@ function main(): int32 {
 	}
 	const pty = opened.value;
 	let buf: Vec<uint8> = new Array(4096);
-	let out: Vec<uint8> = new Array(64);
+	let encoded: Vec<uint8> = new Array(64);
 	const recorded: uint8[] = [];
 	drain(pty, recorded, buf, 3000);
 	for (const c of cases) {
@@ -80,16 +80,16 @@ function main(): int32 {
 			unshifted: c.unshifted,
 			text: c.text,
 		};
-		const n = keys.value.encode(vt.value, e, out);
-		if (!n.ok) {
+		const written = keys.value.encode(vt.value, e, encoded);
+		if (!written.ok) {
 			console.log(`keysPty: ${c.name} did not encode`);
 			return 1;
 		}
 		let sent = "";
-		for (let i = 0; i < n.value; i++) { sent += `${out[i]} `; }
+		for (let i = 0; i < written.value; i++) { sent += `${encoded[i]} `; }
 		for (const b of `\nSENT ${c.name} | ${sent}\n`) { recorded.push(b as uint8); }
-		const w = pty.write(out.slice(0, n.value));
-		if (!w.ok) { return 1; }
+		const wrote = pty.write(encoded.slice(0, written.value));
+		if (!wrote.ok) { return 1; }
 		drain(pty, recorded, buf, 400);
 	}
 	drain(pty, recorded, buf, 2000);

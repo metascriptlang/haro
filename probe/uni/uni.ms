@@ -2,12 +2,12 @@ import { buildWorkload } from "../../bench/workloads";
 import { Vt } from "../../src/vt/vt";
 import { plan } from "../../src/screen/plan";
 
-const w = buildWorkload("unicode");
-if (w.ok) {
+const workload = buildWorkload("unicode");
+if (workload.ok) {
 	const created = Vt.create(120, 40);
 	if (created.ok) {
 		const vt = created.value;
-		const all = w.value.payload;
+		const all = workload.value.payload;
 		let at = 0;
 		let chunk = 0;
 		while (at < all.length) {
@@ -15,9 +15,9 @@ if (w.ok) {
 			vt.write(all.slice(at, end));
 			at = end;
 			chunk++;
-			const p = vt.plan();
-			if (!p.ok) {
-				console.log(`plan failed at chunk ${chunk}: ${p.error.toString()}`);
+			const planned = vt.plan();
+			if (!planned.ok) {
+				console.log(`plan failed at chunk ${chunk}: ${planned.error.toString()}`);
 				break;
 			}
 		}

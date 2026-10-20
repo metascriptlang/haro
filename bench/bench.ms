@@ -162,7 +162,7 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 function measure(
 	w: Workload, stage: Stage, reps: int32, cadence: Cadence,
 ): Result<Measured, BenchError> {
-	const warm = try runPass(w, stage, cadence);
+	const _warmUp = try runPass(w, stage, cadence);
 	let samples: Vec<Totals> = [];
 	for (let i = 0; i < reps; i++) { samples.push(try runPass(w, stage, cadence)); }
 	for (let i = 1; i < reps; i++) {
@@ -214,14 +214,14 @@ function describe(w: Workload, stage: Stage, m: Measured): string {
 	);
 }
 
-function valueOf(flag: string): string | null {
+function flagValue(flag: string): string | null {
 	for (let i = 1; i + 1 < argv.length; i++) {
 		if (argv[i] == flag) { return argv[i + 1]; }
 	}
 	return null;
 }
 
-function has(flag: string): boolean {
+function hasFlag(flag: string): boolean {
 	for (const arg of argv) {
 		if (arg == flag) { return true; }
 	}
@@ -229,24 +229,24 @@ function has(flag: string): boolean {
 }
 
 function intOption(flag: string, fallback: int32): int32 {
-	const text = valueOf(flag);
+	const text = flagValue(flag);
 	if (text === null) { return fallback; }
 	return text.parseInt() as int32;
 }
 
-function selected(): string[] {
-	const only = valueOf("--only");
+function selectedWorkloads(): string[] {
+	const only = flagValue("--only");
 	if (only === null) { return WORKLOAD_NAMES; }
 	return only.split(",");
 }
 
 function main(): int32 {
-	if (has("--list")) {
+	if (hasFlag("--list")) {
 		for (const name of WORKLOAD_NAMES) { console.log(name); }
 		return 0;
 	}
 	const reps = intOption("--reps", DEFAULT_REPS);
-	const paced = has("--paced");
+	const paced = hasFlag("--paced");
 	const cadence: Cadence = {
 		frameBytes: intOption("--frame-kib", DEFAULT_FRAME_KIB) * 1024,
 		gapMs: paced ? FRAME_MS : 0.0,
@@ -257,7 +257,7 @@ function main(): int32 {
 		: `a frame every ${cadence.frameBytes / 1024} KiB`;
 	console.log(`# haroBench reps=${reps} (median, plus 1 warm-up), ${frames}`);
 	console.log(`# the vt is written ${CHUNK_BYTES} B at a time`);
-	for (const name of selected()) {
+	for (const name of selectedWorkloads()) {
 		const built = buildWorkload(name);
 		if (!built.ok) {
 			console.log(`unknown workload ${name}; --list names them`);

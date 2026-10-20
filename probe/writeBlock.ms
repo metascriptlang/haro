@@ -2,7 +2,7 @@ import { NativePty } from "../src/pty/pty";
 import { argv, exit } from "std/process";
 
 function main(): int32 {
-	const mb = argv.length > 1 ? argv[1].parseInt() as int32 : 16;
+	const mib = argv.length > 1 ? argv[1].parseInt() as int32 : 16;
 	const spawned = NativePty.spawn("cmd /c ping -n 8 127.0.0.1 >nul", 80, 24);
 	if (!spawned.ok) {
 		console.log("writeBlock: the command did not start");
@@ -14,10 +14,10 @@ function main(): int32 {
 	let buf: Vec<uint8> = new Array(65536);
 	let worst = 0.0;
 	const start = performance.now();
-	for (let m = 0; m < mb; m++) {
-		const a = performance.now();
+	for (let m = 0; m < mib; m++) {
+		const writeStart = performance.now();
 		const w = pty.write(chunk[0..chunk.length]);
-		const took = performance.now() - a;
+		const took = performance.now() - writeStart;
 		worst = Math.max(worst, took);
 		if (!w.ok) { console.log(`writeBlock: write ${m} failed`); break; }
 		while (true) {
@@ -27,7 +27,7 @@ function main(): int32 {
 		}
 	}
 	console.log(
-		`writeBlock: ${mb} MiB written in ${performance.now() - start} ms, ` +
+		`writeBlock: ${mib} MiB written in ${performance.now() - start} ms, ` +
 		`worst 1 MiB write ${worst} ms`,
 	);
 	pty.close();

@@ -54,14 +54,14 @@ if (opened.ok) {
 				console.log(`row ${row.y}: ${attrs.trimEnd()}`);
 			}
 		}
-		const pal = vt.palette();
-		const rows2 = vt.rows();
-		if (pal.ok && rows2.ok) {
+		const colors = vt.palette();
+		const spanRows = vt.rows();
+		if (colors.ok && spanRows.ok) {
 			const styles = new Map<string, Style>();
 			for (let y = 0; y < 3; y++) {
-				const l = rows2.value[y].line(-1);
+				const l = spanRows.value[y].line(-1);
 				if (l.ok) {
-					for (const sp of spansOf(styles, l.value, pal.value.bg)) {
+					for (const sp of spansOf(styles, l.value, colors.value.bg)) {
 						const st = sp.style;
 						console.log(
 							`  y${y} [${sp.text.trimEnd()}] w=${st.fontWeight} ` +

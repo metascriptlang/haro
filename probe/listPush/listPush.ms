@@ -16,11 +16,11 @@ struct Slot { spans: TextSpan[]; }
 
 function slot(s: string): Slot { return { spans: [{ text: s, style: { color: "#fff" } }] }; }
 
-const [h, setH] = createSignal<number>(0);
+const [rowHeight, setRowHeight] = createSignal<number>(0);
 
 function row(item: Accessor<Slot>): NeonNode {
 	return element(
-		<Text style={{ fontSize: 14, height: h() }} cellWidth={8.4} spans={item().spans} />
+		<Text style={{ fontSize: 14, height: rowHeight() }} cellWidth={8.4} spans={item().spans} />
 	);
 }
 
@@ -54,7 +54,7 @@ const vh = mount(pushed);
 pushed.push(slot("a"));
 pushed.push(slot("b"));
 dump("pushed at h=0", vh);
-setH(18);
+setRowHeight(18);
 dump("after setH(18)", vh);
 pushed.push(slot("c"));
 dump("push after setH", vh);

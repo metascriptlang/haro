@@ -1,7 +1,7 @@
 import { Unit } from "../select/select";
 
-export const REPEAT_MS: float64 = 500;
-export const MAX_CLICKS: int32 = 3;
+const REPEAT_MS: float64 = 500;
+const MAX_CLICKS: int32 = 3;
 
 export interface Clicks {
 	count: int32;

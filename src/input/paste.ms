@@ -35,7 +35,7 @@ export interface Held {
 	warning: Warning;
 }
 
-export const LARGE_UNITS: int32 = 5 * 1024;
+const LARGE_UNITS: int32 = 5 * 1024;
 const END_MARKER = "\x1b[201~";
 const TAB = "    ";
 const ASK_BODY = "A program is attempting to read from the clipboard. The current clipboard contents are shown below.";
@@ -63,7 +63,7 @@ export function replyToRead(code: string, mods: number): Reply {
 	return Reply.Ignore;
 }
 
-export function wrap(text: string, cols: int32): Vec<string> {
+function wrap(text: string, cols: int32): Vec<string> {
 	let out: Vec<string> = [];
 	let line = "";
 	for (const word of text.split(" ")) {
@@ -121,7 +121,7 @@ function body(warning: Warning): string {
 	};
 }
 
-export function previewOf(text: string, cols: int32, maxCode: int32): Vec<Line> {
+function previewOf(text: string, cols: int32, maxCode: int32): Vec<Line> {
 	const all = text.split("
 ");
 	const total = all.length as int32;

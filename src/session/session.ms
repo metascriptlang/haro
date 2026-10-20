@@ -85,15 +85,24 @@ export function close(this s: Session): void {
 	s.vt.free();
 }
 
-function ranToExit(this s: Session, timeoutMs: int32, chunk: int32 = 4096): boolean {
+function runToExit(
+	this s: Session,
+	timeoutMs: int32,
+	chunk: int32 = 4096,
+): Result<boolean, SessionError> {
 	let buf: Vec<uint8> = new Array(chunk);
 	while (true) {
 		const ready = s.pty.wait(timeoutMs);
-		if (!ready.ok || !ready.value) { return false; }
-		const alive = s.pump(buf);
-		if (!alive.ok) { return false; }
-		if (!alive.value) { return true; }
+		if (!ready.ok) { return Result.err(SessionError.PtyReadFailed); }
+		if (!ready.value) { return Result.ok(false); }
+		const alive = try s.pump(buf);
+		if (!alive) { return Result.ok(true); }
 	}
+}
+
+function ranToExit(this s: Session, timeoutMs: int32, chunk: int32 = 4096): boolean {
+	const ended = s.runToExit(timeoutMs, chunk);
+	return ended.ok && ended.value;
 }
 
 function startedOrNull(pty: Pty, cols: int32, rows: int32): Session | null {
@@ -297,7 +306,7 @@ function rowsAfterGrowing(ownsScreen: boolean): string {
 	const started = Session.start(pty, 10, 3);
 	if (!started.ok) { return "start failed"; }
 	const s = started.value;
-	if (!s.ranToExit(1000)) { return "pump failed"; }
+	if (!s.runToExit(1000).ok) { return "pump failed"; }
 	if (!s.resize(10, 5).ok) { return "resize failed"; }
 	const screen = s.screen();
 	s.close();

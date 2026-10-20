@@ -558,27 +558,6 @@ function clipboardRead(effects: Ptr<void>, mark: int64): void {
 	e.readAsked = true;
 }
 
-export function takeReplies(this e: Effects, buf: Span<uint8>): int32 {
-	const n = e.replies.length < buf.length ? e.replies.length : buf.length;
-	for (let i = 0; i < n; i++) { buf[i] = e.replies[i]; }
-	let rest: Vec<uint8> = [];
-	for (let i = n; i < e.replies.length; i++) { rest.push(e.replies[i]); }
-	e.replies = rest;
-	return n;
-}
-
-export function takeClipboard(this e: Effects): string | null {
-	const text = e.clipboard;
-	e.clipboard = null;
-	return text;
-}
-
-export function clipboardAsked(this e: Effects): boolean {
-	const asked = e.readAsked;
-	e.readAsked = false;
-	return asked;
-}
-
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".asBytes();
 const PAD: uint8 = 0x3d;
 const SEMICOLON: uint8 = 0x3b;
@@ -595,7 +574,7 @@ function pushBase64(ref out: Vec<uint8>, bytes: Readonly<Span<uint8>>): void {
 	}
 }
 
-export function answerClipboard(this e: Effects, text: string, allow: boolean): boolean {
+export function answerRead(this e: Effects, text: string, allow: boolean): boolean {
 	const frame = e.readFrame;
 	if (frame === null) { return false; }
 	let head = 0;
@@ -718,7 +697,13 @@ export function writeText(this vt: Vt, text: string): void {
 }
 
 export function replies(this vt: Vt, buf: Span<uint8>): Result<int32, VtError> {
-	return Result.ok(vt.effects.takeReplies(buf));
+	const e = vt.effects;
+	const n = Math.min(e.replies.length, buf.length);
+	for (let i = 0; i < n; i++) { buf[i] = e.replies[i]; }
+	let rest: Vec<uint8> = [];
+	for (let i = n; i < e.replies.length; i++) { rest.push(e.replies[i]); }
+	e.replies = rest;
+	return Result.ok(n);
 }
 
 export struct VtEvents {
@@ -813,15 +798,19 @@ export function setPullScrollback(this vt: Vt, pull: boolean): Result<Vt, VtErro
 }
 
 export function takeClipboard(this vt: Vt): Result<string | null, VtError> {
-	return Result.ok(vt.effects.takeClipboard());
+	const text = vt.effects.clipboard;
+	vt.effects.clipboard = null;
+	return Result.ok(text);
 }
 
 export function clipboardAsked(this vt: Vt): boolean {
-	return vt.effects.clipboardAsked();
+	const asked = vt.effects.readAsked;
+	vt.effects.readAsked = false;
+	return asked;
 }
 
 export function answerClipboard(this vt: Vt, text: string, allow: boolean): Result<Vt, VtError> {
-	if (!vt.effects.answerClipboard(text, allow)) { return Result.err(VtError.ReadFailed); }
+	if (!vt.effects.answerRead(text, allow)) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(vt);
 }
 
@@ -1022,11 +1011,6 @@ function open(this m: Mouse): Result<void, VtError> {
 	return Result.ok(null);
 }
 
-function sameGeometry(a: MouseGeometry | null, b: MouseGeometry): boolean {
-	return a !== null && a.cellWidth == b.cellWidth && a.cellHeight == b.cellHeight && a.width == b.width
-		&& a.height == b.height;
-}
-
 // x and y are surface pixels with the grid at the origin.
 export function mouseReport(
 	this vt: Vt,
@@ -1045,7 +1029,8 @@ export function mouseReport(
 		ghostty_mouse_encoder_setopt_from_terminal(encoder, vt.terminal);
 		m.signature = signature;
 	}
-	if (!sameGeometry(m.geometry, g)) {
+	const known = m.geometry;
+	if (known === null || known != g) {
 		let size: GhosttyMouseEncoderSize = {
 			size: sizeof GhosttyMouseEncoderSize,
 			screen_width: g.width as uint32,
@@ -1125,17 +1110,18 @@ function graphemesOf(
 	count: uint32,
 	ref extra: Vec<uint32>,
 ): Result<uint32, VtError> {
+	const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
 	if (count <= MAX_GRAPHEMES) {
 		let graphemes: Graphemes = { cp: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
-		const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
 		if (!ok(cellGraphemes(cells, bufKey, graphemes))) { return Result.err(VtError.ReadFailed); }
 		for (let i = 1; i < (count as int32); i++) { extra.push(graphemes.cp[i]); }
 		return Result.ok(graphemes.cp[0]);
 	}
 	if (count > MAX_CELL_EXTRA) { return Result.err(VtError.GraphemeTooLong); }
 	let all: Vec<uint32> = new Array(count as int32);
-	const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
-	if (!ok(cellGraphemesInto(cells, bufKey, all as Span<uint32> as Ptr<uint32>))) { return Result.err(VtError.ReadFailed); }
+	if (!ok(cellGraphemesInto(cells, bufKey, all as Span<uint32> as Ptr<uint32>))) {
+		return Result.err(VtError.ReadFailed);
+	}
 	for (let i = 1; i < (count as int32); i++) { extra.push(all[i]); }
 	return Result.ok(all[0]);
 }
@@ -1236,11 +1222,16 @@ function readRow(
 	return Result.ok(row);
 }
 
-export function rows(this vt: Vt): Result<Vec<Row>, VtError> {
-	const colors = try vt.palette();
+function rowIterator(this vt: Vt): Result<GhosttyRenderStateRowIterator, VtError> {
 	let iterator = vt.rows;
 	const key = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR;
 	if (!ok(stateRowIterator(vt.state, key, iterator))) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(iterator);
+}
+
+export function rows(this vt: Vt): Result<Vec<Row>, VtError> {
+	const colors = try vt.palette();
+	const iterator = try vt.rowIterator();
 	let out: Vec<Row> = [];
 	let y = 0;
 	while (ghostty_render_state_row_iterator_next(iterator)) {
@@ -1252,9 +1243,7 @@ export function rows(this vt: Vt): Result<Vec<Row>, VtError> {
 
 export function dirtyRows(this vt: Vt): Result<Vec<Row>, VtError> {
 	const colors = try vt.palette();
-	let iterator = vt.rows;
-	const key = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR;
-	if (!ok(stateRowIterator(vt.state, key, iterator))) { return Result.err(VtError.ReadFailed); }
+	const iterator = try vt.rowIterator();
 	let out: Vec<Row> = [];
 	let y: uint16 = 0;
 	while (ghostty_render_state_row_iterator_next_dirty(iterator, y)) {
@@ -1294,10 +1283,15 @@ export function lines(this vt: Vt): Result<Vec<string>, VtError> {
 	return Result.ok(out);
 }
 
-export function scrollOffset(this vt: Vt): Result<int32, VtError> {
+function scrollbar(this vt: Vt): Result<GhosttyTerminalScrollbar, VtError> {
 	let bar: GhosttyTerminalScrollbar;
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
 	if (!ok(terminalScrollbar(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(bar);
+}
+
+export function scrollOffset(this vt: Vt): Result<int32, VtError> {
+	const bar = try vt.scrollbar();
 	return Result.ok(bar.offset as int32);
 }
 
@@ -1586,18 +1580,15 @@ export function scrollLines(this vt: Vt, rows: int32): void {
 }
 
 export function scrollPages(this vt: Vt, pages: int32): Result<Vt, VtError> {
-	let bar: GhosttyTerminalScrollbar;
-	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
-	if (!ok(terminalScrollbar(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
+	const bar = try vt.scrollbar();
 	const delta = (pages as int64) * (bar.len as int64);
 	vtScroll(vt.terminal, GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_DELTA, delta);
 	return Result.ok(vt);
 }
 
 export function jumpToPrompt(this vt: Vt, delta: int32): Result<boolean, VtError> {
-	let bar: GhosttyTerminalScrollbar;
-	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
-	if (delta == 0 || !ok(terminalScrollbar(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
+	if (delta == 0) { return Result.err(VtError.ReadFailed); }
+	const bar = try vt.scrollbar();
 	const step: int64 = delta < 0 ? -1 : 1;
 	for (let y = (bar.offset as int64) + step; y >= 0 && y < (bar.total as int64); y += step) {
 		let at: GhosttyGridRef;
@@ -1625,9 +1616,7 @@ export function scrollBottom(this vt: Vt): void {
 }
 
 export function atBottom(this vt: Vt): Result<boolean, VtError> {
-	let bar: GhosttyTerminalScrollbar;
-	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
-	if (!ok(terminalScrollbar(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
+	const bar = try vt.scrollbar();
 	return Result.ok(bar.offset + bar.len >= bar.total);
 }
 
@@ -2104,11 +2093,9 @@ function replyTo(query: string): string {
 	if (!created.ok) { return "create failed"; }
 	const vt = created.value;
 	vt.writeText(query);
-	let buf: Vec<uint8> = new Array(64);
-	const n = vt.replies(buf);
+	const replied = pending(vt);
 	vt.free();
-	if (!n.ok) { return "read failed"; }
-	return ascii(buf[0..n.value]);
+	return replied;
 }
 
 test "the device attributes and the version name Haro as a VT220 with colour and clipboard" {
@@ -2503,9 +2490,7 @@ function encoded(k: Keys, vt: Vt, e: KeyEvent): string {
 	let buf: Vec<uint8> = new Array(64);
 	const r = k.encode(vt, e, buf);
 	if (!r.ok) { return ""; }
-	let out = "";
-	for (let i = 0; i < r.value; i++) { out += String.fromCharCode(buf[i] as int32); }
-	return out;
+	return ascii(buf[0..r.value]);
 }
 
 test "AltGr text reaches the program as the text once the consumed Ctrl+Alt is dropped" {

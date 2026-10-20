@@ -1,5 +1,14 @@
 # Haro
 
+The repository is public (`github.com/metascriptlang/haro`). Tracked text, commit messages
+included, names no terminal or project Haro took a design from, and no path on a developer's
+machine, because a reader of a public repository takes a named source as copied code: describe
+the behaviour itself, and keep design sources and their `file:line` anchors in the arc card under
+`~/metascript/.wt/`. Named as usual: vendored code and test data with their licences
+(libghostty-vt, the conformance fixtures), the protocols Haro speaks (xterm and DEC sequences,
+OSC numbers, the kitty keyboard protocol, win32-input-mode), the OS parts it runs on (ConPTY,
+conhost) and Haro's own stack (Neon, Void, Ion, msc).
+
 ## C or MetaScript
 
 Write Haro's code in `.ms`, calls into C libraries and OS APIs included: declare them with

@@ -1,4 +1,5 @@
 import { Accessor, Setter, createSignal } from "../../../../../../neon/src/core/signal";
+import { flush } from "../../../../../../neon/src/core/runtime";
 import { List, createList } from "../../../../../../neon/src/core/list";
 import { ForList, Show } from "../../../../../../neon/src/macros/ui/flow";
 import { NeonNode } from "../../../../../../neon/src/render/node";
@@ -195,6 +196,7 @@ test "a held paste opens the view with its lines and cancelling closes it" {
 	assert !v.visible();
 	const held: Held = { text: "ls\ncd ..\nrm x", warning: Warning.MultiLine };
 	v.showPending(held, null, 8.4, 960);
+	flush();
 	assert v.visible();
 	assert v.cols() == 88;
 	assert v.code.length() == 3;
@@ -202,18 +204,22 @@ test "a held paste opens the view with its lines and cancelling closes it" {
 	assert v.top.at(0).spans[0].text == "Warning: potentially unsafe paste";
 	assert v.code.at(1).spans[0].text == "cd ..";
 	v.showPending(held, null, 8.4, 960);
+	flush();
 	assert v.code.length() == 3;
 	const next: Held = { text: "a\nb", warning: Warning.MultiLine };
 	v.showPending(next, null, 8.4, 400);
+	flush();
 	assert v.code.length() == 2;
 	assert v.cols() == 37;
 	v.showPending(null, null, 8.4, 960);
+	flush();
 	assert !v.visible();
 }
 
 test "a clipboard read opens the view with its own labels and closes it again" {
 	const v = createPasteDialog();
 	v.showPending(null, "secret\ntoken", 8.4, 960);
+	flush();
 	assert v.visible();
 	assert v.top.at(0).spans[0].text == "Authorize clipboard access";
 	assert v.code.length() == 2;
@@ -221,7 +227,9 @@ test "a clipboard read opens the view with its own labels and closes it again" {
 	assert v.cancelLabel() == "Deny (Esc)";
 	const held: Held = { text: "a\nb", warning: Warning.MultiLine };
 	v.showPending(held, "secret", 8.4, 960);
+	flush();
 	assert v.confirmLabel() == "Paste anyway (Enter)";
 	v.showPending(null, null, 8.4, 960);
+	flush();
 	assert !v.visible();
 }

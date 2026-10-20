@@ -12,11 +12,14 @@ export enum Action {
 	PromptDown,
 }
 
-const SHIFT: int32 = 1;
+export const SHIFT: int32 = 1;
 export const CTRL: int32 = 2;
 const ALT: int32 = 4;
 const SUPER: int32 = 8;
 const CHORD: int32 = SHIFT | CTRL | ALT | SUPER;
+const CAPS_LOCK: int32 = 16;
+const NUM_LOCK: int32 = 32;
+const SHIFT_RIGHT: int32 = 64;
 
 export function chordOf(mods: number): int32 {
 	return (mods as int32) & CHORD;
@@ -212,14 +215,10 @@ test "a chord needs exactly its modifiers" {
 }
 
 test "lock and side bits do not change the chord" {
-	const capsLock = 16;
-	const numLock = 32;
-	const shiftRight = 64;
-	const ctrlLeftShiftRight = CTRL | shiftRight | SHIFT;
-	assert resolve("ArrowUp", CTRL | SHIFT | numLock, false) == Action.LineUp;
-	assert resolve("ArrowUp", ctrlLeftShiftRight, false) == Action.LineUp;
-	assert resolve("KeyV", CLIPBOARD_MODS | numLock, false) == Action.Paste;
-	assert resolve("Enter", capsLock, false) == Action.Copy;
+	assert resolve("ArrowUp", CTRL | SHIFT | NUM_LOCK, false) == Action.LineUp;
+	assert resolve("ArrowUp", CTRL | SHIFT | SHIFT_RIGHT, false) == Action.LineUp;
+	assert resolve("KeyV", CLIPBOARD_MODS | NUM_LOCK, false) == Action.Paste;
+	assert resolve("Enter", CAPS_LOCK, false) == Action.Copy;
 }
 
 test "shift page keys scroll the primary screen and reach a full-screen app on the alternate" {
@@ -285,7 +284,7 @@ test "a keybind's text answers exactly its chord, side and lock bits aside" {
 		},
 	];
 	assert textOf(bindFor(binds, "Enter", SHIFT, false)) == "a";
-	assert textOf(bindFor(binds, "Enter", SHIFT | 64 | 32, true)) == "a";
+	assert textOf(bindFor(binds, "Enter", SHIFT | SHIFT_RIGHT | NUM_LOCK, true)) == "a";
 	assert bindFor(binds, "Enter", 0, false) === null;
 	assert bindFor(binds, "Enter", SHIFT | CTRL, false) === null;
 	assert textOf(bindFor(binds, "KeyH", CTRL | SHIFT, false)) == "b";

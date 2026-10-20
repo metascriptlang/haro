@@ -1,4 +1,4 @@
-import { Action, CLIPBOARD_MODS, CTRL, chordOf, resolve } from "./bindings";
+import { Action, CLIPBOARD_MODS, CTRL, SHIFT, chordOf, resolve } from "./bindings";
 
 export enum Warning {
 	None,
@@ -197,14 +197,14 @@ test "enter and the paste chords confirm, escape cancels and everything else is 
 	assert replyTo("NumpadEnter", 0) == Reply.Confirm;
 	assert replyTo("KeyV", CLIPBOARD_MODS) == Reply.Confirm;
 	when (!macos) {
-		assert replyTo("Insert", 1) == Reply.Confirm;
+		assert replyTo("Insert", SHIFT) == Reply.Confirm;
 	}
 	assert replyTo("Escape", 0) == Reply.Cancel;
-	assert replyTo("Enter", 1) == Reply.Ignore;
-	assert replyTo("Escape", 2) == Reply.Ignore;
+	assert replyTo("Enter", SHIFT) == Reply.Ignore;
+	assert replyTo("Escape", CTRL) == Reply.Ignore;
 	assert replyTo("KeyV", 0) == Reply.Ignore;
 	assert replyTo("KeyC", CLIPBOARD_MODS) == Reply.Ignore;
-	assert replyTo("ShiftLeft", 1) == Reply.Ignore;
+	assert replyTo("ShiftLeft", SHIFT) == Reply.Ignore;
 }
 
 test "words wrap at the column count and never split" {
@@ -255,8 +255,8 @@ test "a clipboard read is denied by escape or enter and allowed only by ctrl ent
 	assert replyToRead("Escape", 0) == Reply.Cancel;
 	assert replyToRead("Enter", 0) == Reply.Cancel;
 	assert replyToRead("NumpadEnter", 0) == Reply.Cancel;
-	assert replyToRead("Enter", 2) == Reply.Confirm;
-	assert replyToRead("Enter", 3) == Reply.Ignore;
+	assert replyToRead("Enter", CTRL) == Reply.Confirm;
+	assert replyToRead("Enter", CTRL | SHIFT) == Reply.Ignore;
 	assert replyToRead("KeyV", CLIPBOARD_MODS) == Reply.Ignore;
 	assert replyToRead("KeyY", 0) == Reply.Ignore;
 }

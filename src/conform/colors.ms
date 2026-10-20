@@ -1,7 +1,7 @@
 import { rgb } from "./palette";
 import { Screen, blankScreen } from "./screen";
 
-function colorAt(s: Screen, y: int32): string {
+function firstSpanColor(s: Screen, y: int32): string {
 	const spans = s.spans(y);
 	if (spans.length == 0 || spans[0].style === undefined) { return "<none>"; }
 	const c = spans[0].style!.color;
@@ -12,15 +12,15 @@ test "an OSC 4 palette change repaints the cells that use the entry, OSC 104 put
 	const s = blankScreen(10, 3);
 	assert s !== null;
 	if (s !== null) {
-		assert s.step("\x1b[31mr\x1b[0m\r\n\x1b[41m \x1b[0m");
-		assert colorAt(s, 0) == "#cc6666";
-		assert s.step("\x1b]4;1;rgb:00/ff/00\x07");
-		assert colorAt(s, 0) == "#00ff00";
+		assert s.feedsInStep("\x1b[31mr\x1b[0m\r\n\x1b[41m \x1b[0m");
+		assert firstSpanColor(s, 0) == "#cc6666";
+		assert s.feedsInStep("\x1b]4;1;rgb:00/ff/00\x07");
+		assert firstSpanColor(s, 0) == "#00ff00";
 		assert s.spans(1)[0].style!.backgroundColor == "#00ff00";
-		assert s.step("\x1b]104;1\x07");
-		assert colorAt(s, 0) == "#cc6666";
-		assert s.step("\x1b]4;1;rgb:12/34/56\x07\x1b]104\x07");
-		assert colorAt(s, 0) == "#cc6666";
+		assert s.feedsInStep("\x1b]104;1\x07");
+		assert firstSpanColor(s, 0) == "#cc6666";
+		assert s.feedsInStep("\x1b]4;1;rgb:12/34/56\x07\x1b]104\x07");
+		assert firstSpanColor(s, 0) == "#cc6666";
 		s.close();
 	}
 }
@@ -31,15 +31,15 @@ test "a new default colour (OSC 10, OSC 11, DECSCNM) repaints rows already drawn
 	const reverse = blankScreen(10, 3);
 	assert fg !== null && bg !== null && reverse !== null;
 	if (fg !== null && bg !== null && reverse !== null) {
-		assert fg.step("abc\r\n");
+		assert fg.feedsInStep("abc\r\n");
 		assert fg.feed("\x1b]10;rgb:ff/00/00\x07").ok;
-		assert colorAt(fg, 0) == "#ff0000";
+		assert firstSpanColor(fg, 0) == "#ff0000";
 		assert fg.mismatch() == "";
-		assert bg.step("abc\x1b[44mb\x1b[0m");
+		assert bg.feedsInStep("abc\x1b[44mb\x1b[0m");
 		assert bg.feed("\x1b]11;rgb:10/10/10\x07").ok;
 		assert bg.mismatch() == "";
 		assert bg.spans(0)[0].style!.backgroundColor === undefined;
-		assert reverse.step("abc\r\n");
+		assert reverse.feedsInStep("abc\r\n");
 		assert reverse.feed("\x1b[?5h").ok;
 		assert reverse.mismatch() == "";
 		fg.close();
@@ -78,19 +78,19 @@ test "erasing, inserting and deleting fill the vacated cells with the current ba
 		index !== null && ech !== null && ich !== null &&
 		el !== null && ed !== null && dl !== null
 	) {
-		assert index.step("\x1b[5;1HA" + bg + "\x1bD");
+		assert index.feedsInStep("\x1b[5;1HA" + bg + "\x1bD");
 		assert index.lines() == "\n\n\nA\n";
 		assert redExactly(index, 4, 0, 5);
-		assert ech.step("ABC\x1b[1;1H" + bg + "\x1b[2X");
+		assert ech.feedsInStep("ABC\x1b[1;1H" + bg + "\x1b[2X");
 		assert ech.text(0) == "  C" && redExactly(ech, 0, 0, 2);
-		assert ich.step("ABC\x1b[1;1H" + bg + "\x1b[2@");
+		assert ich.feedsInStep("ABC\x1b[1;1H" + bg + "\x1b[2@");
 		assert ich.text(0) == "  ABC" && redExactly(ich, 0, 0, 2);
-		assert el.step("ABCDE\x1b[1;2H" + bg + "\x1b[K");
+		assert el.feedsInStep("ABCDE\x1b[1;2H" + bg + "\x1b[K");
 		assert el.text(0) == "A" && redExactly(el, 0, 1, 4);
-		assert ed.step("ABC\r\nDEF\r\nGHI\x1b[2;2H" + bg + "\x1b[J");
+		assert ed.feedsInStep("ABC\r\nDEF\r\nGHI\x1b[2;2H" + bg + "\x1b[J");
 		assert ed.lines() == "ABC\nD\n\n\n";
 		assert redExactly(ed, 1, 1, 4) && redExactly(ed, 2, 0, 5) && redExactly(ed, 4, 0, 5);
-		assert dl.step("ABC\r\nDEF\r\nGHI\x1b[2;2H" + bg + "\x1b[M");
+		assert dl.feedsInStep("ABC\r\nDEF\r\nGHI\x1b[2;2H" + bg + "\x1b[M");
 		assert dl.lines() == "ABC\nGHI\n\n\n";
 		assert redExactly(dl, 4, 0, 5);
 		index.close();

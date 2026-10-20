@@ -3,7 +3,7 @@ import { Screen, blankScreen } from "./screen";
 
 const GRAPHEMES_ON = "\x1b[?2027h";
 
-function run(cols: int32, rows: int32, bytes: string): Screen | null {
+function screenAfter(cols: int32, rows: int32, bytes: string): Screen | null {
 	const s = blankScreen(cols, rows);
 	if (s === null) { return null; }
 	if (!s.feed(bytes).ok) {
@@ -14,27 +14,27 @@ function run(cols: int32, rows: int32, bytes: string): Screen | null {
 }
 
 test "a wide character is one unit of text on two cells and moves the cursor two columns" {
-	const s = run(6, 2, "\u{1F600}a");
+	const s = screenAfter(6, 2, "\u{1F600}a");
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "\u{1F600}a";
 		assert s.cursorAt(3, 0);
 		s.close();
 	}
-	const narrow = run(6, 2, "中a\x1b[1;6Hz\x1b[1;4H");
+	const narrow = screenAfter(6, 2, "中a\x1b[1;6Hz\x1b[1;4H");
 	assert narrow !== null;
 	if (narrow !== null) {
-		assert narrow.raw(0) == "中a  z";
+		assert narrow.untrimmedText(0) == "中a  z";
 		assert narrow.cursorAt(3, 0);
 		narrow.close();
 	}
 }
 
 test "a wide character that does not fit the last column wraps whole and leaves a blank behind" {
-	const s = run(10, 3, "\x1b[1;10H\u{1F600}");
+	const s = screenAfter(10, 3, "\x1b[1;10H\u{1F600}");
 	assert s !== null;
 	if (s !== null) {
-		assert s.raw(0) == "";
+		assert s.untrimmedText(0) == "";
 		assert s.text(1) == "\u{1F600}";
 		assert s.cursorAt(2, 1);
 		s.close();
@@ -42,8 +42,8 @@ test "a wide character that does not fit the last column wraps whole and leaves 
 }
 
 test "a narrow character over half a wide one blanks the other half" {
-	const head = run(80, 2, "\u{1F600}\x1b[1;1HA");
-	const tail = run(5, 5, "橋\x1b[1;2HX");
+	const head = screenAfter(80, 2, "\u{1F600}\x1b[1;1HA");
+	const tail = screenAfter(5, 5, "橋\x1b[1;2HX");
 	assert head !== null && tail !== null;
 	if (head !== null && tail !== null) {
 		assert head.text(0) == "A";
@@ -55,7 +55,7 @@ test "a narrow character over half a wide one blanks the other half" {
 }
 
 test "overwriting a wide character at the start of a row leaves the row above whole" {
-	const s = run(10, 3, "中".repeat(10) + "\x1b[2;1HA");
+	const s = screenAfter(10, 3, "中".repeat(10) + "\x1b[2;1HA");
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "中".repeat(5);
@@ -65,7 +65,7 @@ test "overwriting a wide character at the start of a row leaves the row above wh
 }
 
 test "a wide character cannot be drawn in a one-column terminal" {
-	const s = run(1, 2, "\u{1F600}");
+	const s = screenAfter(1, 2, "\u{1F600}");
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "";
@@ -75,8 +75,8 @@ test "a wide character cannot be drawn in a one-column terminal" {
 }
 
 test "with wraparound off a wide character that does not fit is dropped" {
-	const oneSpace = run(5, 5, "\x1b[?7lAAAA\u{1F6A8}");
-	const noSpace = run(5, 5, "\x1b[?7lAAAAA\u{1F6A8}");
+	const oneSpace = screenAfter(5, 5, "\x1b[?7lAAAA\u{1F6A8}");
+	const noSpace = screenAfter(5, 5, "\x1b[?7lAAAAA\u{1F6A8}");
 	assert oneSpace !== null && noSpace !== null;
 	if (oneSpace !== null && noSpace !== null) {
 		assert oneSpace.text(0) == "AAAA";
@@ -89,14 +89,14 @@ test "with wraparound off a wide character that does not fit is dropped" {
 }
 
 test "a combining mark joins its base in text and in the cursor column" {
-	const s = run(5, 5, GRAPHEMES_ON + "o\u{300}");
+	const s = screenAfter(5, 5, GRAPHEMES_ON + "o\u{300}");
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "o\u{300}";
 		assert s.cursorAt(1, 0);
 		s.close();
 	}
-	const pending = run(2, 2, "xå\u{332}");
+	const pending = screenAfter(2, 2, "xå\u{332}");
 	assert pending !== null;
 	if (pending !== null) {
 		assert pending.text(0) == "xå\u{332}";
@@ -105,7 +105,7 @@ test "a combining mark joins its base in text and in the cursor column" {
 }
 
 test "a zero-width joiner with nothing before it is ignored" {
-	const s = run(80, 4, "\u{200D}");
+	const s = screenAfter(80, 4, "\u{200D}");
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "";
@@ -116,8 +116,8 @@ test "a zero-width joiner with nothing before it is ignored" {
 
 test "a family of emoji joined by ZWJ is one wide cell with grapheme clustering on, six cells off" {
 	const family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
-	const on = run(80, 2, GRAPHEMES_ON + family);
-	const off = run(80, 2, family);
+	const on = screenAfter(80, 2, GRAPHEMES_ON + family);
+	const off = screenAfter(80, 2, family);
 	assert on !== null && off !== null;
 	if (on !== null && off !== null) {
 		assert on.text(0) == family;
@@ -132,9 +132,9 @@ test "a family of emoji joined by ZWJ is one wide cell with grapheme clustering 
 test "a skin tone modifier joins an emoji base and stays apart from a quote" {
 	const hand = "\u{1F44B}";
 	const tone = "\u{1F3FF}";
-	const on = run(5, 3, GRAPHEMES_ON + hand + "\r\n" + hand + tone);
-	const quoted = run(80, 2, GRAPHEMES_ON + "\"" + tone + "\"");
-	const off = run(5, 3, hand + "\r\n" + hand + tone);
+	const on = screenAfter(5, 3, GRAPHEMES_ON + hand + "\r\n" + hand + tone);
+	const quoted = screenAfter(80, 2, GRAPHEMES_ON + "\"" + tone + "\"");
+	const off = screenAfter(5, 3, hand + "\r\n" + hand + tone);
 	assert on !== null && quoted !== null && off !== null;
 	if (on !== null && quoted !== null && off !== null) {
 		assert on.text(0) == hand && on.text(1) == hand + tone && on.text(2) == "";
@@ -152,8 +152,8 @@ test "a skin tone modifier joins an emoji base and stays apart from a quote" {
 test "a flag, a ZWJ sequence with a variation selector and a Hangul jamo run keep every codepoint" {
 	const pirate = "\u{1F3F4}\u{200D}☠\u{FE0F}";
 	const hangul = "ᄒ\u{1161}\u{11AB}";
-	const s = run(5, 2, GRAPHEMES_ON + pirate + "\r\n" + hangul);
-	const off = run(5, 2, pirate + "\r\n" + hangul);
+	const s = screenAfter(5, 2, GRAPHEMES_ON + pirate + "\r\n" + hangul);
+	const off = screenAfter(5, 2, pirate + "\r\n" + hangul);
 	assert s !== null && off !== null;
 	if (s !== null && off !== null) {
 		assert s.text(0) == pirate && s.text(1) == hangul;
@@ -178,10 +178,10 @@ test "VS15 narrows a wide symbol back to one cell" {
 }
 
 test "VS16 widens a narrow symbol at the last column onto the next row" {
-	const s = run(3, 5, GRAPHEMES_ON + "\x1b[2C#\u{FE0F}");
+	const s = screenAfter(3, 5, GRAPHEMES_ON + "\x1b[2C#\u{FE0F}");
 	assert s !== null;
 	if (s !== null) {
-		assert s.raw(0) == "";
+		assert s.untrimmedText(0) == "";
 		assert s.text(1) == "#\u{FE0F}";
 		assert s.cursorAt(2, 1);
 		s.close();
@@ -190,8 +190,8 @@ test "VS16 widens a narrow symbol at the last column onto the next row" {
 
 test "a Devanagari conjunct is one wide cell, also when it widens at the last column" {
 	const conjunct = "क\u{94D}\u{200D}ष";
-	const plain = run(5, 5, GRAPHEMES_ON + conjunct);
-	const edge = run(3, 5, GRAPHEMES_ON + "\x1b[2Cक\u{94D}\u{200D}ष");
+	const plain = screenAfter(5, 5, GRAPHEMES_ON + conjunct);
+	const edge = screenAfter(3, 5, GRAPHEMES_ON + "\x1b[2Cक\u{94D}\u{200D}ष");
 	assert plain !== null && edge !== null;
 	if (plain !== null && edge !== null) {
 		assert plain.text(0) == conjunct;
@@ -205,7 +205,7 @@ test "a Devanagari conjunct is one wide cell, also when it widens at the last co
 }
 
 test "a cell keeps at most 64 marks after its base and the frame still paints" {
-	const s = run(10, 2, "A" + "\u{301}".repeat(100) + "B");
+	const s = screenAfter(10, 2, "A" + "\u{301}".repeat(100) + "B");
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "A" + "\u{301}".repeat(64) + "B";
@@ -219,7 +219,7 @@ test "the glitch text fixture paints as eight capped graphemes whole and in smal
 	const expected = readFile("fixtures/conform/ghostty/glitchRow.txt");
 	assert input.ok && expected.ok;
 	if (input.ok && expected.ok) {
-		const whole = run(30, 30, input.value);
+		const whole = screenAfter(30, 30, input.value);
 		assert whole !== null;
 		if (whole !== null) {
 			assert whole.text(0) == expected.value;
@@ -239,9 +239,9 @@ test "the glitch text fixture paints as eight capped graphemes whole and in smal
 }
 
 test "text wraps at the right margin and scrolls from the last row" {
-	const wrapped = run(5, 40, "helloworldabc12");
-	const soft = run(3, 80, "hello");
-	const scrolled = run(1, 5, "abcdef");
+	const wrapped = screenAfter(5, 40, "helloworldabc12");
+	const soft = screenAfter(3, 80, "hello");
+	const scrolled = screenAfter(1, 5, "abcdef");
 	assert wrapped !== null && soft !== null && scrolled !== null;
 	if (wrapped !== null && soft !== null && scrolled !== null) {
 		assert wrapped.text(0) == "hello" && wrapped.text(1) == "world" &&
@@ -258,7 +258,7 @@ test "text wraps at the right margin and scrolls from the last row" {
 }
 
 test "with wraparound off the last column is overwritten, with it on the text wraps" {
-	const s = run(10, 5, "\x1b[?7l\x1b[2;2Hhello, world!");
+	const s = screenAfter(10, 5, "\x1b[?7l\x1b[2;2Hhello, world!");
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(1) == " hello, w!";
@@ -270,8 +270,12 @@ test "with wraparound off the last column is overwritten, with it on the text wr
 }
 
 test "DEC special graphics maps the line-drawing range, SO and SI switch sets" {
-	const g0 = run(50, 2, "\x1b(0ABCabcdefghijklmnopqrstuvwxyzDEF\r\n\x1b(Bhello");
-	const shifted = run(50, 2, "\x1b)0\x0eSO-ABCabcdefghijklmnopqrstuvwxyzDEF\r\n\x0fSI-hello");
+	const g0 = screenAfter(50, 2, "\x1b(0ABCabcdefghijklmnopqrstuvwxyzDEF\r\n\x1b(Bhello");
+	const shifted = screenAfter(
+		50,
+		2,
+		"\x1b)0\x0eSO-ABCabcdefghijklmnopqrstuvwxyzDEF\r\n\x0fSI-hello",
+	);
 	const drawing = "▒␉␌␍␊°±␤␋┘┐┌└┼⎺⎻─⎼⎽├┤┴┬│≤≥";
 	assert g0 !== null && shifted !== null;
 	if (g0 !== null && shifted !== null) {

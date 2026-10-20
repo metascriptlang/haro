@@ -125,25 +125,25 @@ function firstFailure(
 	compare: Compare,
 	skipRunsRow: int32 | null,
 ): Result<void, string> {
-	const f = try loadFixture(name);
-	const opened = Screen.open(f.cols, f.rows);
+	const fixture = try loadFixture(name);
+	const opened = Screen.open(fixture.cols, fixture.rows);
 	if (!opened.ok) { return Result.err("open failed"); }
 	const s = opened.value;
 	defer s.close();
 	const own = compare == Compare.RunsOwnPalette;
 	if (!s.feed(palettePrelude(own)).ok) { return Result.err("prelude frame failed"); }
-	if (!s.feedChunks(f.input, chunk).ok) { return Result.err("frame failed"); }
+	if (!s.feedChunks(fixture.input, chunk).ok) { return Result.err("frame failed"); }
 	if (!s.sameAsFreshRead()) {
 		return Result.err("grid differs from a fresh read of the screen");
 	}
-	for (let y = 0; y < f.rows; y++) {
-		if (s.text(y) != f.text[y]) {
-			return Result.err(`row ${y}: expected "${f.text[y]}" got "${s.text(y)}"`);
+	for (let y = 0; y < fixture.rows; y++) {
+		if (s.text(y) != fixture.text[y]) {
+			return Result.err(`row ${y}: expected "${fixture.text[y]}" got "${s.text(y)}"`);
 		}
 		if (compare == Compare.Text || (skipRunsRow !== null && y == skipRunsRow)) { continue; }
 		const want = runsText(withoutTrailingEmpty(
-			expectedRuns(f.attrs[y], own),
-			f.text[y].length as int32,
+			expectedRuns(fixture.attrs[y], own),
+			fixture.text[y].length as int32,
 		));
 		const got = runsText(merged(s.runs(y)));
 		if (got != want) { return Result.err(`row ${y} runs: expected ${want}got ${got}`); }

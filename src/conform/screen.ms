@@ -59,7 +59,7 @@ export function feedBytes(this s: Screen, values: int32[]): Result<void, ScreenE
 	return s.paint();
 }
 
-export function step(this s: Screen, bytes: string): boolean {
+export function feedsInStep(this s: Screen, bytes: string): boolean {
 	return s.feed(bytes).ok && s.sameAsFreshRead();
 }
 
@@ -90,7 +90,7 @@ export function close(this s: Screen): void {
 	s.vt.free();
 }
 
-export function raw(this s: Screen, y: int32): string {
+export function untrimmedText(this s: Screen, y: int32): string {
 	return s.grid.at(y).line.text;
 }
 
@@ -159,33 +159,35 @@ export function mismatch(this s: Screen): string {
 	if (!fresh.ok) { return "the fresh read failed"; }
 	const colors = s.vt.palette();
 	if (!colors.ok) { return "the palette read failed"; }
-	const all = fresh.value;
-	if ((all.length as int32) != s.rows) {
-		return `the vt has ${all.length} rows, the screen ${s.rows}`;
+	const vtRows = fresh.value;
+	if ((vtRows.length as int32) != s.rows) {
+		return `the vt has ${vtRows.length} rows, the screen ${s.rows}`;
 	}
 	const at = s.vt.cursor();
 	if (!at.ok) { return "the cursor read failed"; }
-	const c = at.value;
+	const vtCursor = at.value;
 	for (let y = 0; y < s.rows; y++) {
-		const l = all[y].line(c !== null && c.y == y ? c.x : -1, colors.value.bg);
-		if (!l.ok) { return `row ${y}: no line`; }
-		if (l.value.text != s.raw(y)) {
-			return `row ${y}: text [${s.raw(y)}] but the vt has [${l.value.text}]`;
+		const cursorCell = vtCursor !== null && vtCursor.y == y ? vtCursor.x : -1;
+		const vtLine = vtRows[y].line(cursorCell, colors.value.bg);
+		if (!vtLine.ok) { return `row ${y}: no line`; }
+		if (vtLine.value.text != s.untrimmedText(y)) {
+			return `row ${y}: text [${s.untrimmedText(y)}] but the vt has [${vtLine.value.text}]`;
 		}
 		const have = runsText(s.runs(y));
-		const want = runsText(l.value.runs);
+		const want = runsText(vtLine.value.runs);
 		if (have != want) { return `row ${y}: runs ${have} but the vt has ${want}`; }
 		const spans = s.spans(y);
 		let spanned = "";
 		for (const sp of spans) { spanned += sp.text; }
-		if (spanned != s.raw(y) || (spans.length as int32) != (s.runs(y).length as int32)) {
+		const oneSpanPerRun = (spans.length as int32) == (s.runs(y).length as int32);
+		if (spanned != s.untrimmedText(y) || !oneSpanPerRun) {
 			return `row ${y}: spans do not cover the line`;
 		}
 	}
 	const shown = s.cursor;
-	if ((c === null) != (shown === null)) { return "the cursor's presence differs"; }
-	if (c !== null && shown !== null && (c.x != shown.x || c.y != shown.y)) {
-		return `cursor ${shown.x},${shown.y} but the vt has ${c.x},${c.y}`;
+	if ((vtCursor === null) != (shown === null)) { return "the cursor's presence differs"; }
+	if (vtCursor !== null && shown !== null && (vtCursor.x != shown.x || vtCursor.y != shown.y)) {
+		return `cursor ${shown.x},${shown.y} but the vt has ${vtCursor.x},${vtCursor.y}`;
 	}
 	return "";
 }

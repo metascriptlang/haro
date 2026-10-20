@@ -23,7 +23,7 @@ function pick(this r: Rng, list: string[]): string {
 	return list[r.next(list.length as int32)];
 }
 
-function op(r: Rng, cols: int32, rows: int32): string {
+function randomOp(r: Rng, cols: int32, rows: int32): string {
 	return match (r.next(16)) {
 		0 | 1 | 2 => r.pick(WORDS),
 		3 => "\r\n",
@@ -42,10 +42,10 @@ function op(r: Rng, cols: int32, rows: int32): string {
 	};
 }
 
-function stream(seed: int32, cols: int32, rows: int32, ops: int32): string {
+function randomStream(seed: int32, cols: int32, rows: int32, ops: int32): string {
 	const r: Rng = { state: seed as int64 };
 	let out = "";
-	for (let i = 0; i < ops; i++) { out += op(r, cols, rows); }
+	for (let i = 0; i < ops; i++) { out += randomOp(r, cols, rows); }
 	return out;
 }
 
@@ -53,7 +53,7 @@ function failureAfter(s: Screen, painted: Result<void, ScreenError>): string {
 	return painted.ok ? s.mismatch() : "a frame failed";
 }
 
-function report(run: string, failure: string, sent: string): void {
+function reportFailure(run: string, failure: string, sent: string): void {
 	if (failure == "") { return; }
 	const visible = sent.replaceAll("\x1b", "<ESC>")
 		.replaceAll("\r", "<CR>")
@@ -62,20 +62,20 @@ function report(run: string, failure: string, sent: string): void {
 	console.log(`frames: bytes ${visible}`);
 }
 
-function playSeed(seed: int32, cols: int32, rows: int32, ops: int32): string {
+function playInChunks(seed: int32, cols: int32, rows: int32, ops: int32): string {
 	const opened = Screen.open(cols, rows);
 	if (!opened.ok) { return "open failed"; }
 	const s = opened.value;
-	const bytes = stream(seed, cols, rows, ops);
+	const bytes = randomStream(seed, cols, rows, ops);
 	const r: Rng = { state: (seed as int64) * 7 + 3 };
 	const cut = 1 + r.next(40);
 	const failure = failureAfter(s, s.feedChunks(bytes, cut));
-	report(`seed ${seed} ${cols}x${rows} chunk ${cut}`, failure, bytes);
+	reportFailure(`seed ${seed} ${cols}x${rows} chunk ${cut}`, failure, bytes);
 	s.close();
 	return failure;
 }
 
-function playEveryFrame(seed: int32, cols: int32, rows: int32, ops: int32): string {
+function playFramePerOp(seed: int32, cols: int32, rows: int32, ops: int32): string {
 	const opened = Screen.open(cols, rows);
 	if (!opened.ok) { return "open failed"; }
 	const s = opened.value;
@@ -83,31 +83,31 @@ function playEveryFrame(seed: int32, cols: int32, rows: int32, ops: int32): stri
 	let failure = "";
 	let sent = "";
 	for (let i = 0; i < ops && failure == ""; i++) {
-		const piece = op(r, cols, rows);
+		const piece = randomOp(r, cols, rows);
 		sent += piece;
 		failure = failureAfter(s, s.feed(piece));
 	}
-	report(`seed ${seed} ${cols}x${rows} frame per op`, failure, sent);
+	reportFailure(`seed ${seed} ${cols}x${rows} frame per op`, failure, sent);
 	s.close();
 	return failure;
 }
 
 test "a stream cut into frames anywhere paints what a fresh read of the vt shows" {
 	for (let seed = 1; seed <= 150; seed++) {
-		assert playSeed(seed, 20, 6, 80) == "";
+		assert playInChunks(seed, 20, 6, 80) == "";
 	}
 }
 
 test "a frame after every operation paints what a fresh read of the vt shows" {
 	for (let seed = 1; seed <= 100; seed++) {
-		assert playEveryFrame(seed, 12, 5, 60) == "";
+		assert playFramePerOp(seed, 12, 5, 60) == "";
 	}
 }
 
 test "scroll-heavy streams on a tall narrow screen stay in step" {
 	for (let seed = 1000; seed < 1060; seed++) {
-		assert playSeed(seed, 7, 12, 120) == "";
-		assert playEveryFrame(seed, 7, 12, 60) == "";
+		assert playInChunks(seed, 7, 12, 120) == "";
+		assert playFramePerOp(seed, 7, 12, 60) == "";
 	}
 }
 
@@ -134,14 +134,14 @@ function playWithViewportAndResize(seed: int32, ops: int32): string {
 				painted = s.resize(cols, rows);
 			},
 			_ => {
-				const piece = op(r, s.cols, s.rows);
+				const piece = randomOp(r, s.cols, s.rows);
 				sent += piece;
 				painted = s.feed(piece);
 			},
 		}
 		failure = failureAfter(s, painted);
 	}
-	report(`seed ${seed} viewport and resize`, failure, sent);
+	reportFailure(`seed ${seed} viewport and resize`, failure, sent);
 	s.close();
 	return failure;
 }

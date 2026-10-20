@@ -151,13 +151,6 @@ function firstFailure(
 	return Result.ok(null);
 }
 
-function conforms(name: string, chunk: int32, compare: Compare, skipRunsRow: int32 | null): string {
-	const checked = firstFailure(name, chunk, compare, skipRunsRow);
-	if (checked.ok) { return ""; }
-	console.log(`${name} (chunk ${chunk}): ${checked.error}`);
-	return checked.error;
-}
-
 function conformsFramed(
 	name: string,
 	smallChunk: int32,
@@ -166,7 +159,11 @@ function conformsFramed(
 ): string {
 	let failures = "";
 	for (const chunk of [0, 61, smallChunk]) {
-		failures += conforms(name, chunk, compare, skipRunsRow);
+		const checked = firstFailure(name, chunk, compare, skipRunsRow);
+		if (!checked.ok) {
+			console.log(`${name} (chunk ${chunk}): ${checked.error}`);
+			failures += checked.error;
+		}
 	}
 	return failures;
 }

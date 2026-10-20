@@ -39,16 +39,13 @@ function isCsiFinal(c: string): boolean {
 
 function withoutStyles(text: string): string {
 	let out = "";
-	let i = 0;
-	while (i < text.length) {
+	for (let i = 0; i < text.length; i++) {
 		if (text[i] == "\x1b" && i + 1 < text.length && text[i + 1] == "[") {
 			i += 2;
 			while (i < text.length && !isCsiFinal(text[i])) { i++; }
-			i++;
 			continue;
 		}
 		out += text[i];
-		i++;
 	}
 	return out;
 }

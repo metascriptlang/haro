@@ -37,16 +37,23 @@ export function modsMask(mods: BitSet<KeyMod>): uint16 {
 	return (mods as uint32) as uint16;
 }
 
+const DELETE: int32 = 0x7F;
+const MAC_FUNCTION_KEY_LEAD: int32 = 0xEF;
+const MAC_FUNCTION_KEY_SECOND_MIN: int32 = 0x9C;
+const MAC_FUNCTION_KEY_SECOND_MAX: int32 = 0xA3;
+
 export function textSafe(text: string): boolean {
 	if (text == "") { return false; }
 	const bytes: Readonly<Span<char>> = text;
 	const n = text.byteLength as int32;
 	for (let i = 0; i < n; i++) {
 		const b = bytes[i] as int32;
-		if (b < 0x20 || b == 0x7F) { return false; }
-		if (b == 0xEF && i + 1 < n) {
-			const after = bytes[i + 1] as int32;
-			if (after >= 0x9C && after <= 0xA3) { return false; }
+		if (b < 0x20 || b == DELETE) { return false; }
+		if (b == MAC_FUNCTION_KEY_LEAD && i + 1 < n) {
+			const second = bytes[i + 1] as int32;
+			if (second >= MAC_FUNCTION_KEY_SECOND_MIN && second <= MAC_FUNCTION_KEY_SECOND_MAX) {
+				return false;
+			}
 		}
 	}
 	return true;
@@ -66,7 +73,7 @@ test "macOS private-use function key codes are not passed on as text" {
 	assert textSafe(String.fromCharCode(0xF00F));
 }
 
-test "a key whose Ctrl+Alt the layout consumed for AltGr text drops both, and a plain Ctrl+Alt keeps them" {
+test "Ctrl+Alt the layout consumed for AltGr text is dropped, and a plain Ctrl+Alt is kept" {
 	const none = 0 as BitSet<KeyMod>;
 	const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt).incl(KeyMod.AltRight);
 	const altGr: KeyEvent = {

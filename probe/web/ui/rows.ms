@@ -6,7 +6,7 @@ import { TextSpan } from "../../../../neon/src/render/hostTypes";
 
 export const FONT_PATH = "assets/JetBrainsMonoNL-Regular.ttf";
 export const BACKGROUND = "#0c0c0c";
-export const FOREGROUND = "#cccccc";
+const FOREGROUND = "#cccccc";
 export const PADDING: number = 6;
 const FONT_SIZE: number = 14;
 

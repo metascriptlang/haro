@@ -30,7 +30,6 @@ enum BenchError {
 	Plan,
 	Cursor,
 	Palette,
-	Apply,
 }
 
 struct Totals {

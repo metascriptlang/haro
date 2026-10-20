@@ -57,6 +57,4 @@ test "spans update" {
 		{ text: " plain", style: plain },
 	]);
 	dump("after set");
-	console.log(`fresh:`);
-
 }

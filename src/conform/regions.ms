@@ -1,5 +1,5 @@
 import { defaultIndexed } from "./palette";
-import { Screen } from "./screen";
+import { Screen, blankScreen } from "./screen";
 import { Rgb, size } from "../vt/vt";
 
 function filled(s: Screen, y: int32, units: int32, bg: Rgb): boolean {
@@ -9,17 +9,6 @@ function filled(s: Screen, y: int32, units: int32, bg: Rgb): boolean {
 		total += r.units;
 	}
 	return total == units;
-}
-
-function open(cols: int32, rows: int32): Screen | null {
-	const opened = Screen.open(cols, rows);
-	if (!opened.ok) { return null; }
-	return opened.value;
-}
-
-function cursorAt(s: Screen, x: int32, y: int32): boolean {
-	const c = s.cursor;
-	return c !== null && c.x == x && c.y == y;
 }
 
 function cup(col: int32, row: int32): string {
@@ -41,12 +30,12 @@ function everything(s: Screen): string {
 }
 
 test "CUP clamps to the screen and treats 0 as 1" {
-	const s = open(80, 80);
-	const small = open(5, 5);
+	const s = blankScreen(80, 80);
+	const small = blankScreen(5, 5);
 	assert s !== null && small !== null;
 	if (s !== null && small !== null) {
-		assert s.step("\x1b[0;0H") && cursorAt(s, 0, 0);
-		assert s.step("\x1b[81;81H") && cursorAt(s, 79, 79);
+		assert s.step("\x1b[0;0H") && s.cursorAt(0, 0);
+		assert s.step("\x1b[81;81H") && s.cursorAt(79, 79);
 		assert small.step("\x1b[500;500HX");
 		assert small.text(4) == "    X";
 		assert small.text(0) == "";
@@ -56,24 +45,24 @@ test "CUP clamps to the screen and treats 0 as 1" {
 }
 
 test "CUP, HVP, CHA and VPA move the cursor to one-based places" {
-	const s = open(4, 3);
+	const s = blankScreen(4, 3);
 	assert s !== null;
 	if (s !== null) {
-		assert s.step(cup(1, 1)) && cursorAt(s, 1, 1);
-		assert s.step("\x1b[3;3f") && cursorAt(s, 2, 2);
-		assert s.step("\x1b[G") && cursorAt(s, 0, 2);
-		assert s.step("\x1b[2G") && cursorAt(s, 1, 2);
-		assert s.step("\x1b[0G") && cursorAt(s, 0, 2);
-		assert s.step("\x1b[100G") && cursorAt(s, 3, 2);
-		assert s.step("\x1b[d") && cursorAt(s, 3, 0);
-		assert s.step("\x1b[2d") && cursorAt(s, 3, 1);
+		assert s.step(cup(1, 1)) && s.cursorAt(1, 1);
+		assert s.step("\x1b[3;3f") && s.cursorAt(2, 2);
+		assert s.step("\x1b[G") && s.cursorAt(0, 2);
+		assert s.step("\x1b[2G") && s.cursorAt(1, 2);
+		assert s.step("\x1b[0G") && s.cursorAt(0, 2);
+		assert s.step("\x1b[100G") && s.cursorAt(3, 2);
+		assert s.step("\x1b[d") && s.cursorAt(3, 0);
+		assert s.step("\x1b[2d") && s.cursorAt(3, 1);
 		s.close();
 	}
 }
 
 test "REP repeats the last character, IRM inserts instead of overwriting" {
-	const rep = open(4, 3);
-	const irm = open(8, 3);
+	const rep = blankScreen(4, 3);
+	const irm = blankScreen(8, 3);
 	assert rep !== null && irm !== null;
 	if (rep !== null && irm !== null) {
 		assert rep.step("h" + cup(1, 0) + "\x1b[2ba");
@@ -86,9 +75,9 @@ test "REP repeats the last character, IRM inserts instead of overwriting" {
 }
 
 test "ICH, ECH and DCH shift or blank cells from the cursor" {
-	const ich = open(4, 3);
-	const ech = open(4, 3);
-	const dch = open(12, 1);
+	const ich = blankScreen(4, 3);
+	const ech = blankScreen(4, 3);
+	const dch = blankScreen(12, 1);
 	assert ich !== null && ech !== null && dch !== null;
 	if (ich !== null && ech !== null && dch !== null) {
 		assert ich.step("hey!wat?" + cup(1, 0) + "\x1b[2@");
@@ -110,7 +99,7 @@ test "ICH, ECH and DCH shift or blank cells from the cursor" {
 }
 
 test "deleting characters fills the vacated cells with the current background" {
-	const s = open(8, 1);
+	const s = blankScreen(8, 1);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("\x1b[40m\x1b[Kfoo\x1b[2P");
@@ -121,7 +110,7 @@ test "deleting characters fills the vacated cells with the current background" {
 }
 
 test "ED erases below the cursor, and 2J fills the whole screen with the current background" {
-	const s = open(3, 3);
+	const s = blankScreen(3, 3);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("abc\r\ndef\r\nghi" + cup(1, 2) + "\x1b[J");
@@ -136,7 +125,7 @@ test "ED erases below the cursor, and 2J fills the whole screen with the current
 }
 
 test "ED 3 erases the scrollback and the viewport is all that is left" {
-	const s = open(3, 3);
+	const s = blankScreen(3, 3);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("abc\r\ndef\r\nghi\r\n111\r\n222\r\na");
@@ -150,8 +139,8 @@ test "ED 3 erases the scrollback and the viewport is all that is left" {
 }
 
 test "inserting and deleting lines inside left and right margins moves only the margin columns" {
-	const up = open(5, 5);
-	const down = open(5, 5);
+	const up = blankScreen(5, 5);
+	const down = blankScreen(5, 5);
 	assert up !== null && down !== null;
 	if (up !== null && down !== null) {
 		const rows = "111\r\n222\r\n333\r\n44444\r\n555";
@@ -168,7 +157,7 @@ test "inserting and deleting lines inside left and right margins moves only the 
 }
 
 test "DL inside shrinking and growing scroll regions" {
-	const s = open(3, 5);
+	const s = blankScreen(3, 5);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("111\r\n222\r\n333\r\n444\r\n555");
@@ -185,12 +174,12 @@ test "DL inside shrinking and growing scroll regions" {
 }
 
 test "DL on a one-column screen deletes from the cursor row" {
-	const s = open(1, 3);
+	const s = blankScreen(1, 3);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("a\r\nb\r\nc" + cup(0, 1) + "\x1b[M");
 		assert s.lines() == "a\nc\n";
-		assert cursorAt(s, 0, 1);
+		assert s.cursorAt(0, 1);
 		assert s.step(cup(0, 0) + "\x1b[2M");
 		assert s.lines() == "\n\n";
 		s.close();
@@ -198,8 +187,8 @@ test "DL on a one-column screen deletes from the cursor row" {
 }
 
 test "reverse index moves up, and scrolls the screen down at the top row" {
-	const s = open(1, 3);
-	const top = open(1, 3);
+	const s = blankScreen(1, 3);
+	const top = blankScreen(1, 3);
 	assert s !== null && top !== null;
 	if (s !== null && top !== null) {
 		assert s.step("1\n\x1bM\n");
@@ -212,7 +201,7 @@ test "reverse index moves up, and scrolls the screen down at the top row" {
 }
 
 test "output scrolls the screen and keeps the lines in scrollback" {
-	const s = open(1, 2);
+	const s = blankScreen(1, 2);
 	assert s !== null;
 	if (s !== null) {
 		for (let i = 1; i <= 8; i++) { assert s.step(`${i}\n`); }
@@ -223,7 +212,7 @@ test "output scrolls the screen and keeps the lines in scrollback" {
 }
 
 test "a region that starts on the first row pushes its top line into scrollback" {
-	const s = open(1, 3);
+	const s = blankScreen(1, 3);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("1\n2\n3\n4\n");
@@ -242,7 +231,7 @@ test "a region that starts on the first row pushes its top line into scrollback"
 }
 
 test "a region below the first row scrolls in place and never touches scrollback" {
-	const s = open(1, 5);
+	const s = blankScreen(1, 5);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("1\n2\n3\n4\n5");
@@ -263,7 +252,7 @@ test "a region below the first row scrolls in place and never touches scrollback
 }
 
 test "the alternate screen scrolls without scrollback and gives the main screen back" {
-	const s = open(1, 5);
+	const s = blankScreen(1, 5);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("M\no\nn\nk\ne\ny");
@@ -284,7 +273,7 @@ test "the alternate screen scrolls without scrollback and gives the main screen 
 }
 
 test "DECCOLM with mode 40 on resizes the terminal and the rows follow" {
-	const s = open(5, 5);
+	const s = blankScreen(5, 5);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("ABCDE\x1b[?3l");
@@ -293,7 +282,7 @@ test "DECCOLM with mode 40 on resizes the terminal and the rows follow" {
 		const size = s.vt.size();
 		assert size.ok && size.value[0] == 80;
 		assert s.lines() == "\n\n\n\n";
-		assert cursorAt(s, 0, 0);
+		assert s.cursorAt(0, 0);
 		assert s.step("x");
 		assert s.text(0) == "x";
 		s.close();
@@ -307,7 +296,7 @@ function numbered(from: int32, to: int32): string {
 }
 
 test "a flood past the scrollback limit leaves the last rows right and the frames in step" {
-	const s = open(40, 24);
+	const s = blankScreen(40, 24);
 	assert s !== null;
 	if (s !== null) {
 		const lines = 120000;
@@ -326,7 +315,7 @@ test "a flood past the scrollback limit leaves the last rows right and the frame
 }
 
 test "widening and narrowing reflows a wrapped line and keeps hard breaks" {
-	const s = open(4, 8);
+	const s = blankScreen(4, 8);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("111\r\n2222aa\r\n333\r\n");
@@ -346,7 +335,7 @@ test "widening and narrowing reflows a wrapped line and keeps hard breaks" {
 }
 
 test "a line that fills the width survives being widened, and rows can shrink and grow around it" {
-	const s = open(20, 4);
+	const s = blankScreen(20, 4);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("some long long text");
@@ -362,9 +351,9 @@ test "a line that fills the width survives being widened, and rows can shrink an
 }
 
 test "a drawing character set, a hidden cursor and a reset before a wrap do not stop the reflow" {
-	const draw = open(4, 4);
-	const hidden = open(4, 4);
-	const reset = open(4, 4);
+	const draw = blankScreen(4, 4);
+	const hidden = blankScreen(4, 4);
+	const reset = blankScreen(4, 4);
 	assert draw !== null && hidden !== null && reset !== null;
 	if (draw !== null && hidden !== null && reset !== null) {
 		assert draw.step("\x1b(0qqqq\x1b(B\r\nSS\r\n") && draw.resize(6, 4).ok;
@@ -381,20 +370,20 @@ test "a drawing character set, a hidden cursor and a reset before a wrap do not 
 }
 
 test "C0 controls move the cursor without writing: BS, LF, CR and tab stops" {
-	const bs = open(4, 3);
-	const lf = open(10, 3);
-	const cr = open(10, 3);
-	const tab = open(25, 3);
+	const bs = blankScreen(4, 3);
+	const lf = blankScreen(10, 3);
+	const cr = blankScreen(10, 3);
+	const tab = blankScreen(25, 3);
 	assert bs !== null && lf !== null && cr !== null && tab !== null;
 	if (bs !== null && lf !== null && cr !== null && tab !== null) {
-		assert bs.step("\b") && cursorAt(bs, 0, 0);
-		assert bs.step("ab\b") && cursorAt(bs, 1, 0);
-		assert lf.step("hello\n") && cursorAt(lf, 5, 1);
-		assert cr.step("hello\r") && cursorAt(cr, 0, 0);
-		assert tab.step("\t") && cursorAt(tab, 8, 0);
-		assert tab.step("\t") && cursorAt(tab, 16, 0);
-		assert tab.step("\t") && cursorAt(tab, 24, 0);
-		assert tab.step("\t") && cursorAt(tab, 24, 0);
+		assert bs.step("\b") && bs.cursorAt(0, 0);
+		assert bs.step("ab\b") && bs.cursorAt(1, 0);
+		assert lf.step("hello\n") && lf.cursorAt(5, 1);
+		assert cr.step("hello\r") && cr.cursorAt(0, 0);
+		assert tab.step("\t") && tab.cursorAt(8, 0);
+		assert tab.step("\t") && tab.cursorAt(16, 0);
+		assert tab.step("\t") && tab.cursorAt(24, 0);
+		assert tab.step("\t") && tab.cursorAt(24, 0);
 		bs.close();
 		lf.close();
 		cr.close();
@@ -403,17 +392,17 @@ test "C0 controls move the cursor without writing: BS, LF, CR and tab stops" {
 }
 
 test "IND and NEL scroll at the bottom, NEL also returns to the first column" {
-	const ind = open(4, 4);
-	const nel = open(4, 4);
+	const ind = blankScreen(4, 4);
+	const nel = blankScreen(4, 4);
 	assert ind !== null && nel !== null;
 	if (ind !== null && nel !== null) {
-		assert ind.step("a\r\nb\x1bD") && cursorAt(ind, 1, 2);
+		assert ind.step("a\r\nb\x1bD") && ind.cursorAt(1, 2);
 		assert ind.lines() == "a\nb\n\n";
-		assert ind.step("\x1bD") && cursorAt(ind, 1, 3);
-		assert ind.step("\x1bD") && cursorAt(ind, 1, 3);
+		assert ind.step("\x1bD") && ind.cursorAt(1, 3);
+		assert ind.step("\x1bD") && ind.cursorAt(1, 3);
 		assert ind.lines() == "b\n\n\n";
-		assert nel.step("a\r\nb\x1bE") && cursorAt(nel, 0, 2);
-		assert nel.step("\x1bE\x1bE") && cursorAt(nel, 0, 3);
+		assert nel.step("a\r\nb\x1bE") && nel.cursorAt(0, 2);
+		assert nel.step("\x1bE\x1bE") && nel.cursorAt(0, 3);
 		assert nel.lines() == "b\n\n\n";
 		ind.close();
 		nel.close();
@@ -421,32 +410,32 @@ test "IND and NEL scroll at the bottom, NEL also returns to the first column" {
 }
 
 test "RI moves up one row at a time and scrolls the rows down at the top" {
-	const s = open(2, 4);
+	const s = blankScreen(2, 4);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("a\r\nb\r\nc\r\nd.");
-		assert s.lines() == "a\nb\nc\nd." && cursorAt(s, 1, 3);
-		assert s.step("\x1bM") && cursorAt(s, 1, 2);
-		assert s.step("\x1bM") && cursorAt(s, 1, 1);
-		assert s.step("\x1bM") && cursorAt(s, 1, 0);
-		assert s.step("\x1bM") && cursorAt(s, 1, 0);
+		assert s.lines() == "a\nb\nc\nd." && s.cursorAt(1, 3);
+		assert s.step("\x1bM") && s.cursorAt(1, 2);
+		assert s.step("\x1bM") && s.cursorAt(1, 1);
+		assert s.step("\x1bM") && s.cursorAt(1, 0);
+		assert s.step("\x1bM") && s.cursorAt(1, 0);
 		assert s.lines() == "\na\nb\nc";
 		s.close();
 	}
 }
 
 test "a tab stop set with HTS is dropped when the column count changes" {
-	const s = open(25, 3);
+	const s = blankScreen(25, 3);
 	assert s !== null;
 	if (s !== null) {
-		assert s.step("boo\x1bH\r\n") && cursorAt(s, 0, 1);
-		assert s.step("\t") && cursorAt(s, 3, 1);
-		assert s.step("\t") && cursorAt(s, 8, 1);
+		assert s.step("boo\x1bH\r\n") && s.cursorAt(0, 1);
+		assert s.step("\t") && s.cursorAt(3, 1);
+		assert s.step("\t") && s.cursorAt(8, 1);
 		assert s.resize(80, 4).ok && s.mismatch() == "";
-		assert s.step(cup(0, 1) + "\t") && cursorAt(s, 8, 1);
-		assert s.step("\t") && cursorAt(s, 16, 1);
-		assert s.step("\t") && cursorAt(s, 24, 1);
-		assert s.step("\t") && cursorAt(s, 32, 1);
+		assert s.step(cup(0, 1) + "\t") && s.cursorAt(8, 1);
+		assert s.step("\t") && s.cursorAt(16, 1);
+		assert s.step("\t") && s.cursorAt(24, 1);
+		assert s.step("\t") && s.cursorAt(32, 1);
 		s.close();
 	}
 }

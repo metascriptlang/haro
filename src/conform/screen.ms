@@ -3,7 +3,7 @@ import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style } from "../../../neon/src/render/style";
 import { RowSlot, applyFrame } from "../app/frame";
 import { LineRun, line } from "../grid/lines";
-import { Cursor, Rgb, Vt } from "../vt/vt";
+import { Cursor, Vt } from "../vt/vt";
 
 export interface Screen {
 	vt: Vt;
@@ -109,8 +109,7 @@ export function spans(this s: Screen, y: int32): TextSpan[] {
 export function lines(this s: Screen): string {
 	let texts: Vec<string> = [];
 	for (let y = 0; y < s.rows; y++) { texts.push(s.text(y)); }
-	return texts.join("
-");
+	return texts.join("\n");
 }
 
 function viewportOffset(this s: Screen): Result<int32, ScreenError> {
@@ -149,7 +148,7 @@ function runText(r: LineRun): string {
 	return `${r.units}:${fg}/${bg}/u${r.underline as int32}${look}`;
 }
 
-function runsText(runs: Vec<LineRun>): string {
+export function runsText(runs: Vec<LineRun>): string {
 	let out = "";
 	for (const r of runs) { out += runText(r) + " "; }
 	return out;
@@ -195,6 +194,13 @@ export function sameAsFreshRead(this s: Screen): boolean {
 	return s.mismatch() == "";
 }
 
-export function rgb(r: int32, g: int32, b: int32): Rgb {
-	return { r: r as uint8, g: g as uint8, b: b as uint8 };
+export function cursorAt(this s: Screen, x: int32, y: int32): boolean {
+	const c = s.cursor;
+	return c !== null && c.x == x && c.y == y;
+}
+
+export function blankScreen(cols: int32, rows: int32): Screen | null {
+	const r = Screen.open(cols, rows);
+	if (!r.ok) { return null; }
+	return r.value;
 }

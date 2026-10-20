@@ -1,8 +1,8 @@
 import { LineRun } from "../grid/lines";
 import { Style } from "../../../neon/src/render/style";
 import { Rgb, Underline } from "../vt/vt";
-import { defaultIndexed } from "./palette";
-import { Screen, rgb } from "./screen";
+import { cssHex, defaultIndexed, rgb } from "./palette";
+import { Screen } from "./screen";
 
 struct Look {
 	run: LineRun;
@@ -10,15 +10,6 @@ struct Look {
 	fg: Rgb;
 	bg: Rgb;
 	text: string;
-}
-
-const HEX = "0123456789abcdef";
-
-function hexOf(c: Rgb): string {
-	const r = c.r as int32;
-	const g = c.g as int32;
-	const b = c.b as int32;
-	return "#" + HEX[r >> 4] + HEX[r & 15] + HEX[g >> 4] + HEX[g & 15] + HEX[b >> 4] + HEX[b & 15];
 }
 
 function look(sgr: string): Look | null {
@@ -169,8 +160,8 @@ test "inverse swaps the foreground and background, including the defaults" {
 	assert plain !== null && coloured !== null && off !== null;
 	if (plain !== null && coloured !== null && off !== null) {
 		assert plain.run.fg == plain.bg && plain.run.bg == plain.fg;
-		assert plain.style.color == hexOf(plain.bg);
-		assert plain.style.backgroundColor == hexOf(plain.fg);
+		assert plain.style.color == cssHex(plain.bg);
+		assert plain.style.backgroundColor == cssHex(plain.fg);
 		assert coloured.run.fg == defaultIndexed(2) && coloured.run.bg == defaultIndexed(1);
 		assert off.run.fg == off.fg && off.run.bg == off.bg;
 	}
@@ -197,7 +188,7 @@ test "a background that equals the terminal's is left to the window, any other b
 	assert same !== null && other !== null;
 	if (same !== null && other !== null) {
 		assert same.style.backgroundColor === undefined;
-		assert other.style.backgroundColor == hexOf(defaultIndexed(1));
+		assert other.style.backgroundColor == cssHex(defaultIndexed(1));
 	}
 }
 

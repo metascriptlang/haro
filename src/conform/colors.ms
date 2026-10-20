@@ -1,10 +1,4 @@
-import { Screen } from "./screen";
-
-function open(cols: int32, rows: int32): Screen | null {
-	const opened = Screen.open(cols, rows);
-	if (!opened.ok) { return null; }
-	return opened.value;
-}
+import { Screen, blankScreen } from "./screen";
 
 function colorAt(s: Screen, y: int32): string {
 	const spans = s.spans(y);
@@ -14,7 +8,7 @@ function colorAt(s: Screen, y: int32): string {
 }
 
 test "an OSC 4 palette change repaints the cells that use the entry, OSC 104 puts it back" {
-	const s = open(10, 3);
+	const s = blankScreen(10, 3);
 	assert s !== null;
 	if (s !== null) {
 		assert s.step("\x1b[31mr\x1b[0m\r\n\x1b[41m \x1b[0m");
@@ -31,9 +25,9 @@ test "an OSC 4 palette change repaints the cells that use the entry, OSC 104 put
 }
 
 test "a new default colour (OSC 10, OSC 11, DECSCNM) repaints rows already drawn" {
-	const fg = open(10, 3);
-	const bg = open(10, 3);
-	const reverse = open(10, 3);
+	const fg = blankScreen(10, 3);
+	const bg = blankScreen(10, 3);
+	const reverse = blankScreen(10, 3);
 	assert fg !== null && bg !== null && reverse !== null;
 	if (fg !== null && bg !== null && reverse !== null) {
 		assert fg.step("abc\r\n");
@@ -70,12 +64,12 @@ function red(s: Screen, y: int32, from: int32, units: int32): boolean {
 }
 
 test "erasing, inserting and deleting fill the vacated cells with the current background" {
-	const index = open(5, 5);
-	const ech = open(10, 10);
-	const ich = open(10, 10);
-	const el = open(5, 5);
-	const ed = open(5, 5);
-	const dl = open(5, 5);
+	const index = blankScreen(5, 5);
+	const ech = blankScreen(10, 10);
+	const ich = blankScreen(10, 10);
+	const el = blankScreen(5, 5);
+	const ed = blankScreen(5, 5);
+	const dl = blankScreen(5, 5);
 	const bg = "\x1b[48;2;255;0;0m";
 	assert index !== null && ech !== null && ich !== null && el !== null && ed !== null && dl !== null;
 	if (index !== null && ech !== null && ich !== null && el !== null && ed !== null && dl !== null) {

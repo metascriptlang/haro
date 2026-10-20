@@ -1,12 +1,11 @@
 import { readFile } from "std/fs";
-import { Screen } from "./screen";
+import { Screen, blankScreen } from "./screen";
 
 const GRAPHEMES_ON = "\x1b[?2027h";
 
 function run(cols: int32, rows: int32, bytes: string): Screen | null {
-	const opened = Screen.open(cols, rows);
-	if (!opened.ok) { return null; }
-	const s = opened.value;
+	const s = blankScreen(cols, rows);
+	if (s === null) { return null; }
 	if (!s.feed(bytes).ok) {
 		s.close();
 		return null;
@@ -14,28 +13,19 @@ function run(cols: int32, rows: int32, bytes: string): Screen | null {
 	return s;
 }
 
-function cursorAt(s: Screen, x: int32, y: int32): boolean {
-	const c = s.cursor;
-	return c !== null && c.x == x && c.y == y;
-}
-
-function blanks(n: int32): string {
-	return " ".repeat(n);
-}
-
 test "a wide character is one unit of text on two cells and moves the cursor two columns" {
 	const s = run(6, 2, "\u{1F600}a");
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "\u{1F600}a";
-		assert cursorAt(s, 3, 0);
+		assert s.cursorAt(3, 0);
 		s.close();
 	}
 	const narrow = run(6, 2, "中a\x1b[1;6Hz\x1b[1;4H");
 	assert narrow !== null;
 	if (narrow !== null) {
-		assert narrow.raw(0) == "中a" + blanks(2) + "z";
-		assert cursorAt(narrow, 3, 0);
+		assert narrow.raw(0) == "中a  z";
+		assert narrow.cursorAt(3, 0);
 		narrow.close();
 	}
 }
@@ -46,7 +36,7 @@ test "a wide character that does not fit the last column wraps whole and leaves 
 	if (s !== null) {
 		assert s.raw(0) == "";
 		assert s.text(1) == "\u{1F600}";
-		assert cursorAt(s, 2, 1);
+		assert s.cursorAt(2, 1);
 		s.close();
 	}
 }
@@ -57,7 +47,7 @@ test "a narrow character over half a wide one blanks the other half" {
 	assert head !== null && tail !== null;
 	if (head !== null && tail !== null) {
 		assert head.text(0) == "A";
-		assert cursorAt(head, 1, 0);
+		assert head.cursorAt(1, 0);
 		assert tail.text(0) == " X";
 		head.close();
 		tail.close();
@@ -79,7 +69,7 @@ test "a wide character cannot be drawn in a one-column terminal" {
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "";
-		assert cursorAt(s, 0, 0);
+		assert s.cursorAt(0, 0);
 		s.close();
 	}
 }
@@ -90,9 +80,9 @@ test "with wraparound off a wide character that does not fit is dropped" {
 	assert oneSpace !== null && noSpace !== null;
 	if (oneSpace !== null && noSpace !== null) {
 		assert oneSpace.text(0) == "AAAA";
-		assert cursorAt(oneSpace, 4, 0);
+		assert oneSpace.cursorAt(4, 0);
 		assert noSpace.text(0) == "AAAAA";
-		assert cursorAt(noSpace, 4, 0);
+		assert noSpace.cursorAt(4, 0);
 		oneSpace.close();
 		noSpace.close();
 	}
@@ -103,7 +93,7 @@ test "a combining mark joins its base in text and in the cursor column" {
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "o\u{300}";
-		assert cursorAt(s, 1, 0);
+		assert s.cursorAt(1, 0);
 		s.close();
 	}
 	const pending = run(2, 2, "xå\u{332}");
@@ -119,7 +109,7 @@ test "a zero-width joiner with nothing before it is ignored" {
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(0) == "";
-		assert cursorAt(s, 0, 0);
+		assert s.cursorAt(0, 0);
 		s.close();
 	}
 }
@@ -131,9 +121,9 @@ test "a family of emoji joined by ZWJ is one wide cell with grapheme clustering 
 	assert on !== null && off !== null;
 	if (on !== null && off !== null) {
 		assert on.text(0) == family;
-		assert cursorAt(on, 2, 0);
+		assert on.cursorAt(2, 0);
 		assert off.text(0) == family;
-		assert cursorAt(off, 6, 0);
+		assert off.cursorAt(6, 0);
 		on.close();
 		off.close();
 	}
@@ -148,11 +138,11 @@ test "a skin tone modifier joins an emoji base and stays apart from a quote" {
 	assert on !== null && quoted !== null && off !== null;
 	if (on !== null && quoted !== null && off !== null) {
 		assert on.text(0) == hand && on.text(1) == hand + tone && on.text(2) == "";
-		assert cursorAt(on, 2, 1);
+		assert on.cursorAt(2, 1);
 		assert quoted.text(0) == "\"" + tone + "\"";
-		assert cursorAt(quoted, 4, 0);
+		assert quoted.cursorAt(4, 0);
 		assert off.text(1) == hand + tone;
-		assert cursorAt(off, 4, 1);
+		assert off.cursorAt(4, 1);
 		on.close();
 		quoted.close();
 		off.close();
@@ -179,9 +169,9 @@ test "VS15 narrows a wide symbol back to one cell" {
 	if (opened.ok) {
 		const s = opened.value;
 		assert s.feed(GRAPHEMES_ON + "☔").ok;
-		assert cursorAt(s, 2, 0);
+		assert s.cursorAt(2, 0);
 		assert s.feed("\u{FE0E}").ok;
-		assert cursorAt(s, 1, 0);
+		assert s.cursorAt(1, 0);
 		assert s.text(0) == "☔\u{FE0E}";
 		s.close();
 	}
@@ -193,7 +183,7 @@ test "VS16 widens a narrow symbol at the last column onto the next row" {
 	if (s !== null) {
 		assert s.raw(0) == "";
 		assert s.text(1) == "#\u{FE0F}";
-		assert cursorAt(s, 2, 1);
+		assert s.cursorAt(2, 1);
 		s.close();
 	}
 }
@@ -205,10 +195,10 @@ test "a Devanagari conjunct is one wide cell, also when it widens at the last co
 	assert plain !== null && edge !== null;
 	if (plain !== null && edge !== null) {
 		assert plain.text(0) == conjunct;
-		assert cursorAt(plain, 2, 0);
+		assert plain.cursorAt(2, 0);
 		assert edge.text(0) == "";
 		assert edge.text(1) == conjunct;
-		assert cursorAt(edge, 2, 1);
+		assert edge.cursorAt(2, 1);
 		plain.close();
 		edge.close();
 	}
@@ -255,11 +245,11 @@ test "text wraps at the right margin and scrolls from the last row" {
 	assert wrapped !== null && soft !== null && scrolled !== null;
 	if (wrapped !== null && soft !== null && scrolled !== null) {
 		assert wrapped.text(0) == "hello" && wrapped.text(1) == "world" && wrapped.text(2) == "abc12";
-		assert cursorAt(wrapped, 4, 2);
+		assert wrapped.cursorAt(4, 2);
 		assert soft.text(0) == "hel" && soft.text(1) == "lo";
-		assert cursorAt(soft, 2, 1);
+		assert soft.cursorAt(2, 1);
 		assert scrolled.lines() == "b\nc\nd\ne\nf";
-		assert cursorAt(scrolled, 0, 4);
+		assert scrolled.cursorAt(0, 4);
 		wrapped.close();
 		soft.close();
 		scrolled.close();

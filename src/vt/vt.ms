@@ -1395,6 +1395,7 @@ function actionOf(a: KeyAction): GhosttyKeyAction {
 	};
 }
 
+// Key tables stay in vt.ms until card 2026-09-30-c-import-type-not-shared-across-modules.md
 function keyOf(name: string): GhosttyKey {
 	return match (name) {
 		"Backquote" => GhosttyKey.GHOSTTY_KEY_BACKQUOTE,

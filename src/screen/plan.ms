@@ -21,6 +21,7 @@ function scrolledRows(this vt: Vt): Result<int32 | null, VtError> {
 	const anchored = try vt.anchoredRow();
 	if (anchored === null) { return Result.ok(null); }
 	const offset = try vt.scrollOffset();
+	// Typed local until card 2026-10-21-result-ok-drops-null-from-declared-return.md
 	const scrolled: int32 | null = offset - anchored;
 	return Result.ok(scrolled);
 }

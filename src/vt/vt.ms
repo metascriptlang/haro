@@ -545,8 +545,8 @@ const OSC52_REPLY = "\x1b]52;";
 // returns. So the callback answers "denied", which makes libghostty write an empty clipboard reply
 // ("ESC ] 52 ; c ;" and the terminator the program used) after mark; this takes those bytes back out
 // of the replies and keeps them, and answerClipboard later writes the same frame with the clipboard in
-// it, or empty. A request while one is pending, or one whose reply is not that frame (kitty's OSC 5522
-// protocol), keeps its refusal.
+// it, or empty. A request while one is pending, or one whose reply is not that frame (the OSC 5522
+// clipboard protocol), keeps its refusal.
 @exportName("haroVtClipboardRead")
 function clipboardRead(effects: Ptr<void>, mark: int64): void {
 	const e = effectsAt(effects);
@@ -1139,7 +1139,7 @@ function graphemesOf(
 }
 
 // The cell's SGR 58 underline colour with a palette index resolved, or null when the cell has none
-// (the text colour applies, generic.zig `underlineColor(...) orelse fg`).
+// (the text colour applies).
 function underlineColorOf(state: GhosttyRenderState, style: GhosttyStyle): Result<Rgb | null, VtError> {
 	const color = style.underline_color;
 	if (color.tag == GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_RGB) {
@@ -1592,7 +1592,7 @@ export function scrollPages(this vt: Vt, pages: int32): Result<Vt, VtError> {
 }
 
 // Scroll the viewport so the nearest prompt (OSC 133 A) above (delta < 0) or below (delta > 0) its top
-// row is the top row, as Surface.zig `jump_to_prompt` does. False when there is no such prompt.
+// row is the top row. False when there is no such prompt.
 export function jumpToPrompt(this vt: Vt, delta: int32): Result<boolean, VtError> {
 	let bar: GhosttyTerminalScrollbar;
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
@@ -1725,8 +1725,7 @@ export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtErro
 	return Result.ok(here);
 }
 
-// The active selection as plain text, the way Ghostty's Screen.selectionString copies it (unwrap and
-// trim), or null when there is none.
+// The active selection as plain text, unwrapped and trimmed, or null when there is none.
 export function selectedText(this vt: Vt): Result<string | null, VtError> {
 	const options: GhosttyTerminalSelectionFormatOptions = {
 		size: sizeof GhosttyTerminalSelectionFormatOptions,
@@ -1748,8 +1747,8 @@ export function selectedText(this vt: Vt): Result<string | null, VtError> {
 
 const PASTE_END = "\x1b[201~";
 
-// Surface.zig completeClipboardPaste with its defaults: bracketed, the data is unsafe only when it holds
-// the end marker; unbracketed, it is unsafe when it holds a newline.
+// Bracketed, the data is unsafe only when it holds the end marker; unbracketed, it is unsafe when it
+// holds a newline.
 export function pasteBytes(this vt: Vt, text: string, allowUnsafe: boolean): Result<Vec<uint8>, PasteError> {
 	const bracketed = modeOn(vt.terminal, MODE_BRACKETED_PASTE) == true;
 	const unsafe = bracketed ? text.includes(PASTE_END) : !pasteSafe(text.asBytes());
@@ -2691,7 +2690,7 @@ function cursorAfter(text: string): string {
 	return `${c.x}${c.wide ? " wide" : ""}`;
 }
 
-test "a cursor on a wide character covers both its cells, from the character or its tail, as ghostty draws it" {
+test "a cursor on a wide character covers both its cells, from the character or its tail" {
 	assert cursorAfter("\u4e2d\x1b[1G") == "0 wide";
 	assert cursorAfter("\u4e2d\x1b[2G") == "0 wide";
 	assert cursorAfter("\u4e2d") == "2";
@@ -3050,7 +3049,7 @@ test "base64 in an OSC 52 answer pads one and two leftover bytes" {
 	}
 }
 
-test "a kitty OSC 5522 read is refused at once rather than waiting for an OSC 52 answer" {
+test "an OSC 5522 clipboard read is refused at once rather than waiting for an OSC 52 answer" {
 	const created = Vt.create(20, 4);
 	assert created.ok;
 	if (created.ok) {

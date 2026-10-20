@@ -71,7 +71,7 @@ function evaluate(path: string, dir: string, api: string): Result<string, string
 	if (!routine.ok) { return Result.err(routine.error); }
 	const got = callRoutine(interp, routine.value, []);
 	if (!got.ok) { return Result.err(got.error); }
-	return Result.ok(unboxString(got.value));
+	return Result.ok(unboxString(got.value.root));
 }
 
 interface FontsFound {

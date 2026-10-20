@@ -12,7 +12,7 @@ function hexValue(c: int32): int32 | null {
 	return null;
 }
 
-function unescape(text: string): string | null {
+function percentDecoded(text: string): string | null {
 	const bytes: Readonly<Span<char>> = text;
 	const byteCount = text.byteLength as int32;
 	let out: Vec<uint8> = [];
@@ -39,7 +39,7 @@ function isAsciiLetter(c: int32): boolean {
 	return (c >= "A".code && c <= "Z".code) || (c >= "a".code && c <= "z".code);
 }
 
-function drivePath(path: string): string {
+function withoutDriveSlash(path: string): string {
 	if (path.length < 3 || path.charAt(0) != "/" || path.charAt(2) != ":") { return path; }
 	return isAsciiLetter(path.charCodeAt(1)) ? path.slice(1, path.length) : path;
 }
@@ -49,9 +49,9 @@ export function fileUri(uri: string): FileUri | null {
 	const afterScheme = uri.slice(FILE_SCHEME.length, uri.length);
 	const slash = afterScheme.indexOf("/");
 	if (slash < 0) { return null; }
-	const path = unescape(afterScheme.slice(slash, afterScheme.length));
+	const path = percentDecoded(afterScheme.slice(slash, afterScheme.length));
 	if (path === null) { return null; }
-	const found: FileUri | null = { host: afterScheme.slice(0, slash), path: drivePath(path) };
+	const found: FileUri | null = { host: afterScheme.slice(0, slash), path: withoutDriveSlash(path) };
 	return found;
 }
 

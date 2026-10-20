@@ -185,10 +185,8 @@ export function refresh(this m: PaneModel): void {
 	} else {
 		const colors = f.colors;
 		if (colors !== null) {
-			const bg = hexOf(colors.bg);
-			const fg = hexOf(colors.fg);
-			if (bg != m.background()) { m.setBackground(bg); }
-			if (fg != m.foreground()) { m.setForeground(fg); }
+			m.setBackground(hexOf(colors.bg));
+			m.setForeground(hexOf(colors.fg));
 		}
 		m.cursor.showCursor(f.cursor, f.look);
 		m.paintSelection();

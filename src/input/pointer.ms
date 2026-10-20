@@ -130,7 +130,9 @@ export function blocks(
 	return Result.ok(sel.marked().blocks(top, rows, cols));
 }
 
-const REACH: float64 = 8;
+const CELL_WIDTH: float64 = 8;
+const ROW_HEIGHT: float64 = 16;
+const REACH: float64 = CELL_WIDTH;
 
 function viewOf(cols: int32, rows: int32, text: string): Vt | null {
 	const created = Vt.create(cols, rows);
@@ -150,8 +152,9 @@ function shaded(row: int32, col: int32, rows: int32, cols: int32): Block {
 }
 
 function click(p: Pointer, vt: Vt, col: int32, row: int32, time: float64): boolean {
-	const r = p.press(vt, spot(col, row), col as float64 * 8, row as float64 * 16, time, REACH);
-	return r.ok;
+	const x = col as float64 * CELL_WIDTH;
+	const y = row as float64 * ROW_HEIGHT;
+	return p.press(vt, spot(col, row), x, y, time, REACH).ok;
 }
 
 test "the spot under a point is its cell, held inside the grid" {
@@ -170,7 +173,7 @@ test "a press with no drag leaves nothing selected and a drag selects the cells 
 		assert click(p, vt, 1, 0, 0);
 		assert !p.selected();
 		assert p.copyText(vt).ok;
-		assert p.drag(vt, { col: 4, row: 0 }).ok;
+		assert p.drag(vt, spot(4, 0)).ok;
 		assert p.selected();
 		const text = p.copyText(vt);
 		assert text.ok;
@@ -187,7 +190,7 @@ test "a drag back past the press selects the other way" {
 	if (vt !== null) {
 		const p = Pointer.open();
 		assert click(p, vt, 8, 0, 0);
-		assert p.drag(vt, { col: 6, row: 0 }).ok;
+		assert p.drag(vt, spot(6, 0)).ok;
 		const text = p.copyText(vt);
 		assert text.ok;
 		if (text.ok) { assert text.value == "wor"; }
@@ -223,7 +226,7 @@ test "a drag after a double click grows the selection by whole words" {
 		const p = Pointer.open();
 		assert click(p, vt, 5, 0, 0);
 		assert click(p, vt, 5, 0, 100);
-		assert p.drag(vt, { col: 9, row: 0 }).ok;
+		assert p.drag(vt, spot(9, 0)).ok;
 		const text = p.copyText(vt);
 		assert text.ok;
 		if (text.ok) { assert text.value == "bar baz"; }
@@ -237,7 +240,7 @@ test "a click away from a selection clears it, and so does clear" {
 	if (vt !== null) {
 		const p = Pointer.open();
 		assert click(p, vt, 0, 0, 0);
-		assert p.drag(vt, { col: 4, row: 0 }).ok;
+		assert p.drag(vt, spot(4, 0)).ok;
 		assert p.selected();
 		p.release();
 		assert click(p, vt, 9, 1, 2000);
@@ -245,7 +248,7 @@ test "a click away from a selection clears it, and so does clear" {
 		const gone = vt.selectedText();
 		assert gone.ok;
 		if (gone.ok) { assert gone.value === null; }
-		assert p.drag(vt, { col: 4, row: 0 }).ok;
+		assert p.drag(vt, spot(4, 0)).ok;
 		assert p.selected();
 		p.clear(vt);
 		assert !p.selected();
@@ -259,7 +262,7 @@ test "a move with no press in progress selects nothing" {
 	assert vt !== null;
 	if (vt !== null) {
 		const p = Pointer.open();
-		const moved = p.drag(vt, { col: 4, row: 0 });
+		const moved = p.drag(vt, spot(4, 0));
 		assert moved.ok;
 		if (moved.ok) { assert !moved.value; }
 		assert !p.selected();
@@ -273,7 +276,7 @@ test "the highlight follows the selection into scrolled rows and out of view" {
 	if (vt !== null) {
 		const p = Pointer.open();
 		assert click(p, vt, 0, 0, 0);
-		assert p.drag(vt, { col: 3, row: 1 }).ok;
+		assert p.drag(vt, spot(3, 1)).ok;
 		const shown = p.blocks(vt, 3, 10);
 		assert shown.ok;
 		if (shown.ok) {
@@ -301,7 +304,7 @@ test "new output that scrolls the terminal moves the selection with its text" {
 	if (vt !== null) {
 		const p = Pointer.open();
 		assert click(p, vt, 0, 1, 0);
-		assert p.drag(vt, { col: 2, row: 1 }).ok;
+		assert p.drag(vt, spot(2, 1)).ok;
 		vt.writeText("\r\nfour\r\nfive");
 		assert vt.update().ok;
 		const kept = p.sync(vt);
@@ -320,7 +323,7 @@ test "a selection the terminal let go of is dropped here too" {
 	if (vt !== null) {
 		const p = Pointer.open();
 		assert click(p, vt, 0, 0, 0);
-		assert p.drag(vt, { col: 3, row: 0 }).ok;
+		assert p.drag(vt, spot(3, 0)).ok;
 		vt.selectionClear();
 		const kept = p.sync(vt);
 		assert kept.ok;

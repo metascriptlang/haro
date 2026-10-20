@@ -3,9 +3,8 @@ import { Pty, PtyError } from "./transport";
 export struct Replay { bytes: Vec<uint8>; }
 
 export function ofText(this typeof Replay, text: string): Replay {
-	const view = text.asBytes();
-	let bytes: Vec<uint8> = new Array(view.length);
-	for (let i = 0; i < view.length; i++) { bytes[i] = view[i]; }
+	let bytes: Vec<uint8> = [];
+	for (const b of text.asBytes()) { bytes.push(b); }
 	return { bytes: bytes };
 }
 
@@ -21,8 +20,7 @@ export function toPty(this r: Replay): Pty {
 		},
 		read: (buf: Span<uint8>): Result<int32, PtyError> => {
 			if (closed || at >= total) { return Result.err(PtyError.Closed); }
-			const room = buf.length as int32;
-			const n = total - at < room ? total - at : room;
+			const n = Math.min(total - at, buf.length as int32);
 			for (let i = 0; i < n; i++) { buf[i] = bytes[at + i]; }
 			at += n;
 			return Result.ok(n);

@@ -629,6 +629,7 @@ const MODE_CURSOR_BLINKING: uint16 = 12;
 const MODE_FOCUS_EVENT: uint16 = 1004;
 const MODE_ALT_SCROLL: uint16 = 1007;
 const MODE_BRACKETED_PASTE: uint16 = 2004;
+const MODE_WIN32_INPUT: uint16 = 9001;
 
 function colorsSet(terminal: GhosttyTerminal, fg: Rgb, bg: Rgb): boolean {
 	let f: GhosttyColorRgb = { r: fg.r, g: fg.g, b: fg.b };
@@ -928,6 +929,7 @@ export struct Modes {
 	altScroll: boolean;
 	cursorKeys: boolean;
 	mouseTracking: boolean;
+	win32Input: boolean;
 }
 
 export function modes(this vt: Vt): Result<Modes, VtError> {
@@ -935,8 +937,9 @@ export function modes(this vt: Vt): Result<Modes, VtError> {
 	const bracketedPaste = modeOn(vt.terminal, MODE_BRACKETED_PASTE);
 	const altScroll = modeOn(vt.terminal, MODE_ALT_SCROLL);
 	const cursorKeys = modeOn(vt.terminal, MODE_DECCKM);
+	const win32Input = modeOn(vt.terminal, MODE_WIN32_INPUT);
 	let tracking = false;
-	if (focusEvents === null || bracketedPaste === null || altScroll === null || cursorKeys === null
+	if (focusEvents === null || bracketedPaste === null || altScroll === null || cursorKeys === null || win32Input === null
 		|| !ok(terminalFlag(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, tracking))) {
 		return Result.err(VtError.ReadFailed);
 	}
@@ -946,6 +949,7 @@ export function modes(this vt: Vt): Result<Modes, VtError> {
 		altScroll: altScroll,
 		cursorKeys: cursorKeys,
 		mouseTracking: tracking,
+		win32Input: win32Input,
 	});
 }
 
@@ -1862,6 +1866,23 @@ test "an untitled terminal has an empty title" {
 		const title = vt.title();
 		assert title.ok;
 		if (title.ok) { assert title.value == ""; }
+		vt.free();
+	}
+}
+
+test "ConPTY's request for win32-input-mode is tracked like any other mode" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const fresh = vt.modes();
+		assert fresh.ok && !fresh.value.win32Input;
+		vt.writeText("\x1b[?9001h\x1b[?1004h");
+		const asked = vt.modes();
+		assert asked.ok && asked.value.win32Input;
+		vt.writeText("\x1b[?9001l");
+		const ended = vt.modes();
+		assert ended.ok && !ended.value.win32Input;
 		vt.free();
 	}
 }

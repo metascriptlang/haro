@@ -57,7 +57,7 @@ if (opened.ok) {
 		if (colors.ok && spanRows.ok) {
 			const styles = new Map<string, Style>();
 			for (let y = 0; y < 3; y++) {
-				const l = spanRows.value[y].line(-1);
+				const l = spanRows.value[y].line(-1, colors.value.bg);
 				if (l.ok) {
 					for (const sp of spansOf(styles, l.value, colors.value.bg)) {
 						const st = sp.style;

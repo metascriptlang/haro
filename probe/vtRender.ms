@@ -28,7 +28,7 @@ function main(): int32 {
 	let term: GhosttyTerminal;
 	ghostty_terminal_new(null, term, 80, 24);
 	const text = "hello\r\n";
-	ghostty_terminal_vt_write(term, text, text.length);
+	ghostty_terminal_vt_write(term, text, text.length as uint64);
 	let state: GhosttyRenderState;
 	ghostty_render_state_new(null, state);
 	ghostty_render_state_update(state, term);

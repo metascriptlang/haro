@@ -97,6 +97,8 @@ function windowHost(): Host {
 		append: (parent: HostNode, child: HostNode): void => {},
 		insertBefore: (parent: HostNode, node: HostNode, ref: HostNode | null): void => {},
 		removeChild: (parent: HostNode, node: HostNode): void => {},
+		parentOf: (node: HostNode): HostNode | null => null,
+		release: (node: HostNode): void => {},
 		nextSibling: (node: HostNode): HostNode | null => null,
 		firstChild: (node: HostNode): HostNode | null => null,
 		cloneNode: null,

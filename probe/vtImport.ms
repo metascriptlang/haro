@@ -14,7 +14,7 @@ function main(): int32 {
 	const r = ghostty_terminal_new(null, term, 80, 24);
 	console.log(`new: ${r as int32}`);
 	const text = "hello\r\n";
-	ghostty_terminal_vt_write(term, text, text.length);
+	ghostty_terminal_vt_write(term, text, text.length as uint64);
 	ghostty_terminal_free(term);
 	return 0;
 }

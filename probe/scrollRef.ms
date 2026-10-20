@@ -82,7 +82,7 @@ function lines(from: int32, count: int32): string {
 }
 
 function pointAt(ref: GhosttyTrackedGridRef, tag: GhosttyPointTag): string {
-	let c: GhosttyPointCoordinate;
+	let c: GhosttyPointCoordinate = { x: 0, y: 0 };
 	const r = ghostty_tracked_grid_ref_point(ref, tag, c);
 	if ((r as int32) != 0) { return `r=${r as int32}`; }
 	return `${c.y}`;
@@ -135,7 +135,7 @@ function frame(name: string, rig: Rig, expected: string): void {
 	}
 	let sb: GhosttyTerminalScrollbar;
 	getScrollbar(rig.term, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR, sb);
-	let c: GhosttyPointCoordinate;
+	let c: GhosttyPointCoordinate = { x: 0, y: 0 };
 	const has = ghostty_tracked_grid_ref_has_value(rig.ref);
 	const screenResult = ghostty_tracked_grid_ref_point(rig.ref, SCREEN, c);
 	const measured = (screenResult as int32) == 0 ? `${(sb.offset as int64) - (c.y as int64)}` : "LOST";

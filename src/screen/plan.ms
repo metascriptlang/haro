@@ -13,7 +13,7 @@ export struct Plan {
 	rows: Vec<Row>;
 }
 
-function sameRow(a: Row, b: Row): boolean {
+function sameContent(a: Row, b: Row): boolean {
 	if (a.cells.length != b.cells.length || a.extra.length != b.extra.length) { return false; }
 	for (let i = 0; i < (a.cells.length as int32); i++) {
 		if (a.cells[i] != b.cells[i]) { return false; }
@@ -32,12 +32,12 @@ function scrolledRows(this vt: Vt): Result<int32 | null, VtError> {
 	return Result.ok(scrolled);
 }
 
-function keptRowsChanged(all: Vec<Row>, painted: Vec<Row>, scrolled: int32): Vec<Row> {
+function changedRowsAfterScroll(all: Vec<Row>, painted: Vec<Row>, scrolled: int32): Vec<Row> {
 	const rowCount = all.length as int32;
 	let out: Vec<Row> = [];
 	for (let y = 0; y < rowCount; y++) {
 		const isNew = y >= rowCount - scrolled;
-		if (isNew || !sameRow(all[y], painted[y + scrolled])) { out.push(all[y]); }
+		if (isNew || !sameContent(all[y], painted[y + scrolled])) { out.push(all[y]); }
 	}
 	return out;
 }
@@ -68,7 +68,7 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 		for (const row of rows) { painted.rows[row.y] = row; }
 	} else {
 		const all = try vt.rows();
-		rows = kind == PlanKind.Scroll ? keptRowsChanged(all, painted.rows, moved) : all;
+		rows = kind == PlanKind.Scroll ? changedRowsAfterScroll(all, painted.rows, moved) : all;
 		painted.rows = all;
 	}
 	painted.alternate = alternate;
@@ -86,14 +86,14 @@ function newLines(from: int32, count: int32): string {
 	return text;
 }
 
-function opened(cols: int32): Result<Vt, VtError> {
+function filledScreen(cols: int32): Result<Vt, VtError> {
 	const vt = try Vt.create(cols, 24);
 	vt.writeText("row 0" + newLines(1, 23));
 	const first = try vt.plan();
 	return Result.ok(vt);
 }
 
-function ys(rows: Vec<Row>): string {
+function rowNumbers(rows: Vec<Row>): string {
 	let out: string[] = [];
 	for (const row of rows) { out.push(`${row.y}`); }
 	return out.join(",");
@@ -130,7 +130,7 @@ test "the first frame repaints every row, the next one is idle" {
 }
 
 test "overwriting a row gives that row and the one the cursor left" {
-	const opening = opened(10);
+	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
@@ -140,7 +140,7 @@ test "overwriting a row gives that row and the one the cursor left" {
 		if (p.ok) {
 			assert p.value.kind == PlanKind.Rows;
 			assert p.value.scrolled == 0;
-			assert ys(p.value.rows) == "5,23";
+			assert rowNumbers(p.value.rows) == "5,23";
 			assert textOf(p.value.rows[0]) == "overwrite";
 		}
 		vt.free();
@@ -148,7 +148,7 @@ test "overwriting a row gives that row and the one the cursor left" {
 }
 
 test "new lines at the bottom scroll by their count and give only the new rows" {
-	const opening = opened(10);
+	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
@@ -158,7 +158,7 @@ test "new lines at the bottom scroll by their count and give only the new rows" 
 		if (one.ok) {
 			assert one.value.kind == PlanKind.Scroll;
 			assert one.value.scrolled == 1;
-			assert ys(one.value.rows) == "23";
+			assert rowNumbers(one.value.rows) == "23";
 			assert textOf(one.value.rows[0]) == "row 24";
 		}
 		vt.writeText(newLines(25, 3));
@@ -167,7 +167,7 @@ test "new lines at the bottom scroll by their count and give only the new rows" 
 		if (three.ok) {
 			assert three.value.kind == PlanKind.Scroll;
 			assert three.value.scrolled == 3;
-			assert ys(three.value.rows) == "21,22,23";
+			assert rowNumbers(three.value.rows) == "21,22,23";
 			assert textOf(three.value.rows[2]) == "row 27";
 		}
 		vt.writeText(newLines(28, 23));
@@ -188,7 +188,7 @@ test "new lines at the bottom scroll by their count and give only the new rows" 
 }
 
 test "a screenful of new lines or more repaints" {
-	const opening = opened(10);
+	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
@@ -219,7 +219,7 @@ test "a screenful of new lines or more repaints" {
 }
 
 test "a row changed in the frame that scrolls is rewritten with the new rows" {
-	const opening = opened(10);
+	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
@@ -229,7 +229,7 @@ test "a row changed in the frame that scrolls is rewritten with the new rows" {
 		if (edited.ok) {
 			assert edited.value.kind == PlanKind.Scroll;
 			assert edited.value.scrolled == 2;
-			assert ys(edited.value.rows) == "2,22,23";
+			assert rowNumbers(edited.value.rows) == "2,22,23";
 			assert textOf(edited.value.rows[0]) == "MOD 4";
 		}
 		vt.writeText("!!" + newLines(26, 1));
@@ -237,7 +237,7 @@ test "a row changed in the frame that scrolls is rewritten with the new rows" {
 		assert appended.ok;
 		if (appended.ok) {
 			assert appended.value.kind == PlanKind.Scroll;
-			assert ys(appended.value.rows) == "22,23";
+			assert rowNumbers(appended.value.rows) == "22,23";
 			assert textOf(appended.value.rows[0]) == "row 25!!";
 		}
 		vt.free();
@@ -245,7 +245,7 @@ test "a row changed in the frame that scrolls is rewritten with the new rows" {
 }
 
 test "a row an earlier frame painted is not rewritten when a later one scrolls" {
-	const opening = opened(10);
+	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
@@ -258,14 +258,14 @@ test "a row an earlier frame painted is not rewritten when a later one scrolls" 
 		assert scrolled.ok;
 		if (scrolled.ok) {
 			assert scrolled.value.kind == PlanKind.Scroll;
-			assert ys(scrolled.value.rows) == "23";
+			assert rowNumbers(scrolled.value.rows) == "23";
 		}
 		vt.free();
 	}
 }
 
 test "a clear rewrites every row without scrolling" {
-	const opening = opened(10);
+	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
@@ -283,7 +283,7 @@ test "a clear rewrites every row without scrolling" {
 }
 
 test "entering and leaving the alternate screen each repaint, then scrolling resumes" {
-	const opening = opened(10);
+	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
@@ -317,7 +317,7 @@ test "entering and leaving the alternate screen each repaint, then scrolling res
 }
 
 test "a top row pruned from scrollback repaints and anchors again" {
-	const opening = opened(80);
+	const opening = filledScreen(80);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
@@ -344,7 +344,7 @@ test "a top row pruned from scrollback repaints and anchors again" {
 }
 
 test "a resize repaints at the new size" {
-	const opening = opened(10);
+	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
@@ -368,7 +368,7 @@ test "a resize repaints at the new size" {
 }
 
 test "scrolling the viewport down plans a scroll by that many rows and up repaints" {
-	const opening = opened(10);
+	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;
@@ -392,7 +392,7 @@ test "scrolling the viewport down plans a scroll by that many rows and up repain
 		if (down.ok) {
 			assert down.value.kind == PlanKind.Scroll;
 			assert down.value.scrolled == 2;
-			assert ys(down.value.rows) == "22,23";
+			assert rowNumbers(down.value.rows) == "22,23";
 			assert textOf(down.value.rows[1]) == "row 98";
 		}
 		vt.free();
@@ -400,7 +400,7 @@ test "scrolling the viewport down plans a scroll by that many rows and up repain
 }
 
 test "output while scrolled up plans nothing, and snapping back to the bottom plans the new rows" {
-	const opening = opened(10);
+	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
 		const vt = opening.value;

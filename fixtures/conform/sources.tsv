@@ -1,78 +1,78 @@
 id	status	reference	commit	note
-alacritty/alt_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/alt_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/clear_underline	ported	~/projects/alacritty/alacritty_terminal/tests/ref/clear_underline	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/colored_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/colored_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/colored_underline	ported	~/projects/alacritty/alacritty_terminal/tests/ref/colored_underline	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/csi_rep	ported	~/projects/alacritty/alacritty_terminal/tests/ref/csi_rep	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/delete_chars_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/delete_chars_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/delete_lines	ported	~/projects/alacritty/alacritty_terminal/tests/ref/delete_lines	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/erase_chars_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/erase_chars_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/fish_cc	ported	~/projects/alacritty/alacritty_terminal/tests/ref/fish_cc	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/grid_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/grid_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/history	ported	~/projects/alacritty/alacritty_terminal/tests/ref/history	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/hyperlinks	ported	~/projects/alacritty/alacritty_terminal/tests/ref/hyperlinks	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/indexed_256_colors	ported	~/projects/alacritty/alacritty_terminal/tests/ref/indexed_256_colors	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/insert_blank_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/insert_blank_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/issue_855	ported	~/projects/alacritty/alacritty_terminal/tests/ref/issue_855	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/ll	ported	~/projects/alacritty/alacritty_terminal/tests/ref/ll	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/newline_with_cursor_beyond_scroll_region	ported	~/projects/alacritty/alacritty_terminal/tests/ref/newline_with_cursor_beyond_scroll_region	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/origin_goto	ported	~/projects/alacritty/alacritty_terminal/tests/ref/origin_goto	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/region_scroll_down	ported	~/projects/alacritty/alacritty_terminal/tests/ref/region_scroll_down	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/row_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/row_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/scroll_in_region_up_preserves_history	ported	~/projects/alacritty/alacritty_terminal/tests/ref/scroll_in_region_up_preserves_history	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/scroll_up_reset	ported	~/projects/alacritty/alacritty_terminal/tests/ref/scroll_up_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/sgr	ported	~/projects/alacritty/alacritty_terminal/tests/ref/sgr	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/tab_rendering	ported	~/projects/alacritty/alacritty_terminal/tests/ref/tab_rendering	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/tmux_git_log	ported	~/projects/alacritty/alacritty_terminal/tests/ref/tmux_git_log	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/tmux_htop	ported	~/projects/alacritty/alacritty_terminal/tests/ref/tmux_htop	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/underline	ported	~/projects/alacritty/alacritty_terminal/tests/ref/underline	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/vim_24bitcolors_bce	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vim_24bitcolors_bce	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/vim_large_window_scroll	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vim_large_window_scroll	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/vim_simple_edit	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vim_simple_edit	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/vttest_origin_mode_1	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vttest_origin_mode_1	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/vttest_origin_mode_2	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vttest_origin_mode_2	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/vttest_scroll	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vttest_scroll	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/vttest_tab_clear_set	ported	~/projects/alacritty/alacritty_terminal/tests/ref/vttest_tab_clear_set	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/wrapline_alt_toggle	ported	~/projects/alacritty/alacritty_terminal/tests/ref/wrapline_alt_toggle	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/zerowidth	ported	~/projects/alacritty/alacritty_terminal/tests/ref/zerowidth	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/zsh_tab_completion	ported	~/projects/alacritty/alacritty_terminal/tests/ref/zsh_tab_completion	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
-alacritty/decaln_reset	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:3759 decaln (homes the cursor, keeps colours: test at :12627)	22fa134a0	Alacritty leaves the cursor in place after ESC # 8, so the next prompt lands on another row; libghostty and xterm home it
-alacritty/deccolm_reset	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:4003 deccolm (test at :16700)	22fa134a0	libghostty ignores DECCOLM unless mode 40 is on; Alacritty clears the screen
-alacritty/erase_in_line	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:14055 test eraseLine resets pending wrap	22fa134a0	after a write to the last column, EL erases that cell and the next char overwrites it; Alacritty keeps the cell and wraps
-alacritty/saved_cursor	not ported: references disagree	~/projects/ghostty/src/terminal/charsets.zig:53-87 dec_special has no 0x5f	22fa134a0	DEC special graphics maps _ to a blank in Alacritty and VT100; libghostty prints _
-alacritty/saved_cursor_alt	not ported: references disagree	~/projects/ghostty/src/terminal/charsets.zig:53-87 dec_special has no 0x5f	22fa134a0	same as saved_cursor
-alacritty/selective_erasure	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:15433 test eraseDisplay protected complete	22fa134a0	libghostty honours DECSCA and CSI ? 2 J (leaves the protected B); the Alacritty recording expects ABC, so Alacritty ignores them
-alacritty/vttest_cursor_movement_1	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:4003 deccolm	22fa134a0	vttest switches to 80 columns with mode 40 on: libghostty resizes, Alacritty keeps 105
-alacritty/vttest_insert	not ported: references disagree	~/projects/ghostty/src/terminal/Terminal.zig:4003 deccolm	22fa134a0	same as vttest_cursor_movement_1
-ghostty/sgr 8 colours	ported	~/projects/ghostty/src/terminal/sgr.zig:761; palette ~/projects/ghostty/src/terminal/color.zig:495-513	22fa134a0	SGR 30-37, 40-47, 90-97, 100-107 against the default palette; src/conform/sgr.ms
-ghostty/sgr 256 colours	ported	~/projects/ghostty/src/terminal/sgr.zig:789; cube and grey ramp ~/projects/ghostty/src/terminal/color.zig:20-37	22fa134a0	src/conform/sgr.ms
-ghostty/sgr truecolour and colour space	ported	~/projects/ghostty/src/terminal/sgr.zig:883	22fa134a0	colon form skips the optional colour space id, semicolon form does not; src/conform/sgr.ms
-ghostty/sgr bold, italic, strikethrough, resets	ported	~/projects/ghostty/src/terminal/sgr.zig:614,626,749	22fa134a0	src/conform/sgr.ms
-ghostty/sgr underline kinds	ported	~/projects/ghostty/src/terminal/sgr.zig:638,651,312,318	22fa134a0	4, 4:0..4:5, 21, 24; the wavy-only span mapping is Haro's (docs/VISION.md, straight and wavy); src/conform/sgr.ms
-ghostty/sgr colon overflow	ported	~/projects/ghostty/src/terminal/sgr.zig:689,704,939	22fa134a0	a parameter with too many colons is unknown and the next one applies; src/conform/sgr.ms
-ghostty/inverse	ported	~/projects/ghostty/src/renderer/generic.zig:3174; ~/projects/alacritty/alacritty/src/display/content.rs:214	22fa134a0 / 29dc5537	fg and bg swap; src/conform/sgr.ms
-ghostty/faint	ported	~/projects/ghostty/src/renderer/generic.zig:670,3182; ~/projects/ghostty/src/config/Config.zig:3927	22fa134a0	faint-opacity 0.5 blends fg into bg, compared within one channel step; src/conform/sgr.ms
-ghostty/print wide char	ported	~/projects/ghostty/src/terminal/Terminal.zig:5315,5338,5384	22fa134a0	wide cell, spacer head at the edge, one-column terminal; src/conform/cells.ms
-ghostty/print over wide char	ported	~/projects/ghostty/src/terminal/Terminal.zig:5403,5431,5470	22fa134a0	src/conform/cells.ms
-ghostty/disabled wraparound wide	ported	~/projects/ghostty/src/terminal/Terminal.zig:7338,7370	22fa134a0	src/conform/cells.ms
-ghostty/graphemes	ported	~/projects/ghostty/src/terminal/Terminal.zig:5556,5788,5888,5917,5991,6249,6726,6752,6786	22fa134a0	family, skin tone, VS15, VS16, o+grave, Devanagari with mode 2027 on and off; src/conform/cells.ms
-ghostty/zero-width	ported	~/projects/ghostty/src/terminal/Terminal.zig:5250,5266,5282; cap ~/projects/ghostty/src/terminal/page.zig:92	22fa134a0	src/conform/cells.ms
-ghostty/glitch.txt	ported	~/projects/ghostty/src/terminal/Terminal.zig:5225; ~/projects/ghostty/src/terminal/res/glitch.txt	22fa134a0	expected row from fixtures/conform/tools/glitchRow.mjs with the 64-mark cap of page.zig:92; src/conform/cells.ms
-ghostty/wraparound and scroll	ported	~/projects/ghostty/src/terminal/Terminal.zig:5155,5189,7302	22fa134a0	src/conform/cells.ms
-wezterm/emoji and hangul	ported	~/projects/wezterm/term/src/test/mod.rs:1153,1171	e2a98e1	src/conform/cells.ms
-wezterm/basic_output	ported	~/projects/wezterm/term/src/test/mod.rs:503	e2a98e1	src/conform/cells.ms
-wezterm/dec special graphics	ported	~/projects/wezterm/term/src/test/mod.rs:722	e2a98e1	src/conform/cells.ms
-wezterm/csi cursor addressing	ported	~/projects/wezterm/term/src/test/csi.rs:216,297,312,345; ~/projects/ghostty/src/terminal/Terminal.zig:8143,8221	e2a98e1 / 22fa134a0	CUP, HVP, CHA, VPA; clamps follow Ghostty, WezTerm leaves the cursor one past the last column; src/conform/regions.ms
-wezterm/csi edit	ported	~/projects/wezterm/term/src/test/csi.rs:8,235,244,253,267,281,327,368,397	e2a98e1	789 (DCH keeps the background), REP, IRM, ICH, ECH, DCH, DL, ED incl. BCE and ED 3; negative parameters not ported; src/conform/regions.ms
-wezterm/margins and delete_lines	ported	~/projects/wezterm/term/src/test/mod.rs:568,614,668	e2a98e1	IL and DL with a scroll region and left and right margins; src/conform/regions.ms
-wezterm/scrolling	ported	~/projects/wezterm/term/src/test/mod.rs:1087,1123,1130,1190,1236	e2a98e1	scrollback content through the viewport, RI, region scroll with and without scrollback, alternate screen; scrollback limits not ported (Ghostty prunes by bytes); src/conform/regions.ms
-ghostty/deccolm	ported	~/projects/ghostty/src/terminal/Terminal.zig:4003,16713,16700	22fa134a0	mode 40 then mode 3 resets to 80 columns and clears; src/conform/regions.ms
+alacritty/alt_reset	ported	Alacritty alacritty_terminal/tests/ref/alt_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/clear_underline	ported	Alacritty alacritty_terminal/tests/ref/clear_underline	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/colored_reset	ported	Alacritty alacritty_terminal/tests/ref/colored_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/colored_underline	ported	Alacritty alacritty_terminal/tests/ref/colored_underline	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/csi_rep	ported	Alacritty alacritty_terminal/tests/ref/csi_rep	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/delete_chars_reset	ported	Alacritty alacritty_terminal/tests/ref/delete_chars_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/delete_lines	ported	Alacritty alacritty_terminal/tests/ref/delete_lines	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/erase_chars_reset	ported	Alacritty alacritty_terminal/tests/ref/erase_chars_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/fish_cc	ported	Alacritty alacritty_terminal/tests/ref/fish_cc	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/grid_reset	ported	Alacritty alacritty_terminal/tests/ref/grid_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/history	ported	Alacritty alacritty_terminal/tests/ref/history	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/hyperlinks	ported	Alacritty alacritty_terminal/tests/ref/hyperlinks	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/indexed_256_colors	ported	Alacritty alacritty_terminal/tests/ref/indexed_256_colors	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/insert_blank_reset	ported	Alacritty alacritty_terminal/tests/ref/insert_blank_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/issue_855	ported	Alacritty alacritty_terminal/tests/ref/issue_855	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/ll	ported	Alacritty alacritty_terminal/tests/ref/ll	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/newline_with_cursor_beyond_scroll_region	ported	Alacritty alacritty_terminal/tests/ref/newline_with_cursor_beyond_scroll_region	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/origin_goto	ported	Alacritty alacritty_terminal/tests/ref/origin_goto	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/region_scroll_down	ported	Alacritty alacritty_terminal/tests/ref/region_scroll_down	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/row_reset	ported	Alacritty alacritty_terminal/tests/ref/row_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/scroll_in_region_up_preserves_history	ported	Alacritty alacritty_terminal/tests/ref/scroll_in_region_up_preserves_history	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/scroll_up_reset	ported	Alacritty alacritty_terminal/tests/ref/scroll_up_reset	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/sgr	ported	Alacritty alacritty_terminal/tests/ref/sgr	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/tab_rendering	ported	Alacritty alacritty_terminal/tests/ref/tab_rendering	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/tmux_git_log	ported	Alacritty alacritty_terminal/tests/ref/tmux_git_log	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/tmux_htop	ported	Alacritty alacritty_terminal/tests/ref/tmux_htop	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/underline	ported	Alacritty alacritty_terminal/tests/ref/underline	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vim_24bitcolors_bce	ported	Alacritty alacritty_terminal/tests/ref/vim_24bitcolors_bce	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vim_large_window_scroll	ported	Alacritty alacritty_terminal/tests/ref/vim_large_window_scroll	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vim_simple_edit	ported	Alacritty alacritty_terminal/tests/ref/vim_simple_edit	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vttest_origin_mode_1	ported	Alacritty alacritty_terminal/tests/ref/vttest_origin_mode_1	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vttest_origin_mode_2	ported	Alacritty alacritty_terminal/tests/ref/vttest_origin_mode_2	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vttest_scroll	ported	Alacritty alacritty_terminal/tests/ref/vttest_scroll	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/vttest_tab_clear_set	ported	Alacritty alacritty_terminal/tests/ref/vttest_tab_clear_set	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/wrapline_alt_toggle	ported	Alacritty alacritty_terminal/tests/ref/wrapline_alt_toggle	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/zerowidth	ported	Alacritty alacritty_terminal/tests/ref/zerowidth	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/zsh_tab_completion	ported	Alacritty alacritty_terminal/tests/ref/zsh_tab_completion	29dc5537	rows and run styles from grid.json; test in src/conform/alacritty.ms
+alacritty/decaln_reset	not ported: references disagree	Ghostty src/terminal/Terminal.zig:3759 decaln (homes the cursor, keeps colours: test at :12627)	22fa134a0	Alacritty leaves the cursor in place after ESC # 8, so the next prompt lands on another row; libghostty and xterm home it
+alacritty/deccolm_reset	not ported: references disagree	Ghostty src/terminal/Terminal.zig:4003 deccolm (test at :16700)	22fa134a0	libghostty ignores DECCOLM unless mode 40 is on; Alacritty clears the screen
+alacritty/erase_in_line	not ported: references disagree	Ghostty src/terminal/Terminal.zig:14055 test eraseLine resets pending wrap	22fa134a0	after a write to the last column, EL erases that cell and the next char overwrites it; Alacritty keeps the cell and wraps
+alacritty/saved_cursor	not ported: references disagree	Ghostty src/terminal/charsets.zig:53-87 dec_special has no 0x5f	22fa134a0	DEC special graphics maps _ to a blank in Alacritty and VT100; libghostty prints _
+alacritty/saved_cursor_alt	not ported: references disagree	Ghostty src/terminal/charsets.zig:53-87 dec_special has no 0x5f	22fa134a0	same as saved_cursor
+alacritty/selective_erasure	not ported: references disagree	Ghostty src/terminal/Terminal.zig:15433 test eraseDisplay protected complete	22fa134a0	libghostty honours DECSCA and CSI ? 2 J (leaves the protected B); the Alacritty recording expects ABC, so Alacritty ignores them
+alacritty/vttest_cursor_movement_1	not ported: references disagree	Ghostty src/terminal/Terminal.zig:4003 deccolm	22fa134a0	vttest switches to 80 columns with mode 40 on: libghostty resizes, Alacritty keeps 105
+alacritty/vttest_insert	not ported: references disagree	Ghostty src/terminal/Terminal.zig:4003 deccolm	22fa134a0	same as vttest_cursor_movement_1
+ghostty/sgr 8 colours	ported	Ghostty src/terminal/sgr.zig:761; palette Ghostty src/terminal/color.zig:495-513	22fa134a0	SGR 30-37, 40-47, 90-97, 100-107 against the default palette; src/conform/sgr.ms
+ghostty/sgr 256 colours	ported	Ghostty src/terminal/sgr.zig:789; cube and grey ramp Ghostty src/terminal/color.zig:20-37	22fa134a0	src/conform/sgr.ms
+ghostty/sgr truecolour and colour space	ported	Ghostty src/terminal/sgr.zig:883	22fa134a0	colon form skips the optional colour space id, semicolon form does not; src/conform/sgr.ms
+ghostty/sgr bold, italic, strikethrough, resets	ported	Ghostty src/terminal/sgr.zig:614,626,749	22fa134a0	src/conform/sgr.ms
+ghostty/sgr underline kinds	ported	Ghostty src/terminal/sgr.zig:638,651,312,318	22fa134a0	4, 4:0..4:5, 21, 24; the wavy-only span mapping is Haro's (docs/VISION.md, straight and wavy); src/conform/sgr.ms
+ghostty/sgr colon overflow	ported	Ghostty src/terminal/sgr.zig:689,704,939	22fa134a0	a parameter with too many colons is unknown and the next one applies; src/conform/sgr.ms
+ghostty/inverse	ported	Ghostty src/renderer/generic.zig:3174; Alacritty alacritty/src/display/content.rs:214	22fa134a0 / 29dc5537	fg and bg swap; src/conform/sgr.ms
+ghostty/faint	ported	Ghostty src/renderer/generic.zig:670,3182; Ghostty src/config/Config.zig:3927	22fa134a0	faint-opacity 0.5 blends fg into bg, compared within one channel step; src/conform/sgr.ms
+ghostty/print wide char	ported	Ghostty src/terminal/Terminal.zig:5315,5338,5384	22fa134a0	wide cell, spacer head at the edge, one-column terminal; src/conform/cells.ms
+ghostty/print over wide char	ported	Ghostty src/terminal/Terminal.zig:5403,5431,5470	22fa134a0	src/conform/cells.ms
+ghostty/disabled wraparound wide	ported	Ghostty src/terminal/Terminal.zig:7338,7370	22fa134a0	src/conform/cells.ms
+ghostty/graphemes	ported	Ghostty src/terminal/Terminal.zig:5556,5788,5888,5917,5991,6249,6726,6752,6786	22fa134a0	family, skin tone, VS15, VS16, o+grave, Devanagari with mode 2027 on and off; src/conform/cells.ms
+ghostty/zero-width	ported	Ghostty src/terminal/Terminal.zig:5250,5266,5282; cap Ghostty src/terminal/page.zig:92	22fa134a0	src/conform/cells.ms
+ghostty/glitch.txt	ported	Ghostty src/terminal/Terminal.zig:5225; Ghostty src/terminal/res/glitch.txt	22fa134a0	expected row from fixtures/conform/tools/glitchRow.mjs with the 64-mark cap of page.zig:92; src/conform/cells.ms
+ghostty/wraparound and scroll	ported	Ghostty src/terminal/Terminal.zig:5155,5189,7302	22fa134a0	src/conform/cells.ms
+wezterm/emoji and hangul	ported	WezTerm term/src/test/mod.rs:1153,1171	e2a98e1	src/conform/cells.ms
+wezterm/basic_output	ported	WezTerm term/src/test/mod.rs:503	e2a98e1	src/conform/cells.ms
+wezterm/dec special graphics	ported	WezTerm term/src/test/mod.rs:722	e2a98e1	src/conform/cells.ms
+wezterm/csi cursor addressing	ported	WezTerm term/src/test/csi.rs:216,297,312,345; Ghostty src/terminal/Terminal.zig:8143,8221	e2a98e1 / 22fa134a0	CUP, HVP, CHA, VPA; clamps follow Ghostty, WezTerm leaves the cursor one past the last column; src/conform/regions.ms
+wezterm/csi edit	ported	WezTerm term/src/test/csi.rs:8,235,244,253,267,281,327,368,397	e2a98e1	789 (DCH keeps the background), REP, IRM, ICH, ECH, DCH, DL, ED incl. BCE and ED 3; negative parameters not ported; src/conform/regions.ms
+wezterm/margins and delete_lines	ported	WezTerm term/src/test/mod.rs:568,614,668	e2a98e1	IL and DL with a scroll region and left and right margins; src/conform/regions.ms
+wezterm/scrolling	ported	WezTerm term/src/test/mod.rs:1087,1123,1130,1190,1236	e2a98e1	scrollback content through the viewport, RI, region scroll with and without scrollback, alternate screen; scrollback limits not ported (Ghostty prunes by bytes); src/conform/regions.ms
+ghostty/deccolm	ported	Ghostty src/terminal/Terminal.zig:4003,16713,16700	22fa134a0	mode 40 then mode 3 resets to 80 columns and clears; src/conform/regions.ms
 frames/differential	property, no external reference	the oracle is a fresh read of the libghostty render state after the same bytes	-	generated streams painted in random frame cuts, per operation, with viewport scrolls and resizes; src/conform/frames.ms
-ghostty/palette dirty	ported	~/projects/ghostty/src/terminal/Terminal.zig:16387,16394; ~/projects/ghostty/src/terminal/stream_terminal.zig:2089,2111	22fa134a0	an OSC 4 or OSC 104 change marks the render state dirty so rows repaint; src/conform/colors.ms
-ghostty/default colour changes are not dirty	ported	~/projects/ghostty/src/terminal/stream_terminal.zig:2095-2096,2113-2114; ~/projects/ghostty/src/terminal/render.zig:633	22fa134a0	OSC 10, OSC 11 and DECSCNM change the render state's default colours without marking a row dirty; Haro bakes them into each row, so rows already drawn go stale; pinned as a known bug in src/conform/colors.ms
-ghostty/background colour erase	ported	~/projects/ghostty/src/terminal/Terminal.zig:10694,10061,12807,14102,15081,11734	22fa134a0	index, ECH, ICH, EL, ED and DL leave the SGR background on the vacated cells; src/conform/colors.ms
-wezterm/resize reflow	ported	~/projects/wezterm/term/src/test/mod.rs:767,825,874,922,1031,1045,1059,1073	e2a98e1	text after each resize; WezTerm's cursor columns not ported (it allows a cursor one past the last column); src/conform/regions.ms
-wezterm/c0 and c1 controls	ported	~/projects/wezterm/term/src/test/c0.rs:6,17,24,40; ~/projects/wezterm/term/src/test/c1.rs:6,19,63	e2a98e1	BS, LF, CR, HT, IND, NEL, RI; src/conform/regions.ms
-wezterm/hts after resize	not ported: references disagree	~/projects/wezterm/term/src/test/c1.rs:31 keeps an HTS stop across a resize; ~/projects/ghostty/src/terminal/Terminal.zig:4064 resets tab stops when the columns change	22fa134a0	src/conform/regions.ms pins Ghostty's behaviour
-ghostty/invalid utf-8	ported	~/projects/ghostty/src/terminal/UTF8Decoder.zig:124; ~/projects/ghostty/src/terminal/stream.zig:3265	22fa134a0	src/conform/cells.ms
-pin note	info	the cited Ghostty lines are in ~/projects/ghostty at 22fa134a0; Haro vendors vendor/ghostty at 622b4eecd (2026-09-23); every behaviour pinned here passes against the vendored library	-	-
+ghostty/palette dirty	ported	Ghostty src/terminal/Terminal.zig:16387,16394; Ghostty src/terminal/stream_terminal.zig:2089,2111	22fa134a0	an OSC 4 or OSC 104 change marks the render state dirty so rows repaint; src/conform/colors.ms
+ghostty/default colour changes are not dirty	ported	Ghostty src/terminal/stream_terminal.zig:2095-2096,2113-2114; Ghostty src/terminal/render.zig:633	22fa134a0	OSC 10, OSC 11 and DECSCNM change the render state's default colours without marking a row dirty; Haro bakes them into each row, so rows already drawn go stale; pinned as a known bug in src/conform/colors.ms
+ghostty/background colour erase	ported	Ghostty src/terminal/Terminal.zig:10694,10061,12807,14102,15081,11734	22fa134a0	index, ECH, ICH, EL, ED and DL leave the SGR background on the vacated cells; src/conform/colors.ms
+wezterm/resize reflow	ported	WezTerm term/src/test/mod.rs:767,825,874,922,1031,1045,1059,1073	e2a98e1	text after each resize; WezTerm's cursor columns not ported (it allows a cursor one past the last column); src/conform/regions.ms
+wezterm/c0 and c1 controls	ported	WezTerm term/src/test/c0.rs:6,17,24,40; WezTerm term/src/test/c1.rs:6,19,63	e2a98e1	BS, LF, CR, HT, IND, NEL, RI; src/conform/regions.ms
+wezterm/hts after resize	not ported: references disagree	WezTerm term/src/test/c1.rs:31 keeps an HTS stop across a resize; Ghostty src/terminal/Terminal.zig:4064 resets tab stops when the columns change	22fa134a0	src/conform/regions.ms pins Ghostty's behaviour
+ghostty/invalid utf-8	ported	Ghostty src/terminal/UTF8Decoder.zig:124; Ghostty src/terminal/stream.zig:3265	22fa134a0	src/conform/cells.ms
+pin note	info	the cited Ghostty lines are at Ghostty commit 22fa134a0; Haro vendors vendor/ghostty at 622b4eecd (2026-09-23); every behaviour pinned here passes against the vendored library	-	-

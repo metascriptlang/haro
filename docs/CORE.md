@@ -147,11 +147,11 @@ a fixed array member (msc card `2026-10-15-c-import-fixed-array-member-sizedarra
 - With the person's profile the window exited at the first prompt: starship prints U+F0054, above
   U+FFFF. Since `9b63bd7` the grid builds such cells with std's `fromCodePoint`.
 
-Re-run 2026-10-16 (msc `5631dd3e5`, neon `2b0f58c`, void `40e9bfa3`, JetBrains Mono NL 14 px, 105x30
-cells): through a live ConPTY, bold, italic, bold-italic, plain and curly underline, strike-through,
-16/256/truecolor and backgrounds draw right. A replay that ends before the first frame draws every
-row over row 0: the row height is a signal set in `onLayout`, and Neon requests no frame for a
-layout-only change (Neon card `2026-10-16-layout-only-style-change-requests-no-frame`).
+Re-run 2026-10-16 (msc `5631dd3e5`, neon `2b0f58c`, void `40e9bfa3`, JetBrains Mono NL 14 px,
+105x30 cells): through a live ConPTY, bold, italic, bold-italic, plain and curly underline,
+strike-through, 16/256/truecolor and backgrounds draw right. A replay that ends before the first
+frame drew every row over row 0: the row height is a signal set in `onLayout`, and Neon requested
+no frame for a layout-only change until neon `2104058`.
 
 ## Measured
 

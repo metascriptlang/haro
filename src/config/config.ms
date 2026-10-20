@@ -144,6 +144,7 @@ function readKeybind(v: JsonValue, key: string): Result<Keybind, string> {
 	for (let i = 0; i < v.keys.length; i++) {
 		const name = v.keys[i];
 		const value = v.values[i];
+		if (value.kind == JsonKind.Null) { continue; }
 		match (name) {
 			"keys" => { keys = try readString(value, `${key}.keys`); },
 			"text" => { sends = try readString(value, `${key}.text`); },
@@ -183,6 +184,7 @@ export function parse(json: string): Result<Config, string> {
 	for (let i = 0; i < root.keys.length; i++) {
 		const key = root.keys[i];
 		const v = root.values[i];
+		if (v.kind == JsonKind.Null) { continue; }
 		match (key) {
 			"fontFamily" => { c.fontFamily = try readFamilies(v, key); },
 			"fontSize" => {
@@ -296,6 +298,14 @@ test "a keybind runs an action or keeps to one screen when its config says so" {
 	assert c.value.keybinds[0].screen == Screen.Alternate;
 	assert c.value.keybinds[1].action == BindAction.CloseWindow;
 	assert c.value.keybinds[1].screen == Screen.Primary;
+}
+
+test "a field msc prints as null is a field the config left out" {
+	const c = parse(`{"fontSize":null,"keybinds":[{"keys":"super+w","text":"x","action":null,"mode":null}]}`);
+	assert c.ok;
+	assert c.value.fontSize == 10.5;
+	assert c.value.keybinds[0].action == BindAction.SendText;
+	assert c.value.keybinds[0].screen == Screen.Any;
 }
 
 test "a list of font families keeps its order, the first one primary and the rest its fallbacks" {

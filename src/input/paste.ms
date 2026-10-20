@@ -149,13 +149,13 @@ function measure(text: string): string {
 
 function dialogWith(
 	heading: string,
-	body: string,
+	message: string,
 	text: string,
 	cols: int32,
 	maxCode: int32,
 ): Dialog {
 	let top: Vec<Line> = [{ text: heading, tone: Tone.Title }];
-	for (const row of wrap(body, cols)) { top.push({ text: row, tone: Tone.Body }); }
+	for (const row of wrap(message, cols)) { top.push({ text: row, tone: Tone.Body }); }
 	top.push({ text: measure(text), tone: Tone.Dim });
 	return { top: top, code: previewOf(text, cols, maxCode) };
 }

@@ -1,4 +1,4 @@
-import { cwd, execFileCapture, findOnPath } from "std/process";
+import { cwd } from "std/process";
 when (!macos) {
 	import { env } from "std/process";
 }
@@ -7,6 +7,13 @@ import { changeStamp, ensureDir, exists, readFile, writeFile } from "std/fs";
 import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
 import { Faces, installedFaces } from "./fonts";
+import {
+	callRoutine,
+	createInterpreter,
+	evalModule,
+	selectRoutine,
+	unboxString,
+} from "../../../../.metascript/src/embed/index";
 
 export interface Loaded {
 	config: Config;
@@ -34,57 +41,37 @@ export function cacheDir(): string {
 	}
 }
 
-function isCsiFinal(c: string): boolean {
-	return c >= "@" && c <= "~";
-}
-
-function withoutStyles(text: string): string {
-	let out = "";
-	for (let i = 0; i < text.length; i++) {
-		if (text[i] == "\x1b" && i + 1 < text.length && text[i + 1] == "[") {
-			i += 2;
-			while (i < text.length && !isCsiFinal(text[i])) { i++; }
-			continue;
-		}
-		out += text[i];
-	}
-	return out;
-}
-
-function lastLine(text: string): string {
-	const lines = text.trim().split("\n");
-	return lines[lines.length - 1].trim();
-}
-
 function packagesOf(api: string): string {
 	return `const config = { deps: { "haro": ${JSON.stringify(`file:${api}`)} } };\n` +
 		"export default config;\n";
 }
 
 function evaluate(path: string, dir: string, api: string): Result<string, string> {
-	const installedMsc = `${homeDir()}/.metascript/bin/msc`;
-	const onPath = findOnPath("msc");
-	const msc = onPath != "" ? onPath : exists(installedMsc) ? installedMsc : "";
-	if (msc == "") {
-		return Result.err(`running config.ms needs msc on PATH or at ${installedMsc}`);
-	}
 	const target = relative(dir, path);
 	const importPath = target.startsWith(".") || isAbsolute(target) ? target : `./${target}`;
 	const runner = `import { config } from ${JSON.stringify(importPath)};\n` +
-		"console.log(JSON.stringify(config));\n";
+		"export function configJson(): string { return JSON.stringify(config); }\n";
 	if (!writeFile(`${dir}/evaluate.ms`, runner).ok) {
 		return Result.err(`cannot write ${dir}/evaluate.ms`);
 	}
-	if (!writeFile(`${dir}/build.ms`, packagesOf(api)).ok) {
-		return Result.err(`cannot write ${dir}/build.ms`);
-	}
 	const beside = `${dirname(path)}/build.ms`;
 	if (!exists(beside)) { const _written = writeFile(beside, packagesOf(api)); }
-	const ran = execFileCapture(msc, ["run", "--target=raiser", "evaluate.ms"], dir);
-	if (!ran.ok) {
-		return Result.err(withoutStyles(`${ran.error.output}${ran.error.errorOutput}`).trim());
+	const made = createInterpreter(`${homeDir().replaceAll("\\", "/")}/.metascript`, [dirname(api)]);
+	if (!made.ok) {
+		return Result.err(`running config.ms needs MetaScript installed: ${made.error}`);
 	}
-	return Result.ok(lastLine(ran.value));
+	const interp = made.value;
+	const ran = evalModule(interp, `${dir}/evaluate.ms`);
+	if (!ran.ok) {
+		return Result.err(ran.error.map(
+			(d) => `${d.file}${d.line > 0 ? `:${d.line}:${d.column}` : ""}: ${d.message}`,
+		).join("\n"));
+	}
+	const routine = selectRoutine(interp, "configJson");
+	if (!routine.ok) { return Result.err(routine.error); }
+	const got = callRoutine(interp, routine.value, []);
+	if (!got.ok) { return Result.err(got.error); }
+	return Result.ok(unboxString(got.value));
 }
 
 interface FontsFound {
@@ -159,16 +146,6 @@ export function load(path: string, api: string): Result<Loaded, string> {
 	return Result.ok({ config: config, faces: fonts.faces, stamp: stamp, notice: fonts.notice });
 }
 
-test "styles in the compiler's diagnostics are dropped, the text kept" {
-	assert withoutStyles("\x1b[1m\x1b[31merror\x1b[0m: bad") == "error: bad";
-	assert withoutStyles("plain") == "plain";
-}
-
-test "the evaluated config is the last line printed" {
-	assert lastLine("note\n{\"a\":1}\n") == "{\"a\":1}";
-	assert lastLine("{}") == "{}";
-}
-
 test "a cached record gives back each family's faces in order" {
 	const json = "{\"fontFamily\":[\"A\",\"B\"]}";
 	const faces: Vec<Faces> = [
@@ -223,6 +200,7 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 	const misspelt = evaluate(path, dir, api);
 	assert !misspelt.ok;
 	if (!misspelt.ok) {
+		assert misspelt.error.includes("/config.ms:3:");
 		assert misspelt.error.includes("'fontSiz' does not exist in type 'HaroConfig'");
 	}
 }

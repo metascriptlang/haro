@@ -13,7 +13,18 @@ export interface Stats {
 
 export struct Mark { name: string; at: float64; }
 
-export const stats: Stats = { refreshes: 0, more: 0, rows: 0, scrolled: 0, chars: 0, keyAt: -1, wakeAt: -1, echoes: [], settles: [], marks: [] };
+export const stats: Stats = {
+	refreshes: 0,
+	more: 0,
+	rows: 0,
+	scrolled: 0,
+	chars: 0,
+	keyAt: -1,
+	wakeAt: -1,
+	echoes: [],
+	settles: [],
+	marks: [],
+};
 
 export function mark(this s: Stats, name: string, at: float64): void {
 	for (const m of s.marks) {
@@ -44,7 +55,13 @@ export function noteWake(this s: Stats, at: float64): void {
 	if (s.keyAt >= 0) { s.wakeAt = at; }
 }
 
-export function noteApplied(this s: Stats, rows: int32, scrolled: int32, chars: int32, at: float64): void {
+export function noteApplied(
+	this s: Stats,
+	rows: int32,
+	scrolled: int32,
+	chars: int32,
+	at: float64,
+): void {
 	s.rows += rows;
 	s.scrolled += scrolled;
 	s.chars += chars;
@@ -65,12 +82,14 @@ function summary(name: string, samples: Vec<float64>): string {
 	if (samples.length == 0) { return `${name} n=0`; }
 	let sorted: Vec<float64> = [...samples];
 	sorted.sort((a: float64, b: float64): number => a - b);
-	return `${name} n=${sorted.length} p50=${hundredths(sorted[Math.floor(sorted.length / 2)])} max=${hundredths(sorted[sorted.length - 1])}`;
+	const middle = hundredths(sorted[Math.floor(sorted.length / 2)]);
+	const highest = hundredths(sorted[sorted.length - 1]);
+	return `${name} n=${sorted.length} p50=${middle} max=${highest}`;
 }
 
 export function line(this s: Stats): string {
-	return `refreshes=${s.refreshes} more=${s.more} rows=${s.rows} scrolled=${s.scrolled} chars=${s.chars} ` +
-		`${summary("echo", s.echoes)} ${summary("settle", s.settles)}`;
+	return `refreshes=${s.refreshes} more=${s.more} rows=${s.rows} scrolled=${s.scrolled} ` +
+		`chars=${s.chars} ${summary("echo", s.echoes)} ${summary("settle", s.settles)}`;
 }
 
 export function reset(this s: Stats): void {
@@ -93,7 +112,8 @@ test "a key's echo runs to the first apply that changes rows, and its settle fro
 	s.noteApplied(0, 0, 0, 13);
 	s.noteApplied(2, 0, 160, 15.5);
 	s.noteApplied(1, 0, 80, 20);
-	assert s.line() == "refreshes=0 more=0 rows=3 scrolled=0 chars=240 echo n=1 p50=5.5 max=5.5 settle n=1 p50=0.5 max=0.5";
+	assert s.line() == "refreshes=0 more=0 rows=3 scrolled=0 chars=240 " +
+		"echo n=1 p50=5.5 max=5.5 settle n=1 p50=0.5 max=0.5";
 	s.reset();
 	assert s.line() == "refreshes=0 more=0 rows=0 scrolled=0 chars=0 echo n=0 settle n=0";
 }

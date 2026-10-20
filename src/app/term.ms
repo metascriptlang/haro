@@ -6,7 +6,14 @@ import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
 import { Session } from "../session/session";
 import {
-	Cursor, CursorLook, CursorShape, Keys, MouseGeometry, MouseInput, PasteError, Palette,
+	Cursor,
+	CursorLook,
+	CursorShape,
+	Keys,
+	MouseGeometry,
+	MouseInput,
+	PasteError,
+	Palette,
 } from "../vt/vt";
 import { FrameError, RowSlot, applyFrame } from "./frame";
 import { stats, mark } from "./stats";
@@ -69,8 +76,16 @@ const HIDDEN: CursorLook = { visible: false, shape: CursorShape.Block, blinking:
 
 function idle(more: boolean, ended: boolean): Frame {
 	return {
-		cursor: null, look: HIDDEN, colors: null, more: more, ended: ended, held: false,
-		copied: null, asked: false, bells: 0, title: null,
+		cursor: null,
+		look: HIDDEN,
+		colors: null,
+		more: more,
+		ended: ended,
+		held: false,
+		copied: null,
+		asked: false,
+		bells: 0,
+		title: null,
 	};
 }
 
@@ -169,7 +184,14 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	}
 	const asked = vt.clipboardAsked();
 	if (vt.holding()) {
-		return Result.ok({ ...idle(more, ended), held: true, copied: copied.value, asked: asked, bells: events.value.bells, title: title });
+		return Result.ok({
+			...idle(more, ended),
+			held: true,
+			copied: copied.value,
+			asked: asked,
+			bells: events.value.bells,
+			title: title,
+		});
 	}
 	const applied = applyFrame(t.grid, t.styles, vt);
 	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
@@ -179,8 +201,16 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	if (!colors.ok) { return Result.err(TermError.FramePaletteFailed); }
 	const current: Palette | null = colors.value;
 	return Result.ok({
-		cursor: applied.value, look: look.value, colors: current, more: more, ended: ended, held: false,
-		copied: copied.value, asked: asked, bells: events.value.bells, title: title,
+		cursor: applied.value,
+		look: look.value,
+		colors: current,
+		more: more,
+		ended: ended,
+		held: false,
+		copied: copied.value,
+		asked: asked,
+		bells: events.value.bells,
+		title: title,
 	});
 }
 
@@ -214,12 +244,19 @@ export function sendText(this t: Term, text: string): Result<int32, TermError> {
 	return Result.ok(n);
 }
 
-export function sendPaste(this t: Term, text: string, allowUnsafe: boolean): Result<int32, TermError> {
+export function sendPaste(
+	this t: Term,
+	text: string,
+	allowUnsafe: boolean,
+): Result<int32, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(0); }
 	const bytes = s.vt.pasteBytes(text, allowUnsafe);
 	if (!bytes.ok) {
-		return Result.err(bytes.error == PasteError.Unsafe ? TermError.PasteUnsafe : TermError.PasteEncodeFailed);
+		return Result.err(match (bytes.error) {
+			PasteError.Unsafe => TermError.PasteUnsafe,
+			PasteError.EncodeFailed => TermError.PasteEncodeFailed,
+		});
 	}
 	const n = bytes.value.length as int32;
 	if (n == 0) { return Result.ok(0); }
@@ -238,7 +275,10 @@ export function sendFocus(this t: Term, gained: boolean): Result<int32, TermErro
 }
 
 export function sendMouse(
-	this t: Term, e: MouseInput, g: MouseGeometry, anyPressed: boolean,
+	this t: Term,
+	e: MouseInput,
+	g: MouseGeometry,
+	anyPressed: boolean,
 ): Result<int32, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(0); }

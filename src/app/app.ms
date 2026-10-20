@@ -12,8 +12,19 @@ import { stats, noteKey } from "./stats";
 import { gridSize } from "../grid/size";
 import { Spot, spotAt } from "../input/pointer";
 import { Block } from "../select/select";
+import { KeyMod } from "../keys/keys";
 import { Cursor, CursorLook, CursorShape, MouseGeometry } from "../vt/vt";
-import { BLINK_MS, BOX_SLOTS, Box, NO_BOX, blinks, boxes, drawn, resets, shapeOf } from "../term/cursor";
+import {
+	BLINK_MS,
+	BOX_SLOTS,
+	Box,
+	NO_BOX,
+	blinks,
+	boxes,
+	drawn,
+	resets,
+	shapeOf,
+} from "../term/cursor";
 import { applyTitle, ringBell } from "./chrome";
 import { hexOf } from "./frame";
 import { Config, fontPx } from "../config/config";
@@ -35,10 +46,12 @@ const NOTICE_TEXT = "#ffffff";
 const NOTICE_PADDING: number = 8;
 const NOTICE_FALLBACK_COLS: int32 = 80;
 const PROBE = "MMMMMMMMMM";
-const SHADES = 3;
+const SHADES: int32 = 3;
 const HOLD_RECHECK_MS = 100;
 const AUTOSCROLL_MS = 15;
 const NO_SHADE: Block = { row: 0, col: 0, rows: 0, cols: 0 };
+const RESTART_NOTICE =
+	"config.ms: fontFamily, fontSize, command and workingDirectory apply when Haro restarts";
 
 export interface Entry {
 	onWake: (handler: () => void) => void;
@@ -52,7 +65,9 @@ export interface Entry {
 }
 
 function restartNeeded(now: Config, started: Config): boolean {
-	return now.fontFamily.join("\n") != started.fontFamily.join("\n") || now.fontSize != started.fontSize || now.command != started.command ||
+	return now.fontFamily.join("\n") != started.fontFamily.join("\n") ||
+		now.fontSize != started.fontSize ||
+		now.command != started.command ||
 		now.workingDirectory != started.workingDirectory;
 }
 
@@ -119,7 +134,8 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		const at = cursorAt;
 		if (at !== null && drawn(cursorLook, focused, blinkOn)) {
 			const width = at.wide ? 2 * cellWidth() : cellWidth();
-			next = boxes(shapeOf(cursorLook, focused), at.x, at.y, width, rowHeight(), 1 / PixelRatio.get());
+			const shape = shapeOf(cursorLook, focused);
+			next = boxes(shape, at.x, at.y, width, rowHeight(), 1 / PixelRatio.get());
 		}
 		for (let i = 0; i < BOX_SLOTS; i++) {
 			const box = i < next.length ? next[i] : NO_BOX;
@@ -221,11 +237,11 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			repaint();
 		}
 		dialog.show(controls.held, controls.reading, cellWidth(), viewWidth());
-		if (frame.value.more) {
+		if (f.more) {
 			stats.more += 1;
 			entry.schedule(refresh);
 		}
-		if (frame.value.ended) { entry.exited(t.shellExitCode()); }
+		if (f.ended) { entry.exited(t.shellExitCode()); }
 	}
 
 	const clip: Bridge = bridge();
@@ -233,7 +249,9 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	function showNotice(text: string): void {
 		notice = text;
 		const room = viewWidth() - 2 * padding() - 2 * NOTICE_PADDING;
-		const cols = cellWidth() > 0 ? Math.max(1, Math.floor(room / cellWidth())) as int32 : NOTICE_FALLBACK_COLS;
+		const cols = cellWidth() > 0
+			? Math.max(1, Math.floor(room / cellWidth())) as int32
+			: NOTICE_FALLBACK_COLS;
 		noticeRows.replaceAll(noticeLines(text, cols));
 		setNoticed(text != "");
 	}
@@ -242,8 +260,9 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		const s = t.session;
 		if (s === null) { return true; }
 		const vt = s.vt;
-		if (!vt.setDefaultColors(settings.foreground, settings.background).ok || !vt.setPalette(settings.palette).ok
-			|| !vt.setScrollback(settings.scrollback).ok) {
+		if (!vt.setDefaultColors(settings.foreground, settings.background).ok ||
+			!vt.setPalette(settings.palette).ok ||
+			!vt.setScrollback(settings.scrollback).ok) {
 			entry.fail("the terminal refused the configured colours or scrollback");
 			return false;
 		}
@@ -258,7 +277,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		settings = c;
 		controls.keybinds = c.keybinds;
 		setPadding(c.padding);
-		showNotice(restartNeeded(c, started) ? "config.ms: fontFamily, fontSize, command and workingDirectory apply when Haro restarts" : "");
+		showNotice(restartNeeded(c, started) ? RESTART_NOTICE : "");
 		if (themed && applySettings()) { refresh(); }
 	});
 
@@ -321,7 +340,10 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		showNotice(notice);
 		dialog.shownFor = null;
 		geometry = {
-			cellWidth: cellPx, cellHeight: rowPx, width: size.value[0] * cellPx, height: size.value[1] * rowPx,
+			cellWidth: cellPx,
+			cellHeight: rowPx,
+			width: size.value[0] * cellPx,
+			height: size.value[1] * rowPx,
 		};
 		setCellWidth(cellPx / ratio);
 		setRowHeight(rowPx / ratio);
@@ -331,12 +353,12 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 				`cell ${advance}x${lineHeight} grid ${size.value[0]}x${size.value[1]}`
 		);
 		const fitted = t.fit(size.value[0], size.value[1]);
-		if (!fitted.ok && fitted.error == TermError.PtyOpenFailed) {
-			showNotice("the shell did not start: check command in config.ms, or --shell");
-			return;
-		}
 		if (!fitted.ok) {
-			fatal("fit", fitted.error);
+			if (fitted.error == TermError.PtyOpenFailed) {
+				showNotice("the shell did not start: check command in config.ms, or --shell");
+			} else {
+				fatal("fit", fitted.error);
+			}
 			return;
 		}
 		if (!themed) {
@@ -401,7 +423,12 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 
 	const hit = (e: NeonEvent): Hit => {
 		return {
-			at: spot(e), x: e.locationX, y: e.locationY, scale: PixelRatio.get(), mods: e.mods as int32, cell: geometry,
+			at: spot(e),
+			x: e.locationX,
+			y: e.locationY,
+			scale: PixelRatio.get(),
+			mods: (e.mods as uint16) as BitSet<KeyMod>,
+			cell: geometry,
 		};
 	};
 
@@ -549,11 +576,19 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 					children: element(
 						<View
 							style={{
-								position: "absolute", left: cursorCol() * cellWidth(), top: cursorRow() * rowHeight(),
-								backgroundColor: background(), pointerEvents: "none",
+								position: "absolute",
+								left: cursorCol() * cellWidth(),
+								top: cursorRow() * rowHeight(),
+								backgroundColor: background(),
+								pointerEvents: "none",
 							}}>
 							<Text
-								style={{ fontSize: fontSize, color: foreground(), height: rowHeight(), textDecorationLine: "underline" }}
+								style={{
+									fontSize: fontSize,
+									color: foreground(),
+									height: rowHeight(),
+									textDecorationLine: "underline",
+								}}
 								cellWidth={cellWidth()}>
 								{preedit()}
 							</Text>
@@ -567,8 +602,13 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 				children: element(
 					<View
 						style={{
-							position: "absolute", left: padding(), right: padding(), top: padding(), padding: NOTICE_PADDING,
-							backgroundColor: NOTICE_BACKGROUND, borderRadius: 4,
+							position: "absolute",
+							left: padding(),
+							right: padding(),
+							top: padding(),
+							padding: NOTICE_PADDING,
+							backgroundColor: NOTICE_BACKGROUND,
+							borderRadius: 4,
 						}}
 						onPointerDown={(e: NeonEvent): void => { showNotice(""); }}>
 						{ForList<string>({ each: noticeRows, children: noticeRow })}

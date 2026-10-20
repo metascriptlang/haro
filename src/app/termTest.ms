@@ -15,7 +15,7 @@ export function recorder(text: string, sink: Sink): Pty {
 		wait: base.wait,
 		read: base.read,
 		write: (data: Span<uint8>): Result<int32, PtyError> => {
-			for (let i = 0; i < data.length; i++) { sink.sent += String.fromCharCode(data[i] as int32); }
+			for (const byte of data) { sink.sent += String.fromCharCode(byte as int32); }
 			return Result.ok(data.length as int32);
 		},
 		resize: base.resize,
@@ -25,7 +25,9 @@ export function recorder(text: string, sink: Sink): Pty {
 }
 
 export function termOf(text: string, cols: int32, rows: int32, sink: Sink): Term | null {
-	const opened = openTerm((c: int32, r: int32): Result<Pty, PtyError> => { return Result.ok(recorder(text, sink)); });
+	const opened = openTerm((c: int32, r: int32): Result<Pty, PtyError> => {
+		return Result.ok(recorder(text, sink));
+	});
 	if (!opened.ok) { return null; }
 	const t = opened.value;
 	if (!t.fit(cols, rows).ok) { return null; }
@@ -34,7 +36,9 @@ export function termOf(text: string, cols: int32, rows: int32, sink: Sink): Term
 }
 
 function termFresh(text: string, sink: Sink): Term | null {
-	const opened = openTerm((c: int32, r: int32): Result<Pty, PtyError> => { return Result.ok(recorder(text, sink)); });
+	const opened = openTerm((c: int32, r: int32): Result<Pty, PtyError> => {
+		return Result.ok(recorder(text, sink));
+	});
 	if (!opened.ok) { return null; }
 	const t = opened.value;
 	if (!t.fit(20, 5).ok) { return null; }
@@ -136,11 +140,11 @@ test "focus reports go out only while the program asked for them" {
 	}
 }
 
-test "a mouse report is the program's encoding of the pointer, and nothing while it asked for none" {
+test "a mouse report is the program's encoding of the pointer, nothing while it asked for none" {
 	const geometry: MouseGeometry = { cellWidth: 8, cellHeight: 16, width: 160, height: 80 };
 	const none = 0 as BitSet<KeyMod>;
 	const press: MouseInput = { action: MouseAction.Press, button: 1, mods: none, x: 17, y: 17 };
-	const release: MouseInput = { action: MouseAction.Release, button: 1, mods: none, x: 17, y: 17 };
+	const release: MouseInput = { ...press, action: MouseAction.Release };
 	const quiet: Sink = { sent: "" };
 	const a = termFresh("ready", quiet);
 	assert a !== null;

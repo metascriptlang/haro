@@ -55,24 +55,26 @@ function shows(t: Term, text: string): boolean {
 	return false;
 }
 
+const FLOOD_LINES: int32 = 200000;
+const FLOOD_IDLE_TICKS: int32 = 3;
+const FLOOD_MAX_TICKS: int32 = 90;
+
 export function smokeFlood(t: Term, pace: Pace): void {
-	const FLOOD_LINES = 200000;
-	const IDLE_TICKS = 3;
-	const MAX_TICKS = 90;
 	let ticks = 0;
 	let doneAt = -1;
 	const report = (label: string): void => {
 		const c = frameCounts();
 		console.log(
-			`smoke: ${label}: wakes=${pace.wakes} applies=${pace.applies} requested=${c[0]} drawn=${c[1]}`
+			`smoke: ${label}: wakes=${pace.wakes} applies=${pace.applies} ` +
+			`requested=${c[0]} drawn=${c[1]}`,
 		);
 	};
 	const tick = (): void => {
 		ticks += 1;
 		report(`tick ${ticks}`);
 		if (doneAt < 0 && shows(t, `line ${FLOOD_LINES}`)) { doneAt = ticks; }
-		const finished = doneAt >= 0 && ticks >= doneAt + IDLE_TICKS;
-		if (finished || ticks >= MAX_TICKS) {
+		const finished = doneAt >= 0 && ticks >= doneAt + FLOOD_IDLE_TICKS;
+		if (finished || ticks >= FLOOD_MAX_TICKS) {
 			console.log(`smoke: flood ${doneAt >= 0 ? "ended" : "did not end"} at tick ${doneAt}`);
 			dump(t, "after the flood");
 			t.shutdown();

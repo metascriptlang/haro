@@ -105,7 +105,11 @@ export function open(this typeof PasteView): PasteView {
 }
 
 export function show(
-	this v: PasteView, held: Held | null, reading: string | null, cellWidth: number, viewWidth: number,
+	this v: PasteView,
+	held: Held | null,
+	reading: string | null,
+	cellWidth: number,
+	viewWidth: number,
 ): void {
 	if (held === null && reading === null) {
 		v.shownFor = null;
@@ -155,7 +159,11 @@ export function PasteDialog(v: PasteView, look: Look): NeonNode {
 	const label = (text: Accessor<string>, style: Style): NeonNode => {
 		return element(
 			<Text
-				style={{ fontSize: look.fontSize, height: look.rowHeight(), width: text().length * look.cellWidth() }}
+				style={{
+					fontSize: look.fontSize,
+					height: look.rowHeight(),
+					width: text().length * look.cellWidth(),
+				}}
 				cellWidth={look.cellWidth()}
 				spans={[{ text: text(), style: style }]}
 			/>
@@ -185,14 +193,25 @@ export function PasteDialog(v: PasteView, look: Look): NeonNode {
 							boxShadow: SHADOW,
 						}}>
 						{ForList<Shown>({ each: v.top, children: row })}
-						<View style={{ backgroundColor: WELL, padding: 8, borderWidth: 1, borderColor: FRAME, borderRadius: RADIUS }}>
+						<View
+							style={{
+								backgroundColor: WELL,
+								padding: 8,
+								borderWidth: 1,
+								borderColor: FRAME,
+								borderRadius: RADIUS,
+							}}>
 							{ForList<Shown>({ each: v.code, children: row })}
 						</View>
 						<View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 12 }}>
 							<Pressable
 								style={{
 									backgroundColor: cancelHeld() ? SECONDARY_HELD : SECONDARY,
-									paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6, borderRadius: 4,
+									paddingLeft: 16,
+									paddingRight: 16,
+									paddingTop: 6,
+									paddingBottom: 6,
+									borderRadius: 4,
 								}}
 								onPressIn={(): void => { setCancelHeld(true); }}
 								onPressOut={(): void => { setCancelHeld(false); }}
@@ -202,7 +221,11 @@ export function PasteDialog(v: PasteView, look: Look): NeonNode {
 							<Pressable
 								style={{
 									backgroundColor: confirmHeld() ? PRIMARY_HELD : PRIMARY,
-									paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6, borderRadius: 4,
+									paddingLeft: 16,
+									paddingRight: 16,
+									paddingTop: 6,
+									paddingBottom: 6,
+									borderRadius: 4,
 								}}
 								onPressIn={(): void => { setConfirmHeld(true); }}
 								onPressOut={(): void => { setConfirmHeld(false); }}

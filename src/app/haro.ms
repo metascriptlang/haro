@@ -11,7 +11,7 @@ import {
 } from "../../../neon/src/platform/ion/window";
 when (voidProfiler) {
 	import { frameStats } from "../../../void/src/void2d/frameMarks";
-	import { ringCount, ringPercentile } from "../../../void/src/void2d/profiler";
+	import { DurationRing, ringCount, ringPercentile } from "../../../void/src/void2d/profiler";
 }
 import {
 	MenuItem,
@@ -91,7 +91,10 @@ when (windows) {
 				],
 			},
 			{ title: "File", items: [MenuItem.action(CLOSE_WINDOW, "Close Window", "w", ModCmd)] },
-			{ title: "Window", items: [MenuItem.standard(MenuRole.Minimize), MenuItem.standard(MenuRole.Zoom)] },
+			{
+				title: "Window",
+				items: [MenuItem.standard(MenuRole.Minimize), MenuItem.standard(MenuRole.Zoom)],
+			},
 		];
 	}
 } else {
@@ -111,7 +114,8 @@ let launchShown = false;
 function note(line: string): void {
 	console.log(`haro: ${line}`);
 	const dir = cacheDir();
-	if (ensureDir(dir).ok) { const _logged = appendFile(`${dir}/haro.log`, `${Date.now()} ${line}\n`); }
+	if (!ensureDir(dir).ok) { return; }
+	const _logged = appendFile(`${dir}/haro.log`, `${Date.now()} ${line}\n`);
 }
 
 function fail(message: string): void {
@@ -175,15 +179,21 @@ function milliseconds(ns: int64): float64 {
 	return Math.round((ns as float64) / 10000.0) / 100;
 }
 
+when (voidProfiler) {
+	function percentiles(ring: DurationRing): string {
+		const p50 = milliseconds(ring.ringPercentile(50));
+		const p99 = milliseconds(ring.ringPercentile(99));
+		return `p50=${p50} p99=${p99}`;
+	}
+}
+
 function voidLine(): string {
 	when (voidProfiler) {
 		const draws = frameStats.draws;
 		if (draws.ringCount() == 0) { return "void frames=0"; }
 		const dirty = frameStats.dirtyToPresent;
-		const d2p = dirty.ringCount() == 0
-			? ""
-			: ` d2p p50=${milliseconds(dirty.ringPercentile(50))} p99=${milliseconds(dirty.ringPercentile(99))}`;
-		return `void frames=${frameStats.frames} draw p50=${milliseconds(draws.ringPercentile(50))} p99=${milliseconds(draws.ringPercentile(99))}${d2p}`;
+		const d2p = dirty.ringCount() == 0 ? "" : ` d2p ${percentiles(dirty)}`;
+		return `void frames=${frameStats.frames} draw ${percentiles(draws)}${d2p}`;
 	} else {
 		return "";
 	}
@@ -193,8 +203,9 @@ function logStats(wakes: int32, applies: int32, requested: number, drawn: number
 	setTimeout((): void => {
 		const counts = frameCounts();
 		console.log(
-			`haro stats: ${stats.line()} wakes=${pace.wakes - wakes} applies=${pace.applies - applies} ` +
-			`requested=${counts[0] - requested} drawn=${counts[1] - drawn} ${voidLine()}`,
+			`haro stats: ${stats.line()} wakes=${pace.wakes - wakes} ` +
+			`applies=${pace.applies - applies} requested=${counts[0] - requested} ` +
+			`drawn=${counts[1] - drawn} ${voidLine()}`,
 		);
 		stats.reset();
 		if (!launchShown && stats.launched()) {
@@ -282,7 +293,11 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 		const bar = setAppMenu(menuBar());
 		if (!bar.ok) { fail(bar.error); }
 	}
-	const opts: DesktopOptions = { ...desktopOptions("Haro", 960, 600), font: families[0], fontFamily: families.join(", ") };
+	const opts: DesktopOptions = {
+		...desktopOptions("Haro", 960, 600),
+		font: families[0],
+		fontFamily: families.join(", "),
+	};
 	const code = runWindow(opts, (): NeonNode => App(t, entry, loaded.config));
 	note("the window closed");
 	t.shutdown();

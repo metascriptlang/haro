@@ -52,7 +52,13 @@ function styleOf(styles: Map<string, Style>, run: LineRun, background: Rgb): Sty
 	const key = fg + bg + decoration + weight + slant + line + lineColor;
 	const known = styles.get(key);
 	if (known !== undefined) { return known; }
-	const style: Style = { color: fg, textDecorationLine: decoration, textDecorationStyle: line, fontWeight: weight, fontStyle: slant };
+	const style: Style = {
+		color: fg,
+		textDecorationLine: decoration,
+		textDecorationStyle: line,
+		fontWeight: weight,
+		fontStyle: slant,
+	};
 	if (bg != "") { style.backgroundColor = bg; }
 	if (lineColor != "") { style.textDecorationColor = lineColor; }
 	if (styles.size >= STYLE_CACHE_LIMIT) { styles.clear(); }
@@ -64,14 +70,18 @@ export function spansOf(styles: Map<string, Style>, l: GridLine, background: Rgb
 	let spans: TextSpan[] = [];
 	let at = 0;
 	for (const run of l.runs) {
-		spans.push({ text: l.text.slice(at, at + run.units), style: styleOf(styles, run, background) });
+		const text = l.text.slice(at, at + run.units);
+		spans.push({ text: text, style: styleOf(styles, run, background) });
 		at += run.units;
 	}
 	return spans;
 }
 
 function slotOf(
-	styles: Map<string, Style>, row: Row, cursor: Cursor | null, background: Rgb,
+	styles: Map<string, Style>,
+	row: Row,
+	cursor: Cursor | null,
+	background: Rgb,
 ): Result<RowSlot, FrameError> {
 	const cursorCell = cursor !== null && cursor.y == row.y ? cursor.x : -1;
 	const built = row.line(cursorCell, background);
@@ -80,7 +90,9 @@ function slotOf(
 }
 
 export function applyFrame(
-	grid: List<RowSlot>, styles: Map<string, Style>, vt: Vt,
+	grid: List<RowSlot>,
+	styles: Map<string, Style>,
+	vt: Vt,
 ): Result<Cursor | null, FrameError> {
 	const planned = vt.plan();
 	if (!planned.ok) { return Result.err(FrameError.PlanFailed); }
@@ -100,7 +112,9 @@ export function applyFrame(
 	}
 	for (const row of vt.painted.rows) {
 		const cursorCell = cursor !== null && cursor.y == row.y ? cursor.x : -1;
-		if (grid.at(row.y).line.cursorCell != cursorCell) { grid.set(row.y, try slotOf(styles, row, cursor, colors.value.bg)); }
+		if (grid.at(row.y).line.cursorCell != cursorCell) {
+			grid.set(row.y, try slotOf(styles, row, cursor, colors.value.bg));
+		}
 	}
 	stats.noteApplied(p.rows.length as int32, p.scrolled, chars, performance.now());
 	return Result.ok(cursor);
@@ -121,7 +135,11 @@ test "each run becomes a span over its own text, sharing one style per look" {
 	const styles = new Map<string, Style>();
 	const l: GridLine = {
 		text: "ab cd",
-		runs: [run(2, RED, BLACK, Underline.None), run(1, WHITE, BLACK, Underline.None), run(2, RED, BLACK, Underline.None)],
+		runs: [
+			run(2, RED, BLACK, Underline.None),
+			run(1, WHITE, BLACK, Underline.None),
+			run(2, RED, BLACK, Underline.None),
+		],
 		cursorCell: -1,
 	};
 	const spans = spansOf(styles, l, BLACK);
@@ -135,7 +153,11 @@ test "truecolour output that never repeats a look keeps the style cache bounded"
 	const styles = new Map<string, Style>();
 	for (let i = 0; i < STYLE_CACHE_LIMIT * 3; i++) {
 		const fg: Rgb = { r: (i & 255) as uint8, g: ((i >> 8) & 255) as uint8, b: 7 };
-		const l: GridLine = { text: "x", runs: [run(1, fg, BLACK, Underline.None)], cursorCell: -1 };
+		const l: GridLine = {
+			text: "x",
+			runs: [run(1, fg, BLACK, Underline.None)],
+			cursorCell: -1,
+		};
 		const spans = spansOf(styles, l, BLACK);
 		assert spans[0].style!.color == hexOf(fg);
 	}

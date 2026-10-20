@@ -1,7 +1,15 @@
 import { NeonEvent, neonEvent } from "../../../neon/src/render/event";
 import { KeyMod } from "../keys/keys";
 import { Block } from "../select/select";
-import { Action, BindAction, CLIPBOARD_MODS, Keybind, Screen, bindFor, resolve } from "../input/bindings";
+import {
+	Action,
+	BindAction,
+	CLIPBOARD_MODS,
+	Keybind,
+	Screen,
+	bindFor,
+	resolve,
+} from "../input/bindings";
 import { Pointer, Spot, autoscrollOf, claimsMouse } from "../input/pointer";
 import { ROWS_PER_NOTCH, Wheel, WheelRoute, reportButton, route } from "../input/wheel";
 import { Held, Reply, replyTo, replyToRead, warningFor, Warning } from "../input/paste";
@@ -37,7 +45,7 @@ export struct Hit {
 	x: float64;
 	y: float64;
 	scale: float64;
-	mods: int32;
+	mods: BitSet<KeyMod>;
 	cell: MouseGeometry;
 }
 
@@ -59,7 +67,15 @@ const SUPER: int32 = 8;
 const KEYBOARD_ROWS: int32 = ROWS_PER_NOTCH as int32;
 
 export function open(this typeof Controls): Controls {
-	return { pointer: Pointer.open(), wheel: Wheel.open(), held: null, reading: null, button: 0, autoscroll: 0, keybinds: [] };
+	return {
+		pointer: Pointer.open(),
+		wheel: Wheel.open(),
+		held: null,
+		reading: null,
+		button: 0,
+		autoscroll: 0,
+		keybinds: [],
+	};
 }
 
 function vtOf(t: Term): Vt | null {
@@ -73,7 +89,12 @@ export function normalized(text: string, bracketed: boolean): string {
 	return bracketed ? lf : lf.trimEnd();
 }
 
-function send(this c: Controls, t: Term, text: string, allowUnsafe: boolean): Result<boolean, ControlError> {
+function send(
+	this c: Controls,
+	t: Term,
+	text: string,
+	allowUnsafe: boolean,
+): Result<boolean, ControlError> {
 	const sent = t.sendPaste(text, allowUnsafe);
 	if (!sent.ok) {
 		return Result.err(match (sent.error) {
@@ -106,7 +127,12 @@ export function holding(this c: Controls): boolean {
 	return c.held !== null || c.reading !== null;
 }
 
-function answerClipboard(this c: Controls, t: Term, text: string, allow: boolean): Result<boolean, ControlError> {
+function answerClipboard(
+	this c: Controls,
+	t: Term,
+	text: string,
+	allow: boolean,
+): Result<boolean, ControlError> {
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	if (!vt.answerClipboard(text, allow).ok) { return Result.err(ControlError.VtFailed); }
@@ -118,7 +144,9 @@ export function asked(this c: Controls, t: Term, host: Bridge): void {
 	host.read((text: string): void => {
 		if (text == "") {
 			const answered = c.answerClipboard(t, "", true);
-			if (!answered.ok) { console.log(`haro: clipboard answer failed: ${answered.error.toString()}`); }
+			if (!answered.ok) {
+				console.log(`haro: clipboard answer failed: ${answered.error.toString()}`);
+			}
 			return;
 		}
 		c.reading = text;
@@ -150,10 +178,10 @@ export function cancel(this c: Controls, t: Term): Result<boolean, ControlError>
 
 function answer(this c: Controls, t: Term, e: NeonEvent): Result<boolean, ControlError> {
 	const reply = c.held !== null ? replyTo(e.code, e.mods) : replyToRead(e.code, e.mods);
-	if (reply == Reply.Confirm) {
-		const _sent = try c.confirm(t);
-	} else if (reply == Reply.Cancel) {
-		const _dropped = try c.cancel(t);
+	match (reply) {
+		Reply.Confirm => { const _sent = try c.confirm(t); },
+		Reply.Cancel => { const _dropped = try c.cancel(t); },
+		Reply.Ignore => {},
 	}
 	return Result.ok(true);
 }
@@ -176,7 +204,12 @@ function pasteFrom(this c: Controls, t: Term, host: Bridge): void {
 	});
 }
 
-function run(this c: Controls, t: Term, bind: Keybind | null, host: Bridge): Result<boolean, ControlError> {
+function run(
+	this c: Controls,
+	t: Term,
+	bind: Keybind | null,
+	host: Bridge,
+): Result<boolean, ControlError> {
 	if (bind === null) { return Result.ok(false); }
 	if (bind.action == BindAction.CloseWindow) {
 		host.close();
@@ -192,39 +225,44 @@ export function closeKey(this c: Controls, t: Term, host: Bridge): Result<boolea
 	if (vt !== null) {
 		const alt = vt.alternateScreen();
 		if (!alt.ok) { return Result.err(ControlError.VtFailed); }
-		if (try c.run(t, bindFor(c.keybinds, "KeyW", SUPER, alt.value), host)) { return Result.ok(true); }
+		const bind = bindFor(c.keybinds, "KeyW", SUPER, alt.value);
+		if (try c.run(t, bind, host)) { return Result.ok(true); }
 	}
 	host.close();
 	return Result.ok(true);
 }
 
-export function keyDown(this c: Controls, t: Term, e: NeonEvent, host: Bridge): Result<boolean, ControlError> {
+export function keyDown(
+	this c: Controls,
+	t: Term,
+	e: NeonEvent,
+	host: Bridge,
+): Result<boolean, ControlError> {
 	if (c.holding()) { return c.answer(t, e); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
 	if (!alt.ok) { return Result.err(ControlError.VtFailed); }
-	if (try c.run(t, bindFor(c.keybinds, e.code, e.mods, alt.value), host)) { return Result.ok(true); }
+	if (try c.run(t, bindFor(c.keybinds, e.code, e.mods, alt.value), host)) {
+		return Result.ok(true);
+	}
 	const action = resolve(e.code, e.mods, alt.value);
-	if (action == Action.None) { return Result.ok(false); }
-	if (action == Action.Copy) { return c.copy(t, host); }
-	if (action == Action.Paste) {
-		c.pasteFrom(t, host);
-		return Result.ok(true);
-	}
-	if (action == Action.PageUp || action == Action.PageDown) {
-		if (!vt.scrollPages(action == Action.PageUp ? -1 : 1).ok) { return Result.err(ControlError.VtFailed); }
-		return Result.ok(true);
-	}
-	if (action == Action.PromptUp || action == Action.PromptDown) {
-		if (!vt.jumpToPrompt(action == Action.PromptUp ? -1 : 1).ok) { return Result.err(ControlError.VtFailed); }
-		return Result.ok(true);
-	}
 	match (action) {
+		Action.None => { return Result.ok(false); },
+		Action.Copy => { return c.copy(t, host); },
+		Action.Paste => { c.pasteFrom(t, host); },
+		Action.PageUp | Action.PageDown => {
+			const pages: int32 = action == Action.PageUp ? -1 : 1;
+			if (!vt.scrollPages(pages).ok) { return Result.err(ControlError.VtFailed); }
+		},
+		Action.PromptUp | Action.PromptDown => {
+			const prompts: int32 = action == Action.PromptUp ? -1 : 1;
+			if (!vt.jumpToPrompt(prompts).ok) { return Result.err(ControlError.VtFailed); }
+		},
 		Action.LineUp => { vt.scrollLines(-KEYBOARD_ROWS); },
 		Action.LineDown => { vt.scrollLines(KEYBOARD_ROWS); },
 		Action.Top => { vt.scrollTop(); },
-		_ => { vt.scrollBottom(); },
+		Action.Bottom => { vt.scrollBottom(); },
 	}
 	return Result.ok(true);
 }
@@ -242,20 +280,27 @@ function copy(this c: Controls, t: Term, host: Bridge): Result<boolean, ControlE
 }
 
 function report(
-	this c: Controls, t: Term, action: MouseAction, button: int32, h: Hit, anyPressed: boolean,
+	this c: Controls,
+	t: Term,
+	action: MouseAction,
+	button: int32,
+	h: Hit,
+	anyPressed: boolean,
 ): Result<boolean, ControlError> {
 	const input: MouseInput = {
 		action: action,
 		button: button,
-		mods: (h.mods as uint16) as BitSet<KeyMod>,
+		mods: h.mods,
 		x: (h.x * h.scale) as float32,
 		y: (h.y * h.scale) as float32,
 	};
 	const sent = t.sendMouse(input, h.cell, anyPressed);
-	if (!sent.ok) { return Result.err(match (sent.error) {
-		TermError.WriteFailed => ControlError.WriteFailed,
-		_ => ControlError.MouseFailed,
-	}); }
+	if (!sent.ok) {
+		return Result.err(match (sent.error) {
+			TermError.WriteFailed => ControlError.WriteFailed,
+			_ => ControlError.MouseFailed,
+		});
+	}
 	return Result.ok(sent.value > 0);
 }
 
@@ -268,14 +313,19 @@ function follow(host: Bridge, uri: string): void {
 }
 
 export function down(
-	this c: Controls, t: Term, host: Bridge, button: int32, h: Hit, time: float64,
+	this c: Controls,
+	t: Term,
+	host: Bridge,
+	button: int32,
+	h: Hit,
+	time: float64,
 ): Result<boolean, ControlError> {
 	if (c.holding()) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const modes = vt.modes();
 	if (!modes.ok) { return Result.err(ControlError.VtFailed); }
-	if (button == LEFT && (h.mods & CTRL) != 0) {
+	if (button == LEFT && h.mods.has(KeyMod.Ctrl)) {
 		const link = vt.linkAt(h.at.col, h.at.row);
 		if (!link.ok) { return Result.err(ControlError.VtFailed); }
 		const uri = link.value;
@@ -284,7 +334,7 @@ export function down(
 			return Result.ok(true);
 		}
 	}
-	if (claimsMouse(modes.value.mouseTracking, (h.mods & SHIFT) != 0)) {
+	if (claimsMouse(modes.value.mouseTracking, h.mods.has(KeyMod.Shift))) {
 		c.pointer.clear(vt);
 		c.button = button;
 		return c.report(t, MouseAction.Press, button, h, true);
@@ -303,13 +353,18 @@ export function down(
 	return Result.ok(false);
 }
 
-export function move(this c: Controls, t: Term, h: Hit, pressed: boolean): Result<boolean, ControlError> {
+export function move(
+	this c: Controls,
+	t: Term,
+	h: Hit,
+	pressed: boolean,
+): Result<boolean, ControlError> {
 	if (c.holding()) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const modes = vt.modes();
 	if (!modes.ok) { return Result.err(ControlError.VtFailed); }
-	if (claimsMouse(modes.value.mouseTracking, (h.mods & SHIFT) != 0)) {
+	if (claimsMouse(modes.value.mouseTracking, h.mods.has(KeyMod.Shift))) {
 		if (!pressed) { c.button = 0; }
 		const _reported = try c.report(t, MouseAction.Motion, c.button, h, c.button != 0);
 		return Result.ok(false);
@@ -329,7 +384,12 @@ export function move(this c: Controls, t: Term, h: Hit, pressed: boolean): Resul
 	return Result.ok(dragged.value);
 }
 
-export function up(this c: Controls, t: Term, button: int32, h: Hit): Result<boolean, ControlError> {
+export function up(
+	this c: Controls,
+	t: Term,
+	button: int32,
+	h: Hit,
+): Result<boolean, ControlError> {
 	const reported = c.button != 0;
 	c.pointer.release();
 	c.autoscroll = 0;
@@ -350,7 +410,12 @@ export function autoscrollTick(this c: Controls, t: Term): Result<boolean, Contr
 	return Result.ok(true);
 }
 
-export function roll(this c: Controls, t: Term, notches: float64, h: Hit): Result<boolean, ControlError> {
+export function roll(
+	this c: Controls,
+	t: Term,
+	notches: float64,
+	h: Hit,
+): Result<boolean, ControlError> {
 	if (c.holding()) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
@@ -359,31 +424,36 @@ export function roll(this c: Controls, t: Term, notches: float64, h: Hit): Resul
 	if (!alt.ok || !modes.ok) { return Result.err(ControlError.VtFailed); }
 	const rows = c.wheel.rows(notches);
 	if (rows == 0) { return Result.ok(false); }
-	const shift = (h.mods & SHIFT) != 0;
+	const shift = h.mods.has(KeyMod.Shift);
 	const claimed = claimsMouse(modes.value.mouseTracking, shift);
 	const where = route(alt.value, claimed, modes.value.altScroll && !shift);
 	const presses = rows < 0 ? -rows : rows;
-	if (where == WheelRoute.Report) {
-		for (let i = 0; i < presses; i++) {
-			const _reported = try c.report(t, MouseAction.Press, reportButton(rows < 0), h, false);
-		}
-		return Result.ok(false);
+	match (where) {
+		WheelRoute.Report => {
+			const button = reportButton(rows < 0);
+			for (let i = 0; i < presses; i++) {
+				const _reported = try c.report(t, MouseAction.Press, button, h, false);
+			}
+			return Result.ok(false);
+		},
+		WheelRoute.Arrows => {
+			c.pointer.clear(vt);
+			const key = neonEvent("keydown");
+			key.code = rows < 0 ? "ArrowUp" : "ArrowDown";
+			for (let i = 0; i < presses; i++) {
+				if (!t.sendKey(key).ok) { return Result.err(ControlError.KeyFailed); }
+			}
+			return Result.ok(false);
+		},
+		WheelRoute.Viewport => {
+			vt.scrollLines(rows);
+			if (c.pointer.dragging) {
+				const dragged = c.pointer.drag(vt, c.pointer.last);
+				if (!dragged.ok) { return Result.err(ControlError.VtFailed); }
+			}
+			return Result.ok(true);
+		},
 	}
-	if (where == WheelRoute.Arrows) {
-		c.pointer.clear(vt);
-		const key = neonEvent("keydown");
-		key.code = rows < 0 ? "ArrowUp" : "ArrowDown";
-		for (let i = 0; i < presses; i++) {
-			if (!t.sendKey(key).ok) { return Result.err(ControlError.KeyFailed); }
-		}
-		return Result.ok(false);
-	}
-	vt.scrollLines(rows);
-	if (c.pointer.dragging) {
-		const dragged = c.pointer.drag(vt, c.pointer.last);
-		if (!dragged.ok) { return Result.err(ControlError.VtFailed); }
-	}
-	return Result.ok(true);
 }
 
 export function shades(this c: Controls, t: Term): Result<Vec<Block>, ControlError> {
@@ -402,7 +472,6 @@ interface Board {
 	reads: int32;
 	closed: int32;
 }
-
 
 function boardOf(offer: string): Board {
 	return { opened: "", copied: "", offer: offer, reads: 0, closed: 0 };
@@ -459,7 +528,11 @@ function hitAt(col: int32, row: int32): Hit {
 
 function hitWith(col: int32, row: int32, mods: int32): Hit {
 	return {
-		at: at(col, row), x: col as float64 * 8, y: row as float64 * 16, scale: 1, mods: mods,
+		at: at(col, row),
+		x: col as float64 * 8,
+		y: row as float64 * 16,
+		scale: 1,
+		mods: (mods as uint16) as BitSet<KeyMod>,
 		cell: { cellWidth: 8, cellHeight: 16, width: 160, height: 80 },
 	};
 }
@@ -508,7 +581,7 @@ test "ctrl shift page, arrow, home and end keys move the viewport and say they d
 	}
 }
 
-test "copy takes the selected text to the clipboard and dismisses the selection, the copy chord and enter alike" {
+test "the copy chord and enter alike copy the selection to the clipboard and dismiss it" {
 	const sink: Sink = { sent: "" };
 	const t = termOf("alpha beta\r\ngamma", 20, 5, sink);
 	assert t !== null;
@@ -645,13 +718,14 @@ test "the buttons confirm and cancel through the same paths as the keys" {
 	}
 }
 
-test "bracketed paste takes line breaks as they are and an end marker or a large text still asks" {
+test "bracketed paste keeps line breaks, and an end marker or a large text still asks" {
 	const framed: Sink = { sent: "" };
 	const a = termOf("\x1b[?2004h", 20, 5, framed);
 	assert a !== null;
 	if (a !== null) {
 		const c = Controls.open();
-		assert handled(c.keyDown(a, key("KeyV", CLIPBOARD_MODS), clipOf(boardOf("one\r\ntwo\r\n"))));
+		const offer = clipOf(boardOf("one\r\ntwo\r\n"));
+		assert handled(c.keyDown(a, key("KeyV", CLIPBOARD_MODS), offer));
 		assert framed.sent == "\x1b[200~one\ntwo\n\x1b[201~";
 		assert !c.holding();
 		const marker = c.paste(a, "evil\x1b[201~rm");
@@ -671,7 +745,7 @@ test "bracketed paste takes line breaks as they are and an end marker or a large
 	}
 }
 
-test "an empty clipboard pastes nothing, except an empty frame when the program asked for brackets" {
+test "an empty clipboard pastes nothing, or an empty frame when the program asked for brackets" {
 	const plain: Sink = { sent: "" };
 	const a = termOf("ready", 20, 5, plain);
 	assert a !== null;
@@ -849,7 +923,8 @@ test "shift hands the mouse back from an app that tracks it, to selection and th
 
 test "a ctrl click on an http link opens it, on any other link or text it does not" {
 	const sink: Sink = { sent: "" };
-	const text = "\x1b]8;;https://example.com/a\x07link\x1b]8;;\x07 \x1b]8;;file:///c:/x.exe\x07bad\x1b]8;;\x07 plain";
+	const text = "\x1b]8;;https://example.com/a\x07link\x1b]8;;\x07 " +
+		"\x1b]8;;file:///c:/x.exe\x07bad\x1b]8;;\x07 plain";
 	const t = termOf(text, 30, 5, sink);
 	assert t !== null;
 	if (t !== null) {
@@ -979,7 +1054,9 @@ test "the shades are the highlight rectangles of the viewport" {
 
 test "ctrl alt up and down move the viewport between prompts the shell marked" {
 	const sink: Sink = { sent: "" };
-	const t = termOf("\x1b]133;A\x07p1\r\nout1\r\nout2\r\n\x1b]133;A\x07p2\r\nout3\r\n\x1b]133;A\x07p3", 10, 3, sink);
+	const marked = "\x1b]133;A\x07p1\r\nout1\r\nout2\r\n" +
+		"\x1b]133;A\x07p2\r\nout3\r\n\x1b]133;A\x07p3";
+	const t = termOf(marked, 10, 3, sink);
 	assert t !== null;
 	if (t !== null) {
 		const c = Controls.open();
@@ -1025,8 +1102,20 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 	if (t !== null) {
 		const c = Controls.open();
 		c.keybinds = [
-			{ code: "Enter", mods: SHIFT, text: "[13;2u", action: BindAction.SendText, screen: Screen.Any },
-			{ code: "KeyC", mods: CTRL | SHIFT, text: "c", action: BindAction.SendText, screen: Screen.Any },
+			{
+				code: "Enter",
+				mods: SHIFT,
+				text: "[13;2u",
+				action: BindAction.SendText,
+				screen: Screen.Any,
+			},
+			{
+				code: "KeyC",
+				mods: CTRL | SHIFT,
+				text: "c",
+				action: BindAction.SendText,
+				screen: Screen.Any,
+			},
 		];
 		const clip = clipOf(boardOf(""));
 		assert handled(c.keyDown(t, key("PageUp", 3), clip));
@@ -1042,8 +1131,20 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 
 test "a keybind with a mode sends to a full-screen program and closes the window at the shell" {
 	const binds: Vec<Keybind> = [
-		{ code: "KeyW", mods: SUPER, text: "\x1b[119;9u", action: BindAction.SendText, screen: Screen.Alternate },
-		{ code: "KeyW", mods: SUPER, text: "", action: BindAction.CloseWindow, screen: Screen.Primary },
+		{
+			code: "KeyW",
+			mods: SUPER,
+			text: "\x1b[119;9u",
+			action: BindAction.SendText,
+			screen: Screen.Alternate,
+		},
+		{
+			code: "KeyW",
+			mods: SUPER,
+			text: "",
+			action: BindAction.CloseWindow,
+			screen: Screen.Primary,
+		},
 	];
 	const atShell: Sink = { sent: "" };
 	const shell = termOf("$ ", 20, 5, atShell);
@@ -1068,7 +1169,13 @@ test "a keybind with a mode sends to a full-screen program and closes the window
 
 test "close window from the menu runs a super w keybind for this screen and otherwise closes" {
 	const binds: Vec<Keybind> = [
-		{ code: "KeyW", mods: SUPER, text: "\x1b[119;9u", action: BindAction.SendText, screen: Screen.Alternate },
+		{
+			code: "KeyW",
+			mods: SUPER,
+			text: "\x1b[119;9u",
+			action: BindAction.SendText,
+			screen: Screen.Alternate,
+		},
 	];
 	const atShell: Sink = { sent: "" };
 	const shell = termOf("$ ", 20, 5, atShell);

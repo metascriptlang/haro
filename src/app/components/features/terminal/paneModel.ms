@@ -1,4 +1,5 @@
 import { Accessor, Setter, createSignal } from "../../../../../../neon/src/core/signal";
+import { flush } from "../../../../../../neon/src/core/runtime";
 import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { PixelRatio } from "../../../../../../neon/src/api/pixelRatio";
 import { Clipboard } from "../../../../../../neon/src/api/clipboard";
@@ -239,6 +240,7 @@ function reconfigure(this m: PaneModel, c: Config | null, error: string): void {
 	m.settings = c;
 	m.controls.keybinds = c.keybinds;
 	m.setPadding(c.padding);
+	flush();
 	m.notify(restartNeeded(c, m.started) ? RESTART_NOTICE : "");
 	if (m.settingsApplied && m.applySettings()) { m.refresh(); }
 }
@@ -286,6 +288,9 @@ export function laidOut(this m: PaneModel, e: NeonEvent): void {
 	const cols = size.value[0];
 	const rows = size.value[1];
 	m.setViewWidth(e.width);
+	m.setCellWidth(cellPx / ratio);
+	m.setRowHeight(rowPx / ratio);
+	flush();
 	m.notify(m.notice.text);
 	m.dialog.shownFor = null;
 	m.mouseGeometry = {
@@ -294,8 +299,6 @@ export function laidOut(this m: PaneModel, e: NeonEvent): void {
 		width: cols * cellPx,
 		height: rows * rowPx,
 	};
-	m.setCellWidth(cellPx / ratio);
-	m.setRowHeight(rowPx / ratio);
 	m.cursor.paintCursor();
 	console.log(
 		`haro: layout ${e.width}x${e.height} ratio ${ratio} ` +

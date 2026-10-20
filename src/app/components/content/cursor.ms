@@ -54,6 +54,8 @@ export function createCursor(metrics: CellMetrics): CursorModel {
 	};
 }
 
+// Parked: the spring cursor in src/term/trail.ms replaces these boxes once Neon can draw it,
+// ~/metascript/.inbox/neon/2026-10-21-a-drawing-node-for-a-cursor-trail.md.
 export function paintCursor(this c: CursorModel): void {
 	let next: Box[BOX_SLOTS] = [NO_BOX, NO_BOX, NO_BOX, NO_BOX];
 	const at = c.at;

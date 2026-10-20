@@ -5,11 +5,12 @@ Gundam 00. It was called Terminator until 2026-10-15; a Linux terminal emulator 
 name. It gets its VT from **libghostty-vt**, draws its pixels with **void2d**, and runs in an
 **Ion** window, on Windows, macOS and Linux with the same pixels everywhere.
 
-It is a **Neon app whose only child is one `<Void>` filling the window**, the shape
-Neon's `docs/VISION.md` gives a game: Ion → Neon → Void. The chrome (tabs, splits,
-settings, command palette) is Neon `Text`/`View` inside that Void area, so it is void2d too. The
-grid is Neon JSX as well: a `ForList` over a `createList` of row slots (`src/app/app.ms`), each
-row one `<Text>` on the cell grid. There is no webview.
+It is a **Neon app whose only child is one `<Void>` filling the window**, the shape Neon's
+`docs/VISION.md` gives a game: Ion → Neon → Void. The chrome (tabs, splits, settings, command
+palette) is Neon `Text`/`View` inside that Void area, so it is void2d too. The grid is Neon JSX as
+well: a `ForList` (`src/app/components/features/terminal/terminalPane.ms`) over a `createList` of
+row slots (`src/app/components/features/terminal/term.ms`), each row one `<Text>` on the cell grid.
+There is no webview.
 
 ## Why it exists
 

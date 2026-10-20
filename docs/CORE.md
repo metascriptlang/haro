@@ -52,8 +52,9 @@ were rejected.
 
 ## How far output scrolled, probed
 
-A scroll marks every row of the render state dirty, so the dirty iterator cannot tell a scroll
-from a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree `504771cca46c2ce2d7153a16f5c9a5cb37e58e06`) measured what can:
+A scroll marks every row of the render state dirty, so the dirty iterator cannot tell a scroll from
+a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree
+`504771cca46c2ce2d7153a16f5c9a5cb37e58e06`) measured what can:
 
 - A tracked grid ref placed on the top viewport row keeps its **screen** y when that row scrolls
   into history (screen coordinates count from the top of scrollback); its viewport and active
@@ -67,15 +68,16 @@ from a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree `504771cca46c2
   `GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN` and repaint everything when it changes.
 - A clear (`ESC[2J`) gives N = 0 with all 24 rows dirty; overwriting one row gives N = 0 with two
   rows dirty: that row and the old cursor row. Moving the cursor to another row dirties both rows;
-  moving it within a row, or hiding or showing it, dirties nothing, so the cursor is read every frame.
+  moving it within a row, or hiding or showing it, dirties nothing, so the cursor is read every
+  frame.
 - After any scroll the render state is FULL and every row's dirty flag is set, so the VT cannot say
   which kept rows changed. A pure scroll leaves each kept row identical to its old position at
   `y + N`; a kept row edited in the same frame shows only by comparing cells. That is why
   `src/screen/plan.ms` keeps the rows it last planned (`Vt.painted`) and diffs on a scroll frame.
 - Reverse index at the top, and any scroll inside the alternate screen, gives N = 0 with all rows
   dirty: a rows frame, never a scroll. These probes ran on the library's default cap, 10 000 bytes
-  (`Terminal.zig`), under which 5000 lines prune the ref at 80 columns but not at 10; `Vt.create` now
-  sets a line cap and a byte cap instead.
+  (`Terminal.zig`), under which 5000 lines prune the ref at 80 columns but not at 10; `Vt.create`
+  now sets a line cap and a byte cap instead.
 
 `GhosttyPoint` is built in C (`probe/scrollRefShim.h`) because msc cannot import a C aggregate with
 a fixed array member (msc card `2026-10-15-c-import-fixed-array-member-sizedarray`).
@@ -123,16 +125,16 @@ a fixed array member (msc card `2026-10-15-c-import-fixed-array-member-sizedarra
   output follows the key in 4 ms (median), and the last frame applies 48 ms after the key (median,
   126 ms max). Haro's old pacing timer added a median 13 ms (max 32 ms) to each later chunk, because
   Ion's timers step by `GetTickCount64`, about 16 ms. Since output applies in the window's frame
-  callback (`ea961a7`), the last chunk lands in the frame drawn a median 3.3 ms after its wake
-  (max 7.7 ms in the quieter run), measured 2026-10-18 by interleaving the two builds under the same load.
-  The machine was at 54-100 % CPU, so nvim's own response (key to first output) was not comparable
-  between runs and is not restated.
+  callback (`ea961a7`), the last chunk lands in the frame drawn a median 3.3 ms after its wake (max
+  7.7 ms in the quieter run), measured 2026-10-18 by interleaving the two builds under the same
+  load. The machine was at 54-100 % CPU, so nvim's own response (key to first output) was not
+  comparable between runs and is not restated.
 
 ## First window, smoke-run
 
-`src/app/haro.ms --smoke` (tree `c120ef45157c565615ff1a9e380849230844608e`, msc `b267cdb1`, neon `f48eec6`, ion `a68e849`,
-Consolas 14 px at 96 DPI, 948x588 → 118x34 cells, `pwsh -NoLogo -NoProfile`, run from the void
-repository root for void's default font path):
+`src/app/haro.ms --smoke` (tree `c120ef45157c565615ff1a9e380849230844608e`, msc `b267cdb1`, neon
+`f48eec6`, ion `a68e849`, Consolas 14 px at 96 DPI, 948x588 → 118x34 cells,
+`pwsh -NoLogo -NoProfile`, run from the void repository root for void's default font path):
 
 - The prompt and command output appear with no window event: the ConPTY reader calls
   `ionWakeLoop()` (`src/pty/conpty.c` `ptySetWake`) and `onWake` pumps and applies the frame plan.
@@ -145,15 +147,16 @@ repository root for void's default font path):
 - With the person's profile the window exited at the first prompt: starship prints U+F0054, above
   U+FFFF. Since `9b63bd7` the grid builds such cells with std's `fromCodePoint`.
 
-Re-run 2026-10-16 (msc `5631dd3e5`, neon `2b0f58c`, void `40e9bfa3`, JetBrains Mono NL 14 px,
-105x30 cells): through a live ConPTY, bold, italic, bold-italic, plain and curly underline,
-strike-through, 16/256/truecolor and backgrounds draw right. A replay that ends before the first
-frame draws every row over row 0: the row height is a signal set in `onLayout`, and Neon requests
-no frame for a layout-only change (Neon card `2026-10-16-layout-only-style-change-requests-no-frame`).
+Re-run 2026-10-16 (msc `5631dd3e5`, neon `2b0f58c`, void `40e9bfa3`, JetBrains Mono NL 14 px, 105x30
+cells): through a live ConPTY, bold, italic, bold-italic, plain and curly underline, strike-through,
+16/256/truecolor and backgrounds draw right. A replay that ends before the first frame draws every
+row over row 0: the row height is a signal set in `onLayout`, and Neon requests no frame for a
+layout-only change (Neon card `2026-10-16-layout-only-style-change-requests-no-frame`).
 
 ## Measured
 
-Ryzen 9 9950X, Windows 11 10.0.26200, msc `3f6873ee`, tree `07cec781ff808899b343bb1c595281a4d4ccffe1`.
+Ryzen 9 9950X, Windows 11 10.0.26200, msc `3f6873ee`, tree
+`07cec781ff808899b343bb1c595281a4d4ccffe1`.
 
 | what | number | how |
 |---|---|---|
@@ -177,9 +180,9 @@ What the numbers decided: per-key getters stay. A full redraw costs about 3.5% o
 so neither `get_multi` nor a C row reader is needed until a measurement says otherwise.
 
 Live window, 2026-10-19 (msc `4fe2a5eec`, neon `7675ed3`, void `a38429c8`, ion `0cac3a0`, release
-with `-d:voidProfiler`, 165 Hz display, 105x30 cells; other sessions held the machine at 41–60 % CPU).
-`pwsh bench/live/drive.ps1 -Exe <haro> -Work <work>` reads `--stats`; echo runs from the key to the
-first apply that changes rows, settle from the last wake before that apply.
+with `-d:voidProfiler`, 165 Hz display, 105x30 cells; other sessions held the machine at 41–60 %
+CPU). `pwsh bench/live/drive.ps1 -Exe <haro> -Work <work>` reads `--stats`; echo runs from the key
+to the first apply that changes rows, settle from the last wake before that apply.
 
 | work | Haro CPU | what the counters show |
 |---|---|---|
@@ -191,7 +194,8 @@ first apply that changes rows, settle from the last wake before that apply.
 What the numbers say: flood CPU is three times the 17–25 % of 2026-10-16 (frames then rode a timer;
 since `ea961a7` each applies in a 165 Hz frame callback), unconfirmed against that build. The nvim
 echo of 50–80 ms did not hold: the same builds gave 4.9–5.5 ms the same evening (settle 3.8–4.0 ms),
-so the afternoon figure came from the machine's state then, cause unknown. An idle focused window draws 1–2 frames a second: the blink.
+so the afternoon figure came from the machine's state then, cause unknown. An idle focused window
+draws 1–2 frames a second: the blink.
 
 Changes measured against that baseline, builds interleaved, same day and load:
 
@@ -240,7 +244,8 @@ passed all 13 unchanged and in place. Inbox conhost re-renders its own buffer:
 
 - dropped: Kitty graphics APC and sixel DCS;
 - kept, but moved out of place: OSC 7, 52 and 0 (the title arrived only after the child exited);
-- kept: `?2026h/l`, but sent before the text it bracketed rather than around it, so nothing is synchronized;
+- kept: `?2026h/l`, but sent before the text it bracketed rather than around it, so nothing is
+  synchronized;
 - kept: OSC 133, OSC 8 (with an `id=` added), `CSI >1u`, `?2004h` and the underline colour;
 - absent from the stream: mouse modes `?1000h ?1006h` and focus `?1004h`. The host takes these as
   its own, so a recording of output cannot say whether the mouse works.

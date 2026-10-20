@@ -60,10 +60,10 @@ Haro's. Void drives a surface that its host hands it, and Neon binds an Ion wind
 Measured 2026-09-23 against ion `32bb557`, void `0167080` and neon `6dd27ac`:
 
 1. ~~**Void: a Windows embed driver.**~~ Landed at void `d003ce8`: host views (`voidViewCreate` /
-   `voidViewResize` / `voidViewFrame`, `voidViewSwapChain` for Ion's `renderSurfaceAttachSwapChain`).
-   One device is shared per process and each view has its own surface, on Windows, iOS and Android.
-   `void/docs/EMBED.md` holds the model and its proofs, and `void/examples/ionViews.ms` drives two
-   views in one Ion window.
+   `voidViewResize` / `voidViewFrame`, `voidViewSwapChain` for Ion's
+   `renderSurfaceAttachSwapChain`). One device is shared per process and each view has its own
+   surface, on Windows, iOS and Android. `void/docs/EMBED.md` holds the model and its proofs, and
+   `void/examples/ionViews.ms` drives two views in one Ion window.
 2. ~~**Neon: a desktop entry.**~~ Landed at neon `8f85cb3`: `runWindow` in
    `neon/src/platform/ion/window.ms`, example `neon/examples/voidWindow.ms`.
 3. ~~**Ion: a frame clock.**~~ Landed at ion `44001f8`..`3f90df1`: a frame policy per surface,

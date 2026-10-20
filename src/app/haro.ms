@@ -3,16 +3,7 @@
 
 import { NeonNode } from "../../../neon/src/render/node";
 import { requestFrame } from "../../../neon/src/animation/frame";
-import {
-	runWindow,
-	DesktopOptions,
-	desktopOptions,
-	frameCounts,
-} from "../../../neon/src/platform/ion/window";
-when (voidProfiler) {
-	import { frameStats } from "../../../void/src/void2d/frameMarks";
-	import { DurationRing, ringCount, ringPercentile } from "../../../void/src/void2d/profiler";
-}
+import { runWindow, DesktopOptions, desktopOptions } from "../../../neon/src/platform/ion/window";
 import {
 	MenuItem,
 	MenuRole,
@@ -21,10 +12,8 @@ import {
 	listen,
 	onWake,
 	openExternal,
-	resourcePath,
 	setAppMenu,
 } from "../../../ion/src/index";
-import { FontStyle, registerFace } from "../../../void/src/void2d/font";
 import { argv, env, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
 import { homeDir } from "std/os";
@@ -33,49 +22,23 @@ import { NativePty } from "../pty/pty";
 import { Replay } from "../pty/replay";
 import { App } from "./app";
 import { Pace } from "./pace";
-import { stats, launched, launchLine, line, mark, noteWake, reset } from "./stats";
+import { stats, mark, noteWake } from "./stats";
+import { logStatsEverySecond } from "./statsLog";
+import { registerFonts } from "./fonts";
 import { Config, defaults } from "../config/config";
 import { Loaded, cacheDir, configPath, load, stampOf } from "../config/source";
-import { Faces } from "../config/fonts";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { Term, openTerm, shutdown } from "./components/features/terminal/term";
 import { AppHost } from "./components/features/terminal/paneModel";
 
 extern function appWireWake(): void;
 
-const ASSETS = resourcePath() == "" ? "assets" : `${resourcePath().replaceAll("\\", "/")}/assets`;
-const FONT_REGULAR = `${ASSETS}/JetBrainsMonoNL-Regular.ttf`;
-const FONT_BOLD = `${ASSETS}/JetBrainsMonoNL-Bold.ttf`;
-const FONT_ITALIC = `${ASSETS}/JetBrainsMonoNL-Italic.ttf`;
-const FONT_BOLD_ITALIC = `${ASSETS}/JetBrainsMonoNL-BoldItalic.ttf`;
 const CLOSE_WINDOW = "close_window";
 
-interface SystemFace {
-	path: string;
-	family: string;
-}
-
-when (windows) {
-	function fallbackFaces(): SystemFace[] {
-		const fonts = `${env.get("WINDIR")}/Fonts`;
-		return [
-			{ path: `${fonts}/seguiemj.ttf`, family: "Segoe UI Emoji" },
-			{ path: `${fonts}/seguisym.ttf`, family: "Segoe UI Symbol" },
-			{ path: `${fonts}/msyh.ttc`, family: "Microsoft YaHei" },
-		];
-	}
-} else when (macos) {
+when (macos) {
 	@include("unistd.h");
 
 	extern function getppid(): int32;
-
-	function fallbackFaces(): SystemFace[] {
-		return [
-			{ path: "/System/Library/Fonts/Apple Color Emoji.ttc", family: "Apple Color Emoji" },
-			{ path: "/System/Library/Fonts/Apple Symbols.ttf", family: "Apple Symbols" },
-			{ path: "/System/Library/Fonts/Hiragino Sans GB.ttc", family: "Hiragino Sans GB" },
-		];
-	}
 
 	function menuBar(): Submenu[] {
 		return [
@@ -98,19 +61,14 @@ when (windows) {
 			},
 		];
 	}
-} else {
-	function fallbackFaces(): SystemFace[] {
-		return [];
-	}
 }
+
 const CONFIG_POLL_MS = 1000;
-const STATS_MS = 1000;
 
 const pace = Pace.start();
 const configFile = flagValue("--config") ?? configPath();
 let loaded: Loaded = { config: defaults(), faces: [], stamp: "" };
 let configError = "";
-let launchShown = false;
 
 function note(line: string): void {
 	console.log(`haro: ${line}`);
@@ -179,78 +137,6 @@ function watchConfig(handler: (c: Config | null, error: string) => void): void {
 	}, CONFIG_POLL_MS);
 }
 
-function milliseconds(ns: int64): float64 {
-	return Math.round((ns as float64) / 10000.0) / 100;
-}
-
-when (voidProfiler) {
-	function percentiles(ring: DurationRing): string {
-		const p50 = milliseconds(ring.ringPercentile(50));
-		const p99 = milliseconds(ring.ringPercentile(99));
-		return `p50=${p50} p99=${p99}`;
-	}
-}
-
-function voidLine(): string {
-	when (voidProfiler) {
-		const draws = frameStats.draws;
-		if (draws.ringCount() == 0) { return "void frames=0"; }
-		const dirty = frameStats.dirtyToPresent;
-		const d2p = dirty.ringCount() == 0 ? "" : ` d2p ${percentiles(dirty)}`;
-		return `void frames=${frameStats.frames} draw ${percentiles(draws)}${d2p}`;
-	} else {
-		return "";
-	}
-}
-
-function logStats(wakes: int32, applies: int32, requested: number, drawn: number): void {
-	setTimeout((): void => {
-		const counts = frameCounts();
-		console.log(
-			`haro stats: ${stats.line()} wakes=${pace.wakes - wakes} ` +
-			`applies=${pace.applies - applies} requested=${counts[0] - requested} ` +
-			`drawn=${counts[1] - drawn} ${voidLine()}`,
-		);
-		stats.reset();
-		if (!launchShown && stats.launched()) {
-			launchShown = true;
-			console.log(`haro launch: ${stats.launchLine()}`);
-		}
-		logStats(pace.wakes, pace.applies, counts[0], counts[1]);
-	}, STATS_MS);
-}
-
-function registerBuiltIn(): void {
-	registerFace(FONT_BOLD, FONT_REGULAR, 700, FontStyle.Normal);
-	registerFace(FONT_ITALIC, FONT_REGULAR, 400, FontStyle.Italic);
-	registerFace(FONT_BOLD_ITALIC, FONT_REGULAR, 700, FontStyle.Italic);
-}
-
-function registerFamily(faces: Faces): string {
-	const family = faces.regular;
-	const bold = faces.bold;
-	const italic = faces.italic;
-	const boldItalic = faces.boldItalic;
-	registerFace(family, family, 400, FontStyle.Normal);
-	if (bold !== null) { registerFace(bold, family, 700, FontStyle.Normal); }
-	if (italic !== null) { registerFace(italic, family, 400, FontStyle.Italic); }
-	if (boldItalic !== null) { registerFace(boldItalic, family, 700, FontStyle.Italic); }
-	return family;
-}
-
-function registerFamilies(): string[] {
-	registerBuiltIn();
-	registerFace(FONT_REGULAR, FONT_REGULAR, 400, FontStyle.Normal);
-	let families: string[] = [];
-	for (const faces of loaded.faces) { families.push(registerFamily(faces)); }
-	families.push(FONT_REGULAR);
-	for (const face of fallbackFaces()) {
-		registerFace(face.path, face.family, 400, FontStyle.Normal);
-		families.push(face.family);
-	}
-	return families;
-}
-
 function inFrame(run: () => void): void {
 	if (!pace.asksFrame()) { return; }
 	const _id = requestFrame((time: number): void => {
@@ -260,7 +146,7 @@ function inFrame(run: () => void): void {
 }
 
 function openWindow(t: Term, exited: (code: int32) => void): int32 {
-	const families = registerFamilies();
+	const families = registerFonts(loaded.faces);
 	const host: AppHost = {
 		onWake: (handler: () => void): void => {
 			onWake((): void => {
@@ -292,7 +178,7 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 			watchConfig(handler);
 		},
 	};
-	if (hasFlag("--stats")) { logStats(0, 0, 0, 0); }
+	if (hasFlag("--stats")) { logStatsEverySecond(pace); }
 	when (macos) {
 		const bar = setAppMenu(menuBar());
 		if (!bar.ok) { fail(bar.error); }

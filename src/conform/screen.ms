@@ -21,15 +21,11 @@ export enum ScreenError {
 	ScrollFailed,
 }
 
-function blankSlot(): RowSlot {
-	return { line: { text: "", runs: [], cursorCell: -1 }, spans: [] };
-}
-
 export function open(this typeof Screen, cols: int32, rows: int32): Result<Screen, ScreenError> {
 	const created = Vt.create(cols, rows);
 	if (!created.ok) { return Result.err(ScreenError.CreateFailed); }
 	let slots: RowSlot[] = [];
-	for (let i = 0; i < rows; i++) { slots.push(blankSlot()); }
+	for (let i = 0; i < rows; i++) { slots.push(RowSlot.blank()); }
 	return Result.ok({
 		vt: created.value,
 		grid: createList<RowSlot>(slots),
@@ -81,7 +77,7 @@ export function resize(this s: Screen, cols: int32, rows: int32): Result<void, S
 	s.cols = cols;
 	s.rows = rows;
 	const have = s.grid.length() as int32;
-	for (let i = have; i < rows; i++) { s.grid.push(blankSlot()); }
+	for (let i = have; i < rows; i++) { s.grid.push(RowSlot.blank()); }
 	for (let i = have; i > rows; i--) { s.grid.remove(i - 1); }
 	return s.paint();
 }

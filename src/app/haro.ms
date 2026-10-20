@@ -38,7 +38,7 @@ import { Config, defaults } from "../config/config";
 import { Loaded, cacheDir, configPath, load, stampOf } from "../config/source";
 import { Faces } from "../config/fonts";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
-import { Term, openTerm, shutdown } from "./term";
+import { Term, openTerm, shutdown } from "./components/features/terminal/term";
 
 extern function appWireWake(): void;
 

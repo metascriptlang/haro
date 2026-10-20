@@ -28,7 +28,7 @@ import {
 import { hexOf } from "./frame";
 import { Config, fontPx } from "../config/config";
 import { noticeLines } from "./notice";
-import { Bridge, ControlError, Controls, Hit } from "./controls";
+import { Bridge, ControlError, Controls, Hit } from "./components/features/terminal/controls";
 import { PasteDialog, PasteView, Look } from "./pasteDialog";
 import {
 	Term,
@@ -38,7 +38,7 @@ import {
 	pumpFrame,
 	sendKey,
 	sendText,
-} from "./term";
+} from "./components/features/terminal/term";
 
 const NOTICE_BACKGROUND = "#5c1f24";
 const NOTICE_TEXT = "#ffffff";

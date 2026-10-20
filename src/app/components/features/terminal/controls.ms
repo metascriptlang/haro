@@ -1,6 +1,6 @@
-import { NeonEvent, neonEvent } from "../../../neon/src/render/event";
-import { KeyMod } from "../keys/keys";
-import { Block } from "../select/select";
+import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
+import { KeyMod } from "../../../../keys/keys";
+import { Block } from "../../../../select/select";
 import {
 	Action,
 	BindAction,
@@ -9,12 +9,12 @@ import {
 	Screen,
 	bindFor,
 	resolve,
-} from "../input/bindings";
-import { Pointer, Spot, autoscrollOf, claimsMouse } from "../input/pointer";
-import { ROWS_PER_NOTCH, Wheel, WheelRoute, reportButton, route } from "../input/wheel";
-import { Held, Reply, replyTo, replyToRead, warningFor, Warning } from "../input/paste";
-import { openable } from "../term/link";
-import { MouseAction, MouseGeometry, MouseInput, Vt } from "../vt/vt";
+} from "../../../../input/bindings";
+import { Pointer, Spot, autoscrollOf, claimsMouse } from "../../../../input/pointer";
+import { ROWS_PER_NOTCH, Wheel, WheelRoute, reportButton, route } from "../../../../input/wheel";
+import { Held, Reply, replyTo, replyToRead, warningFor, Warning } from "../../../../input/paste";
+import { openable } from "../../../../term/link";
+import { MouseAction, MouseGeometry, MouseInput, Vt } from "../../../../vt/vt";
 import { Term, TermError } from "./term";
 import { Sink, termOf } from "./termTest";
 

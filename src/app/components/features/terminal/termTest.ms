@@ -1,7 +1,7 @@
-import { Pty, PtyError } from "../pty/transport";
-import { Replay } from "../pty/replay";
-import { KeyMod } from "../keys/keys";
-import { MouseAction, MouseGeometry, MouseInput } from "../vt/vt";
+import { Pty, PtyError } from "../../../../pty/transport";
+import { Replay } from "../../../../pty/replay";
+import { KeyMod } from "../../../../keys/keys";
+import { MouseAction, MouseGeometry, MouseInput } from "../../../../vt/vt";
 import { Term, openTerm } from "./term";
 
 export interface Sink {

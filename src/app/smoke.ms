@@ -1,7 +1,7 @@
 import { frameCounts } from "../../../neon/src/platform/ion/window";
 import { exit } from "std/process";
 import { Pace } from "./pace";
-import { Term, shutdown, sendText } from "./term";
+import { Term, shutdown, sendText } from "./components/features/terminal/term";
 
 function dump(t: Term, label: string): void {
 	console.log(`smoke: ${label}`);

@@ -1,10 +1,10 @@
-import { createList, List } from "../../../neon/src/core/list";
-import { NeonEvent } from "../../../neon/src/render/event";
-import { Style } from "../../../neon/src/render/style";
-import { KeyAction, KeyEvent, KeyMod, withoutAltGr } from "../keys/keys";
-import { Pty, PtyError } from "../pty/transport";
-import { Replay } from "../pty/replay";
-import { Session } from "../session/session";
+import { createList, List } from "../../../../../../neon/src/core/list";
+import { NeonEvent } from "../../../../../../neon/src/render/event";
+import { Style } from "../../../../../../neon/src/render/style";
+import { KeyAction, KeyEvent, KeyMod, withoutAltGr } from "../../../../keys/keys";
+import { Pty, PtyError } from "../../../../pty/transport";
+import { Replay } from "../../../../pty/replay";
+import { Session } from "../../../../session/session";
 import {
 	Cursor,
 	CursorLook,
@@ -14,9 +14,9 @@ import {
 	MouseInput,
 	PasteError,
 	Palette,
-} from "../vt/vt";
-import { FrameError, RowSlot, applyFrame } from "./frame";
-import { stats, mark } from "./stats";
+} from "../../../../vt/vt";
+import { FrameError, RowSlot, applyFrame } from "../../../frame";
+import { stats, mark } from "../../../stats";
 
 const BUFFER_BYTES = 65536;
 const DRAIN_LIMIT = 16;

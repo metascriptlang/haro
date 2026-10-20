@@ -46,7 +46,12 @@ import {
 	roll,
 	shades,
 } from "./components/features/terminal/mouse";
-import { PasteDialog, PasteView, Look } from "./pasteDialog";
+import {
+	PasteDialog,
+	createPasteDialog,
+	showPending,
+} from "./components/features/paste/pasteDialog";
+import { CellMetrics } from "./components/ui/cellText";
 import {
 	Term,
 	TermError,
@@ -107,7 +112,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 
 	const controls = Controls.open();
 	controls.keybinds = started.keybinds;
-	const dialog = PasteView.open();
+	const dialog = createPasteDialog();
 	const [viewWidth, setViewWidth] = createSignal<number>(0);
 	const shades = createList<Block>([NO_SHADE, NO_SHADE, NO_SHADE]);
 	let litShades: Vec<Block> = [NO_SHADE, NO_SHADE, NO_SHADE];
@@ -254,7 +259,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			paintCursor();
 			paintShades();
 		}
-		dialog.show(controls.held, controls.reading, cellWidth(), viewWidth());
+		dialog.showPending(controls.held, controls.reading, cellWidth(), viewWidth());
 		if (f.more) {
 			stats.more += 1;
 			entry.schedule(refresh);
@@ -501,20 +506,18 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		if (handled.value) { entry.schedule(refresh); }
 	};
 
-	const look: Look = {
-		cellWidth: cellWidth,
-		rowHeight: rowHeight,
-		fontSize: fontSize,
-		onConfirm: (): void => {
-			const sent = controls.confirm(t);
-			if (!sent.ok) { fatalControl("paste", sent.error); }
-			refresh();
-		},
-		onCancel: (): void => {
-			const dropped = controls.cancel(t);
-			if (!dropped.ok) { fatalControl("clipboard", dropped.error); }
-			refresh();
-		},
+	const metrics: CellMetrics = { fontSize: fontSize, cellWidth: cellWidth, rowHeight: rowHeight };
+
+	const confirmPaste = (): void => {
+		const sent = controls.confirm(t);
+		if (!sent.ok) { fatalControl("paste", sent.error); }
+		refresh();
+	};
+
+	const cancelPaste = (): void => {
+		const dropped = controls.cancel(t);
+		if (!dropped.ok) { fatalControl("clipboard", dropped.error); }
+		refresh();
 	};
 
 	const noticeRow = (item: Accessor<string>): NeonNode => {
@@ -614,7 +617,12 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 					),
 				})}
 			</View>
-			{PasteDialog(dialog, look)}
+			<PasteDialog
+				model={dialog}
+				metrics={metrics}
+				onConfirm={confirmPaste}
+				onCancel={cancelPaste}
+			/>
 			{Show({
 				when: noticed,
 				children: element(

@@ -389,9 +389,6 @@ export struct Vt {
 	painted: Painted;
 }
 
-// The mouse encoder, opened on the first report, and the modes and geometry it was last given: it
-// forgets the last cell it reported on every setopt_from_terminal and size, so each is set only when
-// its value changed.
 export interface Mouse {
 	encoder: GhosttyMouseEncoder | null;
 	event: GhosttyMouseEvent | null;
@@ -452,8 +449,6 @@ function ok(r: GhosttyResult): boolean {
 
 const HOLD_LIMIT_MS = 1000;
 
-// What the terminal's callbacks leave for the host: the replies to send to the pty, the events since
-// the last take, an OSC 52 write and an OSC 52 read waiting for its answer.
 export interface Effects {
 	state: GhosttyRenderState;
 	replies: Vec<uint8>;
@@ -541,12 +536,9 @@ function repliesLength(effects: Ptr<void>): int64 {
 
 const OSC52_REPLY = "\x1b]52;";
 
-// An OSC 52 read cannot wait for the user inside vt_write: the reply must be given before the callback
-// returns. So the callback answers "denied", which makes libghostty write an empty clipboard reply
-// ("ESC ] 52 ; c ;" and the terminator the program used) after mark; this takes those bytes back out
-// of the replies and keeps them, and answerClipboard later writes the same frame with the clipboard in
-// it, or empty. A request while one is pending, or one whose reply is not that frame (the OSC 5522
-// clipboard protocol), keeps its refusal.
+// libghostty takes a read's reply before the callback returns, so the callback denies it and this
+// moves the empty reply written after mark (ESC ] 52 ; c ; and the program's terminator) into
+// readFrame, for answerClipboard to fill once the user decides.
 @exportName("haroVtClipboardRead")
 function clipboardRead(effects: Ptr<void>, mark: int64): void {
 	const e = effectsAt(effects);
@@ -563,7 +555,6 @@ function clipboardRead(effects: Ptr<void>, mark: int64): void {
 	e.readAsked = true;
 }
 
-// Moves up to buf.length reply bytes into buf, oldest first.
 export function takeReplies(this e: Effects, buf: Span<uint8>): int32 {
 	const n = e.replies.length < buf.length ? e.replies.length : buf.length;
 	for (let i = 0; i < n; i++) { buf[i] = e.replies[i]; }
@@ -573,14 +564,12 @@ export function takeReplies(this e: Effects, buf: Span<uint8>): int32 {
 	return n;
 }
 
-// The text of the last OSC 52 write to the standard clipboard that the host has not taken.
 export function takeClipboard(this e: Effects): string | null {
 	const text = e.clipboard;
 	e.clipboard = null;
 	return text;
 }
 
-// True once per OSC 52 read that waits for an answer.
 export function clipboardAsked(this e: Effects): boolean {
 	const asked = e.readAsked;
 	e.readAsked = false;
@@ -603,8 +592,6 @@ function pushBase64(ref out: Vec<uint8>, bytes: Readonly<Span<uint8>>): void {
 	}
 }
 
-// Writes the reply the waiting read expects: the clipboard text when allow is set, else empty. False
-// when no read waits.
 export function answerClipboard(this e: Effects, text: string, allow: boolean): boolean {
 	const frame = e.readFrame;
 	if (frame === null) { return false; }
@@ -638,8 +625,7 @@ function colorsSet(terminal: GhosttyTerminal, fg: Rgb, bg: Rgb): boolean {
 		&& ok(setColor(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, b));
 }
 
-// Blinking is what a fresh terminal starts in and what DECSCUSR 0 returns to. The blink mode is not
-// configurable as a reset default, so a full reset (RIS) goes back to a steady cursor.
+// libghostty has no reset default for the blink mode: a full reset (RIS) leaves a steady cursor.
 function blinkDefaultSet(terminal: GhosttyTerminal, on: boolean): boolean {
 	let mode: GhosttyTerminalModeConfig = { mode: MODE_CURSOR_BLINKING, value: on };
 	let blink = on;
@@ -742,7 +728,6 @@ export function title(this vt: Vt): Result<string, VtError> {
 	return stringOf(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_TITLE);
 }
 
-// The OSC 8 URI of the viewport cell at x, y, or null when the cell has none.
 export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, VtError> {
 	let at: GhosttyGridRef;
 	if (!ok(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, x, y, at))) {
@@ -778,8 +763,6 @@ export function setDefaultColors(this vt: Vt, fg: Rgb, bg: Rgb): Result<Vt, VtEr
 	return Result.ok(vt);
 }
 
-// The built-in palette with its first entries replaced by colors, as the colours a program's SGR 30-37,
-// 90-97 and 38;5 indices name.
 export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<Vt, VtError> {
 	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_PALETTE;
 	let palette: Colors256;
@@ -821,8 +804,8 @@ export function answerClipboard(this vt: Vt, text: string, allow: boolean): Resu
 
 const MODE_SYNC_OUTPUT: uint16 = 2026;
 
-// Whether synchronized output holds the screen. A hold older than the limit ends here: the terminal has
-// no clock and a program that never releases would freeze the screen (terminal.h, "Timeouts").
+// A hold older than the limit ends here: the terminal has no clock, and a program that never
+// releases would freeze the screen (terminal.h, "Timeouts").
 export function holding(this vt: Vt): boolean {
 	const e = vt.effects;
 	if (!e.held) { return false; }
@@ -908,7 +891,6 @@ export struct CursorLook {
 	blinking: boolean;
 }
 
-// Reads the render state, so it describes the frame the last update captured.
 export function cursorLook(this vt: Vt): Result<CursorLook, VtError> {
 	let visible = false;
 	let blinking = false;
@@ -953,7 +935,6 @@ export function modes(this vt: Vt): Result<Modes, VtError> {
 	});
 }
 
-// 0 bytes when the program has not asked for focus events.
 export function focusReport(this vt: Vt, gained: boolean, buf: Span<uint8>): Result<int32, VtError> {
 	const on = modeOn(vt.terminal, MODE_FOCUS_EVENT);
 	if (on === null) { return Result.err(VtError.ReadFailed); }
@@ -1023,9 +1004,7 @@ function sameGeometry(a: MouseGeometry | null, b: MouseGeometry): boolean {
 		&& a.height == b.height;
 }
 
-// The report for one pointer event under the modes the program set: 0 bytes when the mode reports
-// nothing for it (a motion within the cell it last reported, for one). x and y are surface pixels with
-// the grid at the origin.
+// x and y are surface pixels with the grid at the origin.
 export function mouseReport(
 	this vt: Vt,
 	e: MouseInput,
@@ -1138,8 +1117,6 @@ function graphemesOf(
 	return Result.ok(all[0]);
 }
 
-// The cell's SGR 58 underline colour with a palette index resolved, or null when the cell has none
-// (the text colour applies).
 function underlineColorOf(state: GhosttyRenderState, style: GhosttyStyle): Result<Rgb | null, VtError> {
 	const color = style.underline_color;
 	if (color.tag == GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_RGB) {
@@ -1591,8 +1568,6 @@ export function scrollPages(this vt: Vt, pages: int32): Result<Vt, VtError> {
 	return Result.ok(vt);
 }
 
-// Scroll the viewport so the nearest prompt (OSC 133 A) above (delta < 0) or below (delta > 0) its top
-// row is the top row. False when there is no such prompt.
 export function jumpToPrompt(this vt: Vt, delta: int32): Result<boolean, VtError> {
 	let bar: GhosttyTerminalScrollbar;
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
@@ -1725,7 +1700,6 @@ export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtErro
 	return Result.ok(here);
 }
 
-// The active selection as plain text, unwrapped and trimmed, or null when there is none.
 export function selectedText(this vt: Vt): Result<string | null, VtError> {
 	const options: GhosttyTerminalSelectionFormatOptions = {
 		size: sizeof GhosttyTerminalSelectionFormatOptions,
@@ -1747,8 +1721,6 @@ export function selectedText(this vt: Vt): Result<string | null, VtError> {
 
 const PASTE_END = "\x1b[201~";
 
-// Bracketed, the data is unsafe only when it holds the end marker; unbracketed, it is unsafe when it
-// holds a newline.
 export function pasteBytes(this vt: Vt, text: string, allowUnsafe: boolean): Result<Vec<uint8>, PasteError> {
 	const bracketed = modeOn(vt.terminal, MODE_BRACKETED_PASTE) == true;
 	const unsafe = bracketed ? text.includes(PASTE_END) : !pasteSafe(text.asBytes());

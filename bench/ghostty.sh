@@ -5,7 +5,8 @@ ghostty=${GHOSTTY:-$root/vendor/ghostty}
 data=$root/bench/out/ghosttyData
 tools=$root/bench/out/ghosttyTools
 mkdir -p "$data"
-(cd "$ghostty" && zig build -Demit-bench -Doptimize=ReleaseFast 	--prefix "$tools" --cache-dir "$root/out/zig-cache-bench")
+(cd "$ghostty" && zig build -Demit-bench -Doptimize=ReleaseFast \
+	--prefix "$tools" --cache-dir "$root/out/zig-cache-bench")
 gen=$tools/bin/ghostty-gen
 stream=$tools/bin/ghostty-bench
 

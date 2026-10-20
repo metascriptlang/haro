@@ -48,7 +48,11 @@ function main(): int32 {
 	const bg = parseColor(BACKGROUND);
 	if (bg !== null) { vh.scene.clear = bg as Color; }
 	_vh = vh;
-	render(ForList<GridRow>({ each: createList<GridRow>(rows()), children: lineRow }), vh.host, vh.root);
+	render(
+		ForList<GridRow>({ each: createList<GridRow>(rows()), children: lineRow }),
+		vh.host,
+		vh.root,
+	);
 	console.log("neonRows: mounted 4 rows on the Void host");
 	voidRun(800, 400, init, frame);
 	return 0;

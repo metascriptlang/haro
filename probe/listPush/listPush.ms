@@ -19,7 +19,9 @@ function slot(s: string): Slot { return { spans: [{ text: s, style: { color: "#f
 const [h, setH] = createSignal<number>(0);
 
 function row(item: Accessor<Slot>): NeonNode {
-	return element(<Text style={{ fontSize: 14, height: h() }} cellWidth={8.4} spans={item().spans} />);
+	return element(
+		<Text style={{ fontSize: 14, height: h() }} cellWidth={8.4} spans={item().spans} />
+	);
 }
 
 function dump(label: string, vh: VoidHost): void {
@@ -37,7 +39,13 @@ function mount(items: List<Slot>): VoidHost {
 	const font = addFont("assets/JetBrainsMonoNL-Regular.ttf");
 	if (!font.ok) { throw new Error("font"); }
 	const vh = createVoidHostWith(Scene2D.create(rgba(0.0, 0.0, 0.0, 1.0)), font.value);
-	render(element(<View style={{ flexGrow: 1 }}>{ForList<Slot>({ each: items, children: row })}</View>), vh.host, vh.root);
+	render(
+		element(
+			<View style={{ flexGrow: 1 }}>{ForList<Slot>({ each: items, children: row })}</View>
+		),
+		vh.host,
+		vh.root,
+	);
 	return vh;
 }
 

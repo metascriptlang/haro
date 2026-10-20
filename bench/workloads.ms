@@ -1,12 +1,12 @@
-export const VTEBENCH_COLS: int32 = 120;
-export const VTEBENCH_ROWS: int32 = 40;
-export const GHOSTTY_COLS: int32 = 120;
-export const GHOSTTY_ROWS: int32 = 80;
-
-const VTEBENCH_MIN_BYTES: int32 = 1048576;
-const GHOSTTY_BYTES: int32 = 4194304;
+const MIB: int32 = 1048576;
+const VTEBENCH_COLS: int32 = 120;
+const VTEBENCH_ROWS: int32 = 40;
+const VTEBENCH_MIN_BYTES: int32 = MIB;
+const GHOSTTY_COLS: int32 = 120;
+const GHOSTTY_ROWS: int32 = 80;
+const GHOSTTY_BYTES: int32 = 4 * MIB;
 const LETTERS: int32 = 26;
-const FIRST_LETTER: int32 = 65;
+const FIRST_LETTER: int32 = "A".code;
 const ALT_SCREEN = "\x1b[?1049h";
 
 export const WORKLOAD_NAMES: string[] = [
@@ -44,8 +44,7 @@ export function bytesOf(text: string): Vec<uint8> {
 }
 
 function putText(ref out: Vec<uint8>, text: string): void {
-	const bytes = text.asBytes();
-	for (let i = 0; i < (bytes.length as int32); i++) { out.push(bytes[i]); }
+	for (const b of text.asBytes()) { out.push(b); }
 }
 
 function putLineEnd(ref out: Vec<uint8>): void {
@@ -76,11 +75,10 @@ function putCodepoint(ref out: Vec<uint8>, cp: int32): void {
 }
 
 function repeatedTo(unit: Vec<uint8>, minBytes: int32): Vec<uint8> {
-	const length = unit.length as int32;
-	const count = (minBytes - 1) / length + 1;
+	const count = (minBytes - 1) / (unit.length as int32) + 1;
 	let out: Vec<uint8> = [];
 	for (let n = 0; n < count; n++) {
-		for (let i = 0; i < length; i++) { out.push(unit[i]); }
+		for (const b of unit) { out.push(b); }
 	}
 	return out;
 }
@@ -97,7 +95,7 @@ function cursorMotion(cols: int32, rows: int32): Vec<uint8> {
 		let columnEnd = cols;
 		let lineStart = 1;
 		let lineEnd = rows;
-		while (true) {
+		while (columnStart <= columnEnd && lineStart <= lineEnd) {
 			let column = columnStart;
 			let line = lineStart;
 			while (column < columnEnd) {
@@ -120,7 +118,6 @@ function cursorMotion(cols: int32, rows: int32): Vec<uint8> {
 			lineStart++;
 			columnEnd--;
 			lineEnd--;
-			if (columnStart > columnEnd || lineStart > lineEnd) { break; }
 		}
 	}
 	return out;
@@ -128,8 +125,8 @@ function cursorMotion(cols: int32, rows: int32): Vec<uint8> {
 
 function denseCells(cols: int32, rows: int32): Vec<uint8> {
 	let out: Vec<uint8> = [];
-	let offset = 0;
 	for (let letter = FIRST_LETTER; letter < FIRST_LETTER + LETTERS; letter++) {
+		const offset = letter - FIRST_LETTER;
 		putText(out, "\x1b[H");
 		for (let line = 1; line <= rows; line++) {
 			for (let column = 1; column <= cols; column++) {
@@ -140,7 +137,6 @@ function denseCells(cols: int32, rows: int32): Vec<uint8> {
 				out.push(letter as uint8);
 			}
 		}
-		offset++;
 	}
 	return out;
 }
@@ -219,43 +215,42 @@ const SGR_ATTRIBUTES: int32[] = [1, 3, 4, 7, 9];
 
 function putSgr(ref out: Vec<uint8>, ref rng: Rng): void {
 	const kind = nextBelow(rng, 8);
-	if (kind == 0) {
-		putText(out, "\x1b[0m");
-	} else if (kind == 1) {
-		const base = nextBelow(rng, 2) == 0 ? 30 : 90;
-		putText(out, `\x1b[${base + nextBelow(rng, 8)}m`);
-	} else if (kind == 2) {
-		const base = nextBelow(rng, 2) == 0 ? 40 : 100;
-		putText(out, `\x1b[${base + nextBelow(rng, 8)}m`);
-	} else if (kind == 3) {
-		putText(out, `\x1b[38;5;${nextBelow(rng, 256)}m`);
-	} else if (kind == 4) {
-		putText(out, `\x1b[48;5;${nextBelow(rng, 256)}m`);
-	} else if (kind == 7) {
-		putText(out, `\x1b[${SGR_ATTRIBUTES[nextBelow(rng, 5)]}m`);
-	} else {
-		const layer = kind == 5 ? 38 : 48;
-		const r = nextBelow(rng, 6) * 51;
-		const g = nextBelow(rng, 6) * 51;
-		const b = nextBelow(rng, 6) * 51;
-		putText(out, `\x1b[${layer};2;${r};${g};${b}m`);
+	match (kind) {
+		0 => { putText(out, "\x1b[0m"); },
+		1 => {
+			const base = nextBelow(rng, 2) == 0 ? 30 : 90;
+			putText(out, `\x1b[${base + nextBelow(rng, 8)}m`);
+		},
+		2 => {
+			const base = nextBelow(rng, 2) == 0 ? 40 : 100;
+			putText(out, `\x1b[${base + nextBelow(rng, 8)}m`);
+		},
+		3 => { putText(out, `\x1b[38;5;${nextBelow(rng, 256)}m`); },
+		4 => { putText(out, `\x1b[48;5;${nextBelow(rng, 256)}m`); },
+		7 => { putText(out, `\x1b[${SGR_ATTRIBUTES[nextBelow(rng, 5)]}m`); },
+		_ => {
+			const layer = kind == 5 ? 38 : 48;
+			const r = nextBelow(rng, 6) * 51;
+			const g = nextBelow(rng, 6) * 51;
+			const b = nextBelow(rng, 6) * 51;
+			putText(out, `\x1b[${layer};2;${r};${g};${b}m`);
+		},
 	}
 }
 
-function putMixChar(ref out: Vec<uint8>, ref rng: Rng, mix: TextMix): void {
+function mixCodepoint(ref rng: Rng, mix: TextMix): int32 {
 	const total = mix.weightOne + mix.weightTwo + mix.weightThree;
 	const pick = nextBelow(rng, total);
-	let cp = 0;
 	if (pick < mix.weightOne) {
-		cp = nextBelow(rng, 100) < 15 ? 0x20 : 0x21 + nextBelow(rng, 0x5E);
-	} else if (pick < mix.weightOne + mix.weightTwo) {
-		cp = 0xC0 + nextBelow(rng, 0x24F - 0xC0 + 1);
-	} else if (nextBelow(rng, 2) == 0) {
-		cp = 0x3041 + nextBelow(rng, 0x30FE - 0x3041 + 1);
-	} else {
-		cp = 0x4E00 + nextBelow(rng, 0x9FFF - 0x4E00 + 1);
+		return nextBelow(rng, 100) < 15 ? 0x20 : 0x21 + nextBelow(rng, 0x5E);
 	}
-	putCodepoint(out, cp);
+	if (pick < mix.weightOne + mix.weightTwo) { return 0xC0 + nextBelow(rng, 0x24F - 0xC0 + 1); }
+	if (nextBelow(rng, 2) == 0) { return 0x3041 + nextBelow(rng, 0x30FE - 0x3041 + 1); }
+	return 0x4E00 + nextBelow(rng, 0x9FFF - 0x4E00 + 1);
+}
+
+function putMixChar(ref out: Vec<uint8>, ref rng: Rng, mix: TextMix): void {
+	putCodepoint(out, mixCodepoint(rng, mix));
 	if (mix.graphemeRate > 0 && nextBelow(rng, 1000) < mix.graphemeRate) {
 		putCodepoint(out, 0x300 + nextBelow(rng, 0x70));
 	}

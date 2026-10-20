@@ -18,7 +18,7 @@ function main(): int32 {
 		const a = performance.now();
 		const w = pty.write(chunk[0..chunk.length]);
 		const took = performance.now() - a;
-		if (took > worst) { worst = took; }
+		worst = Math.max(worst, took);
 		if (!w.ok) { console.log(`writeBlock: write ${m} failed`); break; }
 		while (true) {
 			const ready = pty.wait(0);
@@ -26,7 +26,10 @@ function main(): int32 {
 			if (!pty.read(buf).ok) { break; }
 		}
 	}
-	console.log(`writeBlock: ${mb} MiB written in ${performance.now() - start} ms, worst 1 MiB write ${worst} ms`);
+	console.log(
+		`writeBlock: ${mb} MiB written in ${performance.now() - start} ms, ` +
+		`worst 1 MiB write ${worst} ms`,
+	);
 	pty.close();
 	return 0;
 }

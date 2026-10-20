@@ -18,11 +18,24 @@ test "spans update" {
 	registerFace("assets/JetBrainsMonoNL-Bold.ttf", PATH, 700, FontStyle.Normal);
 	const vh = createVoidHostWith(Scene2D.create(rgba(0.0, 0.0, 0.0, 1.0)), font.value, PATH);
 
-	const plain: Style = { color: "#ffffff", textDecorationLine: "none", textDecorationStyle: "solid", fontWeight: "normal", fontStyle: "normal" };
-	const bold: Style = { color: "#ffffff", textDecorationLine: "none", textDecorationStyle: "solid", fontWeight: "bold", fontStyle: "normal" };
-	const curly: Style = { color: "#ffffff", textDecorationLine: "underline", textDecorationStyle: "wavy", fontWeight: "normal", fontStyle: "normal" };
-	const [spans, setSpans] = createSignal<TextSpan[]>([{ text: "bold", style: bold }, { text: "      ", style: plain }]);
-	render(element(<Text style={{ fontSize: 14, height: 18 }} cellWidth={8.4} spans={spans()} />), vh.host, vh.root);
+	const plain: Style = {
+		color: "#ffffff",
+		textDecorationLine: "none",
+		textDecorationStyle: "solid",
+		fontWeight: "normal",
+		fontStyle: "normal",
+	};
+	const bold: Style = { ...plain, fontWeight: "bold" };
+	const curly: Style = { ...plain, textDecorationLine: "underline", textDecorationStyle: "wavy" };
+	const [spans, setSpans] = createSignal<TextSpan[]>([
+		{ text: "bold", style: bold },
+		{ text: "      ", style: plain },
+	]);
+	render(
+		element(<Text style={{ fontSize: 14, height: 18 }} cellWidth={8.4} spans={spans()} />),
+		vh.host,
+		vh.root,
+	);
 
 	const dump = (label: string): void => {
 		vh.layout(400.0, 100.0);
@@ -37,7 +50,12 @@ test "spans update" {
 	};
 
 	dump("first");
-	setSpans([{ text: "bold", style: bold }, { text: " ", style: plain }, { text: "curly", style: curly }, { text: " plain", style: plain }]);
+	setSpans([
+		{ text: "bold", style: bold },
+		{ text: " ", style: plain },
+		{ text: "curly", style: curly },
+		{ text: " plain", style: plain },
+	]);
 	dump("after set");
 	console.log(`fresh:`);
 

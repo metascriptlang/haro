@@ -55,7 +55,7 @@ struct Measured {
 	bestMs: float64;
 }
 
-function zero(): Totals {
+function zero(this typeof Totals): Totals {
 	return {
 		write: 0.0, plan: 0.0, lines: 0.0, spans: 0.0, apply: 0.0,
 		frames: 0, rows: 0, lineErrors: 0, spanCount: 0,
@@ -85,7 +85,7 @@ function blankSlots(rows: int32): RowSlot[] {
 
 function framePass(
 	vt: Vt, stage: Stage, styles: Map<string, Style>, ref totals: Totals,
-): Result<int32, BenchError> {
+): Result<void, BenchError> {
 	const t0: float64 = performance.now();
 	const planned = vt.plan();
 	if (!planned.ok) { return Result.err(BenchError.Plan); }
@@ -112,7 +112,7 @@ function framePass(
 	totals.spans += t3 - t2;
 	totals.rows += planned.value.rows.length as int32;
 	totals.spanCount += spanCount;
-	return Result.ok(0);
+	return Result.ok(null);
 }
 
 function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, BenchError> {
@@ -125,7 +125,7 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 	if (stage != Stage.Write && !vt.plan().ok) { return Result.err(BenchError.Plan); }
 	const styles = new Map<string, Style>();
 	const grid = createList<RowSlot>(blankSlots(w.rows));
-	let totals = zero();
+	let totals = Totals.zero();
 	const size = payload.length as int32;
 	let at = 0;
 	let sinceFrame = 0;
@@ -151,8 +151,7 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 			totals.apply += performance.now() - w1;
 			if (!applied.ok) { totals.lineErrors += 1; }
 		} else {
-			const framed = framePass(vt, stage, styles, totals);
-			if (!framed.ok) { return Result.err(framed.error); }
+			const _framed = try framePass(vt, stage, styles, totals);
 		}
 		lastFrame = performance.now();
 	}
@@ -181,15 +180,13 @@ function fixed(value: float64, places: int32): string {
 	for (let i = 0; i < places; i++) { scale *= 10; }
 	const scaled = (value * (scale as float64) + 0.5) as int64;
 	const whole = scaled / (scale as int64);
-	let fraction = `${scaled % (scale as int64)}`;
-	while ((fraction.byteLength as int32) < places) { fraction = "0" + fraction; }
-	return places == 0 ? `${whole}` : `${whole}.${fraction}`;
+	const fraction = `${scaled % (scale as int64)}`;
+	const padded = "0".repeat(places - (fraction.byteLength as int32)) + fraction;
+	return places == 0 ? `${whole}` : `${whole}.${padded}`;
 }
 
 function pad(text: string, width: int32): string {
-	let out = text;
-	while ((out.byteLength as int32) < width) { out = " " + out; }
-	return out;
+	return " ".repeat(width - (text.byteLength as int32)) + text;
 }
 
 function describe(w: Workload, stage: Stage, m: Measured): string {

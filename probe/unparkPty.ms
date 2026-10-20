@@ -41,7 +41,9 @@ function main(): int32 {
 		console.log(screen.value.join("\n"));
 		return 1;
 	}
-	console.log("PASS: cmd.exe -> ConPTY -> mutable buffer -> VT screen: mutable-buffer-smoke; exit=0");
+	console.log(
+		"PASS: cmd.exe -> ConPTY -> mutable buffer -> VT screen: mutable-buffer-smoke; exit=0",
+	);
 	return 0;
 }
 

@@ -4,7 +4,7 @@ import { KeyAction, KeyEvent, KeyMod } from "../src/keys/keys";
 import { argv, exit } from "std/process";
 import { writeFile } from "std/fs";
 
-interface Case {
+struct Case {
 	name: string;
 	key: string;
 	mods: BitSet<KeyMod>;
@@ -73,7 +73,12 @@ function main(): int32 {
 	drain(pty, recorded, buf, 3000);
 	for (const c of cases) {
 		const e: KeyEvent = {
-			action: KeyAction.Press, key: c.key, mods: c.mods, consumedMods: none, unshifted: c.unshifted, text: c.text,
+			action: KeyAction.Press,
+			key: c.key,
+			mods: c.mods,
+			consumedMods: none,
+			unshifted: c.unshifted,
+			text: c.text,
 		};
 		const n = keys.value.encode(vt.value, e, out);
 		if (!n.ok) {

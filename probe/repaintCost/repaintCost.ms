@@ -16,8 +16,8 @@ import { addFont } from "../../../void/src/void2d/font";
 
 struct Slot { spans: TextSpan[]; }
 
-const COLS = 105;
-const ROWS = 30;
+const COLS: int32 = 105;
+const ROWS: int32 = 30;
 const plain: Style = { color: "#cccccc" };
 const keyword: Style = { color: "#c678dd", fontWeight: "normal" };
 
@@ -29,7 +29,9 @@ function rowText(seed: int32, y: int32): string {
 
 function slot(seed: int32, y: int32): Slot {
 	const t = rowText(seed, y);
-	return { spans: [{ text: t.slice(0, 20), style: keyword }, { text: t.slice(20), style: plain }] };
+	return {
+		spans: [{ text: t.slice(0, 20), style: keyword }, { text: t.slice(20), style: plain }],
+	};
 }
 
 test "time a full-screen repaint through Neon and void2d" {
@@ -39,13 +41,21 @@ test "time a full-screen repaint through Neon and void2d" {
 	const vh = createVoidHostWith(Scene2D.create(rgba(0.0, 0.0, 0.0, 1.0)), font.value);
 	const items: List<Slot> = createList<Slot>([]);
 	for (let y = 0; y < ROWS; y++) { items.push(slot(0, y)); }
-	const row = (item: Accessor<Slot>): NeonNode => element(<Text style={{ fontSize: 14, height: 18 }} cellWidth={8.4} spans={item().spans} />);
-	render(element(<View style={{ flexGrow: 1 }}>{ForList<Slot>({ each: items, children: row })}</View>), vh.host, vh.root);
+	const row = (item: Accessor<Slot>): NeonNode => element(
+		<Text style={{ fontSize: 14, height: 18 }} cellWidth={8.4} spans={item().spans} />
+	);
+	render(
+		element(
+			<View style={{ flexGrow: 1 }}>{ForList<Slot>({ each: items, children: row })}</View>
+		),
+		vh.host,
+		vh.root,
+	);
 	vh.layout(948.0, 588.0);
 	vh.scene.paintScene(948.0, 588.0, 1.0);
 	frameEnd();
 	vh.scene.clearChanges();
-	const frames = 60;
+	const frames: int32 = 60;
 	let setMs = 0.0;
 	let layoutMs = 0.0;
 	let paintMs = 0.0;
@@ -63,5 +73,8 @@ test "time a full-screen repaint through Neon and void2d" {
 		layoutMs += c - b;
 		paintMs += d - c;
 	}
-	console.log(`per full repaint of ${ROWS}x${COLS}: set ${(setMs / frames)} ms, layout ${(layoutMs / frames)} ms, paint ${(paintMs / frames)} ms`);
+	console.log(
+		`per full repaint of ${ROWS}x${COLS}: set ${(setMs / frames)} ms, ` +
+		`layout ${(layoutMs / frames)} ms, paint ${(paintMs / frames)} ms`,
+	);
 }

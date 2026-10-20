@@ -12,7 +12,10 @@ if (opened.ok) {
 		if (!p.wait(150).ok) { break; }
 		const r = p.read(buf);
 		if (!r.ok) { break; }
-		for (let k = 0; k < r.value; k++) { const b = buf[k] as int32; out += b < 32 ? "" : String.fromCharCode(b); }
+		for (let k = 0; k < r.value; k++) {
+			const b = buf[k] as int32;
+			out += b < 32 ? "" : String.fromCharCode(b);
+		}
 		if (!sent && i == 8) {
 			let reply: Vec<uint8> = [27, 91, 63, 48, 117];
 			p.write(reply);

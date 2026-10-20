@@ -33,7 +33,8 @@ function main(): int32 {
 	ghostty_render_state_new(null, state);
 	ghostty_render_state_update(state, term);
 	let cols: uint16 = 0;
-	const r = ghostty_render_state_get(state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLS, cols);
+	const colsKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLS;
+	const r = ghostty_render_state_get(state, colsKey, cols);
 	console.log(`get cols: ${r as int32} ${cols}`);
 	let rows: GhosttyRenderStateRowIterator;
 	ghostty_render_state_row_iterator_new(null, rows);

@@ -79,7 +79,9 @@ function windowHost(): Host {
 			refuse(`text "${s}" cannot be a child of the window`);
 			return windowNode("");
 		},
-		setText: (node: HostNode, s: string): void => { refuse("text cannot be set on the window"); },
+		setText: (node: HostNode, s: string): void => {
+			refuse("text cannot be set on the window");
+		},
 		setAttr: (node: HostNode, name: string, value: string): void => {},
 		removeAttr: (node: HostNode, name: string): void => {},
 		setStyle: (node: HostNode, style: Style): void => {

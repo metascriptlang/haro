@@ -15,7 +15,10 @@ if (!font.ok) { throw new Error("font"); }
 const vh = createVoidHostWith(Scene2D.create(rgba(0.0, 0.0, 0.0, 1.0)), font.value);
 const [open, setOpen] = createSignal<boolean>(false);
 render(element(
-	<View style={{ width: 400, height: 300 }} onPointerUp={(e: NeonEvent): void => { setOpen(true); }}>
+	<View
+		style={{ width: 400, height: 300 }}
+		onPointerUp={(e: NeonEvent): void => { setOpen(true); }}
+	>
 		{Show({ when: open, children: element(
 			<Pressable style={{ width: 50, height: 20 }} onPress={(): void => {}} />
 		) })}

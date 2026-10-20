@@ -1,8 +1,8 @@
 import { Vt } from "../src/vt/vt";
 
-const COLS = 200;
-const ROWS = 60;
-const RUNS = 50;
+const COLS: int32 = 200;
+const ROWS: int32 = 60;
+const RUNS: int32 = 50;
 
 function fullScreen(): string {
 	let text = "";

@@ -259,23 +259,37 @@ test "a line written to the child reaches it" {
 	}
 }
 
-struct LineCheck { next: int32; digits: string; inNumber: boolean; inCsi: boolean; bytes: int64; }
+struct LineCheck {
+	linesInOrder: int32;
+	digits: string;
+	inNumber: boolean;
+	inEscape: boolean;
+	byteCount: int64;
+}
 
-function feed(this before: LineCheck, bytes: Span<uint8>): LineCheck {
+const NO_LINES: LineCheck = {
+	linesInOrder: 0,
+	digits: "",
+	inNumber: false,
+	inEscape: false,
+	byteCount: 0,
+};
+
+function feed(this before: LineCheck, bytes: Readonly<Span<uint8>>): LineCheck {
 	let c = before;
-	c.bytes += bytes.length;
+	c.byteCount += bytes.length;
 	for (const b of bytes) {
-		if (c.inCsi) {
-			c.inCsi = b < 0x40 || b > 0x7E || b == 0x5B;
+		if (c.inEscape) {
+			c.inEscape = b < 0x40 || b > 0x7E || b == 0x5B;
 		} else if (b == 0x1B) {
-			c.inCsi = true;
+			c.inEscape = true;
 		} else if (b == 0x4C) {
 			c.inNumber = true;
 			c.digits = "";
 		} else if (c.inNumber && b >= 0x30 && b <= 0x39) {
 			c.digits += String.fromCharCode(b as int32);
 		} else if (c.inNumber) {
-			if (b == 0x2E && c.digits == `${c.next}`) { c.next++; }
+			if (b == 0x2E && c.digits == `${c.linesInOrder}`) { c.linesInOrder++; }
 			c.inNumber = false;
 		}
 	}
@@ -283,13 +297,8 @@ function feed(this before: LineCheck, bytes: Span<uint8>): LineCheck {
 }
 
 test "the flood check counts a line ended by a cursor move, not a newline, and skips its escapes" {
-	let check: LineCheck = { next: 0, digits: "", inNumber: false, inCsi: false, bytes: 0 };
 	const text = "\x1b]0;cmd\x07line L0.\x1b[2;1Hline\x1b[1CL1.\x1b[K\r\nline L3.\r\nline L2.\r\n";
-	const view = text.asBytes();
-	let bytes: Vec<uint8> = new Array(view.length);
-	for (let i = 0; i < view.length; i++) { bytes[i] = view[i]; }
-	check = check.feed(bytes[0..bytes.length]);
-	assert check.next == 3;
+	assert NO_LINES.feed(text.asBytes()).linesInOrder == 3;
 }
 
 test "output past the read buffer's limit arrives whole and in order while the app reads late" {
@@ -306,7 +315,7 @@ test "output past the read buffer's limit arrives whole and in order while the a
 		const late: float64 = performance.now();
 		while (performance.now() - late < 1500) {}
 		let buf: Vec<uint8> = new Array(65536);
-		let check: LineCheck = { next: 0, digits: "", inNumber: false, inCsi: false, bytes: 0 };
+		let check = NO_LINES;
 		while (true) {
 			const ready = p.wait(10000);
 			if (!ready.ok || !ready.value) { break; }
@@ -314,9 +323,10 @@ test "output past the read buffer's limit arrives whole and in order while the a
 			if (!r.ok) { break; }
 			check = check.feed(buf[0..r.value]);
 		}
-		console.log(`flood: ${check.bytes} bytes, ${check.next} of ${count} lines in order`);
-		assert check.bytes > 4194304;
-		assert check.next == count;
+		const inOrder = `${check.linesInOrder} of ${count} lines in order`;
+		console.log(`flood: ${check.byteCount} bytes, ${inOrder}`);
+		assert check.byteCount > 4194304;
+		assert check.linesInOrder == count;
 		p.close();
 	}
 	const _gone = remove(path);

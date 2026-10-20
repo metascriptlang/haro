@@ -6,6 +6,7 @@ import { homeDir } from "std/os";
 import { changeStamp, ensureDir, exists, readFile, writeFile } from "std/fs";
 import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
+import { Rgb } from "../vt/vt";
 import { Faces, installedFaces } from "./fonts";
 import {
 	callRoutine,
@@ -202,5 +203,22 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 	if (!misspelt.ok) {
 		assert misspelt.error.includes("/config.ms:3:");
 		assert misspelt.error.includes("'fontSiz' does not exist in type 'HaroConfig'");
+	}
+}
+
+test "a config spreads saigonNight from the haro package and keeps its own fields over it" {
+	const dir = `${cwd()}/out/themedConfig`;
+	assert ensureDir(dir).ok;
+	const path = `${dir}/config.ms`;
+	const config = `import { HaroConfig, saigonNight } from "haro";\n\nexport const config: HaroConfig = { ...saigonNight, fontSize: 13 };\n`;
+	assert writeFile(path, config).ok;
+	const themed = evaluate(path, dir, `${cwd()}/assets/haro`);
+	assert themed.ok;
+	if (themed.ok) {
+		const c = parse(themed.value);
+		const background: Rgb = { r: 22, g: 22, b: 30 };
+		const brightWhite: Rgb = { r: 172, g: 176, b: 208 };
+		assert c.ok && c.value.fontSize == 13 && c.value.background == background;
+		assert c.ok && c.value.palette.length == 16 && c.value.palette[15] == brightWhite;
 	}
 }

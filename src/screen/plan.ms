@@ -426,10 +426,10 @@ test "output while scrolled up plans nothing, and snapping back to the bottom pl
 	}
 }
 
-function kindAfter(vt: Vt, bytes: string): PlanKind {
+function kindAfter(vt: Vt, bytes: string): PlanKind | null {
 	vt.writeText(bytes);
 	const planned = vt.plan();
-	if (!planned.ok) { return PlanKind.Idle; }
+	if (!planned.ok) { return null; }
 	return planned.value.kind;
 }
 

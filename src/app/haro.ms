@@ -25,8 +25,9 @@ import { Pace } from "./pace";
 import { stats, mark, noteWake } from "./stats";
 import { logStatsEverySecond } from "./statsLog";
 import { registerFonts } from "./fonts";
-import { Config, defaults } from "../config/config";
-import { Loaded, cacheDir, configPath, load, stampOf } from "../config/source";
+import { Config } from "../config/config";
+import { cacheDir, configPath } from "../config/source";
+import { ConfigWatch, forFile, readConfig, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { Term, openTerm, shutdown } from "./components/features/terminal/term";
 import { AppHost } from "./components/features/terminal/paneModel";
@@ -63,12 +64,8 @@ when (macos) {
 	}
 }
 
-const CONFIG_POLL_MS = 1000;
-
 const pace = Pace.start();
-const configFile = flagValue("--config") ?? configPath();
-let loaded: Loaded = { config: defaults(), faces: [], stamp: "" };
-let configError = "";
+const config = ConfigWatch.forFile(flagValue("--config") ?? configPath());
 
 function note(line: string): void {
 	console.log(`haro: ${line}`);
@@ -107,36 +104,6 @@ function probableCli(): boolean {
 	}
 }
 
-function reload(): Result<Config, string> {
-	const got = load(configFile);
-	if (!got.ok) { return Result.err(got.error); }
-	loaded = got.value;
-	return Result.ok(got.value.config);
-}
-
-function readConfig(): void {
-	const got = reload();
-	if (got.ok) { return; }
-	configError = got.error;
-	loaded.stamp = stampOf(configFile);
-}
-
-function watchConfig(handler: (c: Config | null, error: string) => void): void {
-	setTimeout((): void => {
-		const stamp = stampOf(configFile);
-		if (stamp != loaded.stamp) {
-			const got = reload();
-			if (got.ok) {
-				handler(got.value, "");
-			} else {
-				loaded.stamp = stamp;
-				handler(null, got.error);
-			}
-		}
-		watchConfig(handler);
-	}, CONFIG_POLL_MS);
-}
-
 function inFrame(run: () => void): void {
 	if (!pace.asksFrame()) { return; }
 	const _id = requestFrame((time: number): void => {
@@ -146,7 +113,7 @@ function inFrame(run: () => void): void {
 }
 
 function openWindow(t: Term, exited: (code: int32) => void): int32 {
-	const families = registerFonts(loaded.faces);
+	const families = registerFonts(config.loaded.faces);
 	const host: AppHost = {
 		onWake: (handler: () => void): void => {
 			onWake((): void => {
@@ -174,8 +141,8 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 			});
 		},
 		onConfig: (handler: (c: Config | null, error: string) => void): void => {
-			if (configError != "") { handler(null, configError); }
-			watchConfig(handler);
+			if (config.error != "") { handler(null, config.error); }
+			config.watchConfig(handler);
 		},
 	};
 	if (hasFlag("--stats")) { logStatsEverySecond(pace); }
@@ -188,14 +155,14 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 		font: families[0],
 		fontFamily: families.join(", "),
 	};
-	const code = runWindow(opts, (): NeonNode => App(t, host, loaded.config));
+	const code = runWindow(opts, (): NeonNode => App(t, host, config.loaded.config));
 	note("the window closed");
 	t.shutdown();
 	return code;
 }
 
 function runShell(shell: string): int32 {
-	const cwd = loaded.config.startDirectory(probableCli(), homeDir());
+	const cwd = config.loaded.config.startDirectory(probableCli(), homeDir());
 	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
 		return NativePty.spawn(shell, cols, rows, cwd);
 	});
@@ -237,11 +204,11 @@ function runReplay(path: string): int32 {
 
 function main(): int32 {
 	stats.mark("main", Date.now());
-	readConfig();
+	config.readConfig();
 	stats.mark("config", Date.now());
 	const replayPath = flagValue("--replay");
 	if (replayPath !== null) { return runReplay(replayPath); }
-	return runShell(flagValue("--shell") ?? loaded.config.command);
+	return runShell(flagValue("--shell") ?? config.loaded.config.command);
 }
 
 exit(main());

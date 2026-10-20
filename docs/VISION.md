@@ -67,7 +67,7 @@ Measured 2026-09-23 against ion `32bb557`, void `0167080` and neon `6dd27ac`:
 2. ~~**Neon: a desktop entry.**~~ Landed at neon `8f85cb3`: `runWindow` in
    `neon/src/platform/ion/window.ms`, example `neon/examples/voidWindow.ms`.
 3. ~~**Ion: a frame clock.**~~ Landed at ion `44001f8`..`3f90df1`: a frame policy per surface,
-   measured in `ion/docs/RENDER-SURFACE.md`.
+   measured in `ion/docs/WINDOW-CONTENT.md` "Frame clock".
 
 Haro's own core landed without them: ConPTY, libghostty-vt, query replies and a cell reader,
 with its measurements in `docs/CORE.md`.

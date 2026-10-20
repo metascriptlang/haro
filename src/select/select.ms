@@ -26,7 +26,7 @@ export struct Selection {
 	block: boolean;
 }
 
-export struct RowSpan {
+struct RowSpan {
 	row: int32;
 	from: int32;
 	to: int32;
@@ -39,7 +39,7 @@ export struct Block {
 	cols: int32;
 }
 
-export function pointRange(at: Point): Range {
+function pointRange(at: Point): Range {
 	return { start: at, end: at };
 }
 
@@ -78,7 +78,7 @@ export function marked(this sel: Selection): Marked {
 	return { range: sel.bounds(), block: sel.block };
 }
 
-export function spans(
+function spans(
 	this m: Marked,
 	top: int32,
 	rows: int32,

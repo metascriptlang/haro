@@ -138,9 +138,7 @@ test "a child's output reaches read and its exit ends the stream" {
 		const p = opened.value;
 		const text = p.toPty().drainText(4096);
 		assert text.includes("hello");
-		const code = p.exitCode();
-		assert code !== null;
-		if (code !== null) { assert code == 0; }
+		assert p.exitCode() === 0;
 		p.close();
 	}
 }
@@ -220,9 +218,7 @@ test "a native pty spawned as a Pty reads its output and reports its exit throug
 	if (spawned.ok) {
 		const pty = spawned.value;
 		assert pty.drainText(4096).includes("hello");
-		const code = pty.exitCode();
-		assert code !== null;
-		if (code !== null) { assert code == 0; }
+		assert pty.exitCode() === 0;
 		pty.close();
 	}
 }

@@ -226,7 +226,6 @@ when (macos) {
 		if (symbols.ok) {
 			assert symbols.value.regular == "/System/Library/Fonts/Apple Symbols.ttf";
 		}
-
 		assert !installedFaces("No Such Family Haro").ok;
 	}
 }

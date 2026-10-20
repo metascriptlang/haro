@@ -221,7 +221,6 @@ export function parse(json: string): Result<Config, string> {
 						`palette has ${list.length} colours, at most ${PALETTE_SIZE}`,
 					);
 				}
-
 				for (let n = 0; n < list.length; n++) {
 					c.palette.push(try readColor(list[n], `palette[${n}]`));
 				}
@@ -334,7 +333,6 @@ test "a field the config cannot use is refused by name" {
 		"scrollback must be a whole number of lines from 0 to 100000";
 	assert refusal(`{"scrollback":1.5}`) ==
 		"scrollback must be a whole number of lines from 0 to 100000";
-
 	assert refusal("[]") == "config must be an object";
 }
 

@@ -135,7 +135,6 @@ export function load(path: string): Result<Loaded, string> {
 		return Result.err(`cannot write ${cacheFile}`);
 	}
 	return Result.ok({ config: config, faces: faces, stamp: stamp });
-
 }
 
 test "styles in the compiler's diagnostics are dropped, the text kept" {

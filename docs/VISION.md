@@ -55,7 +55,7 @@ Ion hands out a surface and input events and never draws. The glue between them 
 Haro's. Void drives a surface that its host hands it, and Neon binds an Ion window to a
 `<Void>` root. Haro is their first consumer on the desktop.
 
-## What unblocks the first window
+## What the first window needed
 
 Measured 2026-09-23 against ion `32bb557`, void `0167080` and neon `6dd27ac`:
 
@@ -74,9 +74,8 @@ with its measurements in `docs/CORE.md`.
 
 ## libghostty-vt — only the parts we need
 
-libghostty-vt exposes a C API (`include/ghostty/vt.h`) and is built with `zig build`
-(Zig 0.16). It is vendored as a git submodule pinned to a commit. Upstream marks the API as
-unstable, so moving the pin is its own commit, with the build and tests re-run.
+libghostty-vt exposes a C API (`include/ghostty/vt.h`); how it is pinned and built is in
+`docs/CORE.md` "libghostty-vt".
 
 Take:
 - `terminal.h`, `screen.h`: VT state, scrollback, reflow on resize.

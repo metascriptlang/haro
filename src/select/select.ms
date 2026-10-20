@@ -120,12 +120,7 @@ export function rebased(this sel: Selection, was: Range, now: Marked | null): Se
 	if (now === null) { return null; }
 	const shift = now.range.start.row - was.start.row;
 	if (shift == 0) { return sel; }
-	const moved: Selection | null = {
-		...sel,
-		origin: sel.origin.shiftedBy(shift),
-		focus: sel.focus.shiftedBy(shift),
-	};
-	return moved;
+	return { ...sel, origin: sel.origin.shiftedBy(shift), focus: sel.focus.shiftedBy(shift) };
 }
 
 function pointRange(at: Point): Range {

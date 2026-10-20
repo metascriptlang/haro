@@ -28,11 +28,9 @@ if (opened.ok) {
 			let reply: Vec<uint8> = [27, 91, 63, 48, 117];
 			p.write(reply);
 			replied = true;
-			shown += `
-[${Math.round(performance.now())}ms REPLIED] `;
+			shown += `\n[${Math.round(performance.now())}ms REPLIED] `;
 		}
-		if (r.value > 0) { shown += `
-[${Math.round(performance.now())}ms ${r.value}B] `; }
+		if (r.value > 0) { shown += `\n[${Math.round(performance.now())}ms ${r.value}B] `; }
 		for (let k = 0; k < r.value; k++) {
 			raw.push(buf[k]);
 			const b = buf[k] as int32;

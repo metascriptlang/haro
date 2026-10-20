@@ -219,10 +219,11 @@ $sum = [ordered]@{
 }
 $echo = @{ n = 0; p50 = @(); max = 0 }
 $settle = @{ n = 0; p50 = @(); max = 0 }
+$latencies = @(@('echo', $echo), @('settle', $settle))
 $voidLine = ''
 foreach ($line in $lines) {
 	foreach ($k in @($sum.Keys)) { if ($line -match " $k=(\d+)") { $sum[$k] += [int]$Matches[1] } }
-	foreach ($pair in @(@('echo', $echo), @('settle', $settle))) {
+	foreach ($pair in $latencies) {
 		if ($line -match "$($pair[0]) n=(\d+) p50=([\d.]+) max=([\d.]+)") {
 			$pair[1].n += [int]$Matches[1]
 			$pair[1].p50 += [double]$Matches[2]
@@ -241,7 +242,7 @@ $r = [ordered]@{
 	seconds = $lines.Count
 }
 foreach ($k in $sum.Keys) { $r[$k] = $sum[$k] }
-foreach ($pair in @(@('echo', $echo), @('settle', $settle))) {
+foreach ($pair in $latencies) {
 	$r["$($pair[0])_n"] = $pair[1].n
 	$r["$($pair[0])_p50_of_seconds_ms"] = Median $pair[1].p50
 	$r["$($pair[0])_max_ms"] = $pair[1].max

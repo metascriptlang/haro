@@ -170,7 +170,7 @@ Flood and pipeline, 2026-10-16 (msc `5631dd3e5`, release):
 
 | what | number | how |
 |---|---|---|
-| Haro CPU while `cmd /c type` floods 10 MB | 74–80 % of a core before pacing (`318eab2`), 17–25 % after (`b2e9537`); flood 5.7–9.9 s either way; idle 0 % | `-Work flood` of a scratch driver that is not in the repo, three runs each, the Haro process only |
+| Haro CPU while `cmd /c type` floods 10 MB | 74–80 % of a core before pacing (`318eab2`), 17–25 % after (`b2e9537`); flood 5.7–9.9 s either way; idle 0 % | `-Work flood` of a scratch driver that is not in the repo, three runs each, the Haro process only. The same script gave other terminals 17–22 %, 32–38 %, 85–102 % and 127–145 % the day before |
 | a full 40-row repaint through `applyFrame`, no window | about 0.5 ms (light_cells), 1.6 ms (dense_cells) | `sh bench/run.sh`, median of 7 |
 | `row.line()` | about 10 µs a row | same |
 | `spansOf` on a row whose every cell changes colour | about 57 µs a row; under 1 µs on plain rows | same |

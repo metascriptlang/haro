@@ -52,7 +52,8 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 	const scrolled = try vt.scrolledRows();
 	let kind = PlanKind.Rows;
 	let moved = 0;
-	if ((painted.rows.length as int32) != rowCount || painted.alternate != alternate || recoloured) {
+	const resized = (painted.rows.length as int32) != rowCount;
+	if (resized || painted.alternate != alternate || recoloured) {
 		kind = PlanKind.Repaint;
 	} else if (scrolled === null || scrolled < 0 || scrolled >= rowCount) {
 		kind = PlanKind.Repaint;
@@ -93,12 +94,9 @@ function opened(cols: int32): Result<Vt, VtError> {
 }
 
 function ys(rows: Vec<Row>): string {
-	let out = "";
-	for (let i = 0; i < (rows.length as int32); i++) {
-		if (i > 0) { out += ","; }
-		out += `${rows[i].y}`;
-	}
-	return out;
+	let out: string[] = [];
+	for (const row of rows) { out.push(`${row.y}`); }
+	return out.join(",");
 }
 
 function textOf(row: Row): string {
@@ -401,7 +399,7 @@ test "scrolling the viewport down plans a scroll by that many rows and up repain
 	}
 }
 
-test "output while the viewport is scrolled up plans nothing, and snapping back plans the new rows" {
+test "output while scrolled up plans nothing, and snapping back to the bottom plans the new rows" {
 	const opening = opened(10);
 	assert opening.ok;
 	if (opening.ok) {

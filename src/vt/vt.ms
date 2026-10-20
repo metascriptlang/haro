@@ -210,11 +210,6 @@ extern function stateRowIterator(
 	key: GhosttyRenderStateData,
 	out it: GhosttyRenderStateRowIterator,
 ): GhosttyResult from "ghostty_render_state_get";
-extern function rowDirty(
-	it: GhosttyRenderStateRowIterator,
-	key: GhosttyRenderStateRowData,
-	out dirty: boolean,
-): GhosttyResult from "ghostty_render_state_row_get";
 extern function rowCells(
 	it: GhosttyRenderStateRowIterator,
 	key: GhosttyRenderStateRowData,
@@ -463,7 +458,7 @@ export interface Effects {
 	readAsked: boolean;
 }
 
-export function openEffects(
+function openEffects(
 	terminal: GhosttyTerminal,
 	state: GhosttyRenderState,
 ): Result<Effects, VtError> {
@@ -487,7 +482,7 @@ export function openEffects(
 	return Result.ok(e);
 }
 
-export function closeEffects(terminal: GhosttyTerminal): void {
+function closeEffects(terminal: GhosttyTerminal): void {
 	const _cleared = vtEffectsWire(terminal, null);
 }
 
@@ -574,7 +569,7 @@ function pushBase64(ref out: Vec<uint8>, bytes: Readonly<Span<uint8>>): void {
 	}
 }
 
-export function answerRead(this e: Effects, text: string, allow: boolean): boolean {
+function answerRead(this e: Effects, text: string, allow: boolean): boolean {
 	const frame = e.readFrame;
 	if (frame === null) { return false; }
 	let head = 0;
@@ -1679,7 +1674,7 @@ export function selection(this vt: Vt): Result<Marked | null, VtError> {
 	return Result.ok(got);
 }
 
-export function wordAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
+function wordAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
 	let options: GhosttyTerminalSelectWordOptions = {
 		size: sizeof GhosttyTerminalSelectWordOptions,
 		ref: try screenRef(vt.terminal, at),
@@ -1688,7 +1683,7 @@ export function wordAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
 	return rangeFound(vt.terminal, selectWord(vt.terminal, options, selection), selection);
 }
 
-export function lineAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
+function lineAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
 	let options: GhosttyTerminalSelectLineOptions = {
 		size: sizeof GhosttyTerminalSelectLineOptions,
 		ref: try screenRef(vt.terminal, at),

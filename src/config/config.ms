@@ -5,8 +5,8 @@ import { BindAction, Keybind, Screen, keybind } from "../input/bindings";
 
 export interface Config {
 	fontFamily: Vec<string>;
-	fontSize: number;
-	padding: number;
+	fontSize: float64;
+	padding: float64;
 	command: string;
 	workingDirectory: string | null;
 	scrollback: int64;
@@ -16,8 +16,8 @@ export interface Config {
 	keybinds: Vec<Keybind>;
 }
 
-const SCREEN_DPI: number = 96;
-const POINTS_PER_INCH: number = 72;
+const SCREEN_DPI: float64 = 96;
+const POINTS_PER_INCH: float64 = 72;
 const PALETTE_SIZE = 256;
 const MAX_SCROLLBACK: int64 = 100000;
 
@@ -46,33 +46,36 @@ export function defaults(): Config {
 
 export function startDirectory(this c: Config, probableCli: boolean, home: string): string | null {
 	const dir = c.workingDirectory ?? (probableCli ? "inherit" : "home");
-	if (dir == "inherit") { return null; }
-	if (dir == "home") { return home; }
-	return dir.startsWith("~/") ? `${home}${dir.slice(1)}` : dir;
+	return match (dir) {
+		"inherit" => null,
+		"home" => home,
+		_ => dir.startsWith("~/") ? `${home}${dir.slice(1)}` : dir,
+	};
 }
 
-export function fontPx(this c: Config): number {
+export function fontPx(this c: Config): float64 {
 	return c.fontSize * SCREEN_DPI / POINTS_PER_INCH;
 }
 
-function hexDigit(c: string): int32 {
+function hexDigit(c: string): int32 | null {
 	const code = c.charCodeAt(0) as int32;
-	if (code >= 48 && code <= 57) { return code - 48; }
-	if (code >= 97 && code <= 102) { return code - 87; }
-	if (code >= 65 && code <= 70) { return code - 55; }
-	return -1;
+	if (code >= "0".code && code <= "9".code) { return code - "0".code; }
+	if (code >= "a".code && code <= "f".code) { return code - "a".code + 10; }
+	if (code >= "A".code && code <= "F".code) { return code - "A".code + 10; }
+	return null;
 }
 
 export function colorOf(text: string): Result<Rgb, string> {
-	if (text.length != 7 || text[0] != "#") { return Result.err(`"${text}" is not a #rrggbb colour`); }
-	let parts: Vec<int32> = [];
+	const notColour = `"${text}" is not a #rrggbb colour`;
+	if (text.length != 7 || text[0] != "#") { return Result.err(notColour); }
+	let channels: Vec<uint8> = [];
 	for (let i = 1; i < 7; i += 2) {
-		const hi = hexDigit(text[i]);
-		const lo = hexDigit(text[i + 1]);
-		if (hi < 0 || lo < 0) { return Result.err(`"${text}" is not a #rrggbb colour`); }
-		parts.push(hi * 16 + lo);
+		const high = hexDigit(text[i]);
+		const low = hexDigit(text[i + 1]);
+		if (high === null || low === null) { return Result.err(notColour); }
+		channels.push((high * 16 + low) as uint8);
 	}
-	return Result.ok({ r: parts[0] as uint8, g: parts[1] as uint8, b: parts[2] as uint8 });
+	return Result.ok({ r: channels[0], g: channels[1], b: channels[2] });
 }
 
 function readString(v: JsonValue, key: string): Result<string, string> {
@@ -87,18 +90,27 @@ function readColor(v: JsonValue, key: string): Result<Rgb, string> {
 	return Result.ok(c.value);
 }
 
-function readArray(v: JsonValue, key: string): Result<Vec<JsonValue>, string> {
+function readNumber(v: JsonValue, key: string): Result<float64, string> {
+	return match (v.kind) {
+		JsonKind.Number | JsonKind.Int => Result.ok(v.asNumber()),
+		_ => Result.err(`${key} must be a number`),
+	};
+}
+
+function readArray(v: JsonValue, key: string): Result<JsonValue[], string> {
 	if (v.kind != JsonKind.Array) { return Result.err(`${key} must be an array`); }
-	let out: Vec<JsonValue> = [];
-	for (const item of v.items) { out.push(item); }
-	return Result.ok(out);
+	return Result.ok(v.items);
 }
 
 function readFamilies(v: JsonValue, key: string): Result<Vec<string>, string> {
 	if (v.kind == JsonKind.String) { return Result.ok([v.strVal]); }
-	if (v.kind != JsonKind.Array) { return Result.err(`${key} must be a family name or a list of them`); }
+	if (v.kind != JsonKind.Array) {
+		return Result.err(`${key} must be a family name or a list of them`);
+	}
 	let out: Vec<string> = [];
-	for (let n = 0; n < v.items.length; n++) { out.push(try readString(v.items[n], `${key}[${n}]`)); }
+	for (let n = 0; n < v.items.length; n++) {
+		out.push(try readString(v.items[n], `${key}[${n}]`));
+	}
 	return Result.ok(out);
 }
 
@@ -118,26 +130,44 @@ function screenOf(name: string, key: string): Result<Screen, string> {
 }
 
 function readKeybind(v: JsonValue, key: string): Result<Keybind, string> {
-	if (v.kind != JsonKind.Object) { return Result.err(`${key} must be { keys, text } or { keys, action }`); }
+	if (v.kind != JsonKind.Object) {
+		return Result.err(`${key} must be { keys, text } or { keys, action }`);
+	}
 	let keys: string | null = null;
 	let sends: string | null = null;
 	let action: BindAction | null = null;
 	let screen = Screen.Any;
 	for (let i = 0; i < v.keys.length; i++) {
 		const name = v.keys[i];
+		const value = v.values[i];
 		match (name) {
-			"keys" => { keys = try readString(v.values[i], `${key}.keys`); },
-			"text" => { sends = try readString(v.values[i], `${key}.text`); },
-			"action" => { action = try actionOf(try readString(v.values[i], `${key}.action`), key); },
-			"mode" => { screen = try screenOf(try readString(v.values[i], `${key}.mode`), key); },
-			_ => { return Result.err(`${key}: unknown field "${name}", expected keys, text, action and mode`); },
+			"keys" => { keys = try readString(value, `${key}.keys`); },
+			"text" => { sends = try readString(value, `${key}.text`); },
+			"action" => { action = try actionOf(try readString(value, `${key}.action`), key); },
+			"mode" => { screen = try screenOf(try readString(value, `${key}.mode`), key); },
+			_ => {
+				return Result.err(
+					`${key}: unknown field "${name}", expected keys, text, action and mode`,
+				);
+			},
 		}
 	}
-	if (sends !== null && action !== null) { return Result.err(`${key} gives both text and action; a keybind does one`); }
-	if (keys === null || (sends === null && action === null)) { return Result.err(`${key} must give keys and either text or action`); }
+	if (sends !== null && action !== null) {
+		return Result.err(`${key} gives both text and action; a keybind does one`);
+	}
+	if (keys === null || (sends === null && action === null)) {
+		return Result.err(`${key} must give keys and either text or action`);
+	}
 	const b = keybind(keys, sends ?? "", action ?? BindAction.SendText, screen);
 	if (!b.ok) { return Result.err(`${key}: ${b.error}`); }
 	return Result.ok(b.value);
+}
+
+function isWorkingDirectory(dir: string): boolean {
+	return match (dir) {
+		"home" | "inherit" => true,
+		_ => dir.startsWith("~/") || isAbsolute(dir),
+	};
 }
 
 export function parse(json: string): Result<Config, string> {
@@ -152,26 +182,33 @@ export function parse(json: string): Result<Config, string> {
 		match (key) {
 			"fontFamily" => { c.fontFamily = try readFamilies(v, key); },
 			"fontSize" => {
-				if (v.kind != JsonKind.Number && v.kind != JsonKind.Int) { return Result.err("fontSize must be a number"); }
-				c.fontSize = v.asNumber();
-				if (c.fontSize <= 0) { return Result.err(`fontSize ${c.fontSize} must be above 0`); }
+				c.fontSize = try readNumber(v, key);
+				if (c.fontSize <= 0) {
+					return Result.err(`fontSize ${c.fontSize} must be above 0`);
+				}
 			},
 			"padding" => {
-				if (v.kind != JsonKind.Number && v.kind != JsonKind.Int) { return Result.err("padding must be a number"); }
-				c.padding = v.asNumber();
-				if (c.padding < 0) { return Result.err(`padding ${c.padding} must be 0 or more`); }
+				c.padding = try readNumber(v, key);
+				if (c.padding < 0) {
+					return Result.err(`padding ${c.padding} must be 0 or more`);
+				}
 			},
 			"command" => { c.command = try readString(v, key); },
 			"workingDirectory" => {
 				const dir = try readString(v, key);
-				if (dir != "home" && dir != "inherit" && !dir.startsWith("~/") && !isAbsolute(dir)) {
-					return Result.err(`workingDirectory "${dir}" must be home, inherit, an absolute path or a path under ~/`);
+				if (!isWorkingDirectory(dir)) {
+					return Result.err(
+						`workingDirectory "${dir}" must be home, inherit, an absolute path ` +
+							"or a path under ~/",
+					);
 				}
 				c.workingDirectory = dir;
 			},
 			"scrollback" => {
 				if (v.kind != JsonKind.Int || v.intVal < 0 || v.intVal > MAX_SCROLLBACK) {
-					return Result.err(`scrollback must be a whole number of lines from 0 to ${MAX_SCROLLBACK}`);
+					return Result.err(
+						`scrollback must be a whole number of lines from 0 to ${MAX_SCROLLBACK}`,
+					);
 				}
 				c.scrollback = v.intVal;
 			},
@@ -179,12 +216,21 @@ export function parse(json: string): Result<Config, string> {
 			"background" => { c.background = try readColor(v, key); },
 			"palette" => {
 				const list = try readArray(v, key);
-				if (list.length > PALETTE_SIZE) { return Result.err(`palette has ${list.length} colours, at most ${PALETTE_SIZE}`); }
-				for (let n = 0; n < list.length; n++) { c.palette.push(try readColor(list[n], `palette[${n}]`)); }
+				if (list.length > PALETTE_SIZE) {
+					return Result.err(
+						`palette has ${list.length} colours, at most ${PALETTE_SIZE}`,
+					);
+				}
+
+				for (let n = 0; n < list.length; n++) {
+					c.palette.push(try readColor(list[n], `palette[${n}]`));
+				}
 			},
 			"keybinds" => {
 				const list = try readArray(v, key);
-				for (let n = 0; n < list.length; n++) { c.keybinds.push(try readKeybind(list[n], `keybinds[${n}]`)); }
+				for (let n = 0; n < list.length; n++) {
+					c.keybinds.push(try readKeybind(list[n], `keybinds[${n}]`));
+				}
 			},
 			_ => { return Result.err(`unknown config field "${key}"`); },
 		}
@@ -213,8 +259,9 @@ test "an empty config keeps every default" {
 
 test "the fields a config gives replace the defaults" {
 	const c = parse(
-		`{"fontFamily":"Operator Saigon","fontSize":10.8,"padding":6,"command":"cmd.exe","scrollback":50000,"background":"#1a1b26",` +
-			`"foreground":"#A9B1D6","palette":["#32344a","#f7768e"],` +
+		`{"fontFamily":"Operator Saigon","fontSize":10.8,"padding":6,"command":"cmd.exe",` +
+			`"scrollback":50000,"background":"#1a1b26","foreground":"#A9B1D6",` +
+			`"palette":["#32344a","#f7768e"],` +
 			`"keybinds":[{"keys":"shift+enter","text":"\\u001b[13;2u"}]}`,
 	);
 	assert c.ok;
@@ -239,7 +286,8 @@ test "the fields a config gives replace the defaults" {
 
 test "a keybind runs an action or keeps to one screen when its config says so" {
 	const c = parse(
-		`{"keybinds":[{"keys":"super+w","text":"\\u001b[119;9u","mode":"alt"},{"keys":"super+w","action":"close_window","mode":"~alt"}]}`,
+		`{"keybinds":[{"keys":"super+w","text":"\\u001b[119;9u","mode":"alt"},` +
+			`{"keys":"super+w","action":"close_window","mode":"~alt"}]}`,
 	);
 	assert c.ok;
 	assert c.value.keybinds.length == 2;
@@ -274,14 +322,19 @@ test "a field the config cannot use is refused by name" {
 		`keybinds[0]: "shift+entre": "entre" is not a key or modifier name`;
 	assert refusal(`{"keybinds":[{"keys":"a","txt":"x"}]}`) ==
 		`keybinds[0]: unknown field "txt", expected keys, text, action and mode`;
-	assert refusal(`{"keybinds":[{"keys":"a"}]}`) == "keybinds[0] must give keys and either text or action";
+	assert refusal(`{"keybinds":[{"keys":"a"}]}`) ==
+		"keybinds[0] must give keys and either text or action";
 	assert refusal(`{"keybinds":[{"keys":"a","text":"x","action":"close_window"}]}`) ==
 		"keybinds[0] gives both text and action; a keybind does one";
 	assert refusal(`{"keybinds":[{"keys":"a","action":"quit"}]}`) ==
 		`keybinds[0].action: "quit" is not an action; close_window is`;
-	assert refusal(`{"keybinds":[{"keys":"a","text":"x","mode":"Alt"}]}`) == `keybinds[0].mode: "Alt" must be alt or ~alt`;
-	assert refusal(`{"scrollback":100001}`) == "scrollback must be a whole number of lines from 0 to 100000";
-	assert refusal(`{"scrollback":1.5}`) == "scrollback must be a whole number of lines from 0 to 100000";
+	assert refusal(`{"keybinds":[{"keys":"a","text":"x","mode":"Alt"}]}`) ==
+		`keybinds[0].mode: "Alt" must be alt or ~alt`;
+	assert refusal(`{"scrollback":100001}`) ==
+		"scrollback must be a whole number of lines from 0 to 100000";
+	assert refusal(`{"scrollback":1.5}`) ==
+		"scrollback must be a whole number of lines from 0 to 100000";
+
 	assert refusal("[]") == "config must be an object";
 }
 

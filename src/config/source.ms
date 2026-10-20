@@ -33,13 +33,17 @@ export function stampOf(path: string): string {
 	return exists(path) ? changeStamp(path) : "";
 }
 
+function isCsiFinal(c: string): boolean {
+	return c >= "@" && c <= "~";
+}
+
 function withoutStyles(text: string): string {
 	let out = "";
 	let i = 0;
 	while (i < text.length) {
 		if (text[i] == "\x1b" && i + 1 < text.length && text[i + 1] == "[") {
 			i += 2;
-			while (i < text.length && !(text[i] >= "@" && text[i] <= "~")) { i++; }
+			while (i < text.length && !isCsiFinal(text[i])) { i++; }
 			i++;
 			continue;
 		}
@@ -56,18 +60,26 @@ function lastLine(text: string): string {
 
 function evaluate(path: string, dir: string): Result<string, string> {
 	const installedMsc = `${homeDir()}/.metascript/bin/msc`;
-	const msc = findOnPath("msc") != "" ? findOnPath("msc") : exists(installedMsc) ? installedMsc : "";
-	if (msc == "") { return Result.err(`running config.ms needs msc on PATH or at ${installedMsc}`); }
+	const onPath = findOnPath("msc");
+	const msc = onPath != "" ? onPath : exists(installedMsc) ? installedMsc : "";
+	if (msc == "") {
+		return Result.err(`running config.ms needs msc on PATH or at ${installedMsc}`);
+	}
 	const target = relative(dir, path);
 	const importPath = target.startsWith(".") || target.indexOf(":") > 0 ? target : `./${target}`;
-	const runner = `import { config } from ${JSON.stringify(importPath)};\nconsole.log(JSON.stringify(config));\n`;
-	if (!writeFile(`${dir}/evaluate.ms`, runner).ok) { return Result.err(`cannot write ${dir}/evaluate.ms`); }
+	const runner = `import { config } from ${JSON.stringify(importPath)};\n` +
+		"console.log(JSON.stringify(config));\n";
+	if (!writeFile(`${dir}/evaluate.ms`, runner).ok) {
+		return Result.err(`cannot write ${dir}/evaluate.ms`);
+	}
 	const ran = execFileCapture(msc, ["run", "--target=raiser", "evaluate.ms"], dir);
-	if (!ran.ok) { return Result.err(withoutStyles(`${ran.error.output}${ran.error.errorOutput}`).trim()); }
+	if (!ran.ok) {
+		return Result.err(withoutStyles(`${ran.error.output}${ran.error.errorOutput}`).trim());
+	}
 	return Result.ok(lastLine(ran.value));
 }
 
-function facesFor(c: Config): Result<Vec<Faces>, string> {
+function fontFaces(this c: Config): Result<Vec<Faces>, string> {
 	let faces: Vec<Faces> = [];
 	for (const family of c.fontFamily) { faces.push(try installedFaces(family)); }
 	return Result.ok(faces);
@@ -78,9 +90,15 @@ const LINES_PER_FAMILY = 4;
 function encodeCache(stamp: string, json: string, faces: Vec<Faces>): string {
 	let lines = [stamp, json];
 	for (const f of faces) {
-		for (const path of [f.regular, f.bold ?? "", f.italic ?? "", f.boldItalic ?? ""]) { lines.push(path); }
+		for (const path of [f.regular, f.bold ?? "", f.italic ?? "", f.boldItalic ?? ""]) {
+			lines.push(path);
+		}
 	}
 	return lines.join("\n");
+}
+
+function pathOrNull(line: string): string | null {
+	return line == "" ? null : line;
 }
 
 function decodeCache(lines: string[], stamp: string): Loaded | null {
@@ -91,9 +109,9 @@ function decodeCache(lines: string[], stamp: string): Loaded | null {
 	for (let at = 2; at < lines.length; at += LINES_PER_FAMILY) {
 		faces.push({
 			regular: lines[at],
-			bold: lines[at + 1] == "" ? null : lines[at + 1],
-			italic: lines[at + 2] == "" ? null : lines[at + 2],
-			boldItalic: lines[at + 3] == "" ? null : lines[at + 3],
+			bold: pathOrNull(lines[at + 1]),
+			italic: pathOrNull(lines[at + 2]),
+			boldItalic: pathOrNull(lines[at + 3]),
 		});
 	}
 	return { config: c.value, faces: faces, stamp: stamp };
@@ -111,11 +129,13 @@ export function load(path: string): Result<Loaded, string> {
 	}
 	if (!ensureDir(dir).ok) { return Result.err(`cannot create ${dir}`); }
 	const json = try evaluate(path, dir);
-	const c = parse(json);
-	if (!c.ok) { return Result.err(c.error); }
-	const faces = try facesFor(c.value);
-	if (!writeFile(cacheFile, encodeCache(stamp, json, faces)).ok) { return Result.err(`cannot write ${cacheFile}`); }
-	return Result.ok({ config: c.value, faces: faces, stamp: stamp });
+	const config = try parse(json);
+	const faces = try config.fontFaces();
+	if (!writeFile(cacheFile, encodeCache(stamp, json, faces)).ok) {
+		return Result.err(`cannot write ${cacheFile}`);
+	}
+	return Result.ok({ config: config, faces: faces, stamp: stamp });
+
 }
 
 test "styles in the compiler's diagnostics are dropped, the text kept" {

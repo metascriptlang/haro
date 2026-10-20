@@ -3,7 +3,7 @@ set -e
 root="$(cd "$(dirname "$0")/.." && pwd)"
 src="$root/out/ghostty-wasm-src"
 out="$root/out/wasm"
-objdump="${LLVM_OBJDUMP:-$HOME/projects/emsdk/upstream/bin/llvm-objdump}"
+objdump="${LLVM_OBJDUMP:-llvm-objdump}"
 command -v "$objdump" >/dev/null || { echo "llvm-objdump not found, set LLVM_OBJDUMP" >&2; exit 1; }
 
 rm -rf "$src" "$out"

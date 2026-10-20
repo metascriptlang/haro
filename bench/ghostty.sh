@@ -1,11 +1,13 @@
 #!/bin/sh
 set -e
-ghostty=${GHOSTTY:-$HOME/projects/ghostty}
-data=$(dirname "$0")/out/ghosttyData
+root=$(cd "$(dirname "$0")/.." && pwd)
+ghostty=${GHOSTTY:-$root/vendor/ghostty}
+data=$root/bench/out/ghosttyData
+tools=$root/bench/out/ghosttyTools
 mkdir -p "$data"
-(cd "$ghostty" && zig build -Demit-bench -Doptimize=ReleaseFast)
-gen=$ghostty/zig-out/bin/ghostty-gen
-stream=$ghostty/zig-out/bin/ghostty-bench
+(cd "$ghostty" && zig build -Demit-bench -Doptimize=ReleaseFast 	--prefix "$tools" --cache-dir "$root/out/zig-cache-bench")
+gen=$tools/bin/ghostty-gen
+stream=$tools/bin/ghostty-bench
 
 "$gen" +ascii | head -c 4194304 > "$data/ghosttyAscii.bin"
 "$gen" +styled --seed=42 --style-rate=0.8 | head -c 4194304 > "$data/ghosttyStyled.bin"

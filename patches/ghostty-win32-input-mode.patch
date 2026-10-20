@@ -1,9 +1,8 @@
-Haro: libghostty-vt records Windows Terminal's win32-input-mode (DEC private mode 9001).
+Haro: libghostty-vt records win32-input-mode (DEC private mode 9001).
 
-Pinned at ghostty 622b4ee. ConPTY asks the terminal for this mode at startup (microsoft/terminal
-src/host/VtIo.cpp 201-203). Ghostty has no Windows frontend, so upstream has no entry for it. The
-terminal only has to record the mode and report it to DECRQM; Haro encodes the keys itself
-(src/keys/win32.ms).
+Pinned at ghostty 622b4ee. ConPTY asks the terminal for this mode at startup. Upstream has no
+Windows frontend, so it has no entry for the mode. The terminal only has to record the mode and
+report it to DECRQM; Haro encodes the keys itself (src/keys/win32.ms).
 
 diff --git a/src/terminal/modes.zig b/src/terminal/modes.zig
 index ea35c8c..65cab90 100644
@@ -13,7 +12,7 @@ index ea35c8c..65cab90 100644
          // Kitty clipboard read that a paste event grants.
          .disabled = build_options.artifact != .lib and builtin.os.tag != .macos,
      },
-+    // Windows Terminal win32-input-mode: ConPTY asks for each key as a
++    // win32-input-mode: ConPTY asks for each key as a
 +    // KEY_EVENT_RECORD. The terminal only records it; the embedder encodes.
 +    // See https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md
 +    .{ .name = "win32_input", .value = 9001 },

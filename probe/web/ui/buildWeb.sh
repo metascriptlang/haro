@@ -1,6 +1,6 @@
 #!/bin/sh
 # Builds one probe entry (neonRows or neonVoid) for the browser with --os=emcc. This mirrors
-# ~/metascript/void/scripts/build-web.sh step for step (pinned emscripten, Windows emcc shims, msc
+# void's scripts/build-web.sh step for step (pinned emscripten, Windows emcc shims, msc
 # retried on the uncached async-emcc path); only the entry, the preload list and the output
 # directory differ, so nothing is written into the void checkout's out/.
 #
@@ -18,7 +18,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 VOID="${VOID_DIR:-$HERE/../../../../void}"
 VOID="$(cd "$VOID" && pwd)"
 WORKTREE="$(cd "$HERE/../../.." && pwd)"
-EMSDK_DIR="${EMSDK_DIR:-$HOME/projects/emsdk}"
+EMSDK_DIR="${EMSDK_DIR:-${EMSDK:?set EMSDK_DIR or EMSDK to the emsdk checkout}}"
 MSC="${MSC:-msc}"
 MSC_FLAGS="${HARO_WEB_MSCFLAGS:-}"
 EMSCRIPTEN_VERSION="$(cat "$VOID/.emscripten-version")"

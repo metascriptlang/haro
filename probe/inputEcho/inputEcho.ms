@@ -1,8 +1,7 @@
 import { argv } from "std/process";
 import { NativePty } from "../../src/pty/pty";
 
-const bs = String.fromCharCode(92);
-const script = ["C:", "Users", "metacraft", "metascript", "terminator-wt-terminator-m1", "probe", "inputEcho", "keys.ps1"].join(bs);
+const script = "probe/inputEcho/keys.ps1";
 const opened = NativePty.spawn(`pwsh.exe -NoLogo -NoProfile -File ${script}`, 100, 10);
 if (opened.ok) {
 	const p = opened.value;

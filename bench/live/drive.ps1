@@ -5,6 +5,8 @@
 # echo types keys into cmd's prompt; nvim presses j in `nvim --clean` over the plain file.
 # replay plays the plain file through --replay, from launch to the end of the recording.
 # launch starts the configured shell and prints each launch mark in ms after the process was created.
+# -LoadFile names a machine-load status line ("... OK ... cpu=N% ..."); the run waits up to 15 min
+# for cpu <= -MaxCpu. -Unset names environment variables the shell inside Haro must not inherit.
 param(
 	[string]$Exe,
 	[string]$Work,
@@ -12,6 +14,8 @@ param(
 	[int]$Keys = 120,
 	[int]$GapMs = 40,
 	[int]$MaxCpu = 60,
+	[string]$LoadFile = "",
+	[string[]]$Unset = @('NO_COLOR'),
 	[string]$Inner = "",
 	[string]$Out = ""
 )
@@ -77,14 +81,16 @@ function Median([double[]]$xs) {
 	return $s[[math]::Floor($s.Count / 2)]
 }
 
-$loadFile = "$HOME\metascript\.wt\nim-audit\load.txt"
-$waited = Get-Date
-while (((Get-Date) - $waited).TotalSeconds -lt 900) {
-	$l = "$(Get-Content $loadFile -ErrorAction SilentlyContinue)"
-	if ($l -match ' OK ' -and $l -match 'cpu=(\d+)%' -and [int]$Matches[1] -le $MaxCpu) { break }
-	Start-Sleep 10
+$loadStart = ""
+if ($LoadFile -ne "") {
+	$waited = Get-Date
+	while (((Get-Date) - $waited).TotalSeconds -lt 900) {
+		$l = "$(Get-Content $LoadFile -ErrorAction SilentlyContinue)"
+		if ($l -match ' OK ' -and $l -match 'cpu=(\d+)%' -and [int]$Matches[1] -le $MaxCpu) { break }
+		Start-Sleep 10
+	}
+	$loadStart = "$(Get-Content $LoadFile -ErrorAction SilentlyContinue)"
 }
-$loadStart = "$(Get-Content $loadFile -ErrorAction SilentlyContinue)"
 
 Ensure-Data
 $logs = Join-Path $data 'logs'
@@ -102,7 +108,7 @@ $shell = switch ($Work) {
 	'launch' { '' }
 	default { throw "unknown workload ${Work}; use flood, color, echo, nvim, replay or launch" }
 }
-foreach ($v in 'NO_COLOR', 'HERDR_ENV', 'HERDR_PANE_ID', 'HERDR_SOCKET') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
+foreach ($v in $Unset) { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
 $haroArgs = if ($Work -eq 'replay') { @('--stats', '--replay', "$data\plain.txt") } elseif ($Work -eq 'launch') { @('--stats') } else { @('--stats', '--shell', "`"$shell`"") }
 $launched = Get-Date
 $p = Start-Process $exePath -WorkingDirectory $Cwd -ArgumentList $haroArgs `

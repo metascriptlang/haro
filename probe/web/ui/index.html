@@ -11,9 +11,6 @@
 <body>
 <canvas id="canvas"></canvas>
 <script>
-  // Same loader as void/web/void2d.html and geass startVoidCanvas: one self-contained
-  // emscripten build per backend in gl/ or wgpu/; ?gl and ?wgpu force one; ?app=<name> picks the
-  // entry (neonRows by default).
   const p = new URLSearchParams(location.search);
   const app = p.get('app') || 'neonRows';
   const dir = p.has('wgpu') ? 'wgpu' : 'gl';

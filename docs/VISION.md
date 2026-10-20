@@ -14,7 +14,7 @@ There is no webview.
 
 ## Why it exists
 
-Three goals, and the second and third are as important as the first.
+Three goals; the second is as important as the first.
 
 1. **A real terminal**, the kind someone uses all day: correct VT, fast output, good text,
    IME, selection, scrollback, links.

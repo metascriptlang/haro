@@ -19,7 +19,7 @@ const CAPSLOCK_ON: uint32 = 0x80;
 const ENHANCED_KEY: uint32 = 0x100;
 const EXTENDED_PREFIX: int32 = 0xE000;
 
-export function controlState(mods: BitSet<KeyMod>, scancode: int32): uint32 {
+function controlState(mods: BitSet<KeyMod>, scancode: int32): uint32 {
 	let state: uint32 = 0;
 	if (mods.has(KeyMod.Shift)) { state |= SHIFT_PRESSED; }
 	if (mods.has(KeyMod.Ctrl)) {
@@ -34,7 +34,7 @@ export function controlState(mods: BitSet<KeyMod>, scancode: int32): uint32 {
 	return state;
 }
 
-export function win32Input(k: Win32Key): string {
+export function sequence(this k: Win32Key): string {
 	const down = k.action == KeyAction.Release ? 0 : 1;
 	const state = controlState(k.mods, k.scancode);
 	return `\x1b[${k.vk};${k.scancode & 0xFF};${k.char};${down};${state};1_`;
@@ -50,7 +50,7 @@ test "a Ctrl chord carries its control character and the left Ctrl" {
 		char: 0x01,
 		mods: none.incl(KeyMod.Ctrl),
 	};
-	assert win32Input(k) == "\x1b[65;30;1;1;8;1_";
+	assert k.sequence() == "\x1b[65;30;1;1;8;1_";
 }
 
 test "a release is the same record with the key up" {
@@ -61,7 +61,7 @@ test "a release is the same record with the key up" {
 		char: 0x0D,
 		mods: none.incl(KeyMod.Shift),
 	};
-	assert win32Input(k) == "\x1b[13;28;13;0;16;1_";
+	assert k.sequence() == "\x1b[13;28;13;0;16;1_";
 }
 
 test "a repeat is sent as another key down" {
@@ -72,7 +72,7 @@ test "a repeat is sent as another key down" {
 		char: 0x20,
 		mods: none,
 	};
-	assert win32Input(k) == "\x1b[32;57;32;1;0;1_";
+	assert k.sequence() == "\x1b[32;57;32;1;0;1_";
 }
 
 test "an extended key sends its scan code without the prefix and sets the enhanced flag" {
@@ -83,7 +83,7 @@ test "an extended key sends its scan code without the prefix and sets the enhanc
 		char: 0,
 		mods: none.incl(KeyMod.Ctrl).incl(KeyMod.CtrlRight),
 	};
-	assert win32Input(k) == "\x1b[37;75;0;1;260;1_";
+	assert k.sequence() == "\x1b[37;75;0;1;260;1_";
 }
 
 test "AltGr arrives as the left Ctrl with the right Alt, as Windows reports it" {
@@ -95,7 +95,7 @@ test "AltGr arrives as the left Ctrl with the right Alt, as Windows reports it" 
 		char: 0x40,
 		mods: altGr,
 	};
-	assert win32Input(k) == "\x1b[81;16;64;1;9;1_";
+	assert k.sequence() == "\x1b[81;16;64;1;9;1_";
 }
 
 test "the lock keys are reported as on" {

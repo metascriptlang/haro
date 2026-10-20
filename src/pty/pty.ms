@@ -208,7 +208,7 @@ test "a native pty starts its command in the directory it is given" {
 }
 
 when (!windows) {
-	test "a directory that does not exist is skipped and the command still runs, as Alacritty and Ghostty do" {
+	test "a directory that does not exist is skipped and the command still runs" {
 		const spawned = NativePty.spawn(ECHO_HELLO, 80, 24, "/no/such/haro/directory");
 		assert spawned.ok;
 		if (spawned.ok) {

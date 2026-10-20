@@ -28,7 +28,24 @@ import {
 import { hexOf } from "./frame";
 import { Config, fontPx } from "../config/config";
 import { noticeLines } from "./notice";
-import { Bridge, ControlError, Controls, Hit } from "./components/features/terminal/controls";
+import {
+	Bridge,
+	ControlError,
+	Controls,
+	Hit,
+	holding,
+	typed,
+} from "./components/features/terminal/controls";
+import { cancel, clipboardAsked, confirm } from "./components/features/terminal/clipboard";
+import { closeKey, keyDown } from "./components/features/terminal/keyboard";
+import {
+	autoscrollTick,
+	pointerDown,
+	pointerMove,
+	pointerUp,
+	roll,
+	shades,
+} from "./components/features/terminal/mouse";
 import { PasteDialog, PasteView, Look } from "./pasteDialog";
 import {
 	Term,

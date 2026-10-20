@@ -1,4 +1,4 @@
-import { Action, CLIPBOARD_MODS, resolve } from "./bindings";
+import { Action, CLIPBOARD_MODS, CTRL, chordOf, resolve } from "./bindings";
 
 export enum Warning {
 	None,
@@ -48,7 +48,7 @@ export function warningFor(text: string, bracketed: boolean): Warning {
 }
 
 export function replyTo(code: string, mods: number): Reply {
-	const held = (mods as int32) & 15;
+	const held = chordOf(mods);
 	if (code == "Escape" && held == 0) { return Reply.Cancel; }
 	if ((code == "Enter" || code == "NumpadEnter") && held == 0) { return Reply.Confirm; }
 	if (resolve(code, mods, false) == Action.Paste) { return Reply.Confirm; }
@@ -56,10 +56,10 @@ export function replyTo(code: string, mods: number): Reply {
 }
 
 export function replyToRead(code: string, mods: number): Reply {
-	const held = (mods as int32) & 15;
+	const held = chordOf(mods);
 	if (code == "Escape" && held == 0) { return Reply.Cancel; }
 	if ((code == "Enter" || code == "NumpadEnter") && held == 0) { return Reply.Cancel; }
-	if ((code == "Enter" || code == "NumpadEnter") && held == 2) { return Reply.Confirm; }
+	if ((code == "Enter" || code == "NumpadEnter") && held == CTRL) { return Reply.Confirm; }
 	return Reply.Ignore;
 }
 
@@ -140,18 +140,19 @@ function measure(text: string): string {
 	return `${count}, ${sizeOf(text.length as int32)}`;
 }
 
-export function dialogOf(warning: Warning, text: string, cols: int32, maxCode: int32): Dialog {
-	let top: Vec<Line> = [{ text: title(warning), tone: Tone.Title }];
-	for (const row of wrap(body(warning), cols)) { top.push({ text: row, tone: Tone.Body }); }
+function dialogWith(heading: string, body: string, text: string, cols: int32, maxCode: int32): Dialog {
+	let top: Vec<Line> = [{ text: heading, tone: Tone.Title }];
+	for (const row of wrap(body, cols)) { top.push({ text: row, tone: Tone.Body }); }
 	top.push({ text: measure(text), tone: Tone.Dim });
 	return { top: top, code: previewOf(text, cols, maxCode) };
 }
 
+export function dialogOf(warning: Warning, text: string, cols: int32, maxCode: int32): Dialog {
+	return dialogWith(title(warning), body(warning), text, cols, maxCode);
+}
+
 export function askDialogOf(text: string, cols: int32, maxCode: int32): Dialog {
-	let top: Vec<Line> = [{ text: "Authorize clipboard access", tone: Tone.Title }];
-	for (const row of wrap(ASK_BODY, cols)) { top.push({ text: row, tone: Tone.Body }); }
-	top.push({ text: measure(text), tone: Tone.Dim });
-	return { top: top, code: previewOf(text, cols, maxCode) };
+	return dialogWith("Authorize clipboard access", ASK_BODY, text, cols, maxCode);
 }
 
 function line(text: string, tone: Tone): Line {

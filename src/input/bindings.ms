@@ -13,10 +13,14 @@ export enum Action {
 }
 
 const SHIFT: int32 = 1;
-const CTRL: int32 = 2;
+export const CTRL: int32 = 2;
 const ALT: int32 = 4;
 const SUPER: int32 = 8;
 const CHORD: int32 = SHIFT | CTRL | ALT | SUPER;
+
+export function chordOf(mods: number): int32 {
+	return (mods as int32) & CHORD;
+}
 
 struct Binding {
 	code: string;
@@ -131,7 +135,7 @@ export function keybind(keys: string, text: string, action: BindAction, screen: 
 }
 
 export function bindFor(binds: Readonly<Span<Keybind>>, code: string, mods: number, altScreen: boolean): Keybind | null {
-	const held = (mods as int32) & CHORD;
+	const held = chordOf(mods);
 	const here = altScreen ? Screen.Alternate : Screen.Primary;
 	for (const b of binds) {
 		if (b.code == code && b.mods == held && (b.screen == Screen.Any || b.screen == here)) { return b; }
@@ -147,7 +151,7 @@ function lookup(table: Readonly<Span<Binding>>, code: string, held: int32, altSc
 }
 
 export function resolve(code: string, mods: number, altScreen: boolean): Action {
-	const held = (mods as int32) & CHORD;
+	const held = chordOf(mods);
 	const found = lookup(BINDINGS, code, held, altScreen);
 	return found != Action.None ? found : lookup(INSERT_CHORDS, code, held, altScreen);
 }

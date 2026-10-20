@@ -36,14 +36,19 @@ export function claimsMouse(tracking: boolean, shift: boolean): boolean {
 	return tracking && !shift;
 }
 
-export function selected(this p: Pointer): boolean {
+function shown(this p: Pointer): Selection | null {
 	const sel = p.sel;
-	return sel !== null && !sel.collapsed();
+	if (sel === null || sel.collapsed()) { return null; }
+	return sel;
+}
+
+export function selected(this p: Pointer): boolean {
+	return p.shown() !== null;
 }
 
 function publish(this p: Pointer, vt: Vt): Result<boolean, VtError> {
-	const sel = p.sel;
-	if (sel === null || sel.collapsed()) {
+	const sel = p.shown();
+	if (sel === null) {
 		vt.selectionClear();
 		return Result.ok(false);
 	}
@@ -84,8 +89,8 @@ export function clear(this p: Pointer, vt: Vt): void {
 }
 
 export function sync(this p: Pointer, vt: Vt): Result<boolean, VtError> {
-	const sel = p.sel;
-	if (sel === null || sel.collapsed()) { return Result.ok(false); }
+	const sel = p.shown();
+	if (sel === null) { return Result.ok(false); }
 	const now = try vt.selection();
 	p.sel = sel.rebased(sel.bounds(), now);
 	if (p.sel === null) { p.dragging = false; }
@@ -101,8 +106,8 @@ export function copyText(this p: Pointer, vt: Vt): Result<string | null, VtError
 }
 
 export function blocks(this p: Pointer, vt: Vt, rows: int32, cols: int32): Result<Vec<Block>, VtError> {
-	const sel = p.sel;
-	if (sel === null || sel.collapsed()) { return Result.ok([]); }
+	const sel = p.shown();
+	if (sel === null) { return Result.ok([]); }
 	const top = try vt.scrollOffset();
 	return Result.ok(sel.marked().blocks(top, rows, cols));
 }
@@ -127,7 +132,7 @@ function shaded(row: int32, col: int32, rows: int32, cols: int32): Block {
 }
 
 function click(p: Pointer, vt: Vt, col: int32, row: int32, time: float64): boolean {
-	const r = p.press(vt, { col: col, row: row }, col as float64 * 8, row as float64 * 16, time, REACH);
+	const r = p.press(vt, spot(col, row), col as float64 * 8, row as float64 * 16, time, REACH);
 	return r.ok;
 }
 

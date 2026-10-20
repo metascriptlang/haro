@@ -923,9 +923,21 @@ export function cursorLook(this vt: Vt): Result<CursorLook, VtError> {
 		|| !ok(stateFlag(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_BLINKING, blinking))) {
 		return Result.err(VtError.ReadFailed);
 	}
-	const shape = style as int32;
-	if (shape < 0 || shape > (CursorShape.BlockHollow as int32)) { return Result.err(VtError.ReadFailed); }
-	return Result.ok({ visible: visible, shape: shape as CursorShape, blinking: blinking });
+	return Result.ok({ visible: visible, shape: try shapeOf(style), blinking: blinking });
+}
+
+function shapeOf(style: GhosttyRenderStateCursorVisualStyle): Result<CursorShape, VtError> {
+	return match (style) {
+		GhosttyRenderStateCursorVisualStyle.GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BAR =>
+			Result.ok(CursorShape.Bar),
+		GhosttyRenderStateCursorVisualStyle.GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK =>
+			Result.ok(CursorShape.Block),
+		GhosttyRenderStateCursorVisualStyle.GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_UNDERLINE =>
+			Result.ok(CursorShape.Underline),
+		GhosttyRenderStateCursorVisualStyle.GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK_HOLLOW =>
+			Result.ok(CursorShape.BlockHollow),
+		_ => Result.err(VtError.ReadFailed),
+	};
 }
 
 export struct Modes {
@@ -1130,17 +1142,20 @@ function graphemesOf(
 
 function underlineColorOf(state: GhosttyRenderState, style: GhosttyStyle): Result<Rgb | null, VtError> {
 	const color = style.underline_color;
-	if (color.tag == GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_RGB) {
-		const found: Rgb | null = rgb(color.value.rgb);
-		return Result.ok(found);
-	}
-	if (color.tag != GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_PALETTE) { return Result.ok(null); }
-	let palette: Colors256;
-	if (!ok(stateColors(state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLOR_PALETTE, palette))) {
-		return Result.err(VtError.ReadFailed);
-	}
-	const found: Rgb | null = rgb(palette.c[color.value.palette]);
-	return Result.ok(found);
+	return match (color.tag) {
+		GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_RGB => {
+			const found: Rgb | null = rgb(color.value.rgb);
+			return Result.ok(found);
+		},
+		GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_PALETTE => {
+			let palette: Colors256;
+			const key = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLOR_PALETTE;
+			if (!ok(stateColors(state, key, palette))) { return Result.err(VtError.ReadFailed); }
+			const found: Rgb | null = rgb(palette.c[color.value.palette]);
+			return Result.ok(found);
+		},
+		_ => Result.ok(null),
+	};
 }
 
 function readCell(
@@ -1696,19 +1711,23 @@ export function lineAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
 
 export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtError> {
 	const here: Range = { start: at, end: at };
-	if (unit == Unit.Cell) { return Result.ok(here); }
-	if (unit == Unit.Line) {
-		const line = try vt.lineAt(at);
-		if (line === null) { return Result.ok(here); }
-		return Result.ok(line);
-	}
-	const word = try vt.wordAt(at);
-	if (word !== null) { return Result.ok(word); }
-	if (at.col > 0) {
-		const head = try vt.wordAt({ row: at.row, col: at.col - 1 });
-		if (head !== null) { return Result.ok(head); }
-	}
-	return Result.ok(here);
+	return match (unit) {
+		Unit.Cell => Result.ok(here),
+		Unit.Line => {
+			const line = try vt.lineAt(at);
+			if (line === null) { return Result.ok(here); }
+			return Result.ok(line);
+		},
+		Unit.Word => {
+			const word = try vt.wordAt(at);
+			if (word !== null) { return Result.ok(word); }
+			if (at.col > 0) {
+				const head = try vt.wordAt({ row: at.row, col: at.col - 1 });
+				if (head !== null) { return Result.ok(head); }
+			}
+			return Result.ok(here);
+		},
+	};
 }
 
 export function selectedText(this vt: Vt): Result<string | null, VtError> {

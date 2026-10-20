@@ -78,12 +78,7 @@ export function marked(this sel: Selection): Marked {
 	return { range: sel.bounds(), block: sel.block };
 }
 
-function spans(
-	this m: Marked,
-	top: int32,
-	rows: int32,
-	cols: int32,
-): Vec<RowSpan> {
+function spans(this m: Marked, top: int32, rows: int32, cols: int32): Vec<RowSpan> {
 	const r = m.range;
 	let out: Vec<RowSpan> = [];
 	for (let y = 0; y < rows; y++) {

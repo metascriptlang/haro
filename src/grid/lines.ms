@@ -32,7 +32,7 @@ function sameStyle(this a: LineRun, b: LineRun): boolean {
 		a.strikethrough == b.strikethrough;
 }
 
-const FAINT_OPACITY = 0.5;
+const FAINT_OPACITY: float64 = 0.5;
 
 function fadeChannel(fg: uint8, bg: uint8): uint8 {
 	return Math.round(fg * FAINT_OPACITY + bg * (1 - FAINT_OPACITY)) as uint8;

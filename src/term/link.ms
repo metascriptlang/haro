@@ -1,5 +1,5 @@
 const MAX_URI_LENGTH: int32 = 2048;
-const SCHEMES = ["http://", "https://"];
+const SCHEMES: string[] = ["http://", "https://"];
 
 export function openable(uri: string): boolean {
 	if (uri.length == 0 || uri.length > MAX_URI_LENGTH) { return false; }
@@ -11,7 +11,10 @@ export function openable(uri: string): boolean {
 	for (const scheme of SCHEMES) {
 		if (!lower.startsWith(scheme)) { continue; }
 		const hostStart = lower.charAt(scheme.length);
-		return hostStart != "" && hostStart != "/" && hostStart != "?" && hostStart != "#";
+		return match (hostStart) {
+			"" | "/" | "?" | "#" => false,
+			_ => true,
+		};
 	}
 	return false;
 }

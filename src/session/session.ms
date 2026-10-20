@@ -85,8 +85,12 @@ export function close(this s: Session): void {
 	s.vt.free();
 }
 
-function runToExit(this s: Session, timeoutMs: int32): Result<boolean, SessionError> {
-	let buf: Vec<uint8> = new Array(4096);
+function runToExit(
+	this s: Session,
+	timeoutMs: int32,
+	chunk: int32 = 4096,
+): Result<boolean, SessionError> {
+	let buf: Vec<uint8> = new Array(chunk);
 	while (true) {
 		const ready = s.pty.wait(timeoutMs);
 		if (!ready.ok) { return Result.err(SessionError.PtyReadFailed); }
@@ -100,14 +104,6 @@ function replaySession(recording: string, cols: int32, rows: int32): Session | n
 	const started = Session.start(Replay.ofText(recording).toPty(), cols, rows);
 	if (!started.ok) { return null; }
 	return started.value;
-}
-
-function pumpInChunks(this s: Session, chunk: int32): Result<boolean, SessionError> {
-	let buf: Vec<uint8> = new Array(chunk);
-	while (true) {
-		const alive = try s.pump(buf);
-		if (!alive) { return Result.ok(true); }
-	}
 }
 
 test "a replayed recording ends in the rows the recorded program drew" {
@@ -132,8 +128,8 @@ test "a recording cut into one-byte reads draws the rows a single read does" {
 	const bytes = replaySession(recording, 20, 4);
 	assert whole !== null && bytes !== null;
 	if (whole !== null && bytes !== null) {
-		assert whole.pumpInChunks(4096).ok;
-		assert bytes.pumpInChunks(1).ok;
+		assert whole.runToExit(1000).ok;
+		assert bytes.runToExit(1000, 1).ok;
 		const a = whole.screen();
 		const b = bytes.screen();
 		assert a.ok && b.ok;

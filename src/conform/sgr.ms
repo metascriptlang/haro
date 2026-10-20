@@ -7,8 +7,8 @@ import { Screen } from "./screen";
 struct Look {
 	run: LineRun;
 	style: Style;
-	fg: Rgb;
-	bg: Rgb;
+	defaultFg: Rgb;
+	defaultBg: Rgb;
 	text: string;
 }
 
@@ -24,8 +24,8 @@ function look(sgr: string): Look | null {
 			found = {
 				run: s.runs(0)[0],
 				style: spans[0].style!,
-				fg: colors.value.fg,
-				bg: colors.value.bg,
+				defaultFg: colors.value.fg,
+				defaultBg: colors.value.bg,
 				text: spans[0].text,
 			};
 		}
@@ -34,7 +34,7 @@ function look(sgr: string): Look | null {
 	return found;
 }
 
-function near(a: uint8, b: int32): boolean {
+function withinOne(a: uint8, b: int32): boolean {
 	const d = (a as int32) - b;
 	return d >= -1 && d <= 1;
 }
@@ -48,9 +48,9 @@ test "SGR 30-37 and 40-47 pick the eight named colours, 90-97 and 100-107 the br
 		assert fg !== null && bg !== null && brightFg !== null && brightBg !== null;
 		if (fg !== null && bg !== null && brightFg !== null && brightBg !== null) {
 			assert fg.run.fg == defaultIndexed(n);
-			assert fg.run.bg == fg.bg;
+			assert fg.run.bg == fg.defaultBg;
 			assert bg.run.bg == defaultIndexed(n);
-			assert bg.run.fg == bg.fg;
+			assert bg.run.fg == bg.defaultFg;
 			assert brightFg.run.fg == defaultIndexed(8 + n);
 			assert brightBg.run.bg == defaultIndexed(8 + n);
 		}
@@ -63,9 +63,9 @@ test "SGR 39 and 49 return to the terminal's defaults, 0 clears everything" {
 	const all = look("1;3;4;9;31;42;0");
 	assert fg !== null && bg !== null && all !== null;
 	if (fg !== null && bg !== null && all !== null) {
-		assert fg.run.fg == fg.fg;
-		assert bg.run.bg == bg.bg;
-		assert all.run.fg == all.fg && all.run.bg == all.bg;
+		assert fg.run.fg == fg.defaultFg;
+		assert bg.run.bg == bg.defaultBg;
+		assert all.run.fg == all.defaultFg && all.run.bg == all.defaultBg;
 		assert !all.run.bold && !all.run.italic && !all.run.strikethrough;
 		assert all.run.underline == Underline.None;
 	}
@@ -149,7 +149,7 @@ test "an SGR parameter with too many colons is dropped and the next one still ap
 	assert l !== null && colour !== null;
 	if (l !== null && colour !== null) {
 		assert l.run.underline == Underline.None && l.run.bold;
-		assert colour.run.fg == colour.fg && colour.run.bold;
+		assert colour.run.fg == colour.defaultFg && colour.run.bold;
 	}
 }
 
@@ -159,11 +159,11 @@ test "inverse swaps the foreground and background, including the defaults" {
 	const off = look("7;27");
 	assert plain !== null && coloured !== null && off !== null;
 	if (plain !== null && coloured !== null && off !== null) {
-		assert plain.run.fg == plain.bg && plain.run.bg == plain.fg;
-		assert plain.style.color == cssHex(plain.bg);
-		assert plain.style.backgroundColor == cssHex(plain.fg);
+		assert plain.run.fg == plain.defaultBg && plain.run.bg == plain.defaultFg;
+		assert plain.style.color == cssHex(plain.defaultBg);
+		assert plain.style.backgroundColor == cssHex(plain.defaultFg);
 		assert coloured.run.fg == defaultIndexed(2) && coloured.run.bg == defaultIndexed(1);
-		assert off.run.fg == off.fg && off.run.bg == off.bg;
+		assert off.run.fg == off.defaultFg && off.run.bg == off.defaultBg;
 	}
 }
 
@@ -171,7 +171,7 @@ test "faint blends the foreground half way into the background" {
 	const l = look("38;2;200;100;0;48;2;0;0;100;2");
 	assert l !== null;
 	if (l !== null) {
-		assert near(l.run.fg.r, 100) && near(l.run.fg.g, 50) && near(l.run.fg.b, 50);
+		assert withinOne(l.run.fg.r, 100) && withinOne(l.run.fg.g, 50) && withinOne(l.run.fg.b, 50);
 		assert l.run.bg == rgb(0, 0, 100);
 	}
 }
@@ -179,7 +179,7 @@ test "faint blends the foreground half way into the background" {
 test "SGR 22 clears faint along with bold" {
 	const l = look("2;22");
 	assert l !== null;
-	if (l !== null) { assert l.run.fg == l.fg && !l.run.bold; }
+	if (l !== null) { assert l.run.fg == l.defaultFg && !l.run.bold; }
 }
 
 test "a background that equals the terminal's is left to the window, any other becomes a span background" {

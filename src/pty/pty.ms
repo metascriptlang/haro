@@ -321,7 +321,8 @@ test "output past the read buffer's limit arrives whole and in order while the a
 		}
 		const inOrder = `${check.linesInOrder} of ${count} lines in order`;
 		console.log(`flood: ${check.byteCount} bytes, ${inOrder}`);
-		assert check.byteCount > 4194304;
+		const readLimit = 4 << 20;
+		assert check.byteCount > readLimit;
 		assert check.linesInOrder == count;
 		p.close();
 	}

@@ -9,12 +9,12 @@ everywhere.
 It is a **Neon app whose only child is one `<Void>` filling the window**, the shape
 Neon's `docs/VISION.md` gives a game: Ion → Neon → Void. The chrome (tabs, splits,
 settings, command palette) is Neon `Text`/`View` inside that Void area, so it is void2d too. The
-grid is Neon JSX as well: `<TerminalGrid>` is a component whose rows are a `<ForList>` over a
-`createList` of row slots, each row one `<Text>` on the cell grid. There is no webview.
+grid is Neon JSX as well: a `ForList` over a `createList` of row slots (`src/app/app.ms`), each
+row one `<Text>` on the cell grid. There is no webview.
 
 ## Why it exists
 
-Two goals, and the second is as important as the first.
+Three goals, and the second and third are as important as the first.
 
 1. **A real terminal**, the kind someone uses all day: correct VT, fast output, good text,
    IME, selection, scrollback, links.
@@ -29,7 +29,7 @@ Two goals, and the second is as important as the first.
    It is measured against other terminals on the same workloads, not against an internal
    hand-drawn variant.
 
-Decided by the person, 2026-10-15. Rejected: a self-managed `<TerminalGrid>` that writes void2d
+Decided by the person, 2026-10-15. Rejected: a self-managed grid component that writes void2d
 nodes directly with no reconcile. It is the lower bound for the same work, but it proves nothing
 about Neon, and every optimisation it needs (scroll as a move, skipping unchanged rows, coalescing
 PTY bursts into one write per frame) would be terminal-only code instead of Neon's.
@@ -96,11 +96,12 @@ Kitty graphics is a later decision.
 - One row component per visible row slot, fed by its own signal. A row whose line did not change
   writes no node, and PTY output that arrives several times between two frames writes each row
   once.
-- When output scrolls the screen by N lines, the list takes `remove` of the top N slots and `push`
-  of N new ones (Neon's op path, `neon/docs/RENDER-MODEL.md` "op"), so the other rows keep their
-  shaped glyphs and only move. The render state marks every row dirty on a scroll, so N comes from
-  the scrollbar offset and a tracked grid ref on the top row; an alternate-screen switch or a ref
-  pruned from scrollback repaints every row (`docs/CORE.md` "How far output scrolled").
+- When output scrolls the screen by N lines, the list moves its top N slots to the bottom
+  (`List.move`, a command on Neon's list handle, `neon/docs/RENDER-MODEL.md` "After mount: the
+  wire graph"), so the kept rows keep their shaped glyphs and only move. The render state marks
+  every row dirty on a scroll, so N comes from the scrollbar offset and a tracked grid ref on the
+  top row; an alternate-screen switch or a ref pruned from scrollback repaints every row
+  (`docs/CORE.md` "How far output scrolled").
 - Glyphs sit on an **integer cell grid**: monospace cells with whole-pixel origins. The font is
   JetBrains Mono NL (`assets/`, SIL OFL 1.1, picked by the person 2026-10-15): the NL cut has no
   ligatures, which a terminal must never apply across cells.

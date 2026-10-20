@@ -65,8 +65,14 @@ function hexDigit(c: string): int32 | null {
 	return null;
 }
 
-function colorOf(text: string): Result<Rgb, string> {
-	const notColour = `"${text}" is not a #rrggbb colour`;
+function readString(v: JsonValue, key: string): Result<string, string> {
+	if (v.kind != JsonKind.String) { return Result.err(`${key} must be a string`); }
+	return Result.ok(v.strVal);
+}
+
+function readColor(v: JsonValue, key: string): Result<Rgb, string> {
+	const text = try readString(v, key);
+	const notColour = `${key}: "${text}" is not a #rrggbb colour`;
 	if (text.length != 7 || text[0] != "#") { return Result.err(notColour); }
 	let channels: Vec<uint8> = [];
 	for (let i = 1; i < 7; i += 2) {
@@ -76,18 +82,6 @@ function colorOf(text: string): Result<Rgb, string> {
 		channels.push((high * 16 + low) as uint8);
 	}
 	return Result.ok({ r: channels[0], g: channels[1], b: channels[2] });
-}
-
-function readString(v: JsonValue, key: string): Result<string, string> {
-	if (v.kind != JsonKind.String) { return Result.err(`${key} must be a string`); }
-	return Result.ok(v.strVal);
-}
-
-function readColor(v: JsonValue, key: string): Result<Rgb, string> {
-	const s = try readString(v, key);
-	const c = colorOf(s);
-	if (!c.ok) { return Result.err(`${key}: ${c.error}`); }
-	return Result.ok(c.value);
 }
 
 function readNumber(v: JsonValue, key: string): Result<float64, string> {

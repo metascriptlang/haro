@@ -13,20 +13,20 @@ function hexValue(c: int32): int32 | null {
 }
 
 function unescape(text: string): string | null {
-	const src: Readonly<Span<char>> = text;
-	const n = text.byteLength as int32;
+	const bytes: Readonly<Span<char>> = text;
+	const byteCount = text.byteLength as int32;
 	let out: Vec<uint8> = [];
 	let i = 0;
-	while (i < n) {
-		const c = src[i] as int32;
+	while (i < byteCount) {
+		const c = bytes[i] as int32;
 		if (c != "%".code) {
 			out.push(c as uint8);
 			i++;
 			continue;
 		}
-		if (i + 2 >= n) { return null; }
-		const hi = hexValue(src[i + 1] as int32);
-		const lo = hexValue(src[i + 2] as int32);
+		if (i + 2 >= byteCount) { return null; }
+		const hi = hexValue(bytes[i + 1] as int32);
+		const lo = hexValue(bytes[i + 2] as int32);
 		if (hi === null || lo === null) { return null; }
 		out.push((hi * 16 + lo) as uint8);
 		i += 3;
@@ -46,12 +46,12 @@ function drivePath(path: string): string {
 
 export function fileUri(uri: string): FileUri | null {
 	if (!uri.startsWith(FILE_SCHEME)) { return null; }
-	const rest = uri.slice(FILE_SCHEME.length, uri.length);
-	const slash = rest.indexOf("/");
+	const afterScheme = uri.slice(FILE_SCHEME.length, uri.length);
+	const slash = afterScheme.indexOf("/");
 	if (slash < 0) { return null; }
-	const path = unescape(rest.slice(slash, rest.length));
+	const path = unescape(afterScheme.slice(slash, afterScheme.length));
 	if (path === null) { return null; }
-	const found: FileUri | null = { host: rest.slice(0, slash), path: drivePath(path) };
+	const found: FileUri | null = { host: afterScheme.slice(0, slash), path: drivePath(path) };
 	return found;
 }
 

@@ -35,26 +35,30 @@ export function boxes(
 	shape: CursorShape,
 	col: int32,
 	row: int32,
-	cw: float64,
-	rh: float64,
-	thick: float64,
+	cellWidth: float64,
+	rowHeight: float64,
+	thickness: float64,
 ): Vec<Box> {
-	const x = (col as float64) * cw;
-	const y = (row as float64) * rh;
+	const x = (col as float64) * cellWidth;
+	const y = (row as float64) * rowHeight;
+	const sideHeight = rowHeight - 2 * thickness;
+	const rightX = x + cellWidth - thickness;
 	return match (shape) {
-		CursorShape.Block => [{ x: x, y: y, w: cw, h: rh, alpha: 0.5 }],
-		CursorShape.Bar => [{ x: x - thick / 2, y: y, w: thick, h: rh, alpha: 1 }],
-		CursorShape.Underline => [{ x: x, y: y + rh - 2 * thick, w: cw, h: thick, alpha: 1 }],
+		CursorShape.Block => [{ x: x, y: y, w: cellWidth, h: rowHeight, alpha: 0.5 }],
+		CursorShape.Bar => [{ x: x - thickness / 2, y: y, w: thickness, h: rowHeight, alpha: 1 }],
+		CursorShape.Underline => [
+			{ x: x, y: y + rowHeight - 2 * thickness, w: cellWidth, h: thickness, alpha: 1 },
+		],
 		CursorShape.BlockHollow => [
-			{ x: x, y: y, w: cw, h: thick, alpha: 1 },
-			{ x: x, y: y + rh - thick, w: cw, h: thick, alpha: 1 },
-			{ x: x, y: y + thick, w: thick, h: rh - 2 * thick, alpha: 1 },
-			{ x: x + cw - thick, y: y + thick, w: thick, h: rh - 2 * thick, alpha: 1 },
+			{ x: x, y: y, w: cellWidth, h: thickness, alpha: 1 },
+			{ x: x, y: y + rowHeight - thickness, w: cellWidth, h: thickness, alpha: 1 },
+			{ x: x, y: y + thickness, w: thickness, h: sideHeight, alpha: 1 },
+			{ x: rightX, y: y + thickness, w: thickness, h: sideHeight, alpha: 1 },
 		],
 	};
 }
 
-function at(x: float64, y: float64, w: float64, h: float64, alpha: float64): Box {
+function box(x: float64, y: float64, w: float64, h: float64, alpha: float64): Box {
 	return { x: x, y: y, w: w, h: h, alpha: alpha };
 }
 
@@ -84,26 +88,26 @@ test "an unfocused window shows a hollow block that does not blink" {
 test "a block cursor is one translucent box over its cell" {
 	const block = boxes(CursorShape.Block, 2, 1, 8, 16, 1);
 	assert block.length == 1;
-	assert block[0] == at(16, 16, 8, 16, 0.5);
+	assert block[0] == box(16, 16, 8, 16, 0.5);
 }
 
 test "a bar cursor is a thin box centred on the cell's left edge" {
 	const bar = boxes(CursorShape.Bar, 2, 1, 8, 16, 1);
-	assert bar[0] == at(15.5, 16, 1, 16, 1);
+	assert bar[0] == box(15.5, 16, 1, 16, 1);
 }
 
 test "an underline cursor is a thin box near the cell's bottom" {
 	const underline = boxes(CursorShape.Underline, 2, 1, 8, 16, 1);
-	assert underline[0] == at(16, 30, 8, 1, 1);
+	assert underline[0] == box(16, 30, 8, 1, 1);
 }
 
 test "a hollow block is four edges that do not overlap" {
 	const edges = boxes(CursorShape.BlockHollow, 0, 0, 8, 16, 1);
 	assert edges.length == 4;
-	assert edges[0] == at(0, 0, 8, 1, 1);
-	assert edges[1] == at(0, 15, 8, 1, 1);
-	assert edges[2] == at(0, 1, 1, 14, 1);
-	assert edges[3] == at(7, 1, 1, 14, 1);
+	assert edges[0] == box(0, 0, 8, 1, 1);
+	assert edges[1] == box(0, 15, 8, 1, 1);
+	assert edges[2] == box(0, 1, 1, 14, 1);
+	assert edges[3] == box(7, 1, 1, 14, 1);
 }
 
 test "output resets the blink at most once every half second" {

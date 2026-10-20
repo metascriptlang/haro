@@ -1,17 +1,17 @@
-const MAX_URI: int32 = 2048;
-const PREFIXES = ["http://", "https://"];
+const MAX_URI_LENGTH: int32 = 2048;
+const SCHEMES = ["http://", "https://"];
 
 export function openable(uri: string): boolean {
-	if (uri.length == 0 || uri.length > MAX_URI) { return false; }
+	if (uri.length == 0 || uri.length > MAX_URI_LENGTH) { return false; }
 	for (let i = 0; i < uri.length; i++) {
 		const c = uri.charCodeAt(i);
 		if (c <= 0x20 || c == 0x7F) { return false; }
 	}
 	const lower = uri.toLowerCase();
-	for (const prefix of PREFIXES) {
-		if (!lower.startsWith(prefix)) { continue; }
-		const host = lower.charAt(prefix.length);
-		return host != "" && host != "/" && host != "?" && host != "#";
+	for (const scheme of SCHEMES) {
+		if (!lower.startsWith(scheme)) { continue; }
+		const hostStart = lower.charAt(scheme.length);
+		return hostStart != "" && hostStart != "/" && hostStart != "?" && hostStart != "#";
 	}
 	return false;
 }

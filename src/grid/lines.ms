@@ -137,200 +137,113 @@ export function line(
 	return Result.ok({ text: text, runs: runs, cursorCell: cursorCell });
 }
 
+function firstLine(text: string, cols: int32, cursorCell: int32): GridLine | null {
+	const created = Vt.create(cols, 2);
+	if (!created.ok) { return null; }
+	const vt = created.value;
+	vt.writeText(text);
+	const updated = vt.update();
+	const colors = vt.palette();
+	const rows = vt.rows();
+	let found: GridLine | null = null;
+	if (updated.ok && colors.ok && rows.ok) {
+		const line = rows.value[0].line(cursorCell, colors.value.bg);
+		if (line.ok) { found = line.value; }
+	}
+	vt.free();
+	return found;
+}
+
 test "a plain row is one run over its text, without the blank cells after it" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		vt.writeText("hello");
-		assert vt.update().ok;
-		const colors = vt.palette();
-		const rows = vt.rows();
-		assert colors.ok && rows.ok;
-		if (colors.ok && rows.ok) {
-			const line = rows.value[0].line(-1, colors.value.bg);
-			assert line.ok;
-			if (line.ok) {
-				assert line.value.text == "hello";
-				assert line.value.runs.length == 1;
-				assert line.value.runs[0].units == 5;
-				assert line.value.cursorCell == -1;
-			}
-		}
-		vt.free();
+	const line = firstLine("hello", 10, -1);
+	assert line !== null;
+	if (line !== null) {
+		assert line.text == "hello";
+		assert line.runs.length == 1;
+		assert line.runs[0].units == 5;
+		assert line.cursorCell == -1;
 	}
 }
 
 test "each styled stretch is its own run" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		vt.writeText("\x1b[1;38;2;255;0;0mA\x1b[0mb");
-		assert vt.update().ok;
-		const colors = vt.palette();
-		const rows = vt.rows();
-		assert colors.ok && rows.ok;
-		if (colors.ok && rows.ok) {
-			const red: Rgb = { r: 255, g: 0, b: 0 };
-			const line = rows.value[0].line(0, colors.value.bg);
-			assert line.ok;
-			if (line.ok) {
-				assert line.value.text == "Ab";
-				assert line.value.runs.length == 2;
-				assert line.value.runs[0].units == 1;
-				assert line.value.runs[0].bold;
-				assert line.value.runs[0].fg == red;
-				assert line.value.runs[1].units == 1;
-				assert !line.value.runs[1].bold;
-				assert line.value.cursorCell == 0;
-			}
-		}
-		vt.free();
+	const red: Rgb = { r: 255, g: 0, b: 0 };
+	const line = firstLine("\x1b[1;38;2;255;0;0mA\x1b[0mb", 10, 0);
+	assert line !== null;
+	if (line !== null) {
+		assert line.text == "Ab";
+		assert line.runs.length == 2;
+		assert line.runs[0].units == 1;
+		assert line.runs[0].bold;
+		assert line.runs[0].fg == red;
+		assert line.runs[1].units == 1;
+		assert !line.runs[1].bold;
+		assert line.cursorCell == 0;
 	}
 }
 
 test "underline kinds travel through, wavy as curly" {
-	const created = Vt.create(20, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		vt.writeText("\x1b[4:2md\x1b[4:3mw\x1b[4:5mv");
-		assert vt.update().ok;
-		const colors = vt.palette();
-		const rows = vt.rows();
-		assert colors.ok && rows.ok;
-		if (colors.ok && rows.ok) {
-			const line = rows.value[0].line(-1, colors.value.bg);
-			assert line.ok;
-			if (line.ok) {
-				assert line.value.runs[0].underline == Underline.Double;
-				assert line.value.runs[1].underline == Underline.Curly;
-				assert line.value.runs[2].underline == Underline.Dashed;
-			}
-		}
-		vt.free();
+	const line = firstLine("\x1b[4:2md\x1b[4:3mw\x1b[4:5mv", 20, -1);
+	assert line !== null;
+	if (line !== null) {
+		assert line.runs[0].underline == Underline.Double;
+		assert line.runs[1].underline == Underline.Curly;
+		assert line.runs[2].underline == Underline.Dashed;
 	}
 }
 
 test "a wide cell carries no spacer text and holds its run" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		vt.writeText("中a");
-		assert vt.update().ok;
-		const colors = vt.palette();
-		const rows = vt.rows();
-		assert colors.ok && rows.ok;
-		if (colors.ok && rows.ok) {
-			const line = rows.value[0].line(-1, colors.value.bg);
-			assert line.ok;
-			if (line.ok) {
-				assert line.value.text == "中a";
-				assert line.value.runs.length == 1;
-				assert line.value.runs[0].units == 2;
-			}
-		}
-		vt.free();
+	const line = firstLine("中a", 10, -1);
+	assert line !== null;
+	if (line !== null) {
+		assert line.text == "中a";
+		assert line.runs.length == 1;
+		assert line.runs[0].units == 2;
 	}
 }
 
 test "an erased line keeps its background as a run" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		vt.writeText("\x1b[48;2;255;0;0m\x1b[K");
-		assert vt.update().ok;
-		const colors = vt.palette();
-		const rows = vt.rows();
-		assert colors.ok && rows.ok;
-		if (colors.ok && rows.ok) {
-			const red: Rgb = { r: 255, g: 0, b: 0 };
-			const line = rows.value[0].line(-1, colors.value.bg);
-			assert line.ok;
-			if (line.ok) {
-				assert line.value.text == "          ";
-				assert line.value.runs.length == 1;
-				assert line.value.runs[0].units == 10;
-				assert line.value.runs[0].bg == red;
-			}
-		}
-		vt.free();
+	const red: Rgb = { r: 255, g: 0, b: 0 };
+	const line = firstLine("\x1b[48;2;255;0;0m\x1b[K", 10, -1);
+	assert line !== null;
+	if (line !== null) {
+		assert line.text == "          ";
+		assert line.runs.length == 1;
+		assert line.runs[0].units == 10;
+		assert line.runs[0].bg == red;
 	}
 }
 
 test "strikethrough is part of the run" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		vt.writeText("\x1b[9mx\x1b[0my");
-		assert vt.update().ok;
-		const colors = vt.palette();
-		const rows = vt.rows();
-		assert colors.ok && rows.ok;
-		if (colors.ok && rows.ok) {
-			const line = rows.value[0].line(-1, colors.value.bg);
-			assert line.ok;
-			if (line.ok) {
-				assert line.value.runs[0].strikethrough;
-				assert !line.value.runs[1].strikethrough;
-			}
-		}
-		vt.free();
+	const line = firstLine("\x1b[9mx\x1b[0my", 10, -1);
+	assert line !== null;
+	if (line !== null) {
+		assert line.runs[0].strikethrough;
+		assert !line.runs[1].strikethrough;
 	}
 }
 
 test "a concealed cell keeps its background and draws no text or line" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		vt.writeText("\x1b[8;4;9;41mab\x1b[0mc\x1b[8m\u4e2d");
-		assert vt.update().ok;
-		const colors = vt.palette();
-		const rows = vt.rows();
-		assert colors.ok && rows.ok;
-		if (colors.ok && rows.ok) {
-			const line = rows.value[0].line(-1, colors.value.bg);
-			assert line.ok;
-			if (line.ok) {
-				assert line.value.text == "  c  ";
-				const hidden = line.value.runs[0];
-				assert hidden.units == 2;
-				assert hidden.underline == Underline.None;
-				assert !hidden.strikethrough;
-				assert hidden.bg != line.value.runs[1].bg;
-			}
-		}
-		vt.free();
+	const line = firstLine("\x1b[8;4;9;41mab\x1b[0mc\x1b[8m\u4e2d", 10, -1);
+	assert line !== null;
+	if (line !== null) {
+		assert line.text == "  c  ";
+		const hidden = line.runs[0];
+		assert hidden.units == 2;
+		assert hidden.underline == Underline.None;
+		assert !hidden.strikethrough;
+		assert hidden.bg != line.runs[1].bg;
 	}
 }
 
 test "a codepoint above the BMP is two UTF-16 units of its run" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		vt.writeText("a😀\x1b[1mb");
-		assert vt.update().ok;
-		const colors = vt.palette();
-		const rows = vt.rows();
-		assert colors.ok && rows.ok;
-		if (colors.ok && rows.ok) {
-			const line = rows.value[0].line(-1, colors.value.bg);
-			assert line.ok;
-			if (line.ok) {
-				assert line.value.text == "a😀b";
-				assert line.value.runs.length == 2;
-				assert line.value.runs[0].units == 3;
-				assert line.value.text.slice(0, 3) == "a😀";
-				assert line.value.runs[1].bold;
-			}
-		}
-		vt.free();
+	const line = firstLine("a😀\x1b[1mb", 10, -1);
+	assert line !== null;
+	if (line !== null) {
+		assert line.text == "a😀b";
+		assert line.runs.length == 2;
+		assert line.runs[0].units == 3;
+		assert line.text.slice(0, 3) == "a😀";
+		assert line.runs[1].bold;
 	}
 }
 
@@ -358,25 +271,12 @@ test "an inverse cell swaps its run's colours" {
 }
 
 test "a faint cell draws its foreground halfway to its background" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		vt.writeText("\x1b[2;38;2;200;100;0;48;2;0;0;100mx");
-		assert vt.update().ok;
-		const colors = vt.palette();
-		const rows = vt.rows();
-		assert colors.ok && rows.ok;
-		if (colors.ok && rows.ok) {
-			const line = rows.value[0].line(-1, colors.value.bg);
-			assert line.ok;
-			if (line.ok) {
-				const fg = line.value.runs[0].fg;
-				assert fg.r == 100 && fg.g == 50 && fg.b == 50;
-				assert line.value.runs[0].bg.b == 100;
-			}
-		}
-		vt.free();
+	const line = firstLine("\x1b[2;38;2;200;100;0;48;2;0;0;100mx", 10, -1);
+	assert line !== null;
+	if (line !== null) {
+		const fg = line.runs[0].fg;
+		assert fg.r == 100 && fg.g == 50 && fg.b == 50;
+		assert line.runs[0].bg.b == 100;
 	}
 }
 
@@ -404,21 +304,10 @@ test "a trailing blank that shows a background, an underline or a strikethrough 
 }
 
 function unitsOf(text: string, cursorCell: int32): string {
-	const created = Vt.create(12, 2);
-	if (!created.ok) { return "create failed"; }
-	const vt = created.value;
-	vt.writeText(text);
-	const updated = vt.update();
-	const colors = vt.palette();
-	const rows = vt.rows();
+	const line = firstLine(text, 12, cursorCell);
+	if (line === null) { return "no line"; }
 	let out: string[] = [];
-	if (updated.ok && colors.ok && rows.ok) {
-		const line = rows.value[0].line(cursorCell, colors.value.bg);
-		if (line.ok) {
-			for (const run of line.value.runs) { out.push(`${run.units}`); }
-		}
-	}
-	vt.free();
+	for (const run of line.runs) { out.push(`${run.units}`); }
 	return out.join(",");
 }
 

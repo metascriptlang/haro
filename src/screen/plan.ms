@@ -43,7 +43,7 @@ function changedRowsAfterScroll(all: Vec<Row>, painted: Vec<Row>, scrolled: int3
 }
 
 export function plan(this vt: Vt): Result<Plan, VtError> {
-	const updated = try vt.update();
+	const _updated = try vt.update();
 	const rowCount = (try vt.size())[1];
 	const alternate = try vt.alternateScreen();
 	const colors = try vt.palette();
@@ -74,7 +74,7 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 	painted.alternate = alternate;
 	painted.palette = colors;
 	if (kind != PlanKind.Idle) {
-		const anchored = try vt.anchorTop();
+		const _anchored = try vt.anchorTop();
 	}
 	vt.clean();
 	return Result.ok({ kind: kind, scrolled: moved, rows: rows });
@@ -89,7 +89,7 @@ function newLines(from: int32, count: int32): string {
 function filledScreen(cols: int32): Result<Vt, VtError> {
 	const vt = try Vt.create(cols, 24);
 	vt.writeText("row 0" + newLines(1, 23));
-	const first = try vt.plan();
+	const _first = try vt.plan();
 	return Result.ok(vt);
 }
 

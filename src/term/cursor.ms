@@ -11,7 +11,7 @@ export struct Box {
 export const NO_BOX: Box = { x: 0, y: 0, w: 0, h: 0, alpha: 0 };
 export const BOX_SLOTS: int32 = 4;
 export const BLINK_MS: int32 = 600;
-export const BLINK_RESET_MS: float64 = 500;
+const BLINK_RESET_MS: float64 = 500;
 
 export function drawn(look: CursorLook, focused: boolean, blinkOn: boolean): boolean {
 	if (!look.visible) { return false; }

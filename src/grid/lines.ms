@@ -278,7 +278,7 @@ test "strikethrough is part of the run" {
 	}
 }
 
-test "a concealed cell keeps its background and draws no text or line, as xterm does" {
+test "a concealed cell keeps its background and draws no text or line" {
 	const created = Vt.create(10, 2);
 	assert created.ok;
 	if (created.ok) {
@@ -375,7 +375,7 @@ test "a faint cell draws its foreground halfway to its background" {
 	}
 }
 
-test "a trailing blank that shows a background, an underline or a strikethrough stays, as alacritty draws it" {
+test "a trailing blank that shows a background, an underline or a strikethrough stays" {
 	const created = Vt.create(10, 4);
 	assert created.ok;
 	if (created.ok) {
@@ -423,7 +423,7 @@ test "the cursor's cell is a run of its own, so a ligature under it shows its pa
 	assert unitsOf("a->b", 0) == "1,3";
 }
 
-test "fi, fl and st never share a run, as Ghostty keeps them unligated" {
+test "fi, fl and st never share a run, so they stay unligated" {
 	assert unitsOf("fifl", -1) == "1,2,1";
 	assert unitsOf("ast", -1) == "2,1";
 	assert unitsOf("ft", -1) == "2";

@@ -26,17 +26,21 @@ function fixtureFile(name: string, file: string): Result<string, string> {
 	return Result.ok(read.value);
 }
 
-function loadFixture(name: string): Result<Fixture, string> {
+function loadFixture(name: string, compare: Compare): Result<Fixture, string> {
 	const size = try fixtureFile(name, "size.txt");
 	const text = try fixtureFile(name, "rows.txt");
-	const attrs = try fixtureFile(name, "attrs.txt");
 	const input = try fixtureFile(name, "in.bin");
+	let attrs: string[] = [];
+	if (compare != Compare.Text) {
+		const read = try fixtureFile(name, "attrs.txt");
+		attrs = read.split("\n");
+	}
 	const colsRows = size.trim().split(" ");
 	return Result.ok({
 		cols: colsRows[0].parseInt() as int32,
 		rows: colsRows[1].parseInt() as int32,
 		text: text.split("\n"),
-		attrs: attrs.split("\n"),
+		attrs: attrs,
 		input: input,
 	});
 }
@@ -123,7 +127,7 @@ function firstFailure(
 	compare: Compare,
 	skipRunsRow: int32 | null,
 ): Result<void, string> {
-	const fixture = try loadFixture(name);
+	const fixture = try loadFixture(name, compare);
 	const opened = Screen.open(fixture.cols, fixture.rows);
 	if (!opened.ok) { return Result.err("open failed"); }
 	const s = opened.value;

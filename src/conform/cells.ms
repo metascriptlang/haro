@@ -224,7 +224,7 @@ test "a cell keeps at most 64 marks after its base and the frame still paints" {
 	}
 }
 
-test "Ghostty's glitch text paints as eight capped graphemes whole and in small frames" {
+test "the glitch text fixture paints as eight capped graphemes whole and in small frames" {
 	const input = readFile("fixtures/conform/ghostty/glitch.txt");
 	const expected = readFile("fixtures/conform/ghostty/glitchRow.txt");
 	assert input.ok && expected.ok;

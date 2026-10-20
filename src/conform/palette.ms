@@ -3,7 +3,7 @@ import { Rgb } from "../vt/vt";
 export const DEFAULT_FG: Rgb = { r: 12, g: 34, b: 56 };
 export const DEFAULT_BG: Rgb = { r: 65, g: 43, b: 21 };
 export const HEX = "0123456789abcdef";
-const GHOSTTY_NAMED: uint32[] = [
+const DEFAULT_NAMED: uint32[] = [
 	0x1D1F21, 0xCC6666, 0xB5BD68, 0xF0C674, 0x81A2BE, 0xB294BB, 0x8ABEB7, 0xC5C8C6,
 	0x666666, 0xD54E53, 0xB9CA4A, 0xE7C547, 0x7AA6DA, 0xC397D8, 0x70C0B1, 0xEAEAEA,
 ];
@@ -22,7 +22,7 @@ function cubeLevel(v: int32): uint8 {
 
 export function defaultIndexed(n: int32): Rgb {
 	if (n < 16) {
-		const c = GHOSTTY_NAMED[n];
+		const c = DEFAULT_NAMED[n];
 		return { r: ((c >> 16) & 255) as uint8, g: ((c >> 8) & 255) as uint8, b: (c & 255) as uint8 };
 	}
 	if (n < 232) {

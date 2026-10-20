@@ -1,8 +1,9 @@
 # Haro core — what the code does not say
 
-The headless core is `src/pty` (ConPTY), `src/vt` (libghostty-vt) and `src/session` (the two
-joined). Types, signatures and the API are in those files; this page holds what they cannot say:
-measured numbers, platform behaviour found by probing, and paths that were rejected.
+The headless core is `src/pty` (ConPTY on Windows, `forkpty` on POSIX), `src/vt` (libghostty-vt)
+and `src/session` (the two joined). Types, signatures and the API are in those files; this page
+holds what they cannot say: measured numbers, platform behaviour found by probing, and paths that
+were rejected.
 
 ## libghostty-vt
 
@@ -41,8 +42,8 @@ measured numbers, platform behaviour found by probing, and paths that were rejec
 - ion marks Ctrl+Alt consumed exactly when AltGr produced text ≥ 0x20
   (`ion/src/platform/windows/input/input.c`, `ionWinKeyFlush`). An AltGr key fed to
   `Keys.encode` unchanged therefore leaves as `CSI 123;7u`-style fixterms bytes, which conhost
-  shells do not parse, so `sendKey` drops a consumed Ctrl+Alt first (`withoutAltGr`), as wezterm
-  (`window/src/os/windows/window.rs`) and Windows Terminal (`terminalInput.cpp`) clear both.
+  shells do not parse, so `sendKey` first clears Ctrl and Alt, side bits included, from a key
+  whose Ctrl+Alt was consumed (`withoutAltGr`).
 - ion's `ION_MOD_*` bits and ghostty's `GHOSTTY_MODS_*` bits are the same order, including the
   side bits (`src/keys/keys.ms` `modsMask` passes the mask through).
 - `\xNN` inside a `.ms` string literal is the *codepoint* NN, not a raw byte: `"\xef"` is "ï"
@@ -77,7 +78,7 @@ from a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree `504771cca46c2
   sets a line cap and a byte cap instead.
 
 `GhosttyPoint` is built in C (`probe/scrollRefShim.h`) because msc cannot import a C aggregate with
-a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-sizedarray.md`).
+a fixed array member (msc card `2026-10-15-c-import-fixed-array-member-sizedarray`).
 
 ## ConPTY, probed on Windows 11 10.0.26200
 
@@ -87,9 +88,9 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
 
 - conhost takes input only as fast as the child reads it: one 1 MiB `WriteFile` to `ping`, which
   never reads, blocked 1060 ms (`probe/writeBlock.ms`, 2026-10-19). So `ptyWrite` queues and a
-  writer thread writes, as Alacritty's `UnblockedWriter` does; a failed write surfaces on the next
-  `ptyWrite`. The reader parks at 4 MiB unread so a flood pushes back on the child; closing while it
-  is parked took 5 ms (`probe/closeParked.ms`).
+  writer thread writes; a failed write surfaces on the next `ptyWrite`. The reader parks at 4 MiB
+  unread so a flood pushes back on the child; closing while it is parked took 5 ms
+  (`probe/closeParked.ms`).
 - conhost may send `ESC[1C` for a space inside a line (`line ESC[1C3971`) and puts its exit-time
   mode resets between CR and LF. Under 90 % machine load a check that took LF as the end of each
   line stopped at line 23, the first scroll of an 80x24 screen, with every byte present (two gate
@@ -130,8 +131,8 @@ a fixed array member (`.inbox/compiler/2026-10-15-c-import-fixed-array-member-si
 ## First window, smoke-run
 
 `src/app/haro.ms --smoke` (tree `c120ef45157c565615ff1a9e380849230844608e`, msc `b267cdb1`, neon `f48eec6`, ion `a68e849`,
-Consolas 14 px at 96 DPI, 948x588 → 118x34 cells, `pwsh -NoLogo -NoProfile`, run from
-`~/metascript/void` for void's default font path):
+Consolas 14 px at 96 DPI, 948x588 → 118x34 cells, `pwsh -NoLogo -NoProfile`, run from the void
+repository root for void's default font path):
 
 - The prompt and command output appear with no window event: the ConPTY reader calls
   `ionWakeLoop()` (`src/pty/conpty.c` `ptySetWake`) and `onWake` pumps and applies the frame plan.
@@ -148,7 +149,7 @@ Re-run 2026-10-16 (msc `5631dd3e5`, neon `2b0f58c`, void `40e9bfa3`, JetBrains M
 105x30 cells): through a live ConPTY, bold, italic, bold-italic, plain and curly underline,
 strike-through, 16/256/truecolor and backgrounds draw right. A replay that ends before the first
 frame draws every row over row 0: the row height is a signal set in `onLayout`, and Neon requests
-no frame for a layout-only change (`.inbox/neon/2026-10-16-layout-only-style-change-requests-no-frame.md`).
+no frame for a layout-only change (Neon card `2026-10-16-layout-only-style-change-requests-no-frame`).
 
 ## Measured
 
@@ -166,7 +167,7 @@ Flood and pipeline, 2026-10-16 (msc `5631dd3e5`, release):
 
 | what | number | how |
 |---|---|---|
-| Haro CPU while `cmd /c type` floods 10 MB | 74–80 % of a core before pacing (`318eab2`), 17–25 % after (`b2e9537`); flood 5.7–9.9 s either way; idle 0 % | `scratchpad/perf/driver.ps1 -Work flood`, three runs each, the Haro process only. The same script gave WT 17–22 %, Rexa 32–38 %, Alacritty 85–102 %, WezTerm 127–145 % the day before |
+| Haro CPU while `cmd /c type` floods 10 MB | 74–80 % of a core before pacing (`318eab2`), 17–25 % after (`b2e9537`); flood 5.7–9.9 s either way; idle 0 % | `-Work flood` of a scratch driver that is not in the repo, three runs each, the Haro process only |
 | a full 40-row repaint through `applyFrame`, no window | about 0.5 ms (light_cells), 1.6 ms (dense_cells) | `sh bench/run.sh`, median of 7 |
 | `row.line()` | about 10 µs a row | same |
 | `spansOf` on a row whose every cell changes colour | about 57 µs a row; under 1 µs on plain rows | same |
@@ -199,7 +200,7 @@ Changes measured against that baseline, builds interleaved, same day and load:
 | a scroll moves the kept rows to the bottom (`List.move`) instead of removing and pushing one per line | colour flood: Void draw p50 0.65–0.67 → 0.26–0.36 ms, Haro CPU per drawn frame 3.35–3.45 → 2.3–3.0 ms | `-Work color`, three pairs |
 | leftover output, wheel, key-bound and autoscroll refreshes wait for the next paced frame | replay of 10 MB: 10 of 10 applies ran outside any frame with dirty-to-present 20–24 ms → all 10 inside frames at 2.4–2.6 ms; 30 wheel records at once: 30 refreshes building 900 rows for one drawn frame → 1 refresh, 30 rows | `-Work replay`, three pairs; 30 `WM_MOUSEWHEEL` posted to the window |
 | Neon `510b0c6` (no draw for a frame that changes nothing, window hidden until the first frame), with Haro `2d8cc6f` | none within noise: flood 7.1 → 7.3 s at 53.7 → 53.6 % CPU, colour 8.5 → 6.7 s at 38.8 → 40.6 %; an idle focused window still draws 1–2 frames a second, which is the cursor blink | `-Work flood` and `-Work color`, second of two interleaved rounds (the first ran under 40–60 % machine load from other jobs and varied 2–4×) |
-| a row leaves out its trailing empty cells (a blank with the default background, no underline or strikethrough, as alacritty `content.rs` skips them) | headless, short-line workloads: plan+lines 1.8–2.3 → 1.1–1.3 ms, applyFrame 5.1–8.6 → 4.3–6.6 ms; full rows unchanged. Live flood: 118 → 65 characters per row, Void draw p50 1.41–1.64 → 1.39–1.54 ms, wall and CPU unchanged (the flood waits on conhost); nvim unchanged, since its rows carry its own background | `bench/run.sh`, two interleaved rounds; `-Work flood` and `-Work nvim`, three interleaved pairs |
+| a row leaves out its trailing empty cells (a blank with the default background, no underline or strikethrough) | headless, short-line workloads: plan+lines 1.8–2.3 → 1.1–1.3 ms, applyFrame 5.1–8.6 → 4.3–6.6 ms; full rows unchanged. Live flood: 118 → 65 characters per row, Void draw p50 1.41–1.64 → 1.39–1.54 ms, wall and CPU unchanged (the flood waits on conhost); nvim unchanged, since its rows carry its own background | `bench/run.sh`, two interleaved rounds; `-Work flood` and `-Work nvim`, three interleaved pairs |
 
 Launch, 2026-10-19 (Haro `b5d2e7d`, same stack; `--stats` prints `haro launch:`, and
 `-Work launch` or a `--shell` override turns it into ms after the process was created; three
@@ -213,11 +214,10 @@ launches each, machine at ~50 % CPU):
 
 A config cache hit costs under 2 ms. The window, both devices and the first layout take 150–190 ms
 before the shell is spawned, and ConPTY needs 250–290 ms after the spawn before the first byte,
-whatever the shell. Alacritty spawns after its window too (`window_context.rs:201`); WezTerm spawns
-at the configured size while its window is still being built (`wezterm-gui/src/main.rs:334`).
+whatever the shell.
 
 ConPTY host, 2026-10-19 evening (Haro `c6c96fd` loads a `conpty.dll` beside `haro.exe`; one
-binary copied beside nothing, beside WezTerm's 1.22.2502.04002 pair, and beside NuGet
+binary copied beside nothing, beside an OpenConsole 1.22.2502.04002 pair, and beside NuGet
 `Microsoft.Windows.Console.ConPTY` 1.25.260930003; the process tree confirmed conhost.exe,
 OpenConsole.exe and OpenConsole.exe; three interleaved rounds, machine at 15–57 % CPU):
 
@@ -249,9 +249,8 @@ Clicks posted to a live Haro window (`WM_LBUTTONDOWN` at two rows, two runs per 
 the app through both hosts alike. nvim `--clean` with `mouse=a` moved its cursor to rows 16
 and 24. A Python app that set VT input and wrote `?1000h ?1006h` read
 `\x1b[<0;36;16M\x1b[<0;36;16m` and the same for row 24. So on Windows 11 the inbox host does
-not cost Haro the mouse. That is the reason WezTerm gives for bundling (its issue #1927) and the
-first reason in Alacritty's PR #6994; both describe older hosts and Windows 10, which never
-receives host fixes.
+not cost Haro the mouse, and the mouse is no reason to bundle OpenConsole there. Windows 10, which
+never receives host fixes, was not measured.
 
 Keys go the other way, and neither host carries them better. `probe/keysPty.ms` sent 22 chords
 through Haro's own encoder (libghostty-vt) into pwsh `[Console]::ReadKey`. Both hosts gave
@@ -264,6 +263,5 @@ the same result:
 - arrived intact: Ctrl+letters, Ctrl+Alt+A, Alt+F, Alt/Ctrl+Backspace, Shift+Tab, Ctrl+Left,
   Shift+Home, F5 with each modifier, Escape.
 
-Both hosts ask the terminal for win32-input-mode at startup (`?9001h`, terminal `VtIo.cpp:201-203`).
-A terminal that answers it sends each key as a full Win32 key record, as WezTerm does
-(`keyevent.rs:191`, `encode_win32_input_mode`). libghostty-vt has no `?9001`.
+Both hosts ask the terminal for win32-input-mode at startup (`?9001h`). A terminal that answers it
+sends each key as a full Win32 key record. libghostty-vt has no `?9001`.

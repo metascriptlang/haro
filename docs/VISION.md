@@ -7,7 +7,7 @@ with **void2d**, and runs in an **Ion** window, on Windows, macOS and Linux with
 everywhere.
 
 It is a **Neon app whose only child is one `<Void>` filling the window**, the shape
-`~/metascript/neon/docs/VISION.md` gives a game: Ion → Neon → Void. The chrome (tabs, splits,
+Neon's `docs/VISION.md` gives a game: Ion → Neon → Void. The chrome (tabs, splits,
 settings, command palette) is Neon `Text`/`View` inside that Void area, so it is void2d too. The
 grid is Neon JSX as well: `<TerminalGrid>` is a component whose rows are a `<ForList>` over a
 `createList` of row slots, each row one `<Text>` on the cell grid. There is no webview.
@@ -23,11 +23,11 @@ Two goals, and the second is as important as the first.
    A terminal presses hard on exactly what that takes: glyph atlas pressure, font fallback (CJK,
    emoji, box drawing), thousands of coloured cells per frame, dirty-only redraw, scroll, and a
    truly idle frame.
-3. **Neon's reactive model at its hardest load.** Terminals drop to hand-written drawing for the
-   grid (xterm.js renderers, Zed's `TerminalElement`, Warp). Haro keeps the grid in JSX and
-   aims to be faster than hand-drawn, because Neon's model hands it the optimisations a hand-drawn
-   grid has to write and maintain itself (see "How a frame is drawn"). It is measured against the
-   terminal in `~/projects/rexa` and against Ghostty, not against an internal hand-drawn variant.
+3. **Neon's reactive model at its hardest load.** A terminal grid is usually drawn by hand. Haro
+   keeps the grid in JSX and aims to be faster than hand-drawn, because Neon's model hands it the
+   optimisations a hand-drawn grid has to write and maintain itself (see "How a frame is drawn").
+   It is measured against other terminals on the same workloads, not against an internal
+   hand-drawn variant.
 
 Decided by the person, 2026-10-15. Rejected: a self-managed `<TerminalGrid>` that writes void2d
 nodes directly with no reconcile. It is the lower bound for the same work, but it proves nothing
@@ -110,12 +110,6 @@ Kitty graphics is a later decision.
 - Box drawing, blocks, braille and powerline glyphs are drawn procedurally rather than taken from
   the font.
 - When nothing changed, a frame draws nothing.
-
-## References
-
-- **Ghostty**: the VT, used as a library, and its renderer as a reference for the font stack,
-  glyph atlas and frame discipline.
-- **WezTerm**: Windows ConPTY handling, font fallback configuration and multiplexing.
 
 ## Platforms
 

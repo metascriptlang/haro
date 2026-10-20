@@ -3,7 +3,7 @@
 @passC("-I../vendor/ghostty/include");
 @passC("-DGHOSTTY_STATIC");
 @include("./scrollRefShim.h");
-@link("../vendor/ghostty/zig-out/lib/ghostty-vt-static.lib");
+@link("../out/ghostty/ghostty-vt-static.lib");
 
 import {
 	ghostty_terminal_new,

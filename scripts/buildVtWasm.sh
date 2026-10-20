@@ -12,6 +12,7 @@ git -C "$root/vendor/ghostty" archive HEAD | tar -x -C "$src"
 rev="$(git -C "$root/vendor/ghostty" rev-parse --short=7 HEAD)"
 cd "$root"
 git apply --directory=out/ghostty-wasm-src patches/ghostty-wasm-embedder.patch
+git apply --directory=out/ghostty-wasm-src patches/ghostty-win32-input-mode.patch
 
 cd "$src"
 zig build -Demit-lib-vt -Doptimize=ReleaseFast -Dtarget=wasm32-freestanding \

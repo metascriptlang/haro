@@ -3,9 +3,9 @@
 when (emcc) {
 	@link("../../out/wasm/libghostty-vt.a");
 } else when (windows) {
-	@link("../../vendor/ghostty/zig-out/lib/ghostty-vt-static.lib");
+	@link("../../out/ghostty/ghostty-vt-static.lib");
 } else {
-	@link("../../vendor/ghostty/zig-out/lib/libghostty-vt.a");
+	@link("../../out/ghostty/libghostty-vt.a");
 }
 @include("./effects.h");
 @compile("./effects.c");

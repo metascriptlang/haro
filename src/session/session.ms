@@ -42,12 +42,12 @@ export function pump(this s: Session, buf: Span<uint8>): Result<boolean, Session
 	}
 	if (r.value > 0) {
 		s.vt.write(buf[0..r.value]);
-		const _answered = try s.answer(buf);
+		const _replied = try s.sendReplies(buf);
 	}
 	return Result.ok(true);
 }
 
-function answer(this s: Session, buf: Span<uint8>): Result<void, SessionError> {
+function sendReplies(this s: Session, buf: Span<uint8>): Result<void, SessionError> {
 	while (true) {
 		const n = s.vt.replies(buf);
 		if (!n.ok) { return Result.err(SessionError.VtReadFailed); }

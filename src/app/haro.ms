@@ -4,17 +4,8 @@
 import { NeonNode } from "../../../neon/src/render/node";
 import { requestFrame } from "../../../neon/src/animation/frame";
 import { runWindow, DesktopOptions, desktopOptions } from "../../../neon/src/platform/ion/window";
-import {
-	MenuItem,
-	MenuRole,
-	ModCmd,
-	Submenu,
-	listen,
-	onWake,
-	openExternal,
-	setAppMenu,
-} from "../../../ion/src/index";
-import { argv, env, exit } from "std/process";
+import { listen, onWake, openExternal } from "../../../ion/src/index";
+import { argv, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
 import { homeDir } from "std/os";
 import { Pty, PtyError } from "../pty/transport";
@@ -36,7 +27,13 @@ extern function appWireWake(): void;
 
 const CLOSE_WINDOW = "close_window";
 
+when (!windows) {
+	import { env } from "std/process";
+}
+
 when (macos) {
+	import { MenuItem, MenuRole, ModCmd, Submenu, setAppMenu } from "../../../ion/src/index";
+
 	@include("unistd.h");
 
 	extern function getppid(): int32;

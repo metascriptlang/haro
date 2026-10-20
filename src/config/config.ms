@@ -65,7 +65,7 @@ function hexDigit(c: string): int32 | null {
 	return null;
 }
 
-export function colorOf(text: string): Result<Rgb, string> {
+function colorOf(text: string): Result<Rgb, string> {
 	const notColour = `"${text}" is not a #rrggbb colour`;
 	if (text.length != 7 || text[0] != "#") { return Result.err(notColour); }
 	let channels: Vec<uint8> = [];

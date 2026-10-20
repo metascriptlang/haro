@@ -84,7 +84,7 @@ export interface Faces {
 	boldItalic: string | null;
 }
 
-export interface FontFile {
+interface FontFile {
 	name: string;
 	path: string;
 }
@@ -114,7 +114,7 @@ function registryFiles(listing: string, fontsDir: string): Vec<FontFile> {
 	return files;
 }
 
-export function facesAmong(files: Vec<FontFile>, family: string): Result<Faces, string> {
+function facesAmong(files: Vec<FontFile>, family: string): Result<Faces, string> {
 	let regular: string | null = null;
 	let bold: string | null = null;
 	let italic: string | null = null;
@@ -133,7 +133,7 @@ export function facesAmong(files: Vec<FontFile>, family: string): Result<Faces, 
 	return Result.ok({ regular: regular, bold: bold, italic: italic, boldItalic: boldItalic });
 }
 
-export function facesIn(listing: string, family: string, fontsDir: string): Result<Faces, string> {
+function facesIn(listing: string, family: string, fontsDir: string): Result<Faces, string> {
 	return facesAmong(registryFiles(listing, fontsDir), family);
 }
 

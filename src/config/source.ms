@@ -13,7 +13,6 @@ import {
 	createInterpreter,
 	evalModule,
 	selectRoutine,
-	unboxString,
 } from "../../../../.metascript/src/embed/index";
 
 export interface Loaded {
@@ -72,7 +71,7 @@ function evaluate(path: string, dir: string, api: string): Result<string, string
 	if (!routine.ok) { return Result.err(routine.error); }
 	const got = callRoutine(interp, routine.value, []);
 	if (!got.ok) { return Result.err(got.error); }
-	return Result.ok(unboxString(got.value.root));
+	return Result.ok(got.value.text());
 }
 
 interface FontsFound {

@@ -13,7 +13,7 @@ export struct Plan {
 	rows: Vec<Row>;
 }
 
-function sameContent(a: Row, b: Row): boolean {
+function sameContent(this a: Row, b: Row): boolean {
 	if (a.cells.length != b.cells.length || a.extra.length != b.extra.length) { return false; }
 	for (let i = 0; i < (a.cells.length as int32); i++) {
 		if (a.cells[i] != b.cells[i]) { return false; }
@@ -37,7 +37,7 @@ function changedRowsAfterScroll(all: Vec<Row>, painted: Vec<Row>, scrolled: int3
 	let out: Vec<Row> = [];
 	for (let y = 0; y < rowCount; y++) {
 		const isNew = y >= rowCount - scrolled;
-		if (isNew || !sameContent(all[y], painted[y + scrolled])) { out.push(all[y]); }
+		if (isNew || !all[y].sameContent(painted[y + scrolled])) { out.push(all[y]); }
 	}
 	return out;
 }

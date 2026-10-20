@@ -76,11 +76,11 @@ function isUnligatedPair(a: uint32, b: uint32): boolean {
 }
 
 function breaksShapingBefore(this row: Row, i: int32, cursorCell: int32): boolean {
-	if (i == 0) { return false; }
 	const cell = row.cells[i];
+	if (i == 0 || cell.extra != 0) { return false; }
+	if (i == cursorCell || i == cursorCell + 1) { return true; }
 	const prev = row.cells[i - 1];
-	if (cell.extra == 0 && (i == cursorCell || i == cursorCell + 1)) { return true; }
-	return cell.extra == 0 && prev.extra == 0 && isUnligatedPair(prev.cp, cell.cp);
+	return prev.extra == 0 && isUnligatedPair(prev.cp, cell.cp);
 }
 
 function isUnicodeScalar(cp: uint32): boolean {

@@ -39,10 +39,6 @@ export struct Block {
 	cols: int32;
 }
 
-function pointRange(at: Point): Range {
-	return { start: at, end: at };
-}
-
 function precedes(this a: Point, b: Point): boolean {
 	return a.row < b.row || (a.row == b.row && a.col < b.col);
 }
@@ -113,6 +109,13 @@ export function blocks(this m: Marked, top: int32, rows: int32, cols: int32): Ve
 	return out;
 }
 
+function shiftedBy(this r: Range, rows: int32): Range {
+	return {
+		start: { row: r.start.row + rows, col: r.start.col },
+		end: { row: r.end.row + rows, col: r.end.col },
+	};
+}
+
 export function rebased(this sel: Selection, was: Range, now: Marked | null): Selection | null {
 	if (now === null) { return null; }
 	const shift = now.range.start.row - was.start.row;
@@ -125,11 +128,8 @@ export function rebased(this sel: Selection, was: Range, now: Marked | null): Se
 	return moved;
 }
 
-function shiftedBy(this r: Range, rows: int32): Range {
-	return {
-		start: { row: r.start.row + rows, col: r.start.col },
-		end: { row: r.end.row + rows, col: r.end.col },
-	};
+function pointRange(at: Point): Range {
+	return { start: at, end: at };
 }
 
 function at(row: int32, col: int32): Point {
@@ -142,6 +142,10 @@ function range(r0: int32, c0: int32, r1: int32, c1: int32): Range {
 
 function span(row: int32, from: int32, to: int32): RowSpan {
 	return { row: row, from: from, to: to };
+}
+
+function block(row: int32, col: int32, rows: int32, cols: int32): Block {
+	return { row: row, col: col, rows: rows, cols: cols };
 }
 
 test "a press with no drag selects nothing for a cell and the unit for a word" {
@@ -222,10 +226,6 @@ test "a rebase follows the terminal's shift and drops a selection the terminal l
 	assert moved !== null;
 	if (moved !== null) { assert moved.bounds() == range(7, 2, 9, 4); }
 	assert sel.rebased(was, null) === null;
-}
-
-function block(row: int32, col: int32, rows: int32, cols: int32): Block {
-	return { row: row, col: col, rows: rows, cols: cols };
 }
 
 test "a linear selection draws as at most three rectangles: head, full middle rows, tail" {

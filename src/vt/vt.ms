@@ -544,6 +544,7 @@ function repliesLength(effects: Ptr<void>): int64 {
 }
 
 const OSC52_REPLY = "\x1b]52;";
+const SHORTEST_OSC52_REPLY = "\x1b]52;c;\x07".byteLength;
 
 // libghostty takes a read's reply before the callback returns, so the callback denies it and this
 // moves the empty reply written after mark (ESC ] 52 ; c ; and the program's terminator) into
@@ -552,7 +553,7 @@ const OSC52_REPLY = "\x1b]52;";
 function clipboardRead(effects: Ptr<void>, mark: int64): void {
 	const e = effectsAt(effects);
 	const from = mark as int32;
-	if (e.readFrame !== null || e.replies.length - from < 8) { return; }
+	if (e.readFrame !== null || e.replies.length - from < SHORTEST_OSC52_REPLY) { return; }
 	const prefix = OSC52_REPLY.asBytes();
 	for (let i = 0; i < prefix.length; i++) {
 		if (e.replies[from + i] != prefix[i]) { return; }
@@ -604,11 +605,12 @@ const MODE_CURSOR_BLINKING: uint16 = 12;
 const MODE_FOCUS_EVENT: uint16 = 1004;
 const MODE_ALT_SCROLL: uint16 = 1007;
 const MODE_BRACKETED_PASTE: uint16 = 2004;
+const MODE_SYNC_OUTPUT: uint16 = 2026;
 const MODE_WIN32_INPUT: uint16 = 9001;
 
 function applyColors(terminal: GhosttyTerminal, fg: Rgb, bg: Rgb): Result<void, VtError> {
-	let f: GhosttyColorRgb = { r: fg.r, g: fg.g, b: fg.b };
-	let b: GhosttyColorRgb = { r: bg.r, g: bg.g, b: bg.b };
+	let f = ghosttyColor(fg);
+	let b = ghosttyColor(bg);
 	const fgOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND;
 	const bgOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND;
 	if (!ok(setColor(terminal, fgOption, f)) || !ok(setColor(terminal, bgOption, b))) {
@@ -794,7 +796,7 @@ export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<Vt,
 		return Result.err(VtError.ReadFailed);
 	}
 	for (let i = 0; i < colors.length; i++) {
-		palette.c[i] = { r: colors[i].r, g: colors[i].g, b: colors[i].b };
+		palette.c[i] = ghosttyColor(colors[i]);
 	}
 	if (!ok(setColors(vt.terminal, option, palette))) { return Result.err(VtError.ReadFailed); }
 	vt.painted.rows = [];
@@ -831,8 +833,6 @@ export function answerClipboard(this vt: Vt, text: string, allow: boolean): Resu
 	if (!vt.effects.answerRead(text, allow)) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(vt);
 }
-
-const MODE_SYNC_OUTPUT: uint16 = 2026;
 
 // A hold older than the limit ends here: the terminal has no clock, and a program that never
 // releases would freeze the screen (terminal.h, "Timeouts").
@@ -1091,6 +1091,10 @@ export function mouseReport(
 }
 
 function rgb(c: GhosttyColorRgb): Rgb {
+	return { r: c.r, g: c.g, b: c.b };
+}
+
+function ghosttyColor(c: Rgb): GhosttyColorRgb {
 	return { r: c.r, g: c.g, b: c.b };
 }
 

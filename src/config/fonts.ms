@@ -80,7 +80,7 @@ const MACHINE_FONTS = "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fo
 const USER_FONTS = "HKCU\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts";
 const VALUE_SEPARATOR = "    REG_SZ    ";
 
-function stripKind(name: string): string {
+function withoutFormatSuffix(name: string): string {
 	const open = name.lastIndexOf(" (");
 	return open > 0 && name.endsWith(")") ? name.slice(0, open) : name;
 }
@@ -93,7 +93,7 @@ function registryFiles(listing: string, fontsDir: string): Vec<FontFile> {
 		if (at < 0) { continue; }
 		const value = line.slice(at + VALUE_SEPARATOR.length).trim();
 		const path = (value.indexOf(":") > 0 ? value : `${fontsDir}/${value}`).replaceAll("\\", "/");
-		for (const name of stripKind(line.slice(0, at)).split(" & ")) { files.push({ name: name, path: path }); }
+		for (const name of withoutFormatSuffix(line.slice(0, at)).split(" & ")) { files.push({ name: name, path: path }); }
 	}
 	return files;
 }
@@ -117,7 +117,7 @@ export function facesIn(listing: string, family: string, fontsDir: string): Resu
 	return facesAmong(registryFiles(listing, fontsDir), family);
 }
 
-function collectionIn(faces: Faces): string | null {
+function collectionPath(faces: Faces): string | null {
 	for (const path of [faces.regular, faces.bold, faces.italic, faces.boldItalic]) {
 		if (path !== null && (path.toLowerCase().endsWith(".ttc") || path.toLowerCase().endsWith(".otc"))) { return path; }
 	}
@@ -134,7 +134,7 @@ export function installedFaces(family: string): Result<Faces, string> {
 		return facesIn(listing, family, `${env.get("WINDIR")}/Fonts`);
 	} else when (macos) {
 		const faces = try facesAmong(familyFiles(family), family);
-		const collection = collectionIn(faces);
+		const collection = collectionPath(faces);
 		if (collection !== null) {
 			return Result.err(`font family "${family}" is in the collection ${collection}, and Haro cannot pick a face out of one yet`);
 		}
@@ -144,7 +144,7 @@ export function installedFaces(family: string): Result<Faces, string> {
 	}
 }
 
-const LISTING = [
+const REGISTRY_LISTING = [
 	"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
 	"    Operator Saigon (TrueType)    REG_SZ    C:\\Fonts\\OperatorSaigon-Regular.otf",
 	"    Operator Saigon Italic (TrueType)    REG_SZ    C:\\Fonts\\OperatorSaigon-Italic.otf",
@@ -157,7 +157,7 @@ const LISTING = [
 ].join("\r\n");
 
 test "a family's faces come from the registry names, user fonts by full path" {
-	const f = facesIn(LISTING, "Operator Saigon", "W:/Fonts");
+	const f = facesIn(REGISTRY_LISTING, "Operator Saigon", "W:/Fonts");
 	assert f.ok;
 	assert f.value.regular == "C:/Fonts/OperatorSaigon-Regular.otf";
 	assert f.value.italic == "C:/Fonts/OperatorSaigon-Italic.otf";
@@ -166,18 +166,18 @@ test "a family's faces come from the registry names, user fonts by full path" {
 }
 
 test "machine fonts resolve in the fonts folder, and a collection answers each of its names" {
-	const segoe = facesIn(LISTING, "Segoe UI", "W:/Fonts");
+	const segoe = facesIn(REGISTRY_LISTING, "Segoe UI", "W:/Fonts");
 	assert segoe.ok;
 	assert segoe.value.regular == "W:/Fonts/segoeui.ttf";
 	assert segoe.value.bold == "W:/Fonts/segoeuib.ttf";
 	assert segoe.value.boldItalic == "W:/Fonts/segoeuiz.ttf";
-	const yahei = facesIn(LISTING, "Microsoft YaHei UI", "W:/Fonts");
+	const yahei = facesIn(REGISTRY_LISTING, "Microsoft YaHei UI", "W:/Fonts");
 	assert yahei.ok;
 	assert yahei.value.regular == "W:/Fonts/msyh.ttc";
 }
 
 test "a family with no regular face is refused by name" {
-	const missing = facesIn(LISTING, "Operator", "W:/Fonts");
+	const missing = facesIn(REGISTRY_LISTING, "Operator", "W:/Fonts");
 	assert !missing.ok;
 	if (!missing.ok) { assert missing.error == `font family "Operator" is not installed`; }
 }
@@ -185,7 +185,7 @@ test "a family with no regular face is refused by name" {
 test "a face inside a font collection is found, so the lookup can refuse it by path" {
 	const f = facesAmong([{ name: "Menlo Regular", path: "/System/Library/Fonts/Menlo.ttc" }], "Menlo");
 	assert f.ok;
-	assert collectionIn(f.value) == "/System/Library/Fonts/Menlo.ttc";
+	assert collectionPath(f.value) == "/System/Library/Fonts/Menlo.ttc";
 }
 
 when (macos) {

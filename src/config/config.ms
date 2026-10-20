@@ -75,30 +75,30 @@ export function colorOf(text: string): Result<Rgb, string> {
 	return Result.ok({ r: parts[0] as uint8, g: parts[1] as uint8, b: parts[2] as uint8 });
 }
 
-function text(v: JsonValue, key: string): Result<string, string> {
+function readString(v: JsonValue, key: string): Result<string, string> {
 	if (v.kind != JsonKind.String) { return Result.err(`${key} must be a string`); }
 	return Result.ok(v.strVal);
 }
 
-function color(v: JsonValue, key: string): Result<Rgb, string> {
-	const s = try text(v, key);
+function readColor(v: JsonValue, key: string): Result<Rgb, string> {
+	const s = try readString(v, key);
 	const c = colorOf(s);
 	if (!c.ok) { return Result.err(`${key}: ${c.error}`); }
 	return Result.ok(c.value);
 }
 
-function items(v: JsonValue, key: string): Result<Vec<JsonValue>, string> {
+function readArray(v: JsonValue, key: string): Result<Vec<JsonValue>, string> {
 	if (v.kind != JsonKind.Array) { return Result.err(`${key} must be an array`); }
 	let out: Vec<JsonValue> = [];
 	for (const item of v.items) { out.push(item); }
 	return Result.ok(out);
 }
 
-function families(v: JsonValue, key: string): Result<Vec<string>, string> {
+function readFamilies(v: JsonValue, key: string): Result<Vec<string>, string> {
 	if (v.kind == JsonKind.String) { return Result.ok([v.strVal]); }
 	if (v.kind != JsonKind.Array) { return Result.err(`${key} must be a family name or a list of them`); }
 	let out: Vec<string> = [];
-	for (let n = 0; n < v.items.length; n++) { out.push(try text(v.items[n], `${key}[${n}]`)); }
+	for (let n = 0; n < v.items.length; n++) { out.push(try readString(v.items[n], `${key}[${n}]`)); }
 	return Result.ok(out);
 }
 
@@ -117,7 +117,7 @@ function screenOf(name: string, key: string): Result<Screen, string> {
 	};
 }
 
-function bindOf(v: JsonValue, key: string): Result<Keybind, string> {
+function readKeybind(v: JsonValue, key: string): Result<Keybind, string> {
 	if (v.kind != JsonKind.Object) { return Result.err(`${key} must be { keys, text } or { keys, action }`); }
 	let keys: string | null = null;
 	let sends: string | null = null;
@@ -126,10 +126,10 @@ function bindOf(v: JsonValue, key: string): Result<Keybind, string> {
 	for (let i = 0; i < v.keys.length; i++) {
 		const name = v.keys[i];
 		match (name) {
-			"keys" => { keys = try text(v.values[i], `${key}.keys`); },
-			"text" => { sends = try text(v.values[i], `${key}.text`); },
-			"action" => { action = try actionOf(try text(v.values[i], `${key}.action`), key); },
-			"mode" => { screen = try screenOf(try text(v.values[i], `${key}.mode`), key); },
+			"keys" => { keys = try readString(v.values[i], `${key}.keys`); },
+			"text" => { sends = try readString(v.values[i], `${key}.text`); },
+			"action" => { action = try actionOf(try readString(v.values[i], `${key}.action`), key); },
+			"mode" => { screen = try screenOf(try readString(v.values[i], `${key}.mode`), key); },
 			_ => { return Result.err(`${key}: unknown field "${name}", expected keys, text, action and mode`); },
 		}
 	}
@@ -150,7 +150,7 @@ export function parse(json: string): Result<Config, string> {
 		const key = root.keys[i];
 		const v = root.values[i];
 		match (key) {
-			"fontFamily" => { c.fontFamily = try families(v, key); },
+			"fontFamily" => { c.fontFamily = try readFamilies(v, key); },
 			"fontSize" => {
 				if (v.kind != JsonKind.Number && v.kind != JsonKind.Int) { return Result.err("fontSize must be a number"); }
 				c.fontSize = v.asNumber();
@@ -161,9 +161,9 @@ export function parse(json: string): Result<Config, string> {
 				c.padding = v.asNumber();
 				if (c.padding < 0) { return Result.err(`padding ${c.padding} must be 0 or more`); }
 			},
-			"command" => { c.command = try text(v, key); },
+			"command" => { c.command = try readString(v, key); },
 			"workingDirectory" => {
-				const dir = try text(v, key);
+				const dir = try readString(v, key);
 				if (dir != "home" && dir != "inherit" && !dir.startsWith("~/") && !isAbsolute(dir)) {
 					return Result.err(`workingDirectory "${dir}" must be home, inherit, an absolute path or a path under ~/`);
 				}
@@ -175,16 +175,16 @@ export function parse(json: string): Result<Config, string> {
 				}
 				c.scrollback = v.intVal;
 			},
-			"foreground" => { c.foreground = try color(v, key); },
-			"background" => { c.background = try color(v, key); },
+			"foreground" => { c.foreground = try readColor(v, key); },
+			"background" => { c.background = try readColor(v, key); },
 			"palette" => {
-				const list = try items(v, key);
+				const list = try readArray(v, key);
 				if (list.length > PALETTE_SIZE) { return Result.err(`palette has ${list.length} colours, at most ${PALETTE_SIZE}`); }
-				for (let n = 0; n < list.length; n++) { c.palette.push(try color(list[n], `palette[${n}]`)); }
+				for (let n = 0; n < list.length; n++) { c.palette.push(try readColor(list[n], `palette[${n}]`)); }
 			},
 			"keybinds" => {
-				const list = try items(v, key);
-				for (let n = 0; n < list.length; n++) { c.keybinds.push(try bindOf(list[n], `keybinds[${n}]`)); }
+				const list = try readArray(v, key);
+				for (let n = 0; n < list.length; n++) { c.keybinds.push(try readKeybind(list[n], `keybinds[${n}]`)); }
 			},
 			_ => { return Result.err(`unknown config field "${key}"`); },
 		}

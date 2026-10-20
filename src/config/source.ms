@@ -55,12 +55,12 @@ function lastLine(text: string): string {
 }
 
 function evaluate(path: string, dir: string): Result<string, string> {
-	const installed = `${homeDir()}/.metascript/bin/msc`;
-	const msc = findOnPath("msc") != "" ? findOnPath("msc") : exists(installed) ? installed : "";
-	if (msc == "") { return Result.err(`running config.ms needs msc on PATH or at ${installed}`); }
+	const installedMsc = `${homeDir()}/.metascript/bin/msc`;
+	const msc = findOnPath("msc") != "" ? findOnPath("msc") : exists(installedMsc) ? installedMsc : "";
+	if (msc == "") { return Result.err(`running config.ms needs msc on PATH or at ${installedMsc}`); }
 	const target = relative(dir, path);
-	const from = target.startsWith(".") || target.indexOf(":") > 0 ? target : `./${target}`;
-	const runner = `import { config } from ${JSON.stringify(from)};\nconsole.log(JSON.stringify(config));\n`;
+	const importPath = target.startsWith(".") || target.indexOf(":") > 0 ? target : `./${target}`;
+	const runner = `import { config } from ${JSON.stringify(importPath)};\nconsole.log(JSON.stringify(config));\n`;
 	if (!writeFile(`${dir}/evaluate.ms`, runner).ok) { return Result.err(`cannot write ${dir}/evaluate.ms`); }
 	const ran = execFileCapture(msc, ["run", "--target=raiser", "evaluate.ms"], dir);
 	if (!ran.ok) { return Result.err(withoutStyles(`${ran.error.output}${ran.error.errorOutput}`).trim()); }
@@ -75,7 +75,7 @@ function facesFor(c: Config): Result<Vec<Faces>, string> {
 
 const LINES_PER_FAMILY = 4;
 
-function record(stamp: string, json: string, faces: Vec<Faces>): string {
+function encodeCache(stamp: string, json: string, faces: Vec<Faces>): string {
 	let lines = [stamp, json];
 	for (const f of faces) {
 		for (const path of [f.regular, f.bold ?? "", f.italic ?? "", f.boldItalic ?? ""]) { lines.push(path); }
@@ -83,7 +83,7 @@ function record(stamp: string, json: string, faces: Vec<Faces>): string {
 	return lines.join("\n");
 }
 
-function cached(lines: string[], stamp: string): Loaded | null {
+function decodeCache(lines: string[], stamp: string): Loaded | null {
 	if (lines.length < 2 || lines[0] != stamp) { return null; }
 	const c = parse(lines[1]);
 	if (!c.ok || lines.length != 2 + c.value.fontFamily.length * LINES_PER_FAMILY) { return null; }
@@ -106,7 +106,7 @@ export function load(path: string): Result<Loaded, string> {
 	const cacheFile = `${dir}/config.cache`;
 	const previous = readFile(cacheFile);
 	if (previous.ok) {
-		const hit = cached(previous.value.split("\n"), stamp);
+		const hit = decodeCache(previous.value.split("\n"), stamp);
 		if (hit !== null) { return Result.ok(hit); }
 	}
 	if (!ensureDir(dir).ok) { return Result.err(`cannot create ${dir}`); }
@@ -114,7 +114,7 @@ export function load(path: string): Result<Loaded, string> {
 	const c = parse(json);
 	if (!c.ok) { return Result.err(c.error); }
 	const faces = try facesFor(c.value);
-	if (!writeFile(cacheFile, record(stamp, json, faces)).ok) { return Result.err(`cannot write ${cacheFile}`); }
+	if (!writeFile(cacheFile, encodeCache(stamp, json, faces)).ok) { return Result.err(`cannot write ${cacheFile}`); }
 	return Result.ok({ config: c.value, faces: faces, stamp: stamp });
 }
 
@@ -134,7 +134,7 @@ test "a cached record gives back each family's faces in order" {
 		{ regular: "/a.otf", bold: null, italic: "/ai.otf", boldItalic: null },
 		{ regular: "/b.otf", bold: "/bb.otf", italic: null, boldItalic: "/bbi.otf" },
 	];
-	const hit = cached(record("s1", json, faces).split("\n"), "s1");
+	const hit = decodeCache(encodeCache("s1", json, faces).split("\n"), "s1");
 	assert hit !== null;
 	if (hit !== null) {
 		assert hit.faces.length == 2;
@@ -142,6 +142,6 @@ test "a cached record gives back each family's faces in order" {
 		assert hit.faces[0].bold === null;
 		assert hit.faces[1].boldItalic == "/bbi.otf";
 	}
-	assert cached(record("s1", json, faces).split("\n"), "s2") === null;
-	assert cached(record("s1", json, [faces[0]]).split("\n"), "s1") === null;
+	assert decodeCache(encodeCache("s1", json, faces).split("\n"), "s2") === null;
+	assert decodeCache(encodeCache("s1", json, [faces[0]]).split("\n"), "s1") === null;
 }

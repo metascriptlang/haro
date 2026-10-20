@@ -5,7 +5,6 @@ import { DEFAULT_BG, DEFAULT_FG, fromCssHex, indexed, palettePrelude } from "./p
 import { Screen, runsText } from "./screen";
 
 const ROOT = "fixtures/conform/alacritty/";
-const NO_ROW = -1;
 
 enum Compare {
 	Text,
@@ -120,44 +119,50 @@ function withoutTrailingEmpty(runs: Vec<LineRun>, textUnits: int32): Vec<LineRun
 	return out;
 }
 
-function firstFailure(name: string, chunk: int32, compare: Compare, skipRunsRow: int32): string {
-	const loaded = loadFixture(name);
-	if (!loaded.ok) { return loaded.error; }
-	const f = loaded.value;
+function firstFailure(
+	name: string,
+	chunk: int32,
+	compare: Compare,
+	skipRunsRow: int32 | null,
+): Result<void, string> {
+	const f = try loadFixture(name);
 	const opened = Screen.open(f.cols, f.rows);
-	if (!opened.ok) { return "open failed"; }
+	if (!opened.ok) { return Result.err("open failed"); }
 	const s = opened.value;
 	defer s.close();
 	const own = compare == Compare.RunsOwnPalette;
-	if (!s.feed(palettePrelude(own)).ok) { return "prelude frame failed"; }
-	if (!s.feedChunks(f.input, chunk).ok) { return "frame failed"; }
-	if (!s.sameAsFreshRead()) { return "grid differs from a fresh read of the screen"; }
+	if (!s.feed(palettePrelude(own)).ok) { return Result.err("prelude frame failed"); }
+	if (!s.feedChunks(f.input, chunk).ok) { return Result.err("frame failed"); }
+	if (!s.sameAsFreshRead()) {
+		return Result.err("grid differs from a fresh read of the screen");
+	}
 	for (let y = 0; y < f.rows; y++) {
 		if (s.text(y) != f.text[y]) {
-			return `row ${y}: expected "${f.text[y]}" got "${s.text(y)}"`;
+			return Result.err(`row ${y}: expected "${f.text[y]}" got "${s.text(y)}"`);
 		}
-		if (compare == Compare.Text || y == skipRunsRow) { continue; }
+		if (compare == Compare.Text || (skipRunsRow !== null && y == skipRunsRow)) { continue; }
 		const want = runsText(withoutTrailingEmpty(
 			expectedRuns(f.attrs[y], own),
 			f.text[y].length as int32,
 		));
 		const got = runsText(merged(s.runs(y)));
-		if (got != want) { return `row ${y} runs: expected ${want}got ${got}`; }
+		if (got != want) { return Result.err(`row ${y} runs: expected ${want}got ${got}`); }
 	}
-	return "";
+	return Result.ok(null);
 }
 
-function conforms(name: string, chunk: int32, compare: Compare, skipRunsRow: int32): string {
-	const failure = firstFailure(name, chunk, compare, skipRunsRow);
-	if (failure != "") { console.log(`${name} (chunk ${chunk}): ${failure}`); }
-	return failure;
+function conforms(name: string, chunk: int32, compare: Compare, skipRunsRow: int32 | null): string {
+	const checked = firstFailure(name, chunk, compare, skipRunsRow);
+	if (checked.ok) { return ""; }
+	console.log(`${name} (chunk ${chunk}): ${checked.error}`);
+	return checked.error;
 }
 
 function conformsFramed(
 	name: string,
 	smallChunk: int32,
 	compare: Compare,
-	skipRunsRow: int32,
+	skipRunsRow: int32 | null = null,
 ): string {
 	let failures = "";
 	for (const chunk of [0, 61, smallChunk]) {
@@ -167,67 +172,67 @@ function conformsFramed(
 }
 
 test "alacritty alt_reset: whole, in 61-byte and in 7-byte frames" {
-	assert conformsFramed("alt_reset", 7, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("alt_reset", 7, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty clear_underline: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("clear_underline", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("clear_underline", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty colored_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("colored_reset", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("colored_reset", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty colored_underline: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("colored_underline", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("colored_underline", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty csi_rep: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("csi_rep", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("csi_rep", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty delete_chars_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("delete_chars_reset", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("delete_chars_reset", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty delete_lines: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("delete_lines", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("delete_lines", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty erase_chars_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("erase_chars_reset", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("erase_chars_reset", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty fish_cc: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("fish_cc", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("fish_cc", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty grid_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("grid_reset", 1, Compare.RunsDefaultPalette, NO_ROW) == "";
+	assert conformsFramed("grid_reset", 1, Compare.RunsDefaultPalette) == "";
 }
 
 test "alacritty history: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("history", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("history", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty hyperlinks: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("hyperlinks", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("hyperlinks", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty indexed_256_colors: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("indexed_256_colors", 1, Compare.RunsDefaultPalette, NO_ROW) == "";
+	assert conformsFramed("indexed_256_colors", 1, Compare.RunsDefaultPalette) == "";
 }
 
 test "alacritty insert_blank_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("insert_blank_reset", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("insert_blank_reset", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty issue_855: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("issue_855", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("issue_855", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty ll: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("ll", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("ll", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty newline_with_cursor_beyond_scroll_region: whole, in 61-byte and in 1-byte frames" {
@@ -235,20 +240,19 @@ test "alacritty newline_with_cursor_beyond_scroll_region: whole, in 61-byte and 
 		"newline_with_cursor_beyond_scroll_region",
 		1,
 		Compare.RunsOwnPalette,
-		NO_ROW,
 	) == "";
 }
 
 test "alacritty origin_goto: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("origin_goto", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("origin_goto", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty region_scroll_down: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("region_scroll_down", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("region_scroll_down", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty row_reset: whole, in 61-byte and in 7-byte frames" {
-	assert conformsFramed("row_reset", 7, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("row_reset", 7, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty scroll_in_region_up_preserves_history: whole, in 61-byte and in 1-byte frames" {
@@ -256,28 +260,27 @@ test "alacritty scroll_in_region_up_preserves_history: whole, in 61-byte and in 
 		"scroll_in_region_up_preserves_history",
 		1,
 		Compare.RunsOwnPalette,
-		NO_ROW,
 	) == "";
 }
 
 test "alacritty scroll_up_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("scroll_up_reset", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("scroll_up_reset", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty sgr: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("sgr", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("sgr", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty tab_rendering: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("tab_rendering", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("tab_rendering", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty tmux_git_log: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("tmux_git_log", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("tmux_git_log", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty tmux_htop: whole, in 61-byte and in 7-byte frames" {
-	assert conformsFramed("tmux_htop", 7, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("tmux_htop", 7, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty underline: whole, in 61-byte and in 1-byte frames" {
@@ -285,41 +288,41 @@ test "alacritty underline: whole, in 61-byte and in 1-byte frames" {
 }
 
 test "alacritty vim_24bitcolors_bce: whole, in 61-byte and in 509-byte frames" {
-	assert conformsFramed("vim_24bitcolors_bce", 509, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("vim_24bitcolors_bce", 509, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty vim_large_window_scroll: whole, in 61-byte and in 509-byte frames" {
-	assert conformsFramed("vim_large_window_scroll", 509, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("vim_large_window_scroll", 509, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty vim_simple_edit: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("vim_simple_edit", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("vim_simple_edit", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty vttest_origin_mode_1: whole, in 61-byte and in 7-byte frames" {
-	assert conformsFramed("vttest_origin_mode_1", 7, Compare.Text, NO_ROW) == "";
+	assert conformsFramed("vttest_origin_mode_1", 7, Compare.Text) == "";
 }
 
 test "alacritty vttest_origin_mode_2: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("vttest_origin_mode_2", 1, Compare.Text, NO_ROW) == "";
+	assert conformsFramed("vttest_origin_mode_2", 1, Compare.Text) == "";
 }
 
 test "alacritty vttest_scroll: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("vttest_scroll", 1, Compare.Text, NO_ROW) == "";
+	assert conformsFramed("vttest_scroll", 1, Compare.Text) == "";
 }
 
 test "alacritty vttest_tab_clear_set: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("vttest_tab_clear_set", 1, Compare.Text, NO_ROW) == "";
+	assert conformsFramed("vttest_tab_clear_set", 1, Compare.Text) == "";
 }
 
 test "alacritty wrapline_alt_toggle: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("wrapline_alt_toggle", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("wrapline_alt_toggle", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty zerowidth: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("zerowidth", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("zerowidth", 1, Compare.RunsOwnPalette) == "";
 }
 
 test "alacritty zsh_tab_completion: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("zsh_tab_completion", 1, Compare.RunsOwnPalette, NO_ROW) == "";
+	assert conformsFramed("zsh_tab_completion", 1, Compare.RunsOwnPalette) == "";
 }

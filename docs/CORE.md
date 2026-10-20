@@ -268,5 +268,6 @@ the same result:
 - arrived intact: Ctrl+letters, Ctrl+Alt+A, Alt+F, Alt/Ctrl+Backspace, Shift+Tab, Ctrl+Left,
   Shift+Home, F5 with each modifier, Escape.
 
-Both hosts ask the terminal for win32-input-mode at startup (`?9001h`). A terminal that answers it
-sends each key as a full Win32 key record. libghostty-vt has no `?9001`.
+Both hosts ask the terminal for win32-input-mode at startup: `?9001h` is in the startup
+bytes `probe/recordPty.ms` recorded through each of them. A terminal that answers it sends each
+key as a full Win32 key record. libghostty-vt has no `?9001`.

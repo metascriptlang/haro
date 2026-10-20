@@ -11,10 +11,6 @@ import { pointerDown, pointerMove, pointerUp, roll } from "./mouse";
 import { Warning } from "../../../../input/paste";
 import { CLIPBOARD_MODS } from "../../../../input/bindings";
 
-export const SHIFT: int32 = 1;
-export const CTRL: int32 = 2;
-export const SUPER: int32 = 8;
-
 export interface Board {
 	opened: string;
 	copied: string;

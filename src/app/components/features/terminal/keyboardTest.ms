@@ -4,11 +4,8 @@ import { Sink, termOf } from "./termTest";
 import { Controls } from "./controls";
 import { closeKey, keyDown } from "./keyboard";
 import { Warning } from "../../../../input/paste";
-import { BindAction, CLIPBOARD_MODS, Keybind, Screen } from "../../../../input/bindings";
+import { BindAction, CLIPBOARD_MODS, CTRL, Keybind, SHIFT, SUPER, Screen } from "../../../../input/bindings";
 import {
-	CTRL,
-	SHIFT,
-	SUPER,
 	at,
 	atBottomOf,
 	boardOf,

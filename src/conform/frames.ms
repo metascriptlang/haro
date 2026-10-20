@@ -1,9 +1,15 @@
 import { listInsert, listMove, listRemove } from "../../../neon/src/core/list";
-import { Vt } from "../vt/vt";
-import { Screen } from "./screen";
+import { scrollLines } from "../vt/vt";
+import { Screen, ScreenError } from "./screen";
 
-const WORDS: string[] = ["a", "hello", "x1", "TEST", "abc def", "中", "\u{1F600}", "e\u{301}", "क\u{94D}ष", "\t", "\b", "  "];
-const SGRS: string[] = ["0", "1", "2", "3", "4", "4:3", "4:2", "7", "9", "22", "27", "31", "42", "93", "103", "38;5;200", "48;5;17", "38;2;10;200;30", "48;2;250;5;5", "39", "49"];
+const WORDS: string[] = [
+	"a", "hello", "x1", "TEST", "abc def", "中", "\u{1F600}", "e\u{301}", "क\u{94D}ष",
+	"\t", "\b", "  ",
+];
+const SGRS: string[] = [
+	"0", "1", "2", "3", "4", "4:3", "4:2", "7", "9", "22", "27", "31", "42", "93", "103",
+	"38;5;200", "48;5;17", "38;2;10;200;30", "48;2;250;5;5", "39", "49",
+];
 const ERASES: string[] = ["J", "0J", "1J", "2J", "K", "0K", "1K", "2K"];
 
 interface Rng { state: int64; }
@@ -18,8 +24,7 @@ function pick(this r: Rng, list: string[]): string {
 }
 
 function op(r: Rng, cols: int32, rows: int32): string {
-	const kind = r.next(16);
-	return match (kind) {
+	return match (r.next(16)) {
 		0 | 1 | 2 => r.pick(WORDS),
 		3 => "\r\n",
 		4 => "\n",
@@ -38,10 +43,23 @@ function op(r: Rng, cols: int32, rows: int32): string {
 }
 
 function stream(seed: int32, cols: int32, rows: int32, ops: int32): string {
-	let r: Rng = { state: seed as int64 };
+	const r: Rng = { state: seed as int64 };
 	let out = "";
 	for (let i = 0; i < ops; i++) { out += op(r, cols, rows); }
 	return out;
+}
+
+function failureAfter(s: Screen, painted: Result<void, ScreenError>): string {
+	return painted.ok ? s.mismatch() : "a frame failed";
+}
+
+function report(run: string, failure: string, sent: string): void {
+	if (failure == "") { return; }
+	const visible = sent.replaceAll("\x1b", "<ESC>")
+		.replaceAll("\r", "<CR>")
+		.replaceAll("\n", "<LF>");
+	console.log(`frames: ${run}: ${failure}`);
+	console.log(`frames: bytes ${visible}`);
 }
 
 function playSeed(seed: int32, cols: int32, rows: int32, ops: int32): string {
@@ -49,18 +67,10 @@ function playSeed(seed: int32, cols: int32, rows: int32, ops: int32): string {
 	if (!opened.ok) { return "open failed"; }
 	const s = opened.value;
 	const bytes = stream(seed, cols, rows, ops);
-	let r: Rng = { state: (seed as int64) * 7 + 3 };
-	let failure = "";
+	const r: Rng = { state: (seed as int64) * 7 + 3 };
 	const cut = 1 + r.next(40);
-	if (!s.feedChunks(bytes, cut).ok) { failure = "a frame failed"; }
-	if (failure == "") {
-		const m = s.mismatch();
-		if (m != "") { failure = m; }
-	}
-	if (failure != "") {
-		console.log(`frames: seed ${seed} ${cols}x${rows} chunk ${cut}: ${failure}`);
-		console.log(`frames: bytes ${bytes.replaceAll("\x1b", "<ESC>").replaceAll("\r", "<CR>").replaceAll("\n", "<LF>")}`);
-	}
+	const failure = failureAfter(s, s.feedChunks(bytes, cut));
+	report(`seed ${seed} ${cols}x${rows} chunk ${cut}`, failure, bytes);
 	s.close();
 	return failure;
 }
@@ -69,23 +79,15 @@ function playEveryFrame(seed: int32, cols: int32, rows: int32, ops: int32): stri
 	const opened = Screen.open(cols, rows);
 	if (!opened.ok) { return "open failed"; }
 	const s = opened.value;
-	let r: Rng = { state: seed as int64 };
+	const r: Rng = { state: seed as int64 };
 	let failure = "";
 	let sent = "";
 	for (let i = 0; i < ops && failure == ""; i++) {
 		const piece = op(r, cols, rows);
 		sent += piece;
-		if (!s.feed(piece).ok) {
-			failure = "a frame failed";
-		} else {
-			const m = s.mismatch();
-			if (m != "") { failure = m; }
-		}
+		failure = failureAfter(s, s.feed(piece));
 	}
-	if (failure != "") {
-		console.log(`frames: seed ${seed} ${cols}x${rows} frame per op: ${failure}`);
-		console.log(`frames: bytes ${sent.replaceAll("\x1b", "<ESC>").replaceAll("\r", "<CR>").replaceAll("\n", "<LF>")}`);
-	}
+	report(`seed ${seed} ${cols}x${rows} frame per op`, failure, sent);
 	s.close();
 	return failure;
 }
@@ -113,36 +115,33 @@ function playWithViewportAndResize(seed: int32, ops: int32): string {
 	const opened = Screen.open(14, 6);
 	if (!opened.ok) { return "open failed"; }
 	const s = opened.value;
-	let r: Rng = { state: seed as int64 };
+	const r: Rng = { state: seed as int64 };
 	let failure = "";
 	let sent = "";
 	for (let i = 0; i < ops && failure == ""; i++) {
-		let ok = true;
-		const kind = r.next(10);
-		if (kind == 0) {
-			const by = r.next(9) - 4;
-			sent += `<scroll ${by}>`;
-			const vt: Vt = s.vt;
-			vt.scrollLines(by);
-			ok = s.paint().ok;
-		} else if (kind == 1) {
-			const cols = 1 + r.next(20);
-			const rows = 1 + r.next(10);
-			sent += `<resize ${cols}x${rows}>`;
-			ok = s.resize(cols, rows).ok;
-		} else {
-			const piece = op(r, s.cols, s.rows);
-			sent += piece;
-			ok = s.feed(piece).ok;
+		let painted: Result<void, ScreenError> = Result.ok(null);
+		match (r.next(10)) {
+			0 => {
+				const by = r.next(9) - 4;
+				sent += `<scroll ${by}>`;
+				s.vt.scrollLines(by);
+				painted = s.paint();
+			},
+			1 => {
+				const cols = 1 + r.next(20);
+				const rows = 1 + r.next(10);
+				sent += `<resize ${cols}x${rows}>`;
+				painted = s.resize(cols, rows);
+			},
+			_ => {
+				const piece = op(r, s.cols, s.rows);
+				sent += piece;
+				painted = s.feed(piece);
+			},
 		}
-		if (!ok) { failure = "a frame failed"; }
-		const m = ok ? s.mismatch() : "";
-		if (m != "") { failure = m; }
+		failure = failureAfter(s, painted);
 	}
-	if (failure != "") {
-		console.log(`frames: seed ${seed} viewport and resize: ${failure}`);
-		console.log(`frames: bytes ${sent.replaceAll("\x1b", "<ESC>").replaceAll("\r", "<CR>").replaceAll("\n", "<LF>")}`);
-	}
+	report(`seed ${seed} viewport and resize`, failure, sent);
 	s.close();
 	return failure;
 }

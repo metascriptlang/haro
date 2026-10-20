@@ -447,7 +447,7 @@ function ok(r: GhosttyResult): boolean {
 	return r == GhosttyResult.GHOSTTY_SUCCESS;
 }
 
-const HOLD_LIMIT_MS = 1000;
+const HOLD_LIMIT_MS: float64 = 1000;
 
 export interface Effects {
 	state: GhosttyRenderState;
@@ -456,14 +456,17 @@ export interface Effects {
 	titleChanged: boolean;
 	pwdChanged: boolean;
 	held: boolean;
-	heldAtMs: number;
-	holdLimitMs: number;
+	heldAtMs: float64;
+	holdLimitMs: float64;
 	clipboard: string | null;
 	readFrame: Vec<uint8> | null;
 	readAsked: boolean;
 }
 
-export function openEffects(terminal: GhosttyTerminal, state: GhosttyRenderState): Effects | null {
+export function openEffects(
+	terminal: GhosttyTerminal,
+	state: GhosttyRenderState,
+): Result<Effects, VtError> {
 	const e: Effects = {
 		state: state,
 		replies: [],
@@ -479,9 +482,9 @@ export function openEffects(terminal: GhosttyTerminal, state: GhosttyRenderState
 	};
 	if (vtEffectsWire(terminal, Handle.borrow(e).ptr) != 0) {
 		closeEffects(terminal);
-		return null;
+		return Result.err(VtError.CreateFailed);
 	}
-	return e;
+	return Result.ok(e);
 }
 
 export function closeEffects(terminal: GhosttyTerminal): void {
@@ -618,32 +621,52 @@ const MODE_ALT_SCROLL: uint16 = 1007;
 const MODE_BRACKETED_PASTE: uint16 = 2004;
 const MODE_WIN32_INPUT: uint16 = 9001;
 
-function colorsSet(terminal: GhosttyTerminal, fg: Rgb, bg: Rgb): boolean {
+function applyColors(terminal: GhosttyTerminal, fg: Rgb, bg: Rgb): Result<void, VtError> {
 	let f: GhosttyColorRgb = { r: fg.r, g: fg.g, b: fg.b };
 	let b: GhosttyColorRgb = { r: bg.r, g: bg.g, b: bg.b };
-	return ok(setColor(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, f))
-		&& ok(setColor(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, b));
+	if (!ok(setColor(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, f))
+		|| !ok(setColor(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, b))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	return Result.ok(null);
 }
 
 // libghostty has no reset default for the blink mode: a full reset (RIS) leaves a steady cursor.
-function blinkDefaultSet(terminal: GhosttyTerminal, on: boolean): boolean {
+function applyBlinkDefault(terminal: GhosttyTerminal, on: boolean): Result<void, VtError> {
 	let mode: GhosttyTerminalModeConfig = { mode: MODE_CURSOR_BLINKING, value: on };
 	let blink = on;
-	return ok(setMode(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode))
-		&& ok(setFlag(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK, blink));
+	const blinkOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK;
+	if (!ok(setMode(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode))
+		|| !ok(setFlag(terminal, blinkOption, blink))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	return Result.ok(null);
 }
 
-function scrollbackSet(terminal: GhosttyTerminal, lines: int64): boolean {
+function applyScrollback(terminal: GhosttyTerminal, lines: int64): Result<void, VtError> {
 	let bytes = SCROLLBACK_MAX_BYTES;
 	let kept = lines as uint64;
-	return ok(setSize(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, bytes))
-		&& ok(setSize(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, kept));
+	const bytesOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES;
+	const linesOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES;
+	if (!ok(setSize(terminal, bytesOption, bytes)) || !ok(setSize(terminal, linesOption, kept))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	return Result.ok(null);
 }
 
-function modeOn(terminal: GhosttyTerminal, mode: uint16): boolean | null {
+function modeOn(terminal: GhosttyTerminal, mode: uint16): Result<boolean, VtError> {
 	let m: GhosttyTerminalModeConfig = { mode: mode, value: false };
-	if (!ok(terminalMode(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MODE, m))) { return null; }
-	return m.value;
+	if (!ok(terminalMode(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MODE, m))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	return Result.ok(m.value);
+}
+
+function mouseTracking(terminal: GhosttyTerminal): Result<boolean, VtError> {
+	let tracking = false;
+	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING;
+	if (!ok(terminalFlag(terminal, key, tracking))) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(tracking);
 }
 
 export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtError> {
@@ -664,26 +687,26 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 	}
 	const effects = openEffects(terminal, state);
 	let top: GhosttyTrackedGridRef;
-	if (effects === null || vtTopTrack(terminal, top) != 0
-		|| !colorsSet(terminal, { r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 })
-		|| !blinkDefaultSet(terminal, true) || !scrollbackSet(terminal, SCROLLBACK_LINES)) {
-		if (effects !== null) { closeEffects(terminal); }
-		ghostty_render_state_row_cells_free(cells);
-		ghostty_render_state_row_iterator_free(iterator);
-		ghostty_render_state_free(state);
-		ghostty_terminal_free(terminal);
-		return Result.err(VtError.CreateFailed);
+	if (effects.ok && vtTopTrack(terminal, top) == 0
+		&& applyColors(terminal, { r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 }).ok
+		&& applyBlinkDefault(terminal, true).ok && applyScrollback(terminal, SCROLLBACK_LINES).ok) {
+		return Result.ok({
+			terminal: terminal,
+			state: state,
+			rows: iterator,
+			cells: cells,
+			effects: effects.value,
+			mouse: { encoder: null, event: null, signature: -1, geometry: null },
+			top: top,
+			painted: { alternate: false, rows: [], palette: null },
+		});
 	}
-	return Result.ok({
-		terminal: terminal,
-		state: state,
-		rows: iterator,
-		cells: cells,
-		effects: effects,
-		mouse: { encoder: null, event: null, signature: -1, geometry: null },
-		top: top,
-		painted: { alternate: false, rows: [], palette: null },
-	});
+	if (effects.ok) { closeEffects(terminal); }
+	ghostty_render_state_row_cells_free(cells);
+	ghostty_render_state_row_iterator_free(iterator);
+	ghostty_render_state_free(state);
+	ghostty_terminal_free(terminal);
+	return Result.err(VtError.CreateFailed);
 }
 
 export function write(this vt: Vt, bytes: Span<uint8>): void {
@@ -759,7 +782,7 @@ export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtErro
 }
 
 export function setDefaultColors(this vt: Vt, fg: Rgb, bg: Rgb): Result<Vt, VtError> {
-	if (!colorsSet(vt.terminal, fg, bg)) { return Result.err(VtError.ReadFailed); }
+	const _applied = try applyColors(vt.terminal, fg, bg);
 	return Result.ok(vt);
 }
 
@@ -777,7 +800,7 @@ export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<Vt,
 }
 
 export function setScrollback(this vt: Vt, lines: int64): Result<Vt, VtError> {
-	if (!scrollbackSet(vt.terminal, lines)) { return Result.err(VtError.ReadFailed); }
+	const _applied = try applyScrollback(vt.terminal, lines);
 	return Result.ok(vt);
 }
 
@@ -817,7 +840,7 @@ export function holding(this vt: Vt): boolean {
 }
 
 export function holdLimit(this vt: Vt, ms: int64): void {
-	vt.effects.holdLimitMs = ms as number;
+	vt.effects.holdLimitMs = ms as float64;
 }
 
 export function update(this vt: Vt): Result<Vt, VtError> {
@@ -915,29 +938,18 @@ export struct Modes {
 }
 
 export function modes(this vt: Vt): Result<Modes, VtError> {
-	const focusEvents = modeOn(vt.terminal, MODE_FOCUS_EVENT);
-	const bracketedPaste = modeOn(vt.terminal, MODE_BRACKETED_PASTE);
-	const altScroll = modeOn(vt.terminal, MODE_ALT_SCROLL);
-	const cursorKeys = modeOn(vt.terminal, MODE_DECCKM);
-	const win32Input = modeOn(vt.terminal, MODE_WIN32_INPUT);
-	let tracking = false;
-	if (focusEvents === null || bracketedPaste === null || altScroll === null || cursorKeys === null || win32Input === null
-		|| !ok(terminalFlag(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, tracking))) {
-		return Result.err(VtError.ReadFailed);
-	}
 	return Result.ok({
-		focusEvents: focusEvents,
-		bracketedPaste: bracketedPaste,
-		altScroll: altScroll,
-		cursorKeys: cursorKeys,
-		mouseTracking: tracking,
-		win32Input: win32Input,
+		focusEvents: try modeOn(vt.terminal, MODE_FOCUS_EVENT),
+		bracketedPaste: try modeOn(vt.terminal, MODE_BRACKETED_PASTE),
+		altScroll: try modeOn(vt.terminal, MODE_ALT_SCROLL),
+		cursorKeys: try modeOn(vt.terminal, MODE_DECCKM),
+		mouseTracking: try mouseTracking(vt.terminal),
+		win32Input: try modeOn(vt.terminal, MODE_WIN32_INPUT),
 	});
 }
 
 export function focusReport(this vt: Vt, gained: boolean, buf: Span<uint8>): Result<int32, VtError> {
-	const on = modeOn(vt.terminal, MODE_FOCUS_EVENT);
-	if (on === null) { return Result.err(VtError.ReadFailed); }
+	const on = try modeOn(vt.terminal, MODE_FOCUS_EVENT);
 	if (!on) { return Result.ok(0); }
 	const event = gained ? GhosttyFocusEvent.GHOSTTY_FOCUS_GAINED : GhosttyFocusEvent.GHOSTTY_FOCUS_LOST;
 	let written: uint64 = 0;
@@ -969,34 +981,33 @@ export struct MouseGeometry {
 const MOUSE_MODES: uint16[] = [9, 1000, 1002, 1003, 1005, 1006, 1015, 1016];
 
 // Which mouse modes are on, as bits: changes exactly when the encoder's options would.
-function mouseSignature(terminal: GhosttyTerminal): int32 | null {
+function mouseSignature(terminal: GhosttyTerminal): Result<int32, VtError> {
 	let signature = 0;
 	for (let i = 0; i < MOUSE_MODES.length; i++) {
-		const on = modeOn(terminal, MOUSE_MODES[i]);
-		if (on === null) { return null; }
+		const on = try modeOn(terminal, MOUSE_MODES[i]);
 		if (on) { signature |= 1 << i; }
 	}
-	let tracking = false;
-	if (!ok(terminalFlag(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, tracking))) {
-		return null;
-	}
-	return tracking ? signature | (1 << MOUSE_MODES.length) : signature;
+	const tracking = try mouseTracking(terminal);
+	return Result.ok(tracking ? signature | (1 << MOUSE_MODES.length) : signature);
 }
 
-function mouseOpen(m: Mouse): boolean {
-	if (m.encoder !== null && m.event !== null) { return true; }
+function open(this m: Mouse): Result<void, VtError> {
+	if (m.encoder !== null && m.event !== null) { return Result.ok(null); }
 	let encoder: GhosttyMouseEncoder;
 	let event: GhosttyMouseEvent;
-	if (!ok(ghostty_mouse_encoder_new(vtAllocator(), encoder))) { return false; }
+	if (!ok(ghostty_mouse_encoder_new(vtAllocator(), encoder))) {
+		return Result.err(VtError.ReadFailed);
+	}
 	if (!ok(ghostty_mouse_event_new(vtAllocator(), event))) {
 		ghostty_mouse_encoder_free(encoder);
-		return false;
+		return Result.err(VtError.ReadFailed);
 	}
 	let track = true;
-	mouseSetFlag(encoder, GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL, track);
+	const trackOption = GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL;
+	mouseSetFlag(encoder, trackOption, track);
 	m.encoder = encoder;
 	m.event = event;
-	return true;
+	return Result.ok(null);
 }
 
 function sameGeometry(a: MouseGeometry | null, b: MouseGeometry): boolean {
@@ -1013,8 +1024,8 @@ export function mouseReport(
 	buf: Span<uint8>,
 ): Result<int32, VtError> {
 	const m = vt.mouse;
-	const signature = mouseSignature(vt.terminal);
-	if (signature === null || !mouseOpen(m)) { return Result.err(VtError.ReadFailed); }
+	const signature = try mouseSignature(vt.terminal);
+	const _opened = try m.open();
 	const encoder = m.encoder;
 	const event = m.event;
 	if (encoder === null || event === null) { return Result.err(VtError.ReadFailed); }
@@ -1722,7 +1733,7 @@ export function selectedText(this vt: Vt): Result<string | null, VtError> {
 const PASTE_END = "\x1b[201~";
 
 export function pasteBytes(this vt: Vt, text: string, allowUnsafe: boolean): Result<Vec<uint8>, PasteError> {
-	const bracketed = modeOn(vt.terminal, MODE_BRACKETED_PASTE) == true;
+	const bracketed = try modeOn(vt.terminal, MODE_BRACKETED_PASTE) catch false;
 	const unsafe = bracketed ? text.includes(PASTE_END) : !pasteSafe(text.asBytes());
 	if (unsafe && !allowUnsafe) { return Result.err(PasteError.Unsafe); }
 	let data: Vec<uint8> = [];

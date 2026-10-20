@@ -1,4 +1,3 @@
-import { List } from "../../../neon/src/core/list";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
 import { KeyMod } from "../keys/keys";

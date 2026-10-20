@@ -25,7 +25,6 @@ import {
 	resets,
 	shapeOf,
 } from "../term/cursor";
-import { applyTitle, ringBell } from "./chrome";
 import { hexOf } from "./frame";
 import { Config, fontPx } from "../config/config";
 import { noticeLines } from "./notice";
@@ -211,9 +210,6 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		const f = frame.value;
 		const copied = f.copied;
 		if (copied !== null) { clipWrite(copied); }
-		const title = f.title;
-		if (title !== null) { applyTitle(title); }
-		if (f.bells > 0) { ringBell(f.bells); }
 		if (f.asked) { controls.asked(t, bridge()); }
 		if (f.held) {
 			watchHold();

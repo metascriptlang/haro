@@ -1,4 +1,3 @@
-import { List } from "../../../neon/src/core/list";
 import { frameCounts } from "../../../neon/src/platform/ion/window";
 import { exit } from "std/process";
 import { Pace } from "./pace";

@@ -34,12 +34,12 @@ function sameStyle(this a: LineRun, b: LineRun): boolean {
 
 const FAINT_OPACITY = 0.5;
 
-function over(fg: uint8, bg: uint8): uint8 {
+function fadeChannel(fg: uint8, bg: uint8): uint8 {
 	return Math.round(fg * FAINT_OPACITY + bg * (1 - FAINT_OPACITY)) as uint8;
 }
 
 function faded(fg: Rgb, bg: Rgb): Rgb {
-	return { r: over(fg.r, bg.r), g: over(fg.g, bg.g), b: over(fg.b, bg.b) };
+	return { r: fadeChannel(fg.r, bg.r), g: fadeChannel(fg.g, bg.g), b: fadeChannel(fg.b, bg.b) };
 }
 
 function lineRun(this cell: Cell): LineRun {
@@ -71,7 +71,7 @@ function pushUnits(ref runs: Vec<LineRun>, run: LineRun, units: int32, split: bo
 	runs.push({ ...run, units: units });
 }
 
-function ligatesBadly(a: uint32, b: uint32): boolean {
+function isUnligatedPair(a: uint32, b: uint32): boolean {
 	return (a == 0x66 && (b == 0x69 || b == 0x6C)) || (a == 0x73 && b == 0x74);
 }
 
@@ -80,10 +80,10 @@ function breaksShapingBefore(this row: Row, i: int32, cursorCell: int32): boolea
 	const cell = row.cells[i];
 	const prev = row.cells[i - 1];
 	if (cell.extra == 0 && (i == cursorCell || i == cursorCell + 1)) { return true; }
-	return cell.extra == 0 && prev.extra == 0 && ligatesBadly(prev.cp, cell.cp);
+	return cell.extra == 0 && prev.extra == 0 && isUnligatedPair(prev.cp, cell.cp);
 }
 
-function isScalar(cp: uint32): boolean {
+function isUnicodeScalar(cp: uint32): boolean {
 	return cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF);
 }
 
@@ -100,13 +100,13 @@ export function line(
 ): Result<GridLine, GridError> {
 	let text = "";
 	let runs: Vec<LineRun> = [];
-	let extra = 0;
+	let extraAt = 0;
 	let end = row.cells.length as int32;
 	while (end > 0 && row.cells[end - 1].isEmpty(background)) { end--; }
 	for (let i = 0; i < end; i++) {
 		const cell = row.cells[i];
 		if (row.isWideSpacer(i)) {
-			extra += cell.extra as int32;
+			extraAt += cell.extra as int32;
 			continue;
 		}
 		const run = cell.lineRun();
@@ -121,14 +121,14 @@ export function line(
 			text += blank;
 			const hidden: LineRun = { ...run, underline: Underline.None, strikethrough: false };
 			pushUnits(runs, hidden, blank.length as int32, split);
-			extra += cell.extra as int32;
+			extraAt += cell.extra as int32;
 			continue;
 		}
 		let cps: Vec<uint32> = [cell.cp];
-		for (let k = 0; k < (cell.extra as int32); k++) { cps.push(row.extra[extra + k]); }
-		extra += cell.extra as int32;
+		for (let k = 0; k < (cell.extra as int32); k++) { cps.push(row.extra[extraAt + k]); }
+		extraAt += cell.extra as int32;
 		for (let k = 0; k < (cps.length as int32); k++) {
-			if (!isScalar(cps[k])) { return Result.err(GridError.CodepointInvalid); }
+			if (!isUnicodeScalar(cps[k])) { return Result.err(GridError.CodepointInvalid); }
 			const unit = fromCodePoint(cps[k] as number);
 			text += unit;
 			pushUnits(runs, run, unit.length as int32, split && k == 0);

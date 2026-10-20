@@ -2,7 +2,8 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const NAMED = {
-	Black: "i0", Red: "i1", Green: "i2", Yellow: "i3", Blue: "i4", Magenta: "i5", Cyan: "i6", White: "i7",
+	Black: "i0", Red: "i1", Green: "i2", Yellow: "i3",
+	Blue: "i4", Magenta: "i5", Cyan: "i6", White: "i7",
 	BrightBlack: "i8", BrightRed: "i9", BrightGreen: "i10", BrightYellow: "i11",
 	BrightBlue: "i12", BrightMagenta: "i13", BrightCyan: "i14", BrightWhite: "i15",
 	DimBlack: "i0", DimRed: "i1", DimGreen: "i2", DimYellow: "i3",
@@ -22,7 +23,7 @@ function color(c) {
 }
 
 function flagsOf(flags) {
-	const has = (name) => flags.split(" | ").includes(name);
+	const has = (name) => flags.includes(name);
 	let out = "";
 	if (has("BOLD")) { out += "B"; }
 	if (has("ITALIC")) { out += "I"; }
@@ -56,10 +57,11 @@ for (const name of names) {
 		for (const cell of row) {
 			const flags = cell.flags.split(" | ");
 			if (flags.includes("WIDE_CHAR_SPACER")) { continue; }
-			const chars = [cell.c === "\t" ? " " : cell.c, ...(cell.extra ? cell.extra.zerowidth : [])].join("");
+			const zeroWidth = cell.extra ? cell.extra.zerowidth : [];
+			const chars = [cell.c === "\t" ? " " : cell.c, ...zeroWidth].join("");
 			if ([...chars].some((ch) => ch.codePointAt(0) > 0xffff)) { astral = true; }
 			text += chars;
-			const token = `${color(cell.fg)}:${color(cell.bg)}:${flagsOf(cell.flags)}`;
+			const token = `${color(cell.fg)}:${color(cell.bg)}:${flagsOf(flags)}`;
 			for (let k = 0; k < chars.length; k++) { units.push(token); }
 		}
 		rows.push(text.trimEnd());

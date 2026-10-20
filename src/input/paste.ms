@@ -42,8 +42,8 @@ const ASK_BODY = "A program is attempting to read from the clipboard. " +
 	"The current clipboard contents are shown below.";
 
 export function warningFor(text: string, bracketed: boolean): Warning {
-	if (text.indexOf(END_MARKER) >= 0) { return Warning.EndMarker; }
-	const multiLine = text.indexOf("\n") >= 0 || text.indexOf("\r") >= 0;
+	if (text.includes(END_MARKER)) { return Warning.EndMarker; }
+	const multiLine = text.includes("\n") || text.includes("\r");
 	if (!bracketed && multiLine) { return Warning.MultiLine; }
 	if (text.length > LARGE_UNITS) { return Warning.Large; }
 	return Warning.None;
@@ -109,10 +109,7 @@ function sizeOf(units: int32): string {
 }
 
 function title(warning: Warning): string {
-	return match (warning) {
-		Warning.Large => "Warning: large paste",
-		_ => "Warning: potentially unsafe paste",
-	};
+	return warning == Warning.Large ? "Warning: large paste" : "Warning: potentially unsafe paste";
 }
 
 function body(warning: Warning): string {

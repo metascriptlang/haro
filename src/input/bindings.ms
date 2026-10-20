@@ -113,10 +113,7 @@ function codeOf(name: string): string | null {
 		const n = name.slice(1).parseInt();
 		if (n >= 1 && n <= 24 && `f${n}` == name) { return `F${n}`; }
 	}
-	for (const known of KEY_NAMES) {
-		if (known == name) { return pascalCase(name); }
-	}
-	return null;
+	return KEY_NAMES.includes(name) ? pascalCase(name) : null;
 }
 
 export function keybind(
@@ -125,13 +122,13 @@ export function keybind(
 	action: BindAction,
 	screen: Screen,
 ): Result<Keybind, string> {
-	let mods = 0;
+	let mods: int32 = 0;
 	let code: string | null = null;
 	for (const part of keys.split("+")) {
 		const mod = modOf(part);
 		if (mod != 0) {
 			if ((mods & mod) != 0) { return Result.err(`"${keys}" names ${part} twice`); }
-			mods = mods | mod;
+			mods |= mod;
 			continue;
 		}
 		if (code !== null) { return Result.err(`"${keys}" names more than one key`); }

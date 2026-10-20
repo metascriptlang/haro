@@ -18,6 +18,7 @@ struct Slot { spans: TextSpan[]; }
 
 const COLS: int32 = 105;
 const ROWS: int32 = 30;
+const FRAMES: int32 = 60;
 const plain: Style = { color: "#cccccc" };
 const keyword: Style = { color: "#c678dd", fontWeight: "normal" };
 
@@ -55,11 +56,10 @@ test "time a full-screen repaint through Neon and void2d" {
 	vh.scene.paintScene(948.0, 588.0, 1.0);
 	frameEnd();
 	vh.scene.clearChanges();
-	const frames: int32 = 60;
 	let setMs = 0.0;
 	let layoutMs = 0.0;
 	let paintMs = 0.0;
-	for (let f = 1; f <= frames; f++) {
+	for (let f = 1; f <= FRAMES; f++) {
 		const setStart = performance.now();
 		for (let y = 0; y < ROWS; y++) { items.set(y, slot(f, y)); }
 		const layoutStart = performance.now();
@@ -74,7 +74,7 @@ test "time a full-screen repaint through Neon and void2d" {
 		paintMs += paintEnd - paintStart;
 	}
 	console.log(
-		`per full repaint of ${ROWS}x${COLS}: set ${(setMs / frames)} ms, ` +
-		`layout ${(layoutMs / frames)} ms, paint ${(paintMs / frames)} ms`,
+		`per full repaint of ${ROWS}x${COLS}: set ${setMs / FRAMES} ms, ` +
+		`layout ${layoutMs / FRAMES} ms, paint ${paintMs / FRAMES} ms`,
 	);
 }

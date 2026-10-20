@@ -193,7 +193,7 @@ function pad(text: string, width: int32): string {
 function describe(w: Workload, stage: Stage, m: Measured): string {
 	const t = m.median;
 	const ms = t.totalMs();
-	const bytes = (w.payload.length as float64);
+	const bytes = w.payload.length as float64;
 	const mibPerSecond = bytes / MIB / (ms / 1000.0);
 	const frameMs = ms - t.write;
 	const nsPerRow = t.rows > 0 && stage != Stage.Write

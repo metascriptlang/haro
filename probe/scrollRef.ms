@@ -138,7 +138,9 @@ function frame(name: string, rig: Rig, expected: string): void {
 	let c: GhosttyPointCoordinate = { x: 0, y: 0 };
 	const has = ghostty_tracked_grid_ref_has_value(rig.ref);
 	const screenResult = ghostty_tracked_grid_ref_point(rig.ref, SCREEN, c);
-	const measured = (screenResult as int32) == 0 ? `${(sb.offset as int64) - (c.y as int64)}` : "LOST";
+	const measured = (screenResult as int32) == 0
+		? `${(sb.offset as int64) - (c.y as int64)}`
+		: "LOST";
 	console.log(
 		`${name}: expected N=${expected} measured N=${measured} | has_value=${has} ` +
 		`refPoint viewport=${pointAt(rig.ref, VIEWPORT)} active=${pointAt(rig.ref, ACTIVE)} ` +

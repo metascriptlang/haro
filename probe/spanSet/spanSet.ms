@@ -4,7 +4,7 @@ import { Text } from "../../../neon/src/components/primitives";
 import { createSignal } from "../../../neon/src/core/signal";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style } from "../../../neon/src/render/style";
-import { createVoidHostWith, VoidHost, VoidNode } from "../../../neon/src/platform/void/host";
+import { createVoidHostWith, VoidNode } from "../../../neon/src/platform/void/host";
 import { Scene2D } from "../../../void/src/void2d/node";
 import { create } from "../../../void/src/void2d/scene";
 import { rgba } from "../../../void/src/void2d/types";

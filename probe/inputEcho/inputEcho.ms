@@ -1,4 +1,3 @@
-import { argv } from "std/process";
 import { NativePty } from "../../src/pty/pty";
 
 const script = "probe/inputEcho/keys.ps1";

@@ -3,11 +3,15 @@ import { exit } from "std/process";
 import { Pace } from "./pace";
 import { Term, shutdown, sendText } from "./components/features/terminal/term";
 
+function rowText(t: Term, row: int32): string {
+	return t.grid.at(row).line.text.trimEnd();
+}
+
 function dump(t: Term, label: string): void {
 	console.log(`smoke: ${label}`);
 	const n = t.grid.length() as int32;
 	for (let i = 0; i < n; i++) {
-		const text = t.grid.at(i).line.text.trimEnd();
+		const text = rowText(t, i);
 		if (text != "") { console.log(`smoke: row ${i}: ${text}`); }
 	}
 }
@@ -49,7 +53,7 @@ export function smoke(t: Term): void {
 function shows(t: Term, text: string): boolean {
 	const n = t.grid.length() as int32;
 	for (let i = 0; i < n; i++) {
-		if (t.grid.at(i).line.text.trimEnd() == text) { return true; }
+		if (rowText(t, i) == text) { return true; }
 	}
 	return false;
 }

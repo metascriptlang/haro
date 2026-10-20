@@ -15,7 +15,7 @@ import {
 	PasteError,
 	Palette,
 } from "../../../../vt/vt";
-import { FrameError, RowSlot, applyFrame } from "../../../frame";
+import { FrameError, RowSlot, applyFrame, blank } from "../../../frame";
 import { stats, mark } from "../../../stats";
 
 const BUFFER_BYTES = 65536;
@@ -107,13 +107,9 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 	});
 }
 
-function blankSlot(): RowSlot {
-	return { line: { text: "", runs: [], cursorCell: -1 }, spans: [] };
-}
-
 function resizeGrid(this t: Term, rows: int32): void {
 	const have = t.grid.length() as int32;
-	for (let i = have; i < rows; i++) { t.grid.push(blankSlot()); }
+	for (let i = have; i < rows; i++) { t.grid.push(RowSlot.blank()); }
 	for (let i = have; i > rows; i--) { t.grid.remove(i - 1); }
 }
 
@@ -214,6 +210,12 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	});
 }
 
+function sendBuffered(this t: Term, s: Session, n: int32): Result<int32, TermError> {
+	if (n == 0) { return Result.ok(0); }
+	if (!s.send(t.buf[0..n]).ok) { return Result.err(TermError.WriteFailed); }
+	return Result.ok(n);
+}
+
 export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(0); }
@@ -227,9 +229,7 @@ export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
 	};
 	const encoded = t.keys.encode(s.vt, key.withoutAltGr(), t.buf);
 	if (!encoded.ok) { return Result.err(TermError.EncodeFailed); }
-	if (encoded.value == 0) { return Result.ok(0); }
-	if (!s.send(t.buf[0..encoded.value]).ok) { return Result.err(TermError.WriteFailed); }
-	return Result.ok(encoded.value);
+	return t.sendBuffered(s, encoded.value);
 }
 
 export function sendText(this t: Term, text: string): Result<int32, TermError> {
@@ -240,8 +240,7 @@ export function sendText(this t: Term, text: string): Result<int32, TermError> {
 	if (n == 0) { return Result.ok(0); }
 	const bytes: Readonly<Span<char>> = text;
 	for (let i = 0; i < n; i++) { t.buf[i] = bytes[i] as uint8; }
-	if (!s.send(t.buf[0..n]).ok) { return Result.err(TermError.WriteFailed); }
-	return Result.ok(n);
+	return t.sendBuffered(s, n);
 }
 
 export function sendPaste(
@@ -269,9 +268,7 @@ export function sendFocus(this t: Term, gained: boolean): Result<int32, TermErro
 	if (s === null) { return Result.ok(0); }
 	const n = s.vt.focusReport(gained, t.buf);
 	if (!n.ok) { return Result.err(TermError.FocusFailed); }
-	if (n.value == 0) { return Result.ok(0); }
-	if (!s.send(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
-	return Result.ok(n.value);
+	return t.sendBuffered(s, n.value);
 }
 
 export function sendMouse(
@@ -284,9 +281,7 @@ export function sendMouse(
 	if (s === null) { return Result.ok(0); }
 	const n = s.vt.mouseReport(e, g, anyPressed, t.buf);
 	if (!n.ok) { return Result.err(TermError.MouseFailed); }
-	if (n.value == 0) { return Result.ok(0); }
-	if (!s.send(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
-	return Result.ok(n.value);
+	return t.sendBuffered(s, n.value);
 }
 
 export function sendReplies(this t: Term): Result<int32, TermError> {

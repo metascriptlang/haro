@@ -11,6 +11,10 @@ export struct RowSlot {
 	spans: TextSpan[];
 }
 
+export function blank(this typeof RowSlot): RowSlot {
+	return { line: { text: "", runs: [], cursorCell: -1 }, spans: [] };
+}
+
 export enum FrameError {
 	PlanFailed,
 	CursorFailed,
@@ -196,8 +200,7 @@ test "a cursor that moves along its row rebuilds that row, so a ligature under i
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		const blank: RowSlot = { line: { text: "", runs: [], cursorCell: -1 }, spans: [] };
-		const grid = createList<RowSlot>([blank, blank]);
+		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank()]);
 		const styles = new Map<string, Style>();
 		vt.writeText("a->b");
 		assert applyFrame(grid, styles, vt).ok;

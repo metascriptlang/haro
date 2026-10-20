@@ -277,7 +277,7 @@ function sentAfterExit(running: boolean): string {
 	if (!started.ok) { return "start failed"; }
 	const s = started.value;
 	let bytes: Vec<uint8> = [0x61];
-	const sent = s.send(bytes[0..1]);
+	const sent = s.send(bytes);
 	const resized = s.resize(12, 4);
 	s.close();
 	const sentText = sent.ok ? `sent ${sent.value}` : "send failed";

@@ -235,9 +235,9 @@ test "a write to a child that does not read its input returns at once" {
 	if (opened.ok) {
 		const p = opened.value;
 		let chunk: Vec<uint8> = new Array(1048576);
-		for (let i = 0; i < chunk.length; i++) { chunk[i] = 97 + (i % 26) as uint8; }
+		for (let i = 0; i < chunk.length; i++) { chunk[i] = "a".code + (i % 26) as uint8; }
 		const start: float64 = performance.now();
-		for (let i = 0; i < 4; i++) { assert p.write(chunk[0..chunk.length]).ok; }
+		for (let i = 0; i < 4; i++) { assert p.write(chunk).ok; }
 		assert performance.now() - start < 200;
 		p.close();
 	}
@@ -249,7 +249,7 @@ test "a line written to the child reaches it" {
 	if (opened.ok) {
 		const p = opened.value;
 		let line: Vec<uint8> = [0x68, 0x69, 0x0D];
-		assert p.write(line[0..line.length]).ok;
+		assert p.write(line).ok;
 		assert p.toPty().drainText(4096).includes("[hi]");
 		p.close();
 	}
@@ -276,16 +276,16 @@ function feed(this before: LineCheck, bytes: Readonly<Span<uint8>>): LineCheck {
 	c.byteCount += bytes.length;
 	for (const b of bytes) {
 		if (c.inEscape) {
-			c.inEscape = b < 0x40 || b > 0x7E || b == 0x5B;
+			c.inEscape = b < "@".code || b > "~".code || b == "[".code;
 		} else if (b == 0x1B) {
 			c.inEscape = true;
-		} else if (b == 0x4C) {
+		} else if (b == "L".code) {
 			c.inNumber = true;
 			c.digits = "";
-		} else if (c.inNumber && b >= 0x30 && b <= 0x39) {
+		} else if (c.inNumber && b >= "0".code && b <= "9".code) {
 			c.digits += String.fromCharCode(b as int32);
 		} else if (c.inNumber) {
-			if (b == 0x2E && c.digits == `${c.linesInOrder}`) { c.linesInOrder++; }
+			if (b == ".".code && c.digits == `${c.linesInOrder}`) { c.linesInOrder++; }
 			c.inNumber = false;
 		}
 	}

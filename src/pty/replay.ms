@@ -69,7 +69,7 @@ test "a replay is ready until its last byte, then ends like a child that exited"
 test "a replay accepts writes and resizes and changes nothing" {
 	const pty = Replay.ofText("xyz").toPty();
 	let buf: Vec<uint8> = new Array(8);
-	buf[0] = 113;
+	buf[0] = "q".code as uint8;
 	const wrote = pty.write(buf[0..1]);
 	assert wrote.ok;
 	if (wrote.ok) { assert wrote.value == 1; }

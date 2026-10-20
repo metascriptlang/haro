@@ -10,7 +10,7 @@ when (linux) {
 
 import { remove, writeFile } from "std/fs";
 import { tmpDir } from "std/os";
-import { Pty, PtyError } from "./transport";
+import { Pty, PtyError, drainText } from "./transport";
 
 extern function ptyOpen(commandLine: cstring, cwd: cstring, cols: int32, rows: int32): int32;
 extern function ptyRead(id: int32, buf: Span<uint8>): int64;
@@ -115,10 +115,6 @@ when (windows) {
 	const ECHO_LINE_READ = "sh -c 'read line; echo \"[$line]\"'";
 	function printFile(path: string): string { return `cat "${path}"`; }
 	const PRINT_DIRECTORY = "sh -c 'echo \"[$PWD]\"'";
-}
-
-when (testBuild) {
-	import { drainText } from "./transport";
 }
 
 function quietWaitMs(this p: NativePty, timeoutMs: int32): Result<float64, PtyError> {

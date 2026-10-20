@@ -1,4 +1,4 @@
-import { Pty, PtyError } from "./transport";
+import { Pty, PtyError, drainText } from "./transport";
 
 export struct Replay { bytes: Vec<uint8>; }
 
@@ -37,10 +37,6 @@ export function toPty(this r: Replay): Pty {
 		close: (): void => { closed = true; },
 		ownsScreen: false,
 	};
-}
-
-when (testBuild) {
-	import { drainText } from "./transport";
 }
 
 test "a replay hands back its bytes in order, whatever the read size" {

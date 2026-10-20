@@ -14,14 +14,7 @@ export struct Plan {
 }
 
 function sameContent(this a: Row, b: Row): boolean {
-	if (a.cells.length != b.cells.length || a.extra.length != b.extra.length) { return false; }
-	for (let i = 0; i < (a.cells.length as int32); i++) {
-		if (a.cells[i] != b.cells[i]) { return false; }
-	}
-	for (let i = 0; i < (a.extra.length as int32); i++) {
-		if (a.extra[i] != b.extra[i]) { return false; }
-	}
-	return true;
+	return a.cells == b.cells && a.extra == b.extra;
 }
 
 function scrolledRows(this vt: Vt): Result<int32 | null, VtError> {

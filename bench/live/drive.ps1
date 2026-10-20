@@ -17,7 +17,7 @@ param(
 	[int]$GapMs = 40,
 	[int]$MaxCpu = 60,
 	[string]$LoadFile = "",
-	[string[]]$Unset = @('NO_COLOR'),
+	[string[]]$Unset = @('NO_COLOR', 'HERDR_ENV', 'HERDR_PANE_ID', 'HERDR_SOCKET'),
 	[string]$Inner = "",
 	[string]$Out = ""
 )

@@ -137,7 +137,7 @@ function facesIn(listing: string, family: string, fontsDir: string): Result<Face
 	return facesAmong(registryFiles(listing, fontsDir), family);
 }
 
-function collectionPath(faces: Faces): string | null {
+function collectionPath(this faces: Faces): string | null {
 	for (const path of [faces.regular, faces.bold, faces.italic, faces.boldItalic]) {
 		if (path === null) { continue; }
 		const lower = path.toLowerCase();
@@ -156,7 +156,7 @@ export function installedFaces(family: string): Result<Faces, string> {
 		return facesIn(listing, family, `${env.get("WINDIR")}/Fonts`);
 	} else when (macos) {
 		const faces = try facesAmong(familyFiles(family), family);
-		const collection = collectionPath(faces);
+		const collection = faces.collectionPath();
 		if (collection !== null) {
 			return Result.err(
 				`font family "${family}" is in the collection ${collection}, ` +
@@ -216,7 +216,7 @@ test "a face inside a font collection is found, so the lookup can refuse it by p
 		"Menlo",
 	);
 	assert f.ok;
-	assert collectionPath(f.value) == "/System/Library/Fonts/Menlo.ttc";
+	assert f.value.collectionPath() == "/System/Library/Fonts/Menlo.ttc";
 }
 
 when (macos) {

@@ -96,10 +96,14 @@ function ranToExit(this s: Session, timeoutMs: int32, chunk: int32 = 4096): bool
 	}
 }
 
-function replaySession(recording: string, cols: int32, rows: int32): Session | null {
-	const started = Session.start(Replay.ofText(recording).toPty(), cols, rows);
+function startedOrNull(pty: Pty, cols: int32, rows: int32): Session | null {
+	const started = Session.start(pty, cols, rows);
 	if (!started.ok) { return null; }
 	return started.value;
+}
+
+function replaySession(recording: string, cols: int32, rows: int32): Session | null {
+	return startedOrNull(Replay.ofText(recording).toPty(), cols, rows);
 }
 
 test "a replayed recording ends in the rows the recorded program drew" {
@@ -200,9 +204,7 @@ when (testBuild) {
 	function nativePtySession(commandLine: string, cols: int32, rows: int32): Session | null {
 		const pty = NativePty.spawn(commandLine, cols, rows);
 		if (!pty.ok) { return null; }
-		const started = Session.start(pty.value, cols, rows);
-		if (!started.ok) { return null; }
-		return started.value;
+		return startedOrNull(pty.value, cols, rows);
 	}
 
 	test "a real command's output, run through the native pty, lands on the VT screen" {

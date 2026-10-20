@@ -2,9 +2,8 @@
 
 A terminal emulator written in MetaScript, named after the robot that rides beside the pilot in
 Gundam 00. It was called Terminator until 2026-10-15; a Linux terminal emulator already owns that
-name. It gets its VT from **libghostty-vt**, draws its pixels
-with **void2d**, and runs in an **Ion** window, on Windows, macOS and Linux with the same pixels
-everywhere.
+name. It gets its VT from **libghostty-vt**, draws its pixels with **void2d**, and runs in an
+**Ion** window, on Windows, macOS and Linux with the same pixels everywhere.
 
 It is a **Neon app whose only child is one `<Void>` filling the window**, the shape
 Neon's `docs/VISION.md` gives a game: Ion → Neon → Void. The chrome (tabs, splits,

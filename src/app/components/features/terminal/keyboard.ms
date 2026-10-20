@@ -1,4 +1,5 @@
 import { NeonEvent } from "../../../../../../neon/src/render/event";
+import { KeyMod } from "../../../../keys/keys";
 import { Action, BindAction, Keybind, bindFor, resolve } from "../../../../input/bindings";
 import { ROWS_PER_NOTCH } from "../../../../input/wheel";
 import {
@@ -13,7 +14,7 @@ import { Term } from "./term";
 import { Bridge, ControlError, Controls, holding, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";
 
-const SUPER: int32 = 8;
+const SUPER_ONLY: BitSet<KeyMod> = (0 as BitSet<KeyMod>).incl(KeyMod.Super);
 const KEYBOARD_ROWS: int32 = ROWS_PER_NOTCH as int32;
 
 function runKeybind(
@@ -37,7 +38,7 @@ export function closeKey(this c: Controls, t: Term, host: Bridge): Result<boolea
 	if (vt !== null) {
 		const alt = vt.alternateScreen();
 		if (!alt.ok) { return Result.err(ControlError.VtFailed); }
-		const bind = bindFor(c.keybinds, "KeyW", SUPER, alt.value);
+		const bind = bindFor(c.keybinds, "KeyW", SUPER_ONLY as uint16, alt.value);
 		if (try c.runKeybind(t, bind, host)) { return Result.ok(true); }
 	}
 	host.close();

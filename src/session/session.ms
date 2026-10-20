@@ -85,18 +85,14 @@ export function close(this s: Session): void {
 	s.vt.free();
 }
 
-function runToExit(
-	this s: Session,
-	timeoutMs: int32,
-	chunk: int32 = 4096,
-): Result<boolean, SessionError> {
+function ranToExit(this s: Session, timeoutMs: int32, chunk: int32 = 4096): boolean {
 	let buf: Vec<uint8> = new Array(chunk);
 	while (true) {
 		const ready = s.pty.wait(timeoutMs);
-		if (!ready.ok) { return Result.err(SessionError.PtyReadFailed); }
-		if (!ready.value) { return Result.ok(false); }
-		const alive = try s.pump(buf);
-		if (!alive) { return Result.ok(true); }
+		if (!ready.ok || !ready.value) { return false; }
+		const alive = s.pump(buf);
+		if (!alive.ok) { return false; }
+		if (!alive.value) { return true; }
 	}
 }
 
@@ -110,9 +106,7 @@ test "a replayed recording ends in the rows the recorded program drew" {
 	const s = replaySession("one\r\ntwo\r\n\x1b[1;31mred\x1b[0m done", 20, 4);
 	assert s !== null;
 	if (s !== null) {
-		const ended = s.runToExit(1000);
-		assert ended.ok;
-		if (ended.ok) { assert ended.value; }
+		assert s.ranToExit(1000);
 		const screen = s.screen();
 		assert screen.ok;
 		if (screen.ok) { assert screen.value.join("\n") == "one\ntwo\nred done\n"; }
@@ -128,8 +122,8 @@ test "a recording cut into one-byte reads draws the rows a single read does" {
 	const bytes = replaySession(recording, 20, 4);
 	assert whole !== null && bytes !== null;
 	if (whole !== null && bytes !== null) {
-		assert whole.runToExit(1000).ok;
-		assert bytes.runToExit(1000, 1).ok;
+		assert whole.ranToExit(1000);
+		assert bytes.ranToExit(1000, 1);
 		const a = whole.screen();
 		const b = bytes.screen();
 		assert a.ok && b.ok;
@@ -146,9 +140,7 @@ test "a replay drops the answer to a terminal query and the screen carries on" {
 	const s = replaySession("\x1b[>qafter", 20, 4);
 	assert s !== null;
 	if (s !== null) {
-		const ended = s.runToExit(1000);
-		assert ended.ok;
-		if (ended.ok) { assert ended.value; }
+		assert s.ranToExit(1000);
 		const screen = s.screen();
 		assert screen.ok;
 		if (screen.ok) { assert screen.value[0] == "after"; }
@@ -169,9 +161,7 @@ when (testBuild) {
 			const s = replaySession(recording.value, 105, 30);
 			assert s !== null;
 			if (s !== null) {
-				const ended = s.runToExit(1000);
-				assert ended.ok;
-				if (ended.ok) { assert ended.value; }
+				assert s.ranToExit(1000);
 				const screen = s.screen();
 				assert screen.ok;
 				if (screen.ok) {
@@ -219,9 +209,7 @@ when (testBuild) {
 		const s = nativePtySession(ECHO_HELLO, 40, 5);
 		assert s !== null;
 		if (s !== null) {
-			const ended = s.runToExit(10000);
-			assert ended.ok;
-			if (ended.ok) { assert ended.value; }
+			assert s.ranToExit(10000);
 			const screen = s.screen();
 			assert screen.ok;
 			if (screen.ok) {
@@ -235,9 +223,7 @@ when (testBuild) {
 		const s = nativePtySession(ASK_XTVERSION, 60, 5);
 		assert s !== null;
 		if (s !== null) {
-			const ended = s.runToExit(10000);
-			assert ended.ok;
-			if (ended.ok) { assert ended.value; }
+			assert s.ranToExit(10000);
 			const screen = s.screen();
 			assert screen.ok;
 			if (screen.ok) {
@@ -256,9 +242,7 @@ when (testBuild) {
 			assert ready.ok;
 			const resized = s.resize(100, 30);
 			assert resized.ok;
-			const ended = s.runToExit(15000);
-			assert ended.ok;
-			if (ended.ok) { assert ended.value; }
+			assert s.ranToExit(15000);
 			const screen = s.screen();
 			assert screen.ok;
 			if (screen.ok) {
@@ -311,8 +295,7 @@ function rowsAfterGrowing(ownsScreen: boolean): string {
 	const started = Session.start(pty, 10, 3);
 	if (!started.ok) { return "start failed"; }
 	const s = started.value;
-	const ended = s.runToExit(1000);
-	if (!ended.ok) { return "pump failed"; }
+	if (!s.ranToExit(1000)) { return "pump failed"; }
 	if (!s.resize(10, 5).ok) { return "resize failed"; }
 	const screen = s.screen();
 	s.close();

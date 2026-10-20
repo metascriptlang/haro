@@ -25,8 +25,8 @@ if (opened.ok) {
 		const r = p.read(buf);
 		if (!r.ok) { break; }
 		if (!replied && shown.includes("[?u")) {
-			let reply: Vec<uint8> = [27, 91, 63, 48, 117];
-			p.write(reply);
+			let keyboardFlagsZero: Vec<uint8> = [27, 91, 63, 48, 117];
+			p.write(keyboardFlagsZero);
 			replied = true;
 			shown += `\n[${Math.round(performance.now())}ms REPLIED] `;
 		}

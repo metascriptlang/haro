@@ -204,11 +204,11 @@ function ghosttyAscii(bytes: int32): Vec<uint8> {
 }
 
 struct TextMix {
-	styleRate: int32;
-	graphemeRate: int32;
-	weightOne: int32;
-	weightTwo: int32;
-	weightThree: int32;
+	stylePerMille: int32;
+	graphemePerMille: int32;
+	oneByteWeight: int32;
+	twoByteWeight: int32;
+	threeByteWeight: int32;
 }
 
 const SGR_ATTRIBUTES: int32[] = [1, 3, 4, 7, 9];
@@ -239,19 +239,21 @@ function putSgr(ref out: Vec<uint8>, ref rng: Rng): void {
 }
 
 function mixCodepoint(ref rng: Rng, mix: TextMix): int32 {
-	const total = mix.weightOne + mix.weightTwo + mix.weightThree;
+	const total = mix.oneByteWeight + mix.twoByteWeight + mix.threeByteWeight;
 	const pick = nextBelow(rng, total);
-	if (pick < mix.weightOne) {
+	if (pick < mix.oneByteWeight) {
 		return nextBelow(rng, 100) < 15 ? 0x20 : 0x21 + nextBelow(rng, 0x5E);
 	}
-	if (pick < mix.weightOne + mix.weightTwo) { return 0xC0 + nextBelow(rng, 0x24F - 0xC0 + 1); }
+	if (pick < mix.oneByteWeight + mix.twoByteWeight) {
+		return 0xC0 + nextBelow(rng, 0x24F - 0xC0 + 1);
+	}
 	if (nextBelow(rng, 2) == 0) { return 0x3041 + nextBelow(rng, 0x30FE - 0x3041 + 1); }
 	return 0x4E00 + nextBelow(rng, 0x9FFF - 0x4E00 + 1);
 }
 
 function putMixChar(ref out: Vec<uint8>, ref rng: Rng, mix: TextMix): void {
 	putCodepoint(out, mixCodepoint(rng, mix));
-	if (mix.graphemeRate > 0 && nextBelow(rng, 1000) < mix.graphemeRate) {
+	if (mix.graphemePerMille > 0 && nextBelow(rng, 1000) < mix.graphemePerMille) {
 		putCodepoint(out, 0x300 + nextBelow(rng, 0x70));
 	}
 }
@@ -263,7 +265,7 @@ function ghosttyStyled(bytes: int32, mix: TextMix): Vec<uint8> {
 		let remaining = 40 + nextBelow(rng, 41);
 		let styled = false;
 		while (remaining > 0) {
-			if (mix.styleRate > 0 && nextBelow(rng, 1000) < mix.styleRate) {
+			if (mix.stylePerMille > 0 && nextBelow(rng, 1000) < mix.stylePerMille) {
 				putSgr(out, rng);
 				styled = true;
 			}
@@ -336,10 +338,18 @@ export function buildWorkload(name: string): Result<Workload, WorkloadError> {
 		)),
 		"ghosttyAscii" => Result.ok(ghosttyStream(name, ghosttyAscii(GHOSTTY_BYTES))),
 		"ghosttyStyled" => Result.ok(ghosttyStream(name, ghosttyStyled(GHOSTTY_BYTES, {
-			styleRate: 800, graphemeRate: 0, weightOne: 1, weightTwo: 0, weightThree: 0,
+			stylePerMille: 800,
+			graphemePerMille: 0,
+			oneByteWeight: 1,
+			twoByteWeight: 0,
+			threeByteWeight: 0,
 		}))),
 		"ghosttyWideMix" => Result.ok(ghosttyStream(name, ghosttyStyled(GHOSTTY_BYTES, {
-			styleRate: 0, graphemeRate: 100, weightOne: 0, weightTwo: 1, weightThree: 2,
+			stylePerMille: 0,
+			graphemePerMille: 100,
+			oneByteWeight: 0,
+			twoByteWeight: 1,
+			threeByteWeight: 2,
 		}))),
 		_ => Result.err(WorkloadError.Unknown),
 	};
@@ -380,7 +390,11 @@ test "the unicode payload holds the vtebench symbols, its emoji and two line end
 
 test "the generated text is the same for every call and ends every line in CR LF" {
 	const mix: TextMix = {
-		styleRate: 800, graphemeRate: 100, weightOne: 1, weightTwo: 1, weightThree: 1,
+		stylePerMille: 800,
+		graphemePerMille: 100,
+		oneByteWeight: 1,
+		twoByteWeight: 1,
+		threeByteWeight: 1,
 	};
 	const a = ghosttyStyled(4096, mix);
 	const b = ghosttyStyled(4096, mix);

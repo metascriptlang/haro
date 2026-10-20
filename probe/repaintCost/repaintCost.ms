@@ -60,18 +60,18 @@ test "time a full-screen repaint through Neon and void2d" {
 	let layoutMs = 0.0;
 	let paintMs = 0.0;
 	for (let f = 1; f <= frames; f++) {
-		const a = performance.now();
+		const setStart = performance.now();
 		for (let y = 0; y < ROWS; y++) { items.set(y, slot(f, y)); }
-		const b = performance.now();
+		const layoutStart = performance.now();
 		vh.layout(948.0, 588.0);
-		const c = performance.now();
+		const paintStart = performance.now();
 		vh.scene.paintScene(948.0, 588.0, 1.0);
 		frameEnd();
 		vh.scene.clearChanges();
-		const d = performance.now();
-		setMs += b - a;
-		layoutMs += c - b;
-		paintMs += d - c;
+		const paintEnd = performance.now();
+		setMs += layoutStart - setStart;
+		layoutMs += paintStart - layoutStart;
+		paintMs += paintEnd - paintStart;
 	}
 	console.log(
 		`per full repaint of ${ROWS}x${COLS}: set ${(setMs / frames)} ms, ` +

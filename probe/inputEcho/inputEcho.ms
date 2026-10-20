@@ -16,8 +16,8 @@ if (opened.ok) {
 			out += b < 32 ? "" : String.fromCharCode(b);
 		}
 		if (!sent && i == 8) {
-			let reply: Vec<uint8> = [27, 91, 63, 48, 117];
-			p.write(reply);
+			let keyboardFlagsZero: Vec<uint8> = [27, 91, 63, 48, 117];
+			p.write(keyboardFlagsZero);
 			sent = true;
 		}
 	}

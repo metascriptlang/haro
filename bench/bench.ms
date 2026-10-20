@@ -86,30 +86,30 @@ function blankSlots(rows: int32): RowSlot[] {
 function framePass(
 	vt: Vt, stage: Stage, styles: Map<string, Style>, ref totals: Totals,
 ): Result<void, BenchError> {
-	const t0: float64 = performance.now();
+	const planStart: float64 = performance.now();
 	const planned = vt.plan();
 	if (!planned.ok) { return Result.err(BenchError.Plan); }
-	const at = vt.cursor();
-	if (!at.ok) { return Result.err(BenchError.Cursor); }
+	const cursorRead = vt.cursor();
+	if (!cursorRead.ok) { return Result.err(BenchError.Cursor); }
 	const colors = vt.palette();
 	if (!colors.ok) { return Result.err(BenchError.Palette); }
-	const t1: float64 = performance.now();
-	const cursor: Cursor | null = at.value;
+	const linesStart: float64 = performance.now();
+	const cursor: Cursor | null = cursorRead.value;
 	let built: Vec<GridLine> = [];
 	for (const row of planned.value.rows) {
 		const cursorCell = cursor !== null && cursor.y == row.y ? cursor.x : -1;
 		const l = row.line(cursorCell, colors.value.bg);
 		if (l.ok) { built.push(l.value); } else { totals.lineErrors += 1; }
 	}
-	const t2: float64 = performance.now();
+	const spansStart: float64 = performance.now();
 	let spanCount = 0;
 	if (stage == Stage.Spans) {
 		for (const l of built) { spanCount += spansOf(styles, l, colors.value.bg).length as int32; }
 	}
-	const t3: float64 = performance.now();
-	totals.plan += t1 - t0;
-	totals.lines += t2 - t1;
-	totals.spans += t3 - t2;
+	const spansEnd: float64 = performance.now();
+	totals.plan += linesStart - planStart;
+	totals.lines += spansStart - linesStart;
+	totals.spans += spansEnd - spansStart;
 	totals.rows += planned.value.rows.length as int32;
 	totals.spanCount += spanCount;
 	return Result.ok(null);
@@ -135,20 +135,22 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 		const toFrame = paced ? size - at : cadence.frameBytes - sinceFrame;
 		const room = Math.min(toFrame, size - at);
 		const n = Math.min(CHUNK_BYTES, room);
-		const w0: float64 = performance.now();
+		const writeStart: float64 = performance.now();
 		vt.write(payload[at..at + n]);
-		const w1: float64 = performance.now();
-		totals.write += w1 - w0;
+		const writeEnd: float64 = performance.now();
+		totals.write += writeEnd - writeStart;
 		at += n;
 		sinceFrame += n;
-		const due = paced ? w1 - lastFrame >= cadence.gapMs : sinceFrame >= cadence.frameBytes;
+		const due = paced
+			? writeEnd - lastFrame >= cadence.gapMs
+			: sinceFrame >= cadence.frameBytes;
 		if (!(due || at == size)) { continue; }
 		sinceFrame = 0;
 		if (stage == Stage.Write) { continue; }
 		totals.frames += 1;
 		if (stage == Stage.Apply) {
 			const applied = applyFrame(grid, styles, vt);
-			totals.apply += performance.now() - w1;
+			totals.apply += performance.now() - writeEnd;
 			if (!applied.ok) { totals.lineErrors += 1; }
 		} else {
 			const _framed = try framePass(vt, stage, styles, totals);

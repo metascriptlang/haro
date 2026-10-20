@@ -30,7 +30,11 @@ const ALT_GR: BitSet<KeyMod> = KeyMod.Ctrl | KeyMod.Alt | KeyMod.CtrlRight | Key
 
 export function withoutAltGr(this e: KeyEvent): KeyEvent {
 	if (!e.consumedMods.has(KeyMod.Ctrl) || !e.consumedMods.has(KeyMod.Alt)) { return e; }
-	return { ...e, mods: e.mods.difference(ALT_GR), consumedMods: e.consumedMods.difference(ALT_GR) };
+	return {
+		...e,
+		mods: e.mods.difference(ALT_GR),
+		consumedMods: e.consumedMods.difference(ALT_GR),
+	};
 }
 
 export function modsMask(mods: BitSet<KeyMod>): uint16 {
@@ -77,8 +81,12 @@ test "Ctrl+Alt the layout consumed for AltGr text is dropped, and a plain Ctrl+A
 	const none = 0 as BitSet<KeyMod>;
 	const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt).incl(KeyMod.AltRight);
 	const altGr: KeyEvent = {
-		action: KeyAction.Press, key: "KeyQ", mods: ctrlAlt.incl(KeyMod.Shift), consumedMods: ctrlAlt,
-		unshifted: 0x71, text: "@",
+		action: KeyAction.Press,
+		key: "KeyQ",
+		mods: ctrlAlt.incl(KeyMod.Shift),
+		consumedMods: ctrlAlt,
+		unshifted: 0x71,
+		text: "@",
 	};
 	const typed = altGr.withoutAltGr();
 	assert typed.mods == none.incl(KeyMod.Shift);

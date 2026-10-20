@@ -38,29 +38,34 @@ export interface Held {
 const LARGE_UNITS: int32 = 5 * 1024;
 const END_MARKER = "\x1b[201~";
 const TAB = "    ";
-const ASK_BODY = "A program is attempting to read from the clipboard. The current clipboard contents are shown below.";
+const ASK_BODY = "A program is attempting to read from the clipboard. " +
+	"The current clipboard contents are shown below.";
 
 export function warningFor(text: string, bracketed: boolean): Warning {
 	if (text.indexOf(END_MARKER) >= 0) { return Warning.EndMarker; }
-	if (!bracketed && (text.indexOf("\n") >= 0 || text.indexOf("\r") >= 0)) { return Warning.MultiLine; }
+	const multiLine = text.indexOf("\n") >= 0 || text.indexOf("\r") >= 0;
+	if (!bracketed && multiLine) { return Warning.MultiLine; }
 	if (text.length > LARGE_UNITS) { return Warning.Large; }
 	return Warning.None;
 }
 
 export function replyTo(code: string, mods: number): Reply {
 	const held = chordOf(mods);
-	if (code == "Escape" && held == 0) { return Reply.Cancel; }
-	if ((code == "Enter" || code == "NumpadEnter") && held == 0) { return Reply.Confirm; }
-	if (resolve(code, mods, false) == Action.Paste) { return Reply.Confirm; }
-	return Reply.Ignore;
+	return match (code) {
+		"Escape" when held == 0 => Reply.Cancel,
+		"Enter" | "NumpadEnter" when held == 0 => Reply.Confirm,
+		_ when resolve(code, mods, false) == Action.Paste => Reply.Confirm,
+		_ => Reply.Ignore,
+	};
 }
 
 export function replyToRead(code: string, mods: number): Reply {
 	const held = chordOf(mods);
-	if (code == "Escape" && held == 0) { return Reply.Cancel; }
-	if ((code == "Enter" || code == "NumpadEnter") && held == 0) { return Reply.Cancel; }
-	if ((code == "Enter" || code == "NumpadEnter") && held == CTRL) { return Reply.Confirm; }
-	return Reply.Ignore;
+	return match (code) {
+		"Escape" | "Enter" | "NumpadEnter" when held == 0 => Reply.Cancel,
+		"Enter" | "NumpadEnter" when held == CTRL => Reply.Confirm,
+		_ => Reply.Ignore,
+	};
 }
 
 function wrap(text: string, cols: int32): Vec<string> {
@@ -86,15 +91,12 @@ export function visible(line: string, cols: int32): string {
 	let out = "";
 	for (let i = 0; i < head.length; i++) {
 		const c = head.charCodeAt(i);
-		if (c == 9) {
-			out += TAB;
-		} else if (c < 32) {
-			out += "^" + String.fromCharCode(c + 64);
-		} else if (c == 127) {
-			out += "^?";
-		} else {
-			out += head.charAt(i);
-		}
+		out += match (c) {
+			9 => TAB,
+			127 => "^?",
+			_ when c < 32 => "^" + String.fromCharCode(c + 64),
+			_ => head.charAt(i),
+		};
 	}
 	if (!cut && out.length <= cols) { return out; }
 	return out.slice(0, cols - 1) + "…";
@@ -115,32 +117,43 @@ function title(warning: Warning): string {
 
 function body(warning: Warning): string {
 	return match (warning) {
-		Warning.MultiLine => "You are about to paste text that contains multiple lines. If you paste this text into your shell, it may result in the unexpected execution of commands. Do you wish to continue?",
-		Warning.EndMarker => "This text contains the sequence that ends a bracketed paste, so what follows it could run as commands the program never expected to receive. Do you wish to continue?",
+		Warning.MultiLine => "You are about to paste text that contains multiple lines. " +
+			"If you paste this text into your shell, it may result in the unexpected execution " +
+			"of commands. Do you wish to continue?",
+		Warning.EndMarker => "This text contains the sequence that ends a bracketed paste, " +
+			"so what follows it could run as commands the program never expected to receive. " +
+			"Do you wish to continue?",
 		_ => "You are about to paste text that is longer than 5 KiB. Do you wish to continue?",
 	};
 }
 
 function previewOf(text: string, cols: int32, maxCode: int32): Vec<Line> {
-	const all = text.split("
-");
+	const all = text.split("\n");
 	const total = all.length as int32;
 	let code: Vec<Line> = [];
 	const shown = Math.min(total, maxCode);
 	for (let i = 0; i < shown; i++) { code.push({ text: visible(all[i], cols), tone: Tone.Code }); }
 	const more = total - shown;
-	if (more > 0) { code.push({ text: more == 1 ? "… 1 more line" : `… ${more} more lines`, tone: Tone.Dim }); }
+	if (more > 0) {
+		const rest = more == 1 ? "… 1 more line" : `… ${more} more lines`;
+		code.push({ text: rest, tone: Tone.Dim });
+	}
 	return code;
 }
 
 function measure(text: string): string {
-	const total = text.split("
-").length as int32;
+	const total = text.split("\n").length as int32;
 	const count = total == 1 ? "1 line" : `${total} lines`;
 	return `${count}, ${sizeOf(text.length as int32)}`;
 }
 
-function dialogWith(heading: string, body: string, text: string, cols: int32, maxCode: int32): Dialog {
+function dialogWith(
+	heading: string,
+	body: string,
+	text: string,
+	cols: int32,
+	maxCode: int32,
+): Dialog {
 	let top: Vec<Line> = [{ text: heading, tone: Tone.Title }];
 	for (const row of wrap(body, cols)) { top.push({ text: row, tone: Tone.Body }); }
 	top.push({ text: measure(text), tone: Tone.Dim });

@@ -86,10 +86,11 @@ function modOf(name: string): int32 {
 }
 
 const KEY_NAMES: Vec<string> = [
-	"backquote", "backslash", "bracket_left", "bracket_right", "comma", "equal", "minus", "period", "quote",
-	"semicolon", "slash", "backspace", "enter", "space", "tab", "escape", "delete", "end", "home", "insert",
-	"page_down", "page_up", "arrow_down", "arrow_left", "arrow_right", "arrow_up", "numpad_add",
-	"numpad_decimal", "numpad_divide", "numpad_enter", "numpad_multiply", "numpad_subtract",
+	"backquote", "backslash", "bracket_left", "bracket_right", "comma", "equal", "minus",
+	"period", "quote", "semicolon", "slash", "backspace", "enter", "space", "tab", "escape",
+	"delete", "end", "home", "insert", "page_down", "page_up", "arrow_down", "arrow_left",
+	"arrow_right", "arrow_up", "numpad_add", "numpad_decimal", "numpad_divide", "numpad_enter",
+	"numpad_multiply", "numpad_subtract",
 ];
 
 function pascal(snake: string): string {
@@ -105,7 +106,9 @@ function codeOf(name: string): string | null {
 	if (name.length == 1 && name >= "0" && name <= "9") { return `Digit${name}`; }
 	if (name.startsWith("key_") && name.length == 5) { return codeOf(name.slice(4)); }
 	if (name.startsWith("digit_") && name.length == 7) { return codeOf(name.slice(6)); }
-	if (name.startsWith("numpad_") && name.length == 8 && name[7] >= "0" && name[7] <= "9") { return pascal(name); }
+	if (name.startsWith("numpad_") && name.length == 8 && name[7] >= "0" && name[7] <= "9") {
+		return pascal(name);
+	}
 	if (name.length >= 2 && name.length <= 3 && name[0] == "f") {
 		const n = name.slice(1).parseInt();
 		if (n >= 1 && n <= 24 && `f${n}` == name) { return `F${n}`; }
@@ -116,7 +119,12 @@ function codeOf(name: string): string | null {
 	return null;
 }
 
-export function keybind(keys: string, text: string, action: BindAction, screen: Screen): Result<Keybind, string> {
+export function keybind(
+	keys: string,
+	text: string,
+	action: BindAction,
+	screen: Screen,
+): Result<Keybind, string> {
 	let mods = 0;
 	let code: string | null = null;
 	for (const part of keys.split("+")) {
@@ -128,24 +136,38 @@ export function keybind(keys: string, text: string, action: BindAction, screen: 
 		}
 		if (code !== null) { return Result.err(`"${keys}" names more than one key`); }
 		code = codeOf(part);
-		if (code === null) { return Result.err(`"${keys}": "${part}" is not a key or modifier name`); }
+		if (code === null) {
+			return Result.err(`"${keys}": "${part}" is not a key or modifier name`);
+		}
 	}
 	if (code === null) { return Result.err(`"${keys}" names no key`); }
 	return Result.ok({ code: code, mods: mods, text: text, action: action, screen: screen });
 }
 
-export function bindFor(binds: Readonly<Span<Keybind>>, code: string, mods: number, altScreen: boolean): Keybind | null {
+export function bindFor(
+	binds: Readonly<Span<Keybind>>,
+	code: string,
+	mods: number,
+	altScreen: boolean,
+): Keybind | null {
 	const held = chordOf(mods);
 	const here = altScreen ? Screen.Alternate : Screen.Primary;
 	for (const b of binds) {
-		if (b.code == code && b.mods == held && (b.screen == Screen.Any || b.screen == here)) { return b; }
+		const onScreen = b.screen == Screen.Any || b.screen == here;
+		if (b.code == code && b.mods == held && onScreen) { return b; }
 	}
 	return null;
 }
 
-function lookup(table: Readonly<Span<Binding>>, code: string, held: int32, altScreen: boolean): Action {
+function lookup(
+	table: Readonly<Span<Binding>>,
+	code: string,
+	held: int32,
+	altScreen: boolean,
+): Action {
 	for (const b of table) {
-		if (b.code == code && b.mods == held && !(b.primaryOnly && altScreen)) { return b.action; }
+		const onScreen = !(b.primaryOnly && altScreen);
+		if (b.code == code && b.mods == held && onScreen) { return b.action; }
 	}
 	return Action.None;
 }
@@ -201,14 +223,14 @@ test "lock and side bits do not change the chord" {
 	assert resolve("Enter", 16, false) == Action.Copy;
 }
 
-test "shift page keys scroll on the primary screen and reach a full-screen app on the alternate one" {
+test "shift page keys scroll the primary screen and reach a full-screen app on the alternate" {
 	assert resolve("PageUp", 1, false) == Action.PageUp;
 	assert resolve("PageDown", 1, false) == Action.PageDown;
 	assert resolve("PageUp", 1, true) == Action.None;
 	assert resolve("PageUp", 3, true) == Action.PageUp;
 }
 
-test "ctrl alt up and down jump between prompts, leaving ctrl shift up and down to the line scroll" {
+test "ctrl alt up and down jump between prompts, ctrl shift up and down scroll by line" {
 	assert resolve("ArrowUp", 6, false) == Action.PromptUp;
 	assert resolve("ArrowDown", 6, false) == Action.PromptDown;
 	assert resolve("ArrowUp", 3, false) == Action.LineUp;
@@ -255,7 +277,13 @@ function textOf(b: Keybind | null): string | null {
 test "a keybind's text answers exactly its chord, side and lock bits aside" {
 	const binds: Vec<Keybind> = [
 		{ code: "Enter", mods: SHIFT, text: "a", action: BindAction.SendText, screen: Screen.Any },
-		{ code: "KeyH", mods: CTRL | SHIFT, text: "b", action: BindAction.SendText, screen: Screen.Any },
+		{
+			code: "KeyH",
+			mods: CTRL | SHIFT,
+			text: "b",
+			action: BindAction.SendText,
+			screen: Screen.Any,
+		},
 	];
 	assert textOf(bindFor(binds, "Enter", SHIFT, false)) == "a";
 	assert textOf(bindFor(binds, "Enter", SHIFT | 64 | 32, true)) == "a";
@@ -266,12 +294,26 @@ test "a keybind's text answers exactly its chord, side and lock bits aside" {
 
 test "a keybind for one screen answers only on that screen" {
 	const binds: Vec<Keybind> = [
-		{ code: "KeyW", mods: SUPER, text: "\x1b[119;9u", action: BindAction.SendText, screen: Screen.Alternate },
-		{ code: "KeyW", mods: SUPER, text: "", action: BindAction.CloseWindow, screen: Screen.Primary },
+		{
+			code: "KeyW",
+			mods: SUPER,
+			text: "\x1b[119;9u",
+			action: BindAction.SendText,
+			screen: Screen.Alternate,
+		},
+		{
+			code: "KeyW",
+			mods: SUPER,
+			text: "",
+			action: BindAction.CloseWindow,
+			screen: Screen.Primary,
+		},
 	];
 	const inApp = bindFor(binds, "KeyW", SUPER, true);
 	assert inApp !== null;
-	if (inApp !== null) { assert inApp.action == BindAction.SendText && inApp.text == "\x1b[119;9u"; }
+	if (inApp !== null) {
+		assert inApp.action == BindAction.SendText && inApp.text == "\x1b[119;9u";
+	}
 	const atShell = bindFor(binds, "KeyW", SUPER, false);
 	assert atShell !== null;
 	if (atShell !== null) { assert atShell.action == BindAction.CloseWindow; }

@@ -18,7 +18,14 @@ export function open(this typeof Pointer): Pointer {
 	return { clicks: Clicks.open(), sel: null, dragging: false, last: { col: 0, row: 0 } };
 }
 
-export function spotAt(x: float64, y: float64, cellWidth: float64, rowHeight: float64, cols: int32, rows: int32): Spot {
+export function spotAt(
+	x: float64,
+	y: float64,
+	cellWidth: float64,
+	rowHeight: float64,
+	cols: int32,
+	rows: int32,
+): Spot {
 	const col = Math.floor(x / cellWidth) as int32;
 	const row = Math.floor(y / rowHeight) as int32;
 	return { col: Math.max(0, Math.min(col, cols - 1)), row: Math.max(0, Math.min(row, rows - 1)) };
@@ -57,7 +64,13 @@ function publish(this p: Pointer, vt: Vt): Result<boolean, VtError> {
 }
 
 export function press(
-	this p: Pointer, vt: Vt, at: Spot, x: float64, y: float64, time: float64, reach: float64,
+	this p: Pointer,
+	vt: Vt,
+	at: Spot,
+	x: float64,
+	y: float64,
+	time: float64,
+	reach: float64,
 ): Result<boolean, VtError> {
 	const unit = unitOf(p.clicks.register(x, y, time, reach));
 	const top = try vt.scrollOffset();
@@ -105,7 +118,12 @@ export function copyText(this p: Pointer, vt: Vt): Result<string | null, VtError
 	return Result.ok(found);
 }
 
-export function blocks(this p: Pointer, vt: Vt, rows: int32, cols: int32): Result<Vec<Block>, VtError> {
+export function blocks(
+	this p: Pointer,
+	vt: Vt,
+	rows: int32,
+	cols: int32,
+): Result<Vec<Block>, VtError> {
 	const sel = p.shown();
 	if (sel === null) { return Result.ok([]); }
 	const top = try vt.scrollOffset();

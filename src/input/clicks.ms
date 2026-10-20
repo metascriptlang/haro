@@ -14,7 +14,13 @@ export function open(this typeof Clicks): Clicks {
 	return { count: 0, x: 0, y: 0, time: 0 };
 }
 
-export function register(this c: Clicks, x: float64, y: float64, time: float64, reach: float64): int32 {
+export function register(
+	this c: Clicks,
+	x: float64,
+	y: float64,
+	time: float64,
+	reach: float64,
+): int32 {
 	const dx = x - c.x;
 	const dy = y - c.y;
 	const near = c.count > 0 && time - c.time <= REPEAT_MS && dx * dx + dy * dy <= reach * reach;

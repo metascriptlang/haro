@@ -300,8 +300,9 @@ test "a flood past the scrollback limit leaves the last rows right and the frame
 	assert s !== null;
 	if (s !== null) {
 		const lines = 120000;
-		for (let at = 1; at <= lines; at += 4000) {
-			assert s.feedChunks(numbered(at, Math.min(at + 3999, lines)), 0).ok;
+		const batch = 4000;
+		for (let at = 1; at <= lines; at += batch) {
+			assert s.feedChunks(numbered(at, Math.min(at + batch - 1, lines)), 0).ok;
 			assert s.mismatch() == "";
 		}
 		let want = "";

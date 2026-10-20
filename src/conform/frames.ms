@@ -12,11 +12,16 @@ const SGRS: string[] = [
 ];
 const ERASES: string[] = ["J", "0J", "1J", "2J", "K", "0K", "1K", "2K"];
 
+const LCG_MULTIPLIER: int64 = 1103515245;
+const LCG_INCREMENT: int64 = 12345;
+const LCG_MODULUS: int64 = 2147483648;
+const LCG_LOW_BITS_DROPPED: int64 = 65536;
+
 interface Rng { state: int64; }
 
 function next(this r: Rng, n: int32): int32 {
-	r.state = (r.state * 1103515245 + 12345) % 2147483648;
-	return ((r.state / 65536) % (n as int64)) as int32;
+	r.state = (r.state * LCG_MULTIPLIER + LCG_INCREMENT) % LCG_MODULUS;
+	return ((r.state / LCG_LOW_BITS_DROPPED) % (n as int64)) as int32;
 }
 
 function pick(this r: Rng, list: string[]): string {

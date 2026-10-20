@@ -1,4 +1,4 @@
-// W1 probe: Haro's Vt wrapper (src/vt) on the wasm libghostty-vt from scripts/buildVtWasm.sh, run under node.
+// Haro's Vt on the wasm libghostty-vt of scripts/buildVtWasm.sh, run under node:
 //   msc build probe/web/vtWeb.ms --os=emcc --output=<dir>/vtWeb.js
 import { Vt } from "../../src/vt/vt";
 

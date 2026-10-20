@@ -1,6 +1,4 @@
-// W2a probe: Neon rows mounted straight on the Void host and drawn by void2d through sokol's
-// browser canvas loop (--os=emcc). No <Void> and no window host: the Void host's root is the
-// mount parent, the way the coordinator's pointer describes "the whole app on the Void host".
+// Neon rows mounted straight on the Void host, with no <Void> and no window host:
 //   probe/web/ui/buildWeb.sh neonRows
 
 @include("../../../../void/src/sokol/bridge.h");
@@ -39,7 +37,6 @@ function frame(): void {
 }
 
 function main(): int32 {
-	// naming the export keeps the module, and its @compile list, in the build
 	const font = addFont(FONT_PATH);
 	if (!font.ok) {
 		console.log(`neonRows: the font ${FONT_PATH} did not load`);

@@ -3,7 +3,6 @@
 
 #include "memShim.h"
 
-/* Fills `mb` megabytes of the C heap with 0xAA and frees nothing: the heap-ownership probe of vtWebOverlap.ms. */
 int vtClobber(int mb) {
 	unsigned char* p = malloc((size_t)mb << 20);
 	if (!p) return 0;

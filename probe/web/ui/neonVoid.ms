@@ -1,7 +1,4 @@
-// W2b probe: the same rows inside one full-window <Void>, the root Haro's App already uses on the
-// desktop. The browser has no window host, so this file carries a minimal one (the Ion window host,
-// src/platform/ion/window.ms, without Ion): it accepts only the `void` tag and opens the Void host
-// as that tag's area; sokol's canvas loop drives layout and present.
+// The rows inside one full-window <Void>, under a window host that accepts only that tag:
 //   probe/web/ui/buildWeb.sh neonVoid
 
 @include("../../../../void/src/sokol/bridge.h");
@@ -129,7 +126,6 @@ function frame(): void {
 }
 
 function main(): int32 {
-	// naming the export keeps the module, and its @compile list, in the build
 	const font = addFont(FONT_PATH);
 	if (!font.ok) {
 		console.log(`neonVoid: the font ${FONT_PATH} did not load`);

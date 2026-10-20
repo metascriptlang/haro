@@ -1,5 +1,4 @@
-// Control for the emcc build: the same Neon <Text> primitive compiled for this machine's native target.
-// If the three -Wincompatible-pointer-types errors of primitives.ms appear here too, they are not an emcc matter.
+// Native control of the emcc build of Neon's <Text>:
 //   msc build probe/web/ui/nativeText.ms --output=<dir>/nativeText.exe
 import { element } from "../../../../neon/src/macros/ui/element";
 import { Text } from "../../../../neon/src/components/primitives";

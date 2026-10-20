@@ -1,5 +1,4 @@
-// Control: the raw libghostty-vt C API with a NULL allocator. The patched library has no default
-// heap, so terminal_new must report an error (exit 0 = it did, 1 = it succeeded).
+// The patched wasm library has no default heap: terminal_new with a NULL allocator must fail.
 @passC("-I../../vendor/ghostty/include");
 @passC("-DGHOSTTY_STATIC");
 @link("../../out/wasm/libghostty-vt.a");

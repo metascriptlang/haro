@@ -1,5 +1,6 @@
 #include <ghostty/vt.h>
-/* shim: importing GhosttyPoint (union with uint64_t _padding[2]) from msc fails "Unresolved type SizedArray" */
+/* msc cannot import GhosttyPoint, a union with uint64_t _padding[2]:
+   .inbox/compiler/2026-10-15-c-import-fixed-array-member-sizedarray.md */
 static inline int sr_track(GhosttyTerminal t, int tag, unsigned x, unsigned y, GhosttyTrackedGridRef *out) {
 	GhosttyPoint p;
 	p.tag = (GhosttyPointTag)tag;

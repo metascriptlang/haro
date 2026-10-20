@@ -1,5 +1,4 @@
-// Probe: can a tracked grid ref on the previous top viewport row tell how many lines scrolled?
-// Per frame: N = scrollbar.offset (viewport top, screen coords) - screenY(ref); then ref.set(viewport 0).
+// Can a tracked grid ref on the previous top viewport row tell how many lines scrolled?
 @passC("-I../vendor/ghostty/include");
 @passC("-DGHOSTTY_STATIC");
 @include("./scrollRefShim.h");
@@ -28,7 +27,7 @@ import {
 	GhosttyTerminalScrollbar,
 } from "../vendor/ghostty/include/ghostty/vt.h";
 
-// string passed straight to ghostty_terminal_vt_write is read wrongly (see report); asBytes is right.
+// msc passes a string to ghostty_terminal_vt_write wrongly; asBytes is right.
 extern function writeBytes(t: GhosttyTerminal, b: Readonly<Span<uint8>>): void from "ghostty_terminal_vt_write";
 extern function stateRowIterator(
 	s: GhosttyRenderState,
@@ -99,7 +98,6 @@ function close(rig: Rig): void {
 	ghostty_terminal_free(rig.term);
 }
 
-// One frame: report, then re-anchor the ref on the new top row and clean the state.
 function frame(name: string, rig: Rig, expected: string): void {
 	ghostty_render_state_update(rig.state, rig.term);
 	let it = rig.it;

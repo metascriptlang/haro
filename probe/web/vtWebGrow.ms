@@ -1,6 +1,4 @@
-// Page growth: 5000 lines of output make the terminal allocate many pages through the embedder's
-// allocator. Exit 0 = the last line is on screen, the scrollback grew, a key still encodes and
-// everything frees.
+// 5000 lines of output make the terminal allocate many pages through the embedder's allocator.
 import { Vt, Keys } from "../../src/vt/vt";
 import { KeyAction, KeyEvent, KeyMod } from "../../src/keys/keys";
 

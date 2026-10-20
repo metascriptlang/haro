@@ -1,5 +1,4 @@
-// Heap ownership: row 0 is read before and after a 64 MB malloc. The terminal's pages come from
-// the C heap, so the allocation must not run into them. Exit 0 = both reads say "hello".
+// The terminal's pages come from the C heap, so a 64 MB malloc must not run into them.
 @include("./memShim.h");
 @compile("./memShim.c");
 

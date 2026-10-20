@@ -1,4 +1,3 @@
-// The content both W2 entries mount: four coloured grid rows as <Text cellWidth spans>.
 import { element } from "../../../../neon/src/macros/ui/element";
 import { NeonNode } from "../../../../neon/src/render/host";
 import { Accessor } from "../../../../neon/src/core/signal";

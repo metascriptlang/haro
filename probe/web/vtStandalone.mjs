@@ -1,6 +1,4 @@
-// W1(b) smoke test: the standalone ghostty-vt.wasm (zig build -Demit-lib-vt -Dtarget=wasm32-freestanding)
-// driven from plain JS, which is how libghostty-vt's wasm build is meant to be embedded.
-//   node probe/web/vtStandalone.mjs <path to ghostty-vt.wasm>
+// node probe/web/vtStandalone.mjs <ghostty-vt.wasm of zig build -Demit-lib-vt -Dtarget=wasm32-freestanding>
 import fs from "node:fs";
 
 const { instance } = await WebAssembly.instantiate(fs.readFileSync(process.argv[2]), {});

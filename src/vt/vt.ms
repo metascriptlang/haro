@@ -95,7 +95,7 @@ import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe, withoutAltGr } from ".
 import { Marked, Point, Range, Selection, Unit } from "../select/select";
 import { Handle } from "std/ffi";
 
-struct Graphemes { cp: uint32[16]; }
+struct InlineGraphemes { cp: uint32[16]; }
 struct Colors256 { c: GhosttyColorRgb[256]; }
 
 extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<Span<uint8>>): void
@@ -223,7 +223,7 @@ extern function cellGraphemeCount(
 extern function cellGraphemes(
 	cells: GhosttyRenderStateRowCells,
 	key: GhosttyRenderStateRowCellsData,
-	out graphemes: Graphemes,
+	out graphemes: InlineGraphemes,
 ): GhosttyResult from "ghostty_render_state_row_cells_get";
 extern function cellGraphemesInto(
 	cells: GhosttyRenderStateRowCells,
@@ -355,7 +355,7 @@ extern function pasteEncode(
 	out written: uint64,
 ): GhosttyResult from "ghostty_paste_encode";
 
-const MAX_GRAPHEMES: uint32 = 16;
+const INLINE_GRAPHEMES: uint32 = 16;
 const MAX_CELL_EXTRA: uint32 = 65536;
 
 export enum VtError {
@@ -376,11 +376,11 @@ export enum PasteError {
 export struct Vt {
 	terminal: GhosttyTerminal;
 	state: GhosttyRenderState;
-	rows: GhosttyRenderStateRowIterator;
+	iterator: GhosttyRenderStateRowIterator;
 	cells: GhosttyRenderStateRowCells;
 	effects: Effects;
 	mouse: Mouse;
-	top: GhosttyTrackedGridRef;
+	anchor: GhosttyTrackedGridRef;
 	painted: Painted;
 }
 
@@ -660,18 +660,18 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		return Result.err(VtError.CreateFailed);
 	}
 	const effects = openEffects(terminal, state);
-	let top: GhosttyTrackedGridRef;
-	if (effects.ok && vtTopTrack(terminal, top) == 0
+	let anchor: GhosttyTrackedGridRef;
+	if (effects.ok && vtTopTrack(terminal, anchor) == 0
 		&& applyColors(terminal, { r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 }).ok
 		&& applyBlinkDefault(terminal, true).ok && applyScrollback(terminal, SCROLLBACK_LINES).ok) {
 		return Result.ok({
 			terminal: terminal,
 			state: state,
-			rows: iterator,
+			iterator: iterator,
 			cells: cells,
 			effects: effects.value,
 			mouse: { encoder: null, event: null, signature: -1, geometry: null },
-			top: top,
+			anchor: anchor,
 			painted: { alternate: false, rows: [], palette: null },
 		});
 	}
@@ -716,7 +716,7 @@ export function takeEvents(this vt: Vt): Result<VtEvents, VtError> {
 	return Result.ok(events);
 }
 
-function stringOf(terminal: GhosttyTerminal, key: GhosttyTerminalData): Result<string, VtError> {
+function terminalString(terminal: GhosttyTerminal, key: GhosttyTerminalData): Result<string, VtError> {
 	let buf: Vec<uint8> = new Array(256);
 	let n = vtString(terminal, key, buf);
 	if (n > (buf.length as int64)) {
@@ -728,7 +728,7 @@ function stringOf(terminal: GhosttyTerminal, key: GhosttyTerminalData): Result<s
 }
 
 export function title(this vt: Vt): Result<string, VtError> {
-	return stringOf(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_TITLE);
+	return terminalString(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_TITLE);
 }
 
 export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, VtError> {
@@ -750,7 +750,7 @@ export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, V
 }
 
 export function pwd(this vt: Vt): Result<string, VtError> {
-	return stringOf(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_PWD);
+	return terminalString(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_PWD);
 }
 
 export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtError> {
@@ -1009,8 +1009,8 @@ function open(this m: Mouse): Result<void, VtError> {
 // x and y are surface pixels with the grid at the origin.
 export function mouseReport(
 	this vt: Vt,
-	e: MouseInput,
-	g: MouseGeometry,
+	input: MouseInput,
+	geometry: MouseGeometry,
 	anyPressed: boolean,
 	buf: Span<uint8>,
 ): Result<int32, VtError> {
@@ -1025,27 +1025,27 @@ export function mouseReport(
 		m.signature = signature;
 	}
 	const known = m.geometry;
-	if (known === null || known != g) {
+	if (known === null || known != geometry) {
 		let size: GhosttyMouseEncoderSize = {
 			size: sizeof GhosttyMouseEncoderSize,
-			screen_width: g.width as uint32,
-			screen_height: g.height as uint32,
-			cell_width: g.cellWidth as uint32,
-			cell_height: g.cellHeight as uint32,
+			screen_width: geometry.width as uint32,
+			screen_height: geometry.height as uint32,
+			cell_width: geometry.cellWidth as uint32,
+			cell_height: geometry.cellHeight as uint32,
 		};
 		mouseSetSize(encoder, GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_SIZE, size);
-		m.geometry = g;
+		m.geometry = geometry;
 	}
 	let pressed = anyPressed;
 	mouseSetFlag(encoder, GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, pressed);
-	mouseSetAction(event, e.action as int32);
-	if (e.button == 0) {
+	mouseSetAction(event, input.action as int32);
+	if (input.button == 0) {
 		ghostty_mouse_event_clear_button(event);
 	} else {
-		mouseSetButton(event, e.button);
+		mouseSetButton(event, input.button);
 	}
-	mouseSetMods(event, modsMask(e.mods) as uint16);
-	ghostty_mouse_event_set_position(event, { x: e.x, y: e.y });
+	mouseSetMods(event, modsMask(input.mods) as uint16);
+	ghostty_mouse_event_set_position(event, { x: input.x, y: input.y });
 	let written: uint64 = 0;
 	if (!ok(mouseEncode(encoder, event, buf, written))) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(written as int32);
@@ -1106,8 +1106,8 @@ function graphemesOf(
 	ref extra: Vec<uint32>,
 ): Result<uint32, VtError> {
 	const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
-	if (count <= MAX_GRAPHEMES) {
-		let graphemes: Graphemes = { cp: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
+	if (count <= INLINE_GRAPHEMES) {
+		let graphemes: InlineGraphemes = { cp: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
 		if (!ok(cellGraphemes(cells, bufKey, graphemes))) { return Result.err(VtError.ReadFailed); }
 		for (let i = 1; i < (count as int32); i++) { extra.push(graphemes.cp[i]); }
 		return Result.ok(graphemes.cp[0]);
@@ -1218,7 +1218,7 @@ function readRow(
 }
 
 function rowIterator(this vt: Vt): Result<GhosttyRenderStateRowIterator, VtError> {
-	let iterator = vt.rows;
+	let iterator = vt.iterator;
 	const key = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR;
 	if (!ok(stateRowIterator(vt.state, key, iterator))) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(iterator);
@@ -1253,7 +1253,7 @@ function isScalar(cp: uint32): boolean {
 
 export function text(this row: Row): Result<string, VtError> {
 	let text = "";
-	let e = 0;
+	let extraAt = 0;
 	for (const cell of row.cells) {
 		if (cell.cp == 0) {
 			text += " ";
@@ -1262,11 +1262,11 @@ export function text(this row: Row): Result<string, VtError> {
 		if (!isScalar(cell.cp)) { return Result.err(VtError.CodepointInvalid); }
 		text += fromCodePoint(cell.cp as number);
 		for (let i = 0; i < (cell.extra as int32); i++) {
-			const cp = row.extra[e + i];
+			const cp = row.extra[extraAt + i];
 			if (!isScalar(cp)) { return Result.err(VtError.CodepointInvalid); }
 			text += fromCodePoint(cp as number);
 		}
-		e += cell.extra as int32;
+		extraAt += cell.extra as int32;
 	}
 	return Result.ok(text);
 }
@@ -1299,7 +1299,7 @@ export function alternateScreen(this vt: Vt): Result<boolean, VtError> {
 
 export function anchoredRow(this vt: Vt): Result<int32 | null, VtError> {
 	let at: GhosttyPointCoordinate = { x: 0, y: 0 };
-	const r = ghostty_tracked_grid_ref_point(vt.top, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, at);
+	const r = ghostty_tracked_grid_ref_point(vt.anchor, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, at);
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
 	if (!ok(r)) { return Result.err(VtError.ReadFailed); }
 	const row: int32 | null = at.y as int32;
@@ -1307,7 +1307,7 @@ export function anchoredRow(this vt: Vt): Result<int32 | null, VtError> {
 }
 
 export function anchorTop(this vt: Vt): Result<Vt, VtError> {
-	if (vtTopAnchor(vt.top, vt.terminal) != 0) { return Result.err(VtError.ReadFailed); }
+	if (vtTopAnchor(vt.anchor, vt.terminal) != 0) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(vt);
 }
 
@@ -1316,14 +1316,14 @@ export function clean(this vt: Vt): void {
 }
 
 export function free(this vt: Vt): void {
-	ghostty_tracked_grid_ref_free(vt.top);
+	ghostty_tracked_grid_ref_free(vt.anchor);
 	closeEffects(vt.terminal);
 	const encoder = vt.mouse.encoder;
 	const event = vt.mouse.event;
 	if (encoder !== null) { ghostty_mouse_encoder_free(encoder); }
 	if (event !== null) { ghostty_mouse_event_free(event); }
 	ghostty_render_state_row_cells_free(vt.cells);
-	ghostty_render_state_row_iterator_free(vt.rows);
+	ghostty_render_state_row_iterator_free(vt.iterator);
 	ghostty_render_state_free(vt.state);
 	ghostty_terminal_free(vt.terminal);
 }
@@ -1920,12 +1920,12 @@ test "a focus change is reported only once the program asked for it" {
 	}
 }
 
-const CELLS: MouseGeometry = { cellWidth: 10, cellHeight: 20, width: 200, height: 80 };
+const GEOMETRY: MouseGeometry = { cellWidth: 10, cellHeight: 20, width: 200, height: 80 };
 
 function mouseBytes(vt: Vt, action: MouseAction, button: int32, mods: BitSet<KeyMod>, anyPressed: boolean): string {
 	let buf: Vec<uint8> = new Array(32);
 	const e: MouseInput = { action: action, button: button, mods: mods, x: 25.0, y: 25.0 };
-	const n = vt.mouseReport(e, CELLS, anyPressed, buf);
+	const n = vt.mouseReport(e, GEOMETRY, anyPressed, buf);
 	if (!n.ok) { return "error"; }
 	return ascii(buf[0..n.value]);
 }
@@ -2150,10 +2150,10 @@ function keptAfter(lines: int32, keep: int64): int32 {
 	if (!created.ok) { return -1; }
 	const vt = created.value;
 	if (keep != SCROLLBACK_LINES && !vt.setScrollback(keep).ok) { return -1; }
-	vt.writeText(numbered(lines));
+	vt.writeText(numberedLines(lines));
 	vt.scrollTop();
 	if (!vt.update().ok) { return -1; }
-	const oldest = top(vt);
+	const oldest = topLine(vt);
 	vt.free();
 	return lines - (oldest.slice(1).parseInt() as int32);
 }
@@ -2712,20 +2712,20 @@ test "the cursor reports where the next write lands" {
 	}
 }
 
-function numbered(count: int32): string {
+function numberedLines(count: int32): string {
 	let text = "r0";
 	for (let i = 1; i < count; i++) { text += `\r\nr${i}`; }
 	return text;
 }
 
-function newText(count: int32): string {
+function linefeedLines(count: int32): string {
 	let text = "";
 	for (let i = 0; i < count; i++) { text += `
 q${i}`; }
 	return text;
 }
 
-function top(vt: Vt): string {
+function topLine(vt: Vt): string {
 	const lines = vt.lines();
 	if (lines.ok) { return lines.value[0]; }
 	return "<unreadable>";
@@ -2752,34 +2752,34 @@ test "the viewport scrolls by lines, pages, to the top and back to the bottom" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText(numbered(10));
+		vt.writeText(numberedLines(10));
 		assert vt.update().ok;
-		assert top(vt) == "r6";
+		assert topLine(vt) == "r6";
 		assert (try vt.atBottom() catch false);
 		vt.scrollLines(-2);
 		assert vt.update().ok;
-		assert top(vt) == "r4";
+		assert topLine(vt) == "r4";
 		assert !(try vt.atBottom() catch true);
 		assert (try vt.scrollOffset() catch -1) == 4;
 		vt.scrollLines(1);
 		assert vt.update().ok;
-		assert top(vt) == "r5";
+		assert topLine(vt) == "r5";
 		vt.scrollTop();
 		assert vt.update().ok;
-		assert top(vt) == "r0";
+		assert topLine(vt) == "r0";
 		vt.scrollLines(-5);
 		assert vt.update().ok;
-		assert top(vt) == "r0";
+		assert topLine(vt) == "r0";
 		assert vt.scrollPages(1).ok;
 		assert vt.update().ok;
-		assert top(vt) == "r4";
+		assert topLine(vt) == "r4";
 		vt.scrollBottom();
 		assert vt.update().ok;
-		assert top(vt) == "r6";
+		assert topLine(vt) == "r6";
 		assert (try vt.atBottom() catch false);
 		vt.scrollLines(5);
 		assert vt.update().ok;
-		assert top(vt) == "r6";
+		assert topLine(vt) == "r6";
 		vt.free();
 	}
 }
@@ -2789,17 +2789,17 @@ test "new output while scrolled up leaves the view where it was" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText(numbered(10));
+		vt.writeText(numberedLines(10));
 		vt.scrollLines(-3);
 		assert vt.update().ok;
-		assert top(vt) == "r3";
+		assert topLine(vt) == "r3";
 		vt.writeText("\r\nr10\r\nr11\r\nr12\r\nr13\r\nr14");
 		assert vt.update().ok;
-		assert top(vt) == "r3";
+		assert topLine(vt) == "r3";
 		assert !(try vt.atBottom() catch true);
 		vt.scrollBottom();
 		assert vt.update().ok;
-		assert top(vt) == "r11";
+		assert topLine(vt) == "r11";
 		vt.free();
 	}
 }
@@ -2887,7 +2887,7 @@ test "a selection survives five lines of new output" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText(numbered(4));
+		vt.writeText(numberedLines(4));
 		assert vt.update().ok;
 		assert vt.selectionSet(marked(1, 0, 2, 1)).ok;
 		assert copied(vt) == "r1\nr2";
@@ -2914,12 +2914,12 @@ test "a selection follows its text when scrollback is pruned" {
 	if (created.ok) {
 		const vt = created.value;
 		assert vt.setScrollback(1000).ok;
-		vt.writeText(numbered(6000));
+		vt.writeText(numberedLines(6000));
 		assert vt.update().ok;
 		const row = (try vt.scrollOffset() catch 0) + 3;
 		assert vt.selectionSet(marked(row, 0, row, 5)).ok;
 		assert copied(vt) == "r5999";
-		vt.writeText(newText(400));
+		vt.writeText(linefeedLines(400));
 		assert vt.update().ok;
 		const kept = vt.selection();
 		assert kept.ok;

@@ -152,7 +152,7 @@ export function resolve(code: string, mods: number, altScreen: boolean): Action 
 	return found != Action.None ? found : lookup(INSERT_CHORDS, code, held, altScreen);
 }
 
-test "copy and paste take ghostty's chords: cmd on macos, ctrl shift and the insert pair elsewhere" {
+test "copy and paste take cmd on macos, and ctrl shift or the insert pair elsewhere" {
 	assert resolve("KeyC", CLIPBOARD_MODS, false) == Action.Copy;
 	assert resolve("KeyV", CLIPBOARD_MODS, false) == Action.Paste;
 	assert resolve("Enter", 0, false) == Action.Copy;
@@ -168,7 +168,7 @@ test "copy and paste take ghostty's chords: cmd on macos, ctrl shift and the ins
 	}
 }
 
-test "windows terminal's scrollback chords resolve" {
+test "ctrl shift with an arrow, a page key, home or end scrolls the scrollback" {
 	assert resolve("ArrowUp", 3, false) == Action.LineUp;
 	assert resolve("ArrowDown", 3, false) == Action.LineDown;
 	assert resolve("PageUp", 3, false) == Action.PageUp;
@@ -224,7 +224,7 @@ function bound(keys: string): string {
 	return `${b.value.code} ${b.value.mods}`;
 }
 
-test "a keybind names its modifiers and one key the way ghostty's triggers do" {
+test "a keybind names its modifiers and one key, joined by plus signs" {
 	assert bound("shift+enter") == "Enter 1";
 	assert bound("ctrl+shift+h") == "KeyH 3";
 	assert bound("control+key_h") == "KeyH 2";
@@ -260,7 +260,7 @@ test "a keybind's text answers exactly its chord, side and lock bits aside" {
 	assert textOf(bindFor(binds, "KeyH", CTRL | SHIFT, false)) == "b";
 }
 
-test "a keybind with a mode answers only on its screen, the way alacritty's alt and ~alt do" {
+test "a keybind for one screen answers only on that screen" {
 	const binds: Vec<Keybind> = [
 		{ code: "KeyW", mods: SUPER, text: "\x1b[119;9u", action: BindAction.SendText, screen: Screen.Alternate },
 		{ code: "KeyW", mods: SUPER, text: "", action: BindAction.CloseWindow, screen: Screen.Primary },

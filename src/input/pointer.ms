@@ -315,7 +315,7 @@ test "an app that tracks the mouse owns it unless shift is held" {
 	assert !claimsMouse(false, true);
 }
 
-test "a drag within a pixel of the top or the bottom scrolls that way, as Ghostty's edge does" {
+test "a drag within a pixel of the top or the bottom scrolls that way" {
 	assert autoscrollOf(-40, 300) == -1;
 	assert autoscrollOf(1, 300) == -1;
 	assert autoscrollOf(2, 300) == 0;

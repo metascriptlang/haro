@@ -1,7 +1,6 @@
 import { KeyAction, KeyMod } from "./keys";
 
-// A key as win32-input-mode carries it, one KEY_EVENT_RECORD (microsoft/terminal spec #4999,
-// terminalInput.cpp _makeWin32Output).
+// A key as win32-input-mode carries it, one KEY_EVENT_RECORD (microsoft/terminal spec #4999).
 export struct Win32Key {
 	action: KeyAction;
 	vk: uint16;

@@ -80,7 +80,7 @@ test "a key whose Ctrl+Alt the layout consumed for AltGr text drops both, and a 
 	assert chord.withoutAltGr().mods == chord.mods;
 }
 
-test "the modifier mask keeps the ghostty bit order" {
+test "the modifier mask keeps libghostty-vt's bit order" {
 	const none = 0 as BitSet<KeyMod>;
 	assert modsMask(none) == 0;
 	assert modsMask(none.incl(KeyMod.Shift)) == 0x01;

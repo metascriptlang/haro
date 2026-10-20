@@ -149,6 +149,13 @@ recompiler session raiser-embed on 2026-10-19, a host and a 1000-ball loop, not 
 The call cost is fine for a hook per key or per event. It is not fine for a hook per cell or
 per output line during a flood.
 
+Haro has evaluated `config.ms` in-process since 2026-10-20 (`src/config/source.ms` `evaluate`).
+Measured that day on macOS, msc `8205756f8`: the release binary went from 6.3 MB to 21.2 MB, and
+an evaluation takes about 0.4 s. An evaluation leaves about 66 MB live after Haro drops the
+interpreter (`~/metascript/.inbox/compiler/2026-10-20-evalmodule-keeps-its-heap-after-the-host-drops-the-interpreter.md`).
+Haro still needs MetaScript installed at `~/.metascript`, as it needed `msc` before; shipping
+the std inside Haro.app is not done.
+
 ### Rejected, and why
 
 - **Plugins that build Neon components** (free-form UI). Script code would have
@@ -158,15 +165,12 @@ per output line during a flood.
 - **`haro.on("key", fn)` closures** for now. No closure crosses the embed boundary yet, so hooks
   are exported functions found by name. The closure form can be added on top later.
 - **Config as JSON for good.** It stays only until the embed API carries structs. Until then
-  Haro's runner prints `JSON.stringify(config)`, and `src/config/config.ms` `parse` re-checks
+  the runner module's `configJson()` returns `JSON.stringify(config)`, and `src/config/config.ms` `parse` re-checks
   what msc already checked.
 
 ### What the embed path waits on
 
 Each of these is a compiler change, tracked in `~/metascript/.inbox/compiler/`:
-- the installed msc carrying `src/embed`;
-- `evalModule` resolving the `haro` package the way `msc run` does through `deps` in a
-  `build.ms`;
 - structs and arrays crossing `callRoutine`;
 - `JSON.stringify` taking a string-literal union field. Until then `Keybind.mode` and `action`
   are typed `string`.

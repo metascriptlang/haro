@@ -277,75 +277,72 @@ function ghosttyStyled(bytes: int32, mix: TextMix): Vec<uint8> {
 	return out;
 }
 
+function vtebench(name: string, setup: Vec<uint8>, payload: Vec<uint8>): Workload {
+	return {
+		name: name,
+		cols: VTEBENCH_COLS,
+		rows: VTEBENCH_ROWS,
+		setup: setup,
+		payload: payload,
+	};
+}
+
+function vtebenchScrolling(name: string, setup: Vec<uint8>): Workload {
+	return vtebench(name, setup, repeatedTo(scrollingUnit(), VTEBENCH_MIN_BYTES));
+}
+
+function ghosttyStream(name: string, payload: Vec<uint8>): Workload {
+	return { name: name, cols: GHOSTTY_COLS, rows: GHOSTTY_ROWS, setup: [], payload: payload };
+}
+
 export function buildWorkload(name: string): Result<Workload, WorkloadError> {
 	const cols = VTEBENCH_COLS;
 	const rows = VTEBENCH_ROWS;
 	const none: Vec<uint8> = [];
-	const w: Workload = match (name) {
-		"cursor_motion" => ({
-			name: name, cols: cols, rows: rows, setup: none,
-			payload: cursorMotion(cols, rows),
-		}),
-		"dense_cells" => ({
-			name: name, cols: cols, rows: rows, setup: bytesOf(ALT_SCREEN),
-			payload: denseCells(cols, rows),
-		}),
-		"light_cells" => ({
-			name: name, cols: cols, rows: rows, setup: bytesOf(ALT_SCREEN),
-			payload: repeatedTo(lightCells(cols, rows), VTEBENCH_MIN_BYTES),
-		}),
-		"scrolling" => ({
-			name: name, cols: cols, rows: rows, setup: none,
-			payload: repeatedTo(scrollingUnit(), VTEBENCH_MIN_BYTES),
-		}),
-		"scrolling_fullscreen" => ({
-			name: name, cols: cols, rows: rows, setup: none,
-			payload: repeatedTo(scrollingFullscreen(cols), VTEBENCH_MIN_BYTES),
-		}),
-		"scrolling_top_region" => ({
-			name: name, cols: cols, rows: rows,
-			setup: bytesOf(`${ALT_SCREEN}\x1b[2;${rows}r`),
-			payload: repeatedTo(scrollingUnit(), VTEBENCH_MIN_BYTES),
-		}),
-		"scrolling_bottom_region" => ({
-			name: name, cols: cols, rows: rows,
-			setup: bytesOf(`${ALT_SCREEN}\x1b[1;${rows - 1}r`),
-			payload: repeatedTo(scrollingUnit(), VTEBENCH_MIN_BYTES),
-		}),
-		"scrolling_top_small_region" => ({
-			name: name, cols: cols, rows: rows,
-			setup: bytesOf(`${ALT_SCREEN}\x1b[${rows / 2};${rows}r`),
-			payload: repeatedTo(scrollingUnit(), VTEBENCH_MIN_BYTES),
-		}),
-		"scrolling_bottom_small_region" => ({
-			name: name, cols: cols, rows: rows,
-			setup: bytesOf(`${ALT_SCREEN}\x1b[1;${rows / 2}r`),
-			payload: repeatedTo(scrollingUnit(), VTEBENCH_MIN_BYTES),
-		}),
-		"unicode" => ({
-			name: name, cols: cols, rows: rows, setup: bytesOf(ALT_SCREEN),
-			payload: repeatedTo(unicodeSymbols(), VTEBENCH_MIN_BYTES),
-		}),
-		"ghosttyAscii" => ({
-			name: name, cols: GHOSTTY_COLS, rows: GHOSTTY_ROWS, setup: none,
-			payload: ghosttyAscii(GHOSTTY_BYTES),
-		}),
-		"ghosttyStyled" => ({
-			name: name, cols: GHOSTTY_COLS, rows: GHOSTTY_ROWS, setup: none,
-			payload: ghosttyStyled(GHOSTTY_BYTES, {
-				styleRate: 800, graphemeRate: 0, weightOne: 1, weightTwo: 0, weightThree: 0,
-			}),
-		}),
-		"ghosttyWideMix" => ({
-			name: name, cols: GHOSTTY_COLS, rows: GHOSTTY_ROWS, setup: none,
-			payload: ghosttyStyled(GHOSTTY_BYTES, {
-				styleRate: 0, graphemeRate: 100, weightOne: 0, weightTwo: 1, weightThree: 2,
-			}),
-		}),
-		_ => ({ name: "", cols: 0, rows: 0, setup: none, payload: none }),
+	return match (name) {
+		"cursor_motion" => Result.ok(vtebench(name, none, cursorMotion(cols, rows))),
+		"dense_cells" => Result.ok(vtebench(name, bytesOf(ALT_SCREEN), denseCells(cols, rows))),
+		"light_cells" => Result.ok(vtebench(
+			name,
+			bytesOf(ALT_SCREEN),
+			repeatedTo(lightCells(cols, rows), VTEBENCH_MIN_BYTES),
+		)),
+		"scrolling" => Result.ok(vtebenchScrolling(name, none)),
+		"scrolling_fullscreen" => Result.ok(vtebench(
+			name,
+			none,
+			repeatedTo(scrollingFullscreen(cols), VTEBENCH_MIN_BYTES),
+		)),
+		"scrolling_top_region" => Result.ok(vtebenchScrolling(
+			name,
+			bytesOf(`${ALT_SCREEN}\x1b[2;${rows}r`),
+		)),
+		"scrolling_bottom_region" => Result.ok(vtebenchScrolling(
+			name,
+			bytesOf(`${ALT_SCREEN}\x1b[1;${rows - 1}r`),
+		)),
+		"scrolling_top_small_region" => Result.ok(vtebenchScrolling(
+			name,
+			bytesOf(`${ALT_SCREEN}\x1b[${rows / 2};${rows}r`),
+		)),
+		"scrolling_bottom_small_region" => Result.ok(vtebenchScrolling(
+			name,
+			bytesOf(`${ALT_SCREEN}\x1b[1;${rows / 2}r`),
+		)),
+		"unicode" => Result.ok(vtebench(
+			name,
+			bytesOf(ALT_SCREEN),
+			repeatedTo(unicodeSymbols(), VTEBENCH_MIN_BYTES),
+		)),
+		"ghosttyAscii" => Result.ok(ghosttyStream(name, ghosttyAscii(GHOSTTY_BYTES))),
+		"ghosttyStyled" => Result.ok(ghosttyStream(name, ghosttyStyled(GHOSTTY_BYTES, {
+			styleRate: 800, graphemeRate: 0, weightOne: 1, weightTwo: 0, weightThree: 0,
+		}))),
+		"ghosttyWideMix" => Result.ok(ghosttyStream(name, ghosttyStyled(GHOSTTY_BYTES, {
+			styleRate: 0, graphemeRate: 100, weightOne: 0, weightTwo: 1, weightThree: 2,
+		}))),
+		_ => Result.err(WorkloadError.Unknown),
 	};
-	if (w.cols == 0) { return Result.err(WorkloadError.Unknown); }
-	return Result.ok(w);
 }
 
 test "light cells fill the grid once per letter and home the cursor before each" {

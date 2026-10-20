@@ -93,7 +93,11 @@ function isEmpty(this cell: Cell, background: Rgb): boolean {
 		run.underline == Underline.None && !run.strikethrough;
 }
 
-export function line(this row: Row, cursorCell: int32, background: Rgb): Result<GridLine, GridError> {
+export function line(
+	this row: Row,
+	cursorCell: int32,
+	background: Rgb,
+): Result<GridLine, GridError> {
 	let text = "";
 	let runs: Vec<LineRun> = [];
 	let extra = 0;
@@ -115,7 +119,8 @@ export function line(this row: Row, cursorCell: int32, background: Rgb): Result<
 		if (cell.flags.has(CellFlag.Invisible)) {
 			const blank = cell.flags.has(CellFlag.Wide) ? "  " : " ";
 			text += blank;
-			pushUnits(runs, { ...run, underline: Underline.None, strikethrough: false }, blank.length as int32, split);
+			const hidden: LineRun = { ...run, underline: Underline.None, strikethrough: false };
+			pushUnits(runs, hidden, blank.length as int32, split);
 			extra += cell.extra as int32;
 			continue;
 		}

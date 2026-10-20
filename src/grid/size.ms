@@ -11,9 +11,9 @@ export function gridSize(
 	if (cellWidthPx <= 0 || cellHeightPx <= 0) {
 		return Result.err(GridSizeError.InvalidCellSize);
 	}
-	const cols = surfaceWidthPx / cellWidthPx;
-	const rows = surfaceHeightPx / cellHeightPx;
-	return Result.ok([cols < 1 ? 1 : cols, rows < 1 ? 1 : rows]);
+	const cols = Math.max(surfaceWidthPx / cellWidthPx, 1);
+	const rows = Math.max(surfaceHeightPx / cellHeightPx, 1);
+	return Result.ok([cols, rows]);
 }
 
 test "an exact surface divides into its grid" {

@@ -22,11 +22,17 @@ export function chordOf(mods: number): int32 {
 	return (mods as int32) & CHORD;
 }
 
+export enum Screen {
+	Any,
+	Alternate,
+	Primary,
+}
+
 struct Binding {
 	code: string;
 	mods: int32;
 	action: Action;
-	primaryOnly: boolean;
+	screen: Screen;
 }
 
 when (macos) {
@@ -35,36 +41,30 @@ when (macos) {
 } else {
 	export const CLIPBOARD_MODS: int32 = CTRL | SHIFT;
 	const INSERT_CHORDS: Vec<Binding> = [
-		{ code: "Insert", mods: CTRL, action: Action.Copy, primaryOnly: false },
-		{ code: "Insert", mods: SHIFT, action: Action.Paste, primaryOnly: false },
+		{ code: "Insert", mods: CTRL, action: Action.Copy, screen: Screen.Any },
+		{ code: "Insert", mods: SHIFT, action: Action.Paste, screen: Screen.Any },
 	];
 }
 
 const BINDINGS: Vec<Binding> = [
-	{ code: "KeyC", mods: CLIPBOARD_MODS, action: Action.Copy, primaryOnly: false },
-	{ code: "Enter", mods: 0, action: Action.Copy, primaryOnly: false },
-	{ code: "KeyV", mods: CLIPBOARD_MODS, action: Action.Paste, primaryOnly: false },
-	{ code: "ArrowUp", mods: CTRL | SHIFT, action: Action.LineUp, primaryOnly: false },
-	{ code: "ArrowDown", mods: CTRL | SHIFT, action: Action.LineDown, primaryOnly: false },
-	{ code: "PageUp", mods: CTRL | SHIFT, action: Action.PageUp, primaryOnly: false },
-	{ code: "PageDown", mods: CTRL | SHIFT, action: Action.PageDown, primaryOnly: false },
-	{ code: "Home", mods: CTRL | SHIFT, action: Action.Top, primaryOnly: false },
-	{ code: "End", mods: CTRL | SHIFT, action: Action.Bottom, primaryOnly: false },
-	{ code: "ArrowUp", mods: CTRL | ALT, action: Action.PromptUp, primaryOnly: false },
-	{ code: "ArrowDown", mods: CTRL | ALT, action: Action.PromptDown, primaryOnly: false },
-	{ code: "PageUp", mods: SHIFT, action: Action.PageUp, primaryOnly: true },
-	{ code: "PageDown", mods: SHIFT, action: Action.PageDown, primaryOnly: true },
+	{ code: "KeyC", mods: CLIPBOARD_MODS, action: Action.Copy, screen: Screen.Any },
+	{ code: "Enter", mods: 0, action: Action.Copy, screen: Screen.Any },
+	{ code: "KeyV", mods: CLIPBOARD_MODS, action: Action.Paste, screen: Screen.Any },
+	{ code: "ArrowUp", mods: CTRL | SHIFT, action: Action.LineUp, screen: Screen.Any },
+	{ code: "ArrowDown", mods: CTRL | SHIFT, action: Action.LineDown, screen: Screen.Any },
+	{ code: "PageUp", mods: CTRL | SHIFT, action: Action.PageUp, screen: Screen.Any },
+	{ code: "PageDown", mods: CTRL | SHIFT, action: Action.PageDown, screen: Screen.Any },
+	{ code: "Home", mods: CTRL | SHIFT, action: Action.Top, screen: Screen.Any },
+	{ code: "End", mods: CTRL | SHIFT, action: Action.Bottom, screen: Screen.Any },
+	{ code: "ArrowUp", mods: CTRL | ALT, action: Action.PromptUp, screen: Screen.Any },
+	{ code: "ArrowDown", mods: CTRL | ALT, action: Action.PromptDown, screen: Screen.Any },
+	{ code: "PageUp", mods: SHIFT, action: Action.PageUp, screen: Screen.Primary },
+	{ code: "PageDown", mods: SHIFT, action: Action.PageDown, screen: Screen.Primary },
 ];
 
 export enum BindAction {
 	SendText,
 	CloseWindow,
-}
-
-export enum Screen {
-	Any,
-	Alternate,
-	Primary,
 }
 
 export struct Keybind {
@@ -141,6 +141,10 @@ export function keybind(
 	return Result.ok({ code: code, mods: mods, text: text, action: action, screen: screen });
 }
 
+function appliesOn(screen: Screen, altScreen: boolean): boolean {
+	return screen == Screen.Any || screen == (altScreen ? Screen.Alternate : Screen.Primary);
+}
+
 export function bindFor(
 	binds: Readonly<Span<Keybind>>,
 	code: string,
@@ -148,10 +152,8 @@ export function bindFor(
 	altScreen: boolean,
 ): Keybind | null {
 	const held = chordOf(mods);
-	const here = altScreen ? Screen.Alternate : Screen.Primary;
 	for (const b of binds) {
-		const onScreen = b.screen == Screen.Any || b.screen == here;
-		if (b.code == code && b.mods == held && onScreen) { return b; }
+		if (b.code == code && b.mods == held && appliesOn(b.screen, altScreen)) { return b; }
 	}
 	return null;
 }
@@ -163,8 +165,7 @@ function lookup(
 	altScreen: boolean,
 ): Action {
 	for (const b of table) {
-		const onScreen = !(b.primaryOnly && altScreen);
-		if (b.code == code && b.mods == held && onScreen) { return b.action; }
+		if (b.code == code && b.mods == held && appliesOn(b.screen, altScreen)) { return b.action; }
 	}
 	return Action.None;
 }

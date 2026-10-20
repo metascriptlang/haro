@@ -1,9 +1,14 @@
 import { changeStamp } from "std/fs";
 import { Config, defaults } from "../config/config";
 import { Loaded, empty, load } from "../config/source";
+import { resourcePath } from "../../../ion/src/index";
+import { cwd } from "std/process";
 
 // Polled until card 2026-09-26-await-on-fs-watch-never-resumes.md lets a watch resume in an Ion window
 const CONFIG_POLL_MS = 1000;
+const API = resourcePath() == ""
+	? `${cwd().replaceAll("\\", "/")}/assets/haro`
+	: `${resourcePath().replaceAll("\\", "/")}/assets/haro`;
 
 export interface ConfigWatch {
 	file: string;
@@ -16,7 +21,7 @@ export function forFile(this typeof ConfigWatch, file: string): ConfigWatch {
 }
 
 function reload(this w: ConfigWatch): Result<Config, string> {
-	const got = load(w.file);
+	const got = load(w.file, API);
 	if (!got.ok) { return Result.err(got.error); }
 	w.loaded = got.value;
 	return Result.ok(got.value.config);

@@ -1,10 +1,10 @@
-import { execFileCapture, findOnPath } from "std/process";
+import { cwd, execFileCapture, findOnPath } from "std/process";
 when (!macos) {
 	import { env } from "std/process";
 }
 import { homeDir } from "std/os";
 import { changeStamp, ensureDir, exists, readFile, writeFile } from "std/fs";
-import { isAbsolute, relative } from "std/fs/path";
+import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
 import { Faces, installedFaces } from "./fonts";
 
@@ -56,7 +56,12 @@ function lastLine(text: string): string {
 	return lines[lines.length - 1].trim();
 }
 
-function evaluate(path: string, dir: string): Result<string, string> {
+function packagesOf(api: string): string {
+	return `const config = { deps: { "haro": ${JSON.stringify(`file:${api}`)} } };\n` +
+		"export default config;\n";
+}
+
+function evaluate(path: string, dir: string, api: string): Result<string, string> {
 	const installedMsc = `${homeDir()}/.metascript/bin/msc`;
 	const onPath = findOnPath("msc");
 	const msc = onPath != "" ? onPath : exists(installedMsc) ? installedMsc : "";
@@ -70,6 +75,11 @@ function evaluate(path: string, dir: string): Result<string, string> {
 	if (!writeFile(`${dir}/evaluate.ms`, runner).ok) {
 		return Result.err(`cannot write ${dir}/evaluate.ms`);
 	}
+	if (!writeFile(`${dir}/build.ms`, packagesOf(api)).ok) {
+		return Result.err(`cannot write ${dir}/build.ms`);
+	}
+	const beside = `${dirname(path)}/build.ms`;
+	if (!exists(beside)) { const _written = writeFile(beside, packagesOf(api)); }
 	const ran = execFileCapture(msc, ["run", "--target=raiser", "evaluate.ms"], dir);
 	if (!ran.ok) {
 		return Result.err(withoutStyles(`${ran.error.output}${ran.error.errorOutput}`).trim());
@@ -129,7 +139,7 @@ function decodeCache(lines: string[], stamp: string): Loaded | null {
 	return { config: c.value, faces: faces, stamp: stamp, notice: "" };
 }
 
-export function load(path: string): Result<Loaded, string> {
+export function load(path: string, api: string): Result<Loaded, string> {
 	const stamp = changeStamp(path);
 	if (stamp == "") { return Result.ok(Loaded.empty()); }
 	const dir = cacheDir();
@@ -140,7 +150,7 @@ export function load(path: string): Result<Loaded, string> {
 		if (hit !== null) { return Result.ok(hit); }
 	}
 	if (!ensureDir(dir).ok) { return Result.err(`cannot create ${dir}`); }
-	const json = try evaluate(path, dir);
+	const json = try evaluate(path, dir, api);
 	const config = try parse(json);
 	const fonts = fontsFound(config.fontFamily);
 	if (fonts.notice == "" && !writeFile(cacheFile, encodeCache(stamp, json, fonts.faces)).ok) {
@@ -191,5 +201,28 @@ when (windows) {
 		assert found.faces.length == 1;
 		assert found.faces[0].regular.toLowerCase().endsWith("/segoeui.ttf");
 		assert found.notice.includes(`"No Such Family Haro"`);
+	}
+}
+
+test "a config typed with HaroConfig evaluates, and a misspelt field is the checker's error" {
+	const dir = `${cwd()}/out/typedConfig`;
+	assert ensureDir(dir).ok;
+	const path = `${dir}/config.ms`;
+	const api = `${cwd()}/assets/haro`;
+	const head = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = `;
+	const body = `{ fontSize: 13, keybinds: [{ keys: "super+w", text: "x", mode: "alt" }] };\n`;
+	assert writeFile(path, `${head}${body}`).ok;
+	const typed = evaluate(path, dir, api);
+	assert typed.ok;
+	if (typed.ok) {
+		const c = parse(typed.value);
+		assert c.ok && c.value.fontSize == 13 && c.value.keybinds.length == 1;
+	}
+	assert exists(`${dir}/build.ms`);
+	assert writeFile(path, `${head}{ fontSiz: 13 };\n`).ok;
+	const misspelt = evaluate(path, dir, api);
+	assert !misspelt.ok;
+	if (!misspelt.ok) {
+		assert misspelt.error.includes("'fontSiz' does not exist in type 'HaroConfig'");
 	}
 }

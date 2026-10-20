@@ -107,10 +107,6 @@ export function spans(this s: Screen, y: int32): TextSpan[] {
 	return s.grid.at(y).spans;
 }
 
-export function cursorCell(this s: Screen, y: int32): int32 {
-	return s.grid.at(y).line.cursorCell;
-}
-
 export function lines(this s: Screen): string {
 	let out = "";
 	for (let y = 0; y < s.rows; y++) {
@@ -141,15 +137,6 @@ export function history(this s: Screen): Vec<string> | null {
 	}
 	s.vt.scrollBottom();
 	if (!s.paint()) { return null; }
-	return out;
-}
-
-export function joined(lines: Vec<string>): string {
-	let out = "";
-	for (let i = 0; i < (lines.length as int32); i++) {
-		if (i > 0) { out += "\n"; }
-		out += lines[i];
-	}
 	return out;
 }
 

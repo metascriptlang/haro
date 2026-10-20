@@ -1,5 +1,5 @@
 import { defaultIndexed } from "./palette";
-import { Screen, joined } from "./screen";
+import { Screen } from "./screen";
 import { Rgb, size } from "../vt/vt";
 
 function filled(s: Screen, y: int32, units: int32, bg: Rgb): boolean {
@@ -37,7 +37,7 @@ function margins(left: int32, right: int32): string {
 function everything(s: Screen): string {
 	const h = s.history();
 	if (h === null) { return "<no history>"; }
-	return joined(h);
+	return h.join("\n");
 }
 
 test "CUP clamps to the screen and treats 0 as 1" {

@@ -13,4 +13,4 @@ git apply --directory=out/ghostty-src patches/ghostty-win32-input-mode.patch
 
 cd "$src"
 zig build -Demit-lib-vt -Doptimize=ReleaseFast -Dversion-string="0.0.0-dev+$rev" --cache-dir "$root/out/zig-cache"
-cp zig-out/lib/*ghostty-vt* "$out/"
+cp -R zig-out/lib/*ghostty-vt* "$out/"

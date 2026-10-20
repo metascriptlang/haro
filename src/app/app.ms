@@ -86,14 +86,14 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	const [preedit, setPreedit] = createSignal<string>("");
 	const [composing, setComposing] = createSignal<boolean>(false);
 	const noticeRows = createList<string>([]);
-	let themed = false;
+	let settingsApplied = false;
 
 	const controls = Controls.open();
 	controls.keybinds = started.keybinds;
 	const dialog = PasteView.open();
 	const [viewWidth, setViewWidth] = createSignal<number>(0);
 	const shades = createList<Block>([NO_SHADE, NO_SHADE, NO_SHADE]);
-	let lit: Vec<Block> = [NO_SHADE, NO_SHADE, NO_SHADE];
+	let litShades: Vec<Block> = [NO_SHADE, NO_SHADE, NO_SHADE];
 	const cursorBoxes = createList<Box>([NO_BOX, NO_BOX, NO_BOX, NO_BOX]);
 	let litBoxes: Vec<Box> = [NO_BOX, NO_BOX, NO_BOX, NO_BOX];
 	let cursorAt: Cursor | null = null;
@@ -104,7 +104,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	let lastReset = 0.0;
 	let heldTimer: number = -1;
 	let scrollTimer: number = -1;
-	let geometry: MouseGeometry = { cellWidth: 1, cellHeight: 1, width: 1, height: 1 };
+	let mouseGeometry: MouseGeometry = { cellWidth: 1, cellHeight: 1, width: 1, height: 1 };
 
 	const fatal = (what: string, error: TermError): void => {
 		entry.fail(`${what}: ${error.toString()}`);
@@ -114,7 +114,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		entry.fail(`${what}: ${error.toString()}`);
 	};
 
-	function repaint(): void {
+	function paintShades(): void {
 		const drawn = controls.shades(t);
 		if (!drawn.ok) {
 			fatalControl("selection", drawn.error);
@@ -122,8 +122,8 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		}
 		for (let i = 0; i < SHADES; i++) {
 			const next = i < drawn.value.length ? drawn.value[i] : NO_SHADE;
-			if (next == lit[i]) { continue; }
-			lit[i] = next;
+			if (next == litShades[i]) { continue; }
+			litShades[i] = next;
 			shades.set(i, next);
 		}
 	}
@@ -181,7 +181,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		}, HOLD_RECHECK_MS);
 	}
 
-	function clipWrite(text: string): void {
+	function copyToClipboard(text: string): void {
 		try {
 			Clipboard.setString(text);
 		} catch (e) {
@@ -189,7 +189,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		}
 	}
 
-	function clipRead(done: (text: string) => void): void {
+	function readClipboard(done: (text: string) => void): void {
 		Clipboard.getString().then((text: string): void => {
 			done(text);
 			refresh();
@@ -197,7 +197,12 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	}
 
 	function bridge(): Bridge {
-		return { write: clipWrite, read: clipRead, open: entry.openLink, close: entry.close };
+		return {
+			write: copyToClipboard,
+			read: readClipboard,
+			open: entry.openLink,
+			close: entry.close,
+		};
 	}
 
 	function refresh(): void {
@@ -209,8 +214,8 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		}
 		const f = frame.value;
 		const copied = f.copied;
-		if (copied !== null) { clipWrite(copied); }
-		if (f.asked) { controls.asked(t, bridge()); }
+		if (copied !== null) { copyToClipboard(copied); }
+		if (f.asked) { controls.clipboardAsked(t, bridge()); }
 		if (f.held) {
 			watchHold();
 		} else {
@@ -230,7 +235,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			cursorLook = f.look;
 			syncBlink();
 			paintCursor();
-			repaint();
+			paintShades();
 		}
 		dialog.show(controls.held, controls.reading, cellWidth(), viewWidth());
 		if (f.more) {
@@ -274,7 +279,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		controls.keybinds = c.keybinds;
 		setPadding(c.padding);
 		showNotice(restartNeeded(c, started) ? RESTART_NOTICE : "");
-		if (themed && applySettings()) { refresh(); }
+		if (settingsApplied && applySettings()) { refresh(); }
 	});
 
 	entry.onCloseKey((): void => {
@@ -335,7 +340,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		setViewWidth(e.width);
 		showNotice(notice);
 		dialog.shownFor = null;
-		geometry = {
+		mouseGeometry = {
 			cellWidth: cellPx,
 			cellHeight: rowPx,
 			width: size.value[0] * cellPx,
@@ -357,8 +362,8 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			}
 			return;
 		}
-		if (!themed) {
-			themed = true;
+		if (!settingsApplied) {
+			settingsApplied = true;
 			if (!applySettings()) { return; }
 		}
 		if (fitted.value) { refresh(); }
@@ -424,18 +429,18 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			y: e.locationY,
 			scale: PixelRatio.get(),
 			mods: (e.mods as uint16) as BitSet<KeyMod>,
-			cell: geometry,
+			cell: mouseGeometry,
 		};
 	};
 
 	const pressed = (e: NeonEvent): void => {
 		if (cellWidth() <= 0) { return; }
-		const handled = controls.down(t, clip, e.button as int32, hit(e), Date.now());
+		const handled = controls.pointerDown(t, clip, e.button as int32, hit(e), Date.now());
 		if (!handled.ok) {
 			fatalControl("press", handled.error);
 			return;
 		}
-		repaint();
+		paintShades();
 	};
 
 	const autoscroll = (): void => {
@@ -455,18 +460,18 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 
 	const dragged = (e: NeonEvent): void => {
 		if (cellWidth() <= 0) { return; }
-		const handled = controls.move(t, hit(e), e.pressed);
+		const handled = controls.pointerMove(t, hit(e), e.pressed);
 		if (!handled.ok) {
 			fatalControl("move", handled.error);
 			return;
 		}
-		if (handled.value) { repaint(); }
+		if (handled.value) { paintShades(); }
 		autoscroll();
 	};
 
 	const released = (e: NeonEvent): void => {
 		if (cellWidth() <= 0) { return; }
-		const handled = controls.up(t, e.button as int32, hit(e));
+		const handled = controls.pointerUp(t, e.button as int32, hit(e));
 		if (!handled.ok) { fatalControl("release", handled.error); }
 	};
 

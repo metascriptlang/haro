@@ -43,7 +43,7 @@ import { Term, openTerm, shutdown } from "./term";
 extern function appWireWake(): void;
 
 const ASSETS = resourcePath() == "" ? "assets" : `${resourcePath().replaceAll("\\", "/")}/assets`;
-const FONT_PATH = `${ASSETS}/JetBrainsMonoNL-Regular.ttf`;
+const FONT_REGULAR = `${ASSETS}/JetBrainsMonoNL-Regular.ttf`;
 const FONT_BOLD = `${ASSETS}/JetBrainsMonoNL-Bold.ttf`;
 const FONT_ITALIC = `${ASSETS}/JetBrainsMonoNL-Italic.ttf`;
 const FONT_BOLD_ITALIC = `${ASSETS}/JetBrainsMonoNL-BoldItalic.ttf`;
@@ -106,7 +106,7 @@ const CONFIG_POLL_MS = 1000;
 const STATS_MS = 1000;
 
 const pace = Pace.start();
-const configFile = valueOf("--config") ?? configPath();
+const configFile = flagValue("--config") ?? configPath();
 let loaded: Loaded = { config: defaults(), faces: [], stamp: "" };
 let configError = "";
 let launchShown = false;
@@ -123,14 +123,14 @@ function fail(message: string): void {
 	exit(1);
 }
 
-function valueOf(flag: string): string | null {
+function flagValue(flag: string): string | null {
 	for (let i = 1; i + 1 < argv.length; i++) {
 		if (argv[i] == flag) { return argv[i + 1]; }
 	}
 	return null;
 }
 
-function has(flag: string): boolean {
+function hasFlag(flag: string): boolean {
 	for (const arg of argv) {
 		if (arg == flag) { return true; }
 	}
@@ -217,9 +217,9 @@ function logStats(wakes: int32, applies: int32, requested: number, drawn: number
 }
 
 function registerBuiltIn(): void {
-	registerFace(FONT_BOLD, FONT_PATH, 700, FontStyle.Normal);
-	registerFace(FONT_ITALIC, FONT_PATH, 400, FontStyle.Italic);
-	registerFace(FONT_BOLD_ITALIC, FONT_PATH, 700, FontStyle.Italic);
+	registerFace(FONT_BOLD, FONT_REGULAR, 700, FontStyle.Normal);
+	registerFace(FONT_ITALIC, FONT_REGULAR, 400, FontStyle.Italic);
+	registerFace(FONT_BOLD_ITALIC, FONT_REGULAR, 700, FontStyle.Italic);
 }
 
 function registerFamily(faces: Faces): string {
@@ -236,10 +236,10 @@ function registerFamily(faces: Faces): string {
 
 function registerFamilies(): string[] {
 	registerBuiltIn();
-	registerFace(FONT_PATH, FONT_PATH, 400, FontStyle.Normal);
+	registerFace(FONT_REGULAR, FONT_REGULAR, 400, FontStyle.Normal);
 	let families: string[] = [];
 	for (const faces of loaded.faces) { families.push(registerFamily(faces)); }
-	families.push(FONT_PATH);
+	families.push(FONT_REGULAR);
 	for (const face of fallbackFaces()) {
 		registerFace(face.path, face.family, 400, FontStyle.Normal);
 		families.push(face.family);
@@ -255,7 +255,7 @@ function inFrame(run: () => void): void {
 	});
 }
 
-function show(t: Term, exited: (code: int32) => void): int32 {
+function openWindow(t: Term, exited: (code: int32) => void): int32 {
 	const families = registerFamilies();
 	const entry: Entry = {
 		onWake: (handler: () => void): void => {
@@ -288,7 +288,7 @@ function show(t: Term, exited: (code: int32) => void): int32 {
 			watchConfig(handler);
 		},
 	};
-	if (has("--stats")) { logStats(0, 0, 0, 0); }
+	if (hasFlag("--stats")) { logStats(0, 0, 0, 0); }
 	when (macos) {
 		const bar = setAppMenu(menuBar());
 		if (!bar.ok) { fail(bar.error); }
@@ -315,9 +315,9 @@ function runShell(shell: string): int32 {
 	}
 	const t = opened.value;
 	appWireWake();
-	if (has("--smoke")) { smoke(t); }
-	if (has("--flood")) { smokeFlood(t, pace); }
-	return show(t, (code: int32): void => {
+	if (hasFlag("--smoke")) { smoke(t); }
+	if (hasFlag("--flood")) { smokeFlood(t, pace); }
+	return openWindow(t, (code: int32): void => {
 		note(`the shell exited with code ${code}`);
 		t.shutdown();
 		exit(0);
@@ -339,8 +339,8 @@ function runReplay(path: string): int32 {
 		return 1;
 	}
 	const t = opened.value;
-	if (has("--smoke")) { smokeReplay(t); }
-	return show(t, (code: int32): void => {
+	if (hasFlag("--smoke")) { smokeReplay(t); }
+	return openWindow(t, (code: int32): void => {
 		console.log(`haro: the recording ended with code ${code}`);
 	});
 }
@@ -349,9 +349,9 @@ function main(): int32 {
 	stats.mark("main", Date.now());
 	readConfig();
 	stats.mark("config", Date.now());
-	const replayPath = valueOf("--replay");
+	const replayPath = flagValue("--replay");
 	if (replayPath !== null) { return runReplay(replayPath); }
-	return runShell(valueOf("--shell") ?? loaded.config.command);
+	return runShell(flagValue("--shell") ?? loaded.config.command);
 }
 
 exit(main());

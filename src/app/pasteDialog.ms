@@ -82,13 +82,13 @@ function styleOf(tone: Tone): Style {
 	};
 }
 
-function shown(line: Line): Shown {
+function shownLine(line: Line): Shown {
 	return { spans: [{ text: line.text, style: styleOf(line.tone) }] };
 }
 
 function fill(list: List<Shown>, lines: Vec<Line>): void {
 	while (list.length() > 0) { list.remove(0); }
-	for (const line of lines) { list.push(shown(line)); }
+	for (const line of lines) { list.push(shownLine(line)); }
 }
 
 export function open(this typeof PasteView): PasteView {
@@ -121,19 +121,19 @@ export function show(
 	if (held !== null) {
 		if (v.shownFor === held) { return; }
 		const d = dialogOf(held.warning, held.text, cols, PREVIEW_ROWS);
-		v.open_(d, cols, PASTE_CONFIRM, PASTE_CANCEL);
+		v.present(d, cols, PASTE_CONFIRM, PASTE_CANCEL);
 		v.shownFor = held;
 		v.shownRead = null;
 		return;
 	}
 	const text = reading as string;
 	if (v.shownRead === text) { return; }
-	v.open_(askDialogOf(text, cols, PREVIEW_ROWS), cols, READ_CONFIRM, READ_CANCEL);
+	v.present(askDialogOf(text, cols, PREVIEW_ROWS), cols, READ_CONFIRM, READ_CANCEL);
 	v.shownRead = text;
 	v.shownFor = null;
 }
 
-function open_(this v: PasteView, d: Dialog, cols: int32, confirm: string, cancel: string): void {
+function present(this v: PasteView, d: Dialog, cols: int32, confirm: string, cancel: string): void {
 	fill(v.top, d.top);
 	fill(v.code, d.code);
 	v.setCols(cols as number);

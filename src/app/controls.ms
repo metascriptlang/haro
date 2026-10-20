@@ -140,7 +140,7 @@ function answerClipboard(
 	return Result.ok(true);
 }
 
-export function asked(this c: Controls, t: Term, host: Bridge): void {
+export function clipboardAsked(this c: Controls, t: Term, host: Bridge): void {
 	host.read((text: string): void => {
 		if (text == "") {
 			const answered = c.answerClipboard(t, "", true);
@@ -176,7 +176,7 @@ export function cancel(this c: Controls, t: Term): Result<boolean, ControlError>
 	return c.answerClipboard(t, "", false);
 }
 
-function answer(this c: Controls, t: Term, e: NeonEvent): Result<boolean, ControlError> {
+function answerHeld(this c: Controls, t: Term, e: NeonEvent): Result<boolean, ControlError> {
 	const reply = c.held !== null ? replyTo(e.code, e.mods) : replyToRead(e.code, e.mods);
 	match (reply) {
 		Reply.Confirm => { const _sent = try c.confirm(t); },
@@ -204,7 +204,7 @@ function pasteFrom(this c: Controls, t: Term, host: Bridge): void {
 	});
 }
 
-function run(
+function runKeybind(
 	this c: Controls,
 	t: Term,
 	bind: Keybind | null,
@@ -226,7 +226,7 @@ export function closeKey(this c: Controls, t: Term, host: Bridge): Result<boolea
 		const alt = vt.alternateScreen();
 		if (!alt.ok) { return Result.err(ControlError.VtFailed); }
 		const bind = bindFor(c.keybinds, "KeyW", SUPER, alt.value);
-		if (try c.run(t, bind, host)) { return Result.ok(true); }
+		if (try c.runKeybind(t, bind, host)) { return Result.ok(true); }
 	}
 	host.close();
 	return Result.ok(true);
@@ -238,12 +238,12 @@ export function keyDown(
 	e: NeonEvent,
 	host: Bridge,
 ): Result<boolean, ControlError> {
-	if (c.holding()) { return c.answer(t, e); }
+	if (c.holding()) { return c.answerHeld(t, e); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
 	if (!alt.ok) { return Result.err(ControlError.VtFailed); }
-	if (try c.run(t, bindFor(c.keybinds, e.code, e.mods, alt.value), host)) {
+	if (try c.runKeybind(t, bindFor(c.keybinds, e.code, e.mods, alt.value), host)) {
 		return Result.ok(true);
 	}
 	const action = resolve(e.code, e.mods, alt.value);
@@ -279,7 +279,7 @@ function copy(this c: Controls, t: Term, host: Bridge): Result<boolean, ControlE
 	return Result.ok(true);
 }
 
-function report(
+function reportMouse(
 	this c: Controls,
 	t: Term,
 	action: MouseAction,
@@ -304,7 +304,7 @@ function report(
 	return Result.ok(sent.value > 0);
 }
 
-function follow(host: Bridge, uri: string): void {
+function openLink(host: Bridge, uri: string): void {
 	if (openable(uri)) {
 		host.open(uri);
 	} else {
@@ -312,7 +312,7 @@ function follow(host: Bridge, uri: string): void {
 	}
 }
 
-export function down(
+export function pointerDown(
 	this c: Controls,
 	t: Term,
 	host: Bridge,
@@ -330,14 +330,14 @@ export function down(
 		if (!link.ok) { return Result.err(ControlError.VtFailed); }
 		const uri = link.value;
 		if (uri !== null) {
-			follow(host, uri);
+			openLink(host, uri);
 			return Result.ok(true);
 		}
 	}
 	if (claimsMouse(modes.value.mouseTracking, h.mods.has(KeyMod.Shift))) {
 		c.pointer.clear(vt);
 		c.button = button;
-		return c.report(t, MouseAction.Press, button, h, true);
+		return c.reportMouse(t, MouseAction.Press, button, h, true);
 	}
 	if (button == LEFT) {
 		const reach = (h.cell.cellWidth as float64) / h.scale;
@@ -353,7 +353,7 @@ export function down(
 	return Result.ok(false);
 }
 
-export function move(
+export function pointerMove(
 	this c: Controls,
 	t: Term,
 	h: Hit,
@@ -366,7 +366,7 @@ export function move(
 	if (!modes.ok) { return Result.err(ControlError.VtFailed); }
 	if (claimsMouse(modes.value.mouseTracking, h.mods.has(KeyMod.Shift))) {
 		if (!pressed) { c.button = 0; }
-		const _reported = try c.report(t, MouseAction.Motion, c.button, h, c.button != 0);
+		const _reported = try c.reportMouse(t, MouseAction.Motion, c.button, h, c.button != 0);
 		return Result.ok(false);
 	}
 	if (!c.pointer.dragging) {
@@ -384,7 +384,7 @@ export function move(
 	return Result.ok(dragged.value);
 }
 
-export function up(
+export function pointerUp(
 	this c: Controls,
 	t: Term,
 	button: int32,
@@ -395,7 +395,7 @@ export function up(
 	c.autoscroll = 0;
 	if (!reported || c.holding()) { return Result.ok(false); }
 	c.button = 0;
-	return c.report(t, MouseAction.Release, button, h, false);
+	return c.reportMouse(t, MouseAction.Release, button, h, false);
 }
 
 export function autoscrollTick(this c: Controls, t: Term): Result<boolean, ControlError> {
@@ -432,7 +432,7 @@ export function roll(
 		WheelRoute.Report => {
 			const button = reportButton(rows < 0);
 			for (let i = 0; i < presses; i++) {
-				const _reported = try c.report(t, MouseAction.Press, button, h, false);
+				const _reported = try c.reportMouse(t, MouseAction.Press, button, h, false);
 			}
 			return Result.ok(false);
 		},
@@ -538,9 +538,9 @@ function hitWith(col: int32, row: int32, mods: int32): Hit {
 }
 
 function drag(c: Controls, t: Term, clip: Bridge, from: Spot, to: Spot): boolean {
-	const pressed = c.down(t, clip, 1, hitAt(from.col, from.row), 0).ok;
-	const moved = c.move(t, hitAt(to.col, to.row), true).ok;
-	const _released = c.up(t, 1, hitAt(to.col, to.row));
+	const pressed = c.pointerDown(t, clip, 1, hitAt(from.col, from.row), 0).ok;
+	const moved = c.pointerMove(t, hitAt(to.col, to.row), true).ok;
+	const _released = c.pointerUp(t, 1, hitAt(to.col, to.row));
 	return pressed && moved;
 }
 
@@ -781,9 +781,9 @@ test "while a paste is held the wheel, the buttons and the pointer do nothing" {
 		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
 		assert !handled(c.roll(t, 1, hitAt(0, 0)));
 		assert offsetOf(t) == bottom;
-		assert !handled(c.down(t, clip, 1, hitAt(0, 0), 0));
+		assert !handled(c.pointerDown(t, clip, 1, hitAt(0, 0), 0));
 		assert !c.pointer.dragging;
-		assert !handled(c.down(t, clip, 2, hitAt(0, 0), 0));
+		assert !handled(c.pointerDown(t, clip, 2, hitAt(0, 0), 0));
 		assert clip.write !== null;
 		t.shutdown();
 	}
@@ -873,15 +873,15 @@ test "an app that tracks the mouse gets presses, releases and wheel notches as i
 		const c = Controls.open();
 		const clip = clipOf(boardOf("x"));
 		const bottom = offsetOf(t);
-		assert handled(c.down(t, clip, 1, hitAt(2, 1), 0));
+		assert handled(c.pointerDown(t, clip, 1, hitAt(2, 1), 0));
 		assert !c.pointer.dragging;
 		assert sink.sent == "\x1b[<0;3;2M";
-		assert handled(c.up(t, 1, hitAt(2, 1)));
+		assert handled(c.pointerUp(t, 1, hitAt(2, 1)));
 		assert sink.sent == "\x1b[<0;3;2M\x1b[<0;3;2m";
 		assert !handled(c.roll(t, 1, hitAt(0, 0)));
 		assert offsetOf(t) == bottom;
 		assert sink.sent == "\x1b[<0;3;2M\x1b[<0;3;2m\x1b[<64;1;1M\x1b[<64;1;1M\x1b[<64;1;1M";
-		assert !handled(c.up(t, 1, hitAt(0, 0)));
+		assert !handled(c.pointerUp(t, 1, hitAt(0, 0)));
 		t.shutdown();
 	}
 }
@@ -893,10 +893,10 @@ test "motion is reported only in the modes that ask for it, and the held button 
 	if (t !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("x"));
-		assert !handled(c.move(t, hitAt(1, 1), false));
+		assert !handled(c.pointerMove(t, hitAt(1, 1), false));
 		assert sink.sent == "";
-		assert handled(c.down(t, clip, 1, hitAt(1, 1), 0));
-		assert !handled(c.move(t, hitAt(4, 1), true));
+		assert handled(c.pointerDown(t, clip, 1, hitAt(1, 1), 0));
+		assert !handled(c.pointerMove(t, hitAt(4, 1), true));
 		assert sink.sent == "\x1b[<0;2;2M\x1b[<32;5;2M";
 		t.shutdown();
 	}
@@ -910,9 +910,9 @@ test "shift hands the mouse back from an app that tracks it, to selection and th
 		const c = Controls.open();
 		const clip = clipOf(boardOf("x"));
 		const bottom = offsetOf(t);
-		assert handled(c.down(t, clip, 1, hitWith(0, 1, 1), 0));
+		assert handled(c.pointerDown(t, clip, 1, hitWith(0, 1, 1), 0));
 		assert c.pointer.dragging;
-		assert handled(c.move(t, hitWith(5, 1, 1), true));
+		assert handled(c.pointerMove(t, hitWith(5, 1, 1), true));
 		assert c.pointer.selected();
 		assert sink.sent == "";
 		assert handled(c.roll(t, 1, hitWith(0, 0, 1)));
@@ -931,14 +931,14 @@ test "a ctrl click on an http link opens it, on any other link or text it does n
 		const c = Controls.open();
 		const board = boardOf("");
 		const clip = clipOf(board);
-		assert handled(c.down(t, clip, 1, hitWith(1, 0, 2), 0));
+		assert handled(c.pointerDown(t, clip, 1, hitWith(1, 0, 2), 0));
 		assert board.opened == "https://example.com/a";
 		board.opened = "";
-		assert handled(c.down(t, clip, 1, hitWith(6, 0, 2), 0));
+		assert handled(c.pointerDown(t, clip, 1, hitWith(6, 0, 2), 0));
 		assert board.opened == "";
-		assert handled(c.down(t, clip, 1, hitWith(12, 0, 2), 10000));
+		assert handled(c.pointerDown(t, clip, 1, hitWith(12, 0, 2), 10000));
 		assert board.opened == "";
-		assert handled(c.down(t, clip, 1, hitWith(1, 0, 0), 20000));
+		assert handled(c.pointerDown(t, clip, 1, hitWith(1, 0, 0), 20000));
 		assert board.opened == "";
 		t.shutdown();
 	}
@@ -951,7 +951,7 @@ test "a clipboard read waits for an answer: escape or enter deny it, ctrl enter 
 	if (a !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("secret"));
-		c.asked(a, clip);
+		c.clipboardAsked(a, clip);
 		assert c.holding();
 		assert c.reading == "secret";
 		assert deny.sent == "";
@@ -968,7 +968,7 @@ test "a clipboard read waits for an answer: escape or enter deny it, ctrl enter 
 	if (b !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("secret"));
-		c.asked(b, clip);
+		c.clipboardAsked(b, clip);
 		assert handled(c.keyDown(b, key("Enter", 2), clip));
 		assert allow.sent == "\x1b]52;c;c2VjcmV0\x1b\\";
 		b.shutdown();
@@ -981,13 +981,13 @@ test "an empty clipboard is answered at once and a read does not ask while the p
 	assert t !== null;
 	if (t !== null) {
 		const c = Controls.open();
-		c.asked(t, clipOf(boardOf("")));
+		c.clipboardAsked(t, clipOf(boardOf("")));
 		assert !c.holding();
 		assert sink.sent == "\x1b]52;c;\x1b\\";
 		c.reading = "x";
 		const clip = clipOf(boardOf(""));
 		assert !handled(c.roll(t, 1, hitAt(0, 0)));
-		assert !handled(c.down(t, clip, 1, hitAt(0, 0), 0));
+		assert !handled(c.pointerDown(t, clip, 1, hitAt(0, 0), 0));
 		t.shutdown();
 	}
 }
@@ -1000,10 +1000,10 @@ test "a right click copies a selection and otherwise pastes" {
 		const c = Controls.open();
 		const board = boardOf("pasted");
 		const clip = clipOf(board);
-		assert !handled(c.down(t, clip, 2, hitAt(0, 0), 0));
+		assert !handled(c.pointerDown(t, clip, 2, hitAt(0, 0), 0));
 		assert sink.sent == "pasted";
 		assert drag(c, t, clip, at(0, 0), at(4, 0));
-		assert handled(c.down(t, clip, 2, hitAt(0, 0), 1000));
+		assert handled(c.pointerDown(t, clip, 2, hitAt(0, 0), 1000));
 		assert board.copied == "alpha";
 		assert sink.sent == "pasted";
 		assert !c.pointer.selected();
@@ -1018,13 +1018,13 @@ test "a move that finds the button released ends the drag, and a wheel while dra
 	if (t !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
-		assert c.down(t, clip, 1, hitAt(0, 4), 0).ok;
-		assert handled(c.move(t, hitAt(3, 4), true));
+		assert c.pointerDown(t, clip, 1, hitAt(0, 4), 0).ok;
+		assert handled(c.pointerMove(t, hitAt(3, 4), true));
 		assert handled(c.roll(t, 1, hitAt(0, 0)));
 		const kept = c.pointer.sel;
 		assert kept !== null;
 		if (kept !== null) { assert kept.bounds().start.row < kept.bounds().end.row; }
-		assert !handled(c.move(t, hitAt(5, 4), false));
+		assert !handled(c.pointerMove(t, hitAt(5, 4), false));
 		assert !c.pointer.dragging;
 		t.shutdown();
 	}
@@ -1078,9 +1078,9 @@ test "a drag held past the top edge scrolls back a row per tick, and the release
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		const bottom = offsetOf(t);
-		assert c.down(t, clip, 1, hitAt(3, 2), 0).ok;
+		assert c.pointerDown(t, clip, 1, hitAt(3, 2), 0).ok;
 		const above: Hit = { ...hitAt(3, 0), y: -12 };
-		assert c.move(t, above, true).ok;
+		assert c.pointerMove(t, above, true).ok;
 		assert c.autoscroll == -1;
 		assert handled(c.autoscrollTick(t));
 		assert handled(c.autoscrollTick(t));
@@ -1088,7 +1088,7 @@ test "a drag held past the top edge scrolls back a row per tick, and the release
 		const kept = c.pointer.sel;
 		assert kept !== null;
 		if (kept !== null) { assert kept.bounds().start.row == bottom - 2; }
-		assert c.up(t, 1, above).ok;
+		assert c.pointerUp(t, 1, above).ok;
 		assert !handled(c.autoscrollTick(t));
 		assert offsetOf(t) == bottom - 2;
 		t.shutdown();

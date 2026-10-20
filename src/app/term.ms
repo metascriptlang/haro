@@ -74,7 +74,7 @@ export struct Frame {
 
 const HIDDEN: CursorLook = { visible: false, shape: CursorShape.Block, blinking: false };
 
-function idle(more: boolean, ended: boolean): Frame {
+function idleFrame(more: boolean, ended: boolean): Frame {
 	return {
 		cursor: null,
 		look: HIDDEN,
@@ -111,7 +111,7 @@ function blankSlot(): RowSlot {
 	return { line: { text: "", runs: [], cursorCell: -1 }, spans: [] };
 }
 
-function matchGrid(this t: Term, rows: int32): void {
+function resizeGrid(this t: Term, rows: int32): void {
 	const have = t.grid.length() as int32;
 	for (let i = have; i < rows; i++) { t.grid.push(blankSlot()); }
 	for (let i = have; i > rows; i--) { t.grid.remove(i - 1); }
@@ -133,7 +133,7 @@ export function fit(this t: Term, cols: int32, rows: int32): Result<boolean, Ter
 	}
 	t.cols = cols;
 	t.rows = rows;
-	t.matchGrid(rows);
+	t.resizeGrid(rows);
 	return Result.ok(true);
 }
 
@@ -167,7 +167,7 @@ export function drain(this t: Term): Result<boolean, TermError> {
 
 export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok(idle(false, false)); }
+	if (s === null) { return Result.ok(idleFrame(false, false)); }
 	const more = try t.drain();
 	const ended = t.ended;
 	t.ended = false;
@@ -185,7 +185,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	const asked = vt.clipboardAsked();
 	if (vt.holding()) {
 		return Result.ok({
-			...idle(more, ended),
+			...idleFrame(more, ended),
 			held: true,
 			copied: copied.value,
 			asked: asked,

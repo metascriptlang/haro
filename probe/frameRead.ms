@@ -34,35 +34,35 @@ function main(): int32 {
 	if (!created.ok) { return 1; }
 	const vt = created.value;
 	vt.writeText(fullScreen());
-	let update: Vec<float64> = [];
-	let full: Vec<float64> = [];
-	let oneRow: Vec<float64> = [];
+	let updateMs: Vec<float64> = [];
+	let fullReadMs: Vec<float64> = [];
+	let dirtyReadMs: Vec<float64> = [];
 	let cells = 0;
 	let dirtyCount = 0;
 	for (let run = 0; run < RUNS; run++) {
 		if (!vt.update().ok) { return 1; }
-		const f0: float64 = performance.now();
+		const fullStart: float64 = performance.now();
 		const rows = vt.rows();
-		full.push(performance.now() - f0);
+		fullReadMs.push(performance.now() - fullStart);
 		if (!rows.ok) { return 1; }
 		cells = 0;
 		for (const row of rows.value) { cells += row.cells.length; }
 		vt.clean();
 		vt.writeText("\x1b[1;1H\x1b[31mx");
-		const u0: float64 = performance.now();
+		const updateStart: float64 = performance.now();
 		if (!vt.update().ok) { return 1; }
-		update.push(performance.now() - u0);
-		const d0: float64 = performance.now();
+		updateMs.push(performance.now() - updateStart);
+		const dirtyStart: float64 = performance.now();
 		const dirty = vt.dirtyRows();
-		oneRow.push(performance.now() - d0);
+		dirtyReadMs.push(performance.now() - dirtyStart);
 		if (!dirty.ok) { return 1; }
 		dirtyCount = dirty.value.length;
 		vt.clean();
 	}
 	console.log(`cells=${cells} runs=${RUNS} dirty rows after one write=${dirtyCount}`);
-	console.log(`update after one write median ${median(update)} ms`);
-	console.log(`rows() full ${COLS}x${ROWS} median ${median(full)} ms`);
-	console.log(`dirtyRows() after one write median ${median(oneRow)} ms`);
+	console.log(`update after one write median ${median(updateMs)} ms`);
+	console.log(`rows() full ${COLS}x${ROWS} median ${median(fullReadMs)} ms`);
+	console.log(`dirtyRows() after one write median ${median(dirtyReadMs)} ms`);
 	vt.free();
 	return 0;
 }

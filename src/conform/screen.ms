@@ -17,6 +17,8 @@ export interface Screen {
 export enum ScreenError {
 	CreateFailed,
 	FrameFailed,
+	ResizeFailed,
+	ScrollFailed,
 }
 
 function blankSlot(): RowSlot {
@@ -38,19 +40,19 @@ export function open(this typeof Screen, cols: int32, rows: int32): Result<Scree
 	});
 }
 
-export function paint(this s: Screen): boolean {
+export function paint(this s: Screen): Result<void, ScreenError> {
 	const applied = applyFrame(s.grid, s.styles, s.vt);
-	if (!applied.ok) { return false; }
+	if (!applied.ok) { return Result.err(ScreenError.FrameFailed); }
 	s.cursor = applied.value;
-	return true;
+	return Result.ok(null);
 }
 
-export function feed(this s: Screen, bytes: string): boolean {
+export function feed(this s: Screen, bytes: string): Result<void, ScreenError> {
 	s.vt.writeText(bytes);
 	return s.paint();
 }
 
-export function feedBytes(this s: Screen, values: int32[]): boolean {
+export function feedBytes(this s: Screen, values: int32[]): Result<void, ScreenError> {
 	let bytes: Vec<uint8> = new Array(values.length);
 	for (let i = 0; i < values.length; i++) { bytes[i] = values[i] as uint8; }
 	s.vt.write(bytes);
@@ -58,27 +60,24 @@ export function feedBytes(this s: Screen, values: int32[]): boolean {
 }
 
 export function step(this s: Screen, bytes: string): boolean {
-	return s.feed(bytes) && s.sameAsFreshRead();
+	return s.feed(bytes).ok && s.sameAsFreshRead();
 }
 
-export function feedChunks(this s: Screen, text: string, chunk: int32): boolean {
+export function feedChunks(this s: Screen, text: string, chunk: int32): Result<void, ScreenError> {
 	const view = text.asBytes();
 	const total = view.length as int32;
 	let bytes: Vec<uint8> = new Array(total);
 	for (let i = 0; i < total; i++) { bytes[i] = view[i]; }
 	const size = chunk > 0 ? chunk : total;
-	let at = 0;
-	while (at < total) {
-		const n = total - at < size ? total - at : size;
-		s.vt.write(bytes[at..at + n]);
-		if (!s.paint()) { return false; }
-		at += n;
+	for (let at = 0; at < total; at += size) {
+		s.vt.write(bytes[at..at + Math.min(size, total - at)]);
+		const _painted = try s.paint();
 	}
-	return true;
+	return Result.ok(null);
 }
 
-export function resize(this s: Screen, cols: int32, rows: int32): boolean {
-	if (!s.vt.resize(cols, rows).ok) { return false; }
+export function resize(this s: Screen, cols: int32, rows: int32): Result<void, ScreenError> {
+	if (!s.vt.resize(cols, rows).ok) { return Result.err(ScreenError.ResizeFailed); }
 	s.cols = cols;
 	s.rows = rows;
 	const have = s.grid.length() as int32;
@@ -108,40 +107,46 @@ export function spans(this s: Screen, y: int32): TextSpan[] {
 }
 
 export function lines(this s: Screen): string {
-	let out = "";
-	for (let y = 0; y < s.rows; y++) {
-		if (y > 0) { out += "\n"; }
-		out += s.text(y);
-	}
-	return out;
+	let texts: Vec<string> = [];
+	for (let y = 0; y < s.rows; y++) { texts.push(s.text(y)); }
+	return texts.join("
+");
 }
 
-export function history(this s: Screen): Vec<string> | null {
+function viewportOffset(this s: Screen): Result<int32, ScreenError> {
+	const offset = s.vt.scrollOffset();
+	if (!offset.ok) { return Result.err(ScreenError.ScrollFailed); }
+	return Result.ok(offset.value);
+}
+
+export function history(this s: Screen): Result<Vec<string>, ScreenError> {
 	let out: Vec<string> = [];
 	s.vt.scrollTop();
-	if (!s.paint()) { return null; }
+	const _top = try s.paint();
 	while (true) {
-		const offset = s.vt.scrollOffset();
-		if (!offset.ok) { return null; }
+		const offset = try s.viewportOffset();
 		for (let y = 0; y < s.rows; y++) {
-			while ((out.length as int32) <= offset.value + y) { out.push(""); }
-			out[offset.value + y] = s.text(y);
+			while ((out.length as int32) <= offset + y) { out.push(""); }
+			out[offset + y] = s.text(y);
 		}
 		const bottom = s.vt.atBottom();
-		if (!bottom.ok) { return null; }
+		if (!bottom.ok) { return Result.err(ScreenError.ScrollFailed); }
 		if (bottom.value) { break; }
 		s.vt.scrollLines(s.rows);
-		if (!s.paint()) { return null; }
-		const next = s.vt.scrollOffset();
-		if (!next.ok || next.value <= offset.value) { return null; }
+		const _page = try s.paint();
+		const next = try s.viewportOffset();
+		if (next <= offset) { return Result.err(ScreenError.ScrollFailed); }
 	}
 	s.vt.scrollBottom();
-	if (!s.paint()) { return null; }
-	return out;
+	const _bottom = try s.paint();
+	return Result.ok(out);
 }
 
 function runText(r: LineRun): string {
-	return `${r.units}:${r.fg.r},${r.fg.g},${r.fg.b}/${r.bg.r},${r.bg.g},${r.bg.b}/u${r.underline as int32}${r.bold ? "B" : ""}${r.italic ? "I" : ""}${r.strikethrough ? "S" : ""}`;
+	const fg = `${r.fg.r},${r.fg.g},${r.fg.b}`;
+	const bg = `${r.bg.r},${r.bg.g},${r.bg.b}`;
+	const look = `${r.bold ? "B" : ""}${r.italic ? "I" : ""}${r.strikethrough ? "S" : ""}`;
+	return `${r.units}:${fg}/${bg}/u${r.underline as int32}${look}`;
 }
 
 function runsText(runs: Vec<LineRun>): string {
@@ -156,14 +161,18 @@ export function mismatch(this s: Screen): string {
 	const colors = s.vt.palette();
 	if (!colors.ok) { return "the palette read failed"; }
 	const all = fresh.value;
-	if ((all.length as int32) != s.rows) { return `the vt has ${all.length} rows, the screen ${s.rows}`; }
+	if ((all.length as int32) != s.rows) {
+		return `the vt has ${all.length} rows, the screen ${s.rows}`;
+	}
 	const at = s.vt.cursor();
 	if (!at.ok) { return "the cursor read failed"; }
 	const c = at.value;
 	for (let y = 0; y < s.rows; y++) {
 		const l = all[y].line(c !== null && c.y == y ? c.x : -1, colors.value.bg);
 		if (!l.ok) { return `row ${y}: no line`; }
-		if (l.value.text != s.raw(y)) { return `row ${y}: text [${s.raw(y)}] but the vt has [${l.value.text}]`; }
+		if (l.value.text != s.raw(y)) {
+			return `row ${y}: text [${s.raw(y)}] but the vt has [${l.value.text}]`;
+		}
 		const have = runsText(s.runs(y));
 		const want = runsText(l.value.runs);
 		if (have != want) { return `row ${y}: runs ${have} but the vt has ${want}`; }

@@ -26,7 +26,7 @@ function look(sgr: string): Look | null {
 	if (!opened.ok) { return null; }
 	const s = opened.value;
 	let found: Look | null = null;
-	if (s.feed("\x1b[" + sgr + "mX")) {
+	if (s.feed("\x1b[" + sgr + "mX").ok) {
 		const colors = s.vt.palette();
 		const spans = s.spans(0);
 		if (colors.ok && spans.length > 0 && spans[0].style !== undefined) {

@@ -37,15 +37,15 @@ test "a new default colour (OSC 10, OSC 11, DECSCNM) repaints rows already drawn
 	assert fg !== null && bg !== null && reverse !== null;
 	if (fg !== null && bg !== null && reverse !== null) {
 		assert fg.step("abc\r\n");
-		assert fg.feed("\x1b]10;rgb:ff/00/00\x07");
+		assert fg.feed("\x1b]10;rgb:ff/00/00\x07").ok;
 		assert colorAt(fg, 0) == "#ff0000";
 		assert fg.mismatch() == "";
 		assert bg.step("abc\x1b[44mb\x1b[0m");
-		assert bg.feed("\x1b]11;rgb:10/10/10\x07");
+		assert bg.feed("\x1b]11;rgb:10/10/10\x07").ok;
 		assert bg.mismatch() == "";
 		assert bg.spans(0)[0].style!.backgroundColor === undefined;
 		assert reverse.step("abc\r\n");
-		assert reverse.feed("\x1b[?5h");
+		assert reverse.feed("\x1b[?5h").ok;
 		assert reverse.mismatch() == "";
 		fg.close();
 		bg.close();

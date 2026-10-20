@@ -52,7 +52,7 @@ function playSeed(seed: int32, cols: int32, rows: int32, ops: int32): string {
 	let r: Rng = { state: (seed as int64) * 7 + 3 };
 	let failure = "";
 	const cut = 1 + r.next(40);
-	if (!s.feedChunks(bytes, cut)) { failure = "a frame failed"; }
+	if (!s.feedChunks(bytes, cut).ok) { failure = "a frame failed"; }
 	if (failure == "") {
 		const m = s.mismatch();
 		if (m != "") { failure = m; }
@@ -75,7 +75,7 @@ function playEveryFrame(seed: int32, cols: int32, rows: int32, ops: int32): stri
 	for (let i = 0; i < ops && failure == ""; i++) {
 		const piece = op(r, cols, rows);
 		sent += piece;
-		if (!s.feed(piece)) {
+		if (!s.feed(piece).ok) {
 			failure = "a frame failed";
 		} else {
 			const m = s.mismatch();
@@ -124,16 +124,16 @@ function playWithViewportAndResize(seed: int32, ops: int32): string {
 			sent += `<scroll ${by}>`;
 			const vt: Vt = s.vt;
 			vt.scrollLines(by);
-			ok = s.paint();
+			ok = s.paint().ok;
 		} else if (kind == 1) {
 			const cols = 1 + r.next(20);
 			const rows = 1 + r.next(10);
 			sent += `<resize ${cols}x${rows}>`;
-			ok = s.resize(cols, rows);
+			ok = s.resize(cols, rows).ok;
 		} else {
 			const piece = op(r, s.cols, s.rows);
 			sent += piece;
-			ok = s.feed(piece);
+			ok = s.feed(piece).ok;
 		}
 		if (!ok) { failure = "a frame failed"; }
 		const m = ok ? s.mismatch() : "";
@@ -158,9 +158,9 @@ test "a scroll moves the rows it keeps and builds none" {
 	assert opened.ok;
 	if (opened.ok) {
 		const s = opened.value;
-		assert s.feed("a\r\nb\r\nc\r\nd");
+		assert s.feed("a\r\nb\r\nc\r\nd").ok;
 		const q = s.grid.attach();
-		assert s.feed("\r\ne\r\nf");
+		assert s.feed("\r\ne\r\nf").ok;
 		let built = 0;
 		let moved = 0;
 		for (const o of q.ops) {

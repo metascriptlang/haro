@@ -142,8 +142,8 @@ function conforms(name: string, chunk: int32, compare: Compare, skipRunsRow: int
 	if (!opened.ok) { return "open failed"; }
 	const s = opened.value;
 	let failure = "";
-	if (!s.feed(palettePrelude(own))) { failure = "prelude frame failed"; }
-	if (failure == "" && !s.feedChunks(input, chunk)) {
+	if (!s.feed(palettePrelude(own)).ok) { failure = "prelude frame failed"; }
+	if (failure == "" && !s.feedChunks(input, chunk).ok) {
 		failure = "frame failed";
 	}
 	if (failure == "" && !s.sameAsFreshRead()) { failure = "grid differs from a fresh read of the screen"; }

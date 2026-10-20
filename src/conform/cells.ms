@@ -7,7 +7,7 @@ function run(cols: int32, rows: int32, bytes: string): Screen | null {
 	const opened = Screen.open(cols, rows);
 	if (!opened.ok) { return null; }
 	const s = opened.value;
-	if (!s.feed(bytes)) {
+	if (!s.feed(bytes).ok) {
 		s.close();
 		return null;
 	}
@@ -178,9 +178,9 @@ test "VS15 narrows a wide symbol back to one cell" {
 	assert opened.ok;
 	if (opened.ok) {
 		const s = opened.value;
-		assert s.feed(GRAPHEMES_ON + "☔");
+		assert s.feed(GRAPHEMES_ON + "☔").ok;
 		assert cursorAt(s, 2, 0);
-		assert s.feed("\u{FE0E}");
+		assert s.feed("\u{FE0E}").ok;
 		assert cursorAt(s, 1, 0);
 		assert s.text(0) == "☔\u{FE0E}";
 		s.close();
@@ -240,7 +240,7 @@ test "the glitch text fixture paints as eight capped graphemes whole and in smal
 		assert opened.ok;
 		if (opened.ok) {
 			const s = opened.value;
-			assert s.feedChunks(input.value, 7);
+			assert s.feedChunks(input.value, 7).ok;
 			assert s.text(0) == expected.value;
 			assert s.sameAsFreshRead();
 			s.close();
@@ -271,7 +271,7 @@ test "with wraparound off the last column is overwritten, with it on the text wr
 	assert s !== null;
 	if (s !== null) {
 		assert s.text(1) == " hello, w!";
-		assert s.feed("\x1b[?7h\x1b[1J\x1b[2;2Hhello, world!");
+		assert s.feed("\x1b[?7h\x1b[1J\x1b[2;2Hhello, world!").ok;
 		assert s.text(1) == " hello, wo";
 		assert s.text(2) == "rld!";
 		s.close();
@@ -296,10 +296,10 @@ test "bytes that are not UTF-8 show as replacement characters and the text after
 	assert opened.ok;
 	if (opened.ok) {
 		const s = opened.value;
-		assert s.feedBytes([0xF0, 0x9F, 0xF0, 0x9F, 0x98, 0x84, 0xED, 0xA0, 0x80, 0x61]);
+		assert s.feedBytes([0xF0, 0x9F, 0xF0, 0x9F, 0x98, 0x84, 0xED, 0xA0, 0x80, 0x61]).ok;
 		assert s.text(0) == "\uFFFD\u{1F604}\uFFFD\uFFFD\uFFFDa";
-		assert s.feedBytes([0xFF, 0x62, 0xC3]);
-		assert s.feedBytes([0xA9]);
+		assert s.feedBytes([0xFF, 0x62, 0xC3]).ok;
+		assert s.feedBytes([0xA9]).ok;
 		assert s.text(0) == "\uFFFD\u{1F604}\uFFFD\uFFFD\uFFFDa\uFFFDb\u00e9";
 		assert s.mismatch() == "";
 		s.close();

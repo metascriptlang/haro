@@ -8,7 +8,7 @@ when (linux) {
 	@passL("-lutil");
 }
 
-import { remove, writeFile } from "std/fs";
+import { normalize, remove, writeFile } from "std/fs";
 import { tmpDir } from "std/os";
 import { Pty, PtyError, drainText } from "./transport";
 
@@ -107,7 +107,7 @@ when (windows) {
 	function printFile(path: string): string {
 		return `cmd.exe /c type "${path.replaceAll("/", "\\")}"`;
 	}
-	const PRINT_DIRECTORY = "cmd.exe /c cd";
+	const PRINT_DIRECTORY = "cmd.exe /c echo [%CD%]";
 } else {
 	const ECHO_HELLO = "echo hello";
 	const QUIET_FOR_3S = "sleep 3";
@@ -183,13 +183,13 @@ test "a command that cannot start is an error" {
 }
 
 test "a native pty starts its command in the directory it is given" {
-	const dir = tmpDir().replaceAll("\\", "/");
+	const dir = normalize(tmpDir());
 	const spawned = NativePty.spawn(PRINT_DIRECTORY, 80, 24, dir);
 	assert spawned.ok;
 	if (spawned.ok) {
 		const out = spawned.value.drainText(4096).replaceAll("\\", "/");
 		when (windows) {
-			assert out.toLowerCase().includes(dir.toLowerCase());
+			assert out.toLowerCase().includes(`[${dir.toLowerCase()}]`);
 		} else {
 			assert out.includes(`[${dir}]`);
 		}

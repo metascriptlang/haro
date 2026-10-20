@@ -77,14 +77,17 @@ export function spansOf(styles: Map<string, Style>, l: GridLine, background: Rgb
 	return spans;
 }
 
+function cursorCellOf(cursor: Cursor | null, y: int32): int32 {
+	return cursor !== null && cursor.y == y ? cursor.x : -1;
+}
+
 function slotOf(
 	styles: Map<string, Style>,
 	row: Row,
 	cursor: Cursor | null,
 	background: Rgb,
 ): Result<RowSlot, FrameError> {
-	const cursorCell = cursor !== null && cursor.y == row.y ? cursor.x : -1;
-	const built = row.line(cursorCell, background);
+	const built = row.line(cursorCellOf(cursor, row.y), background);
 	if (!built.ok) { return Result.err(FrameError.LineFailed); }
 	return Result.ok({ line: built.value, spans: spansOf(styles, built.value, background) });
 }
@@ -111,8 +114,7 @@ export function applyFrame(
 		grid.set(row.y, slot);
 	}
 	for (const row of vt.painted.rows) {
-		const cursorCell = cursor !== null && cursor.y == row.y ? cursor.x : -1;
-		if (grid.at(row.y).line.cursorCell != cursorCell) {
+		if (grid.at(row.y).line.cursorCell != cursorCellOf(cursor, row.y)) {
 			grid.set(row.y, try slotOf(styles, row, cursor, colors.value.bg));
 		}
 	}

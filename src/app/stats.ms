@@ -13,31 +13,37 @@ export interface Stats {
 
 export struct Mark { name: string; at: float64; }
 
-export const stats: Stats = {
-	refreshes: 0,
-	more: 0,
-	rows: 0,
-	scrolled: 0,
-	chars: 0,
-	keyAt: -1,
-	wakeAt: -1,
-	echoes: [],
-	settles: [],
-	marks: [],
-};
+export function empty(this typeof Stats): Stats {
+	return {
+		refreshes: 0,
+		more: 0,
+		rows: 0,
+		scrolled: 0,
+		chars: 0,
+		keyAt: -1,
+		wakeAt: -1,
+		echoes: [],
+		settles: [],
+		marks: [],
+	};
+}
+
+export const stats: Stats = Stats.empty();
+
+function marked(this s: Stats, name: string): boolean {
+	for (const m of s.marks) {
+		if (m.name == name) { return true; }
+	}
+	return false;
+}
 
 export function mark(this s: Stats, name: string, at: float64): void {
-	for (const m of s.marks) {
-		if (m.name == name) { return; }
-	}
+	if (s.marked(name)) { return; }
 	s.marks.push({ name: name, at: at });
 }
 
 export function launched(this s: Stats): boolean {
-	for (const m of s.marks) {
-		if (m.name == "painted") { return true; }
-	}
-	return false;
+	return s.marked("painted");
 }
 
 export function launchLine(this s: Stats): string {
@@ -102,8 +108,8 @@ export function reset(this s: Stats): void {
 	s.settles = [];
 }
 
-test "a key's echo runs to the first apply that changes rows, and its settle from the last wake before that apply" {
-	const s: Stats = { refreshes: 0, more: 0, rows: 0, scrolled: 0, chars: 0, keyAt: -1, wakeAt: -1, echoes: [], settles: [], marks: [] };
+test "a key's echo runs to the first apply with rows, its settle from the last wake before it" {
+	const s = Stats.empty();
 	s.noteWake(9);
 	s.noteKey(10);
 	s.noteKey(12);
@@ -119,7 +125,7 @@ test "a key's echo runs to the first apply that changes rows, and its settle fro
 }
 
 test "each launch mark keeps its first time, and the launch ends at the first painted rows" {
-	const s: Stats = { refreshes: 0, more: 0, rows: 0, scrolled: 0, chars: 0, keyAt: -1, wakeAt: -1, echoes: [], settles: [], marks: [] };
+	const s = Stats.empty();
 	s.mark("config", 5);
 	s.mark("spawn", 9);
 	s.mark("config", 30);

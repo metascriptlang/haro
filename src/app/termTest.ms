@@ -23,25 +23,24 @@ export function recorder(text: string, sink: Sink): Pty {
 	};
 }
 
-export function termOf(text: string, cols: int32, rows: int32, sink: Sink): Term | null {
+function fitted(text: string, cols: int32, rows: int32, sink: Sink): Term | null {
 	const opened = openTerm((c: int32, r: int32): Result<Pty, PtyError> => {
 		return Result.ok(recorder(text, sink));
 	});
 	if (!opened.ok) { return null; }
 	const t = opened.value;
 	if (!t.fit(cols, rows).ok) { return null; }
-	if (!t.pumpFrame().ok) { return null; }
+	return t;
+}
+
+export function termOf(text: string, cols: int32, rows: int32, sink: Sink): Term | null {
+	const t = fitted(text, cols, rows, sink);
+	if (t === null || !t.pumpFrame().ok) { return null; }
 	return t;
 }
 
 function termFresh(text: string, sink: Sink): Term | null {
-	const opened = openTerm((c: int32, r: int32): Result<Pty, PtyError> => {
-		return Result.ok(recorder(text, sink));
-	});
-	if (!opened.ok) { return null; }
-	const t = opened.value;
-	if (!t.fit(20, 5).ok) { return null; }
-	return t;
+	return fitted(text, 20, 5, sink);
 }
 
 function rowText(t: Term, y: int32): string {

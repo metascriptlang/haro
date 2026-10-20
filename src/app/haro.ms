@@ -148,12 +148,16 @@ function probableCli(): boolean {
 	}
 }
 
-function readConfig(): void {
+function reload(): Result<Config, string> {
 	const got = load(configFile);
-	if (got.ok) {
-		loaded = got.value;
-		return;
-	}
+	if (!got.ok) { return Result.err(got.error); }
+	loaded = got.value;
+	return Result.ok(got.value.config);
+}
+
+function readConfig(): void {
+	const got = reload();
+	if (got.ok) { return; }
 	configError = got.error;
 	loaded.stamp = stampOf(configFile);
 }
@@ -162,10 +166,9 @@ function watchConfig(handler: (c: Config | null, error: string) => void): void {
 	setTimeout((): void => {
 		const stamp = stampOf(configFile);
 		if (stamp != loaded.stamp) {
-			const got = load(configFile);
+			const got = reload();
 			if (got.ok) {
-				loaded = got.value;
-				handler(got.value.config, "");
+				handler(got.value, "");
 			} else {
 				loaded.stamp = stamp;
 				handler(null, got.error);

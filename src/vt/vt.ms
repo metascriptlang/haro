@@ -1818,11 +1818,11 @@ test "a cursor position query is answered with the cursor's place" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("ab[6n");
+		vt.writeText("ab\x1b[6n");
 		let buf: Vec<uint8> = new Array(64);
 		const n = vt.replies(buf);
 		assert n.ok;
-		if (n.ok) { assert ascii(buf[0..n.value]) == "[1;3R"; }
+		if (n.ok) { assert ascii(buf[0..n.value]) == "\x1b[1;3R"; }
 		vt.free();
 	}
 }
@@ -1832,7 +1832,7 @@ test "bells, a title and a pwd reach the host as events once each" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("a]2;build: ok]7;file:///C:/Users/me");
+		vt.writeText("\x07a\x07\x1b]2;build: ok\x07\x1b]7;file:///C:/Users/me\x07");
 		const first = vt.takeEvents();
 		assert first.ok;
 		if (first.ok) {
@@ -1900,7 +1900,7 @@ test "the input modes a program sets are readable, and a fresh terminal sets non
 			assert !fresh.value.mouseTracking;
 			assert fresh.value.altScroll;
 		}
-		vt.writeText("[?1004h[?2004h[?1h[?1000h[?1007l");
+		vt.writeText("\x1b[?1004h\x1b[?2004h\x1b[?1h\x1b[?1000h\x1b[?1007l");
 		const set = vt.modes();
 		assert set.ok;
 		if (set.ok) {
@@ -1923,13 +1923,13 @@ test "a focus change is reported only once the program asked for it" {
 		const before = vt.focusReport(true, buf);
 		assert before.ok;
 		if (before.ok) { assert before.value == 0; }
-		vt.writeText("[?1004h");
+		vt.writeText("\x1b[?1004h");
 		const gained = vt.focusReport(true, buf);
 		assert gained.ok;
-		if (gained.ok) { assert ascii(buf[0..gained.value]) == "[I"; }
+		if (gained.ok) { assert ascii(buf[0..gained.value]) == "\x1b[I"; }
 		const lost = vt.focusReport(false, buf);
 		assert lost.ok;
-		if (lost.ok) { assert ascii(buf[0..lost.value]) == "[O"; }
+		if (lost.ok) { assert ascii(buf[0..lost.value]) == "\x1b[O"; }
 		vt.free();
 	}
 }
@@ -1961,12 +1961,12 @@ test "SGR reporting names the cell, the button and the modifiers" {
 	if (created.ok) {
 		const vt = created.value;
 		const none = 0 as BitSet<KeyMod>;
-		vt.writeText("[?1000h[?1006h");
-		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "[<0;3;2M";
-		assert mouseBytes(vt, MouseAction.Release, 1, none, false) == "[<0;3;2m";
-		assert mouseBytes(vt, MouseAction.Press, 3, none, true) == "[<1;3;2M";
-		assert mouseBytes(vt, MouseAction.Press, 4, none, false) == "[<64;3;2M";
-		assert mouseBytes(vt, MouseAction.Press, 1, none.incl(KeyMod.Shift), true) == "[<4;3;2M";
+		vt.writeText("\x1b[?1000h\x1b[?1006h");
+		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "\x1b[<0;3;2M";
+		assert mouseBytes(vt, MouseAction.Release, 1, none, false) == "\x1b[<0;3;2m";
+		assert mouseBytes(vt, MouseAction.Press, 3, none, true) == "\x1b[<1;3;2M";
+		assert mouseBytes(vt, MouseAction.Press, 4, none, false) == "\x1b[<64;3;2M";
+		assert mouseBytes(vt, MouseAction.Press, 1, none.incl(KeyMod.Shift), true) == "\x1b[<4;3;2M";
 		vt.free();
 	}
 }
@@ -1977,12 +1977,12 @@ test "motion is reported only under button or any-event tracking" {
 	if (created.ok) {
 		const vt = created.value;
 		const none = 0 as BitSet<KeyMod>;
-		vt.writeText("[?1000h[?1006h");
+		vt.writeText("\x1b[?1000h\x1b[?1006h");
 		assert mouseBytes(vt, MouseAction.Motion, 1, none, true) == "";
-		vt.writeText("[?1002h");
-		assert mouseBytes(vt, MouseAction.Motion, 1, none, true) == "[<32;3;2M";
-		vt.writeText("[?1003h");
-		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "[<35;3;2M";
+		vt.writeText("\x1b[?1002h");
+		assert mouseBytes(vt, MouseAction.Motion, 1, none, true) == "\x1b[<32;3;2M";
+		vt.writeText("\x1b[?1003h");
+		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
 		vt.free();
 	}
 }
@@ -1993,11 +1993,11 @@ test "the same cell is not reported twice for motion, and SGR-pixels reports pix
 	if (created.ok) {
 		const vt = created.value;
 		const none = 0 as BitSet<KeyMod>;
-		vt.writeText("[?1003h[?1006h");
-		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "[<35;3;2M";
+		vt.writeText("\x1b[?1003h\x1b[?1006h");
+		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "";
-		vt.writeText("[?1016h");
-		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "[<0;25;25M";
+		vt.writeText("\x1b[?1016h");
+		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "\x1b[<0;25;25M";
 		vt.free();
 	}
 }
@@ -2009,13 +2009,13 @@ test "a frame drawn under synchronized output shows only once the program ends t
 		const vt = created.value;
 		vt.writeText("one");
 		assert vt.update().ok;
-		vt.writeText("[?2026h[2J[Hhalf");
+		vt.writeText("\x1b[?2026h\x1b[2J\x1b[Hhalf");
 		assert vt.holding();
 		assert vt.update().ok;
 		const held = vt.lines();
 		assert held.ok;
 		if (held.ok) { assert held.value[0] == "one"; }
-		vt.writeText(" drawn[?2026l");
+		vt.writeText(" drawn\x1b[?2026l");
 		assert !vt.holding();
 		assert vt.update().ok;
 		const shown = vt.lines();
@@ -2031,13 +2031,13 @@ test "a hold the program never ends is dropped after its limit" {
 	if (created.ok) {
 		const vt = created.value;
 		vt.holdLimit(0);
-		vt.writeText("[?2026hstuck");
+		vt.writeText("\x1b[?2026hstuck");
 		assert vt.update().ok;
 		assert !vt.holding();
 		const shown = vt.lines();
 		assert shown.ok;
 		if (shown.ok) { assert shown.value[0] == "stuck"; }
-		vt.writeText("[?2026h");
+		vt.writeText("\x1b[?2026h");
 		vt.holdLimit(1000);
 		assert vt.holding();
 		vt.free();
@@ -2068,28 +2068,28 @@ test "a fresh cursor is a visible blinking block" {
 }
 
 test "DECTCEM hides and shows the cursor" {
-	const hidden = lookAfter("[?25l");
+	const hidden = lookAfter("\x1b[?25l");
 	assert hidden !== null;
 	if (hidden !== null) { assert !hidden.visible; }
-	const shown = lookAfter("[?25l[?25h");
+	const shown = lookAfter("\x1b[?25l\x1b[?25h");
 	assert shown !== null;
 	if (shown !== null) { assert shown.visible; }
 }
 
 test "DECSCUSR picks the cursor's shape and blink" {
-	const bar = lookAfter("[5 q");
+	const bar = lookAfter("\x1b[5 q");
 	assert bar !== null;
 	if (bar !== null) {
 		assert bar.shape == CursorShape.Bar;
 		assert bar.blinking;
 	}
-	const underline = lookAfter("[4 q");
+	const underline = lookAfter("\x1b[4 q");
 	assert underline !== null;
 	if (underline !== null) {
 		assert underline.shape == CursorShape.Underline;
 		assert !underline.blinking;
 	}
-	const block = lookAfter("[6 q[2 q");
+	const block = lookAfter("\x1b[6 q\x1b[2 q");
 	assert block !== null;
 	if (block !== null) {
 		assert block.shape == CursorShape.Block;
@@ -2110,26 +2110,26 @@ function replyTo(query: string): string {
 }
 
 test "the device attributes and the version name Haro as a VT220 with colour and clipboard" {
-	assert replyTo("[c") == "[?62;22;52c";
-	assert replyTo("[>c") == "[>1;10;0c";
-	assert replyTo("[>q") == "P>|haro\\";
+	assert replyTo("\x1b[c") == "\x1b[?62;22;52c";
+	assert replyTo("\x1b[>c") == "\x1b[>1;10;0c";
+	assert replyTo("\x1b[>q") == "\x1bP>|haro\x1b\\";
 }
 
 test "the tertiary device attributes carry a zero unit id" {
-	assert replyTo("[=c") == "P!|00000000\\";
+	assert replyTo("\x1b[=c") == "\x1bP!|00000000\x1b\\";
 }
 
 test "a mode report names a mode set, reset and unknown" {
-	assert replyTo("[?2004$p") == "[?2004;2$y";
-	assert replyTo("[?2004h[?2004$p") == "[?2004;1$y";
-	assert replyTo("[?9999$p") == "[?9999;0$y";
+	assert replyTo("\x1b[?2004$p") == "\x1b[?2004;2$y";
+	assert replyTo("\x1b[?2004h\x1b[?2004$p") == "\x1b[?2004;1$y";
+	assert replyTo("\x1b[?9999$p") == "\x1b[?9999;0$y";
 }
 
 test "the colour queries answer with the host's default colours, a program's override and the palette" {
-	assert replyTo("]11;?") == "]11;rgb:0000/0000/0000";
-	assert replyTo("]10;?") == "]10;rgb:ffff/ffff/ffff";
-	assert replyTo("]11;rgb:10/20/30]11;?") == "]11;rgb:1010/2020/3030";
-	assert replyTo("]4;1;?") == "]4;1;rgb:cccc/6666/6666";
+	assert replyTo("\x1b]11;?\x07") == "\x1b]11;rgb:0000/0000/0000\x07";
+	assert replyTo("\x1b]10;?\x07") == "\x1b]10;rgb:ffff/ffff/ffff\x07";
+	assert replyTo("\x1b]11;rgb:10/20/30\x07\x1b]11;?\x07") == "\x1b]11;rgb:1010/2020/3030\x07";
+	assert replyTo("\x1b]4;1;?\x07") == "\x1b]4;1;rgb:cccc/6666/6666\x07";
 }
 
 test "a theme the host sets is what a colour query reports" {
@@ -2138,11 +2138,11 @@ test "a theme the host sets is what a colour query reports" {
 	if (created.ok) {
 		const vt = created.value;
 		assert vt.setDefaultColors({ r: 0x28, g: 0x2c, b: 0x34 }, { r: 0xff, g: 0xff, b: 0xfe }).ok;
-		vt.writeText("]11;?\\");
+		vt.writeText("\x1b]11;?\x1b\\");
 		let buf: Vec<uint8> = new Array(64);
 		const n = vt.replies(buf);
 		assert n.ok;
-		if (n.ok) { assert ascii(buf[0..n.value]) == "]11;rgb:ffff/ffff/fefe\\"; }
+		if (n.ok) { assert ascii(buf[0..n.value]) == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\"; }
 		vt.free();
 	}
 }
@@ -2194,11 +2194,11 @@ test "an OSC 52 write reaches the host once, and only for the standard clipboard
 		const none = vt.takeClipboard();
 		assert none.ok;
 		if (none.ok) { assert none.value === null; }
-		vt.writeText("]52;p;cHJpbWFyeQ==");
+		vt.writeText("\x1b]52;p;cHJpbWFyeQ==\x07");
 		const primary = vt.takeClipboard();
 		assert primary.ok;
 		if (primary.ok) { assert primary.value === null; }
-		vt.writeText("]52;c;aGVsbG8gd29ybGQ=");
+		vt.writeText("\x1b]52;c;aGVsbG8gd29ybGQ=\x07");
 		const first = vt.takeClipboard();
 		assert first.ok;
 		if (first.ok) { assert first.value == "hello world"; }
@@ -2222,7 +2222,7 @@ test "an OSC 8 link answers for each of its cells and for no others" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("]8;;https://example.com/a?b=1\\link]8;;\\ plain");
+		vt.writeText("\x1b]8;;https://example.com/a?b=1\x1b\\link\x1b]8;;\x1b\\ plain");
 		assert linkText(vt, 0, 0) == "https://example.com/a?b=1";
 		assert linkText(vt, 3, 0) == "https://example.com/a?b=1";
 		assert linkText(vt, 4, 0) == "<none>";
@@ -2288,7 +2288,7 @@ test "a styled cell carries its colour, flags and underline" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("[1;4;38;2;255;0;0mA[0mb");
+		vt.writeText("\x1b[1;4;38;2;255;0;0mA\x1b[0mb");
 		assert vt.update().ok;
 		const rows = vt.rows();
 		assert rows.ok;
@@ -2315,7 +2315,7 @@ test "an erased line keeps its background on cells without text" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("[48;2;0;0;255m[K");
+		vt.writeText("\x1b[48;2;0;0;255m\x1b[K");
 		assert vt.update().ok;
 		const rows = vt.rows();
 		assert rows.ok;
@@ -2377,7 +2377,7 @@ test "an underline carries the SGR 58 colour, resolved from the palette when it 
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("[4:3m[58;2;255;80;80ma[58;5;1mb[59mc[24;58;2;1;2;3md");
+		vt.writeText("\x1b[4:3m\x1b[58;2;255;80;80ma\x1b[58;5;1mb\x1b[59mc\x1b[24;58;2;1;2;3md");
 		assert vt.update().ok;
 		const rows = vt.rows();
 		assert rows.ok;

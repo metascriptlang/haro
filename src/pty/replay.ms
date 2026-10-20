@@ -41,14 +41,8 @@ export function toPty(this r: Replay): Pty {
 	};
 }
 
-function drainText(this p: Pty, chunk: int32): string {
-	let buf: Vec<uint8> = new Array(chunk);
-	let text = "";
-	while (true) {
-		const r = p.read(buf);
-		if (!r.ok) { return text; }
-		for (let i = 0; i < r.value; i++) { text += String.fromCharCode(buf[i] as int32); }
-	}
+when (testBuild) {
+	import { drainText } from "./transport";
 }
 
 test "a replay hands back its bytes in order, whatever the read size" {

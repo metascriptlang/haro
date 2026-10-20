@@ -117,18 +117,8 @@ when (windows) {
 	const PRINT_DIRECTORY = "sh -c 'echo \"[$PWD]\"'";
 }
 
-function drain(this p: Pty): string {
-	let buf: Vec<uint8> = new Array(4096);
-	let text = "";
-	while (true) {
-		const ready = p.wait(10000);
-		if (!ready.ok || !ready.value) { return text; }
-		const r = p.read(buf);
-		if (!r.ok) { return text; }
-		for (let i = 0; i < r.value; i++) {
-			text += String.fromCharCode(buf[i] as int32);
-		}
-	}
+when (testBuild) {
+	import { drainText } from "./transport";
 }
 
 function quietWaitMs(this p: NativePty, timeoutMs: int32): Result<float64, PtyError> {
@@ -146,7 +136,7 @@ test "a child's output reaches read and its exit ends the stream" {
 	assert opened.ok;
 	if (opened.ok) {
 		const p = opened.value;
-		const text = p.toPty().drain();
+		const text = p.toPty().drainText(4096);
 		assert text.includes("hello");
 		const code = p.exitCode();
 		assert code !== null;
@@ -203,7 +193,7 @@ test "a native pty starts its command in the directory it is given" {
 	const spawned = NativePty.spawn(PRINT_DIRECTORY, 80, 24, dir);
 	assert spawned.ok;
 	if (spawned.ok) {
-		const out = spawned.value.drain().replaceAll("\\", "/");
+		const out = spawned.value.drainText(4096).replaceAll("\\", "/");
 		when (windows) {
 			assert out.toLowerCase().includes(dir.toLowerCase());
 		} else {
@@ -218,7 +208,7 @@ when (!windows) {
 		const spawned = NativePty.spawn(ECHO_HELLO, 80, 24, "/no/such/haro/directory");
 		assert spawned.ok;
 		if (spawned.ok) {
-			assert spawned.value.drain().includes("hello");
+			assert spawned.value.drainText(4096).includes("hello");
 			spawned.value.close();
 		}
 	}
@@ -229,7 +219,7 @@ test "a native pty spawned as a Pty reads its output and reports its exit throug
 	assert spawned.ok;
 	if (spawned.ok) {
 		const pty = spawned.value;
-		assert pty.drain().includes("hello");
+		assert pty.drainText(4096).includes("hello");
 		const code = pty.exitCode();
 		assert code !== null;
 		if (code !== null) { assert code == 0; }
@@ -268,7 +258,7 @@ test "a line written to the child reaches it" {
 		const p = opened.value;
 		let line: Vec<uint8> = [0x68, 0x69, 0x0D];
 		assert p.write(line[0..line.length]).ok;
-		assert p.toPty().drain().includes("[hi]");
+		assert p.toPty().drainText(4096).includes("[hi]");
 		p.close();
 	}
 }

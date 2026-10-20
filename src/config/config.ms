@@ -285,7 +285,7 @@ test "a field the config cannot use is refused by name" {
 	assert refusal("[]") == "config must be an object";
 }
 
-test "the shell starts at home unless Haro was probably started from a command line, as Ghostty does" {
+test "the shell starts at home unless Haro was probably started from a command line" {
 	const c = defaults();
 	assert c.startDirectory(false, "/Users/me") == "/Users/me";
 	assert c.startDirectory(true, "/Users/me") === null;

@@ -1,5 +1,11 @@
 const FILE_SCHEME = "file://";
 
+export enum FileUriError {
+	NotFileScheme,
+	NoPath,
+	BadEscape,
+}
+
 export struct FileUri {
 	host: string;
 	path: string;
@@ -12,7 +18,7 @@ function hexValue(c: int32): int32 | null {
 	return null;
 }
 
-function percentDecoded(text: string): string | null {
+function percentDecoded(text: string): Result<string, FileUriError> {
 	const bytes: Readonly<Span<char>> = text;
 	const byteCount = text.byteLength as int32;
 	let out: Vec<uint8> = [];
@@ -24,15 +30,14 @@ function percentDecoded(text: string): string | null {
 			i++;
 			continue;
 		}
-		if (i + 2 >= byteCount) { return null; }
+		if (i + 2 >= byteCount) { return Result.err(FileUriError.BadEscape); }
 		const hi = hexValue(bytes[i + 1] as int32);
 		const lo = hexValue(bytes[i + 2] as int32);
-		if (hi === null || lo === null) { return null; }
+		if (hi === null || lo === null) { return Result.err(FileUriError.BadEscape); }
 		out.push((hi * 16 + lo) as uint8);
 		i += 3;
 	}
-	const decoded: string | null = out[0..(out.length as int32)].asString();
-	return decoded;
+	return Result.ok(out[0..(out.length as int32)].asString());
 }
 
 function isAsciiLetter(c: int32): boolean {
@@ -44,15 +49,13 @@ function withoutDriveSlash(path: string): string {
 	return isAsciiLetter(path.charCodeAt(1)) ? path.slice(1, path.length) : path;
 }
 
-export function fileUri(uri: string): FileUri | null {
-	if (!uri.startsWith(FILE_SCHEME)) { return null; }
+export function fileUri(uri: string): Result<FileUri, FileUriError> {
+	if (!uri.startsWith(FILE_SCHEME)) { return Result.err(FileUriError.NotFileScheme); }
 	const afterScheme = uri.slice(FILE_SCHEME.length, uri.length);
 	const slash = afterScheme.indexOf("/");
-	if (slash < 0) { return null; }
-	const path = percentDecoded(afterScheme.slice(slash, afterScheme.length));
-	if (path === null) { return null; }
-	const found: FileUri | null = { host: afterScheme.slice(0, slash), path: withoutDriveSlash(path) };
-	return found;
+	if (slash < 0) { return Result.err(FileUriError.NoPath); }
+	const path = try percentDecoded(afterScheme.slice(slash, afterScheme.length));
+	return Result.ok({ host: afterScheme.slice(0, slash), path: withoutDriveSlash(path) });
 }
 
 export function isLocalHost(host: string, machine: string): boolean {
@@ -62,28 +65,34 @@ export function isLocalHost(host: string, machine: string): boolean {
 
 test "a POSIX file URI gives its path with escapes decoded" {
 	const u = fileUri("file://box/home/me/my%20dir");
-	assert u !== null;
-	if (u !== null) {
-		assert u.host == "box";
-		assert u.path == "/home/me/my dir";
+	assert u.ok;
+	if (u.ok) {
+		assert u.value.host == "box";
+		assert u.value.path == "/home/me/my dir";
 	}
 }
 
 test "a Windows file URI loses the slash before its drive letter" {
 	const u = fileUri("file:///C:/Users/me/%E1%BB%87");
-	assert u !== null;
-	if (u !== null) {
-		assert u.host == "";
-		assert u.path == "C:/Users/me/ệ";
+	assert u.ok;
+	if (u.ok) {
+		assert u.value.host == "";
+		assert u.value.path == "C:/Users/me/ệ";
 	}
 }
 
+function refusal(uri: string): FileUriError | null {
+	const parsed = fileUri(uri);
+	if (parsed.ok) { return null; }
+	return parsed.error;
+}
+
 test "anything but a file URI with a path is refused" {
-	assert fileUri("http://example.com/a") === null;
-	assert fileUri("file://box") === null;
-	assert fileUri("file:///a/%zz") === null;
-	assert fileUri("file:///a/%4") === null;
-	assert fileUri("") === null;
+	assert refusal("http://example.com/a") == FileUriError.NotFileScheme;
+	assert refusal("file://box") == FileUriError.NoPath;
+	assert refusal("file:///a/%zz") == FileUriError.BadEscape;
+	assert refusal("file:///a/%4") == FileUriError.BadEscape;
+	assert refusal("") == FileUriError.NotFileScheme;
 }
 
 test "only an empty, localhost or this machine's host is local" {

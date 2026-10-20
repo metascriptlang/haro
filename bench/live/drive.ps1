@@ -1,5 +1,5 @@
 # Runs one workload in a live Haro window and prints one JSON line.
-#   pwsh bench/live/drive.ps1 -Exe out/haroStats.exe -Work flood|color|echo|nvim
+#   pwsh bench/live/drive.ps1 -Exe out/haroStats.exe -Work flood|color|echo|nvim|replay|launch
 # The exe must be built with --stats support; build it with -d:voidProfiler to get Void's draw
 # times.
 # flood and color wait for the shell to come up, then time `cmd /c type` of 10 MB inside Haro.

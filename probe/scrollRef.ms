@@ -29,7 +29,8 @@ import {
 	GhosttyTerminalData,
 } from "../vendor/ghostty/include/ghostty/vt.h";
 
-// msc passes a string to ghostty_terminal_vt_write wrongly; asBytes is right.
+// The header's const uint8_t* imports as a cstring, so the bytes go through this declaration:
+// .inbox/compiler/2026-09-26-c-import-uint8-pointer-is-cstring.md
 extern function writeBytes(
 	t: GhosttyTerminal,
 	b: Readonly<Span<uint8>>,

@@ -244,7 +244,8 @@ test "text wraps at the right margin and scrolls from the last row" {
 	const scrolled = run(1, 5, "abcdef");
 	assert wrapped !== null && soft !== null && scrolled !== null;
 	if (wrapped !== null && soft !== null && scrolled !== null) {
-		assert wrapped.text(0) == "hello" && wrapped.text(1) == "world" && wrapped.text(2) == "abc12";
+		assert wrapped.text(0) == "hello" && wrapped.text(1) == "world" &&
+			wrapped.text(2) == "abc12";
 		assert wrapped.cursorAt(4, 2);
 		assert soft.text(0) == "hel" && soft.text(1) == "lo";
 		assert soft.cursorAt(2, 1);

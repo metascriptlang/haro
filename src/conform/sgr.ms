@@ -182,7 +182,7 @@ test "SGR 22 clears faint along with bold" {
 	if (l !== null) { assert l.run.fg == l.defaultFg && !l.run.bold; }
 }
 
-test "a background that equals the terminal's is left to the window, any other becomes a span background" {
+test "a background equal to the terminal's is left to the window, any other is a span background" {
 	const same = look("48;2;1;2;3;49");
 	const other = look("41");
 	assert same !== null && other !== null;

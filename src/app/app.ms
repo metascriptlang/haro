@@ -27,7 +27,12 @@ import {
 } from "../term/cursor";
 import { hexOf } from "./frame";
 import { Config, fontPx } from "../config/config";
-import { noticeLines } from "./notice";
+import {
+	Notice,
+	createNotice,
+	noticeCols,
+	showNotice,
+} from "./components/features/notice/notice";
 import {
 	Bridge,
 	ControlError,
@@ -62,10 +67,6 @@ import {
 	sendText,
 } from "./components/features/terminal/term";
 
-const NOTICE_BACKGROUND = "#5c1f24";
-const NOTICE_TEXT = "#ffffff";
-const NOTICE_PADDING: number = 8;
-const NOTICE_FALLBACK_COLS: int32 = 80;
 const PROBE = "MMMMMMMMMM";
 const SHADES: int32 = 3;
 const HOLD_RECHECK_MS = 100;
@@ -103,11 +104,9 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 	const [background, setBackground] = createSignal<string>(hexOf(started.background));
 	const [foreground, setForeground] = createSignal<string>(hexOf(started.foreground));
 	const [padding, setPadding] = createSignal<number>(started.padding);
-	let notice = "";
-	const [noticed, setNoticed] = createSignal<boolean>(false);
+	const notice = createNotice();
 	const [preedit, setPreedit] = createSignal<string>("");
 	const [composing, setComposing] = createSignal<boolean>(false);
-	const noticeRows = createList<string>([]);
 	let settingsApplied = false;
 
 	const controls = Controls.open();
@@ -269,14 +268,8 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 
 	const clip: Bridge = bridge();
 
-	function showNotice(text: string): void {
-		notice = text;
-		const room = viewWidth() - 2 * padding() - 2 * NOTICE_PADDING;
-		const cols = cellWidth() > 0
-			? Math.max(1, Math.floor(room / cellWidth())) as int32
-			: NOTICE_FALLBACK_COLS;
-		noticeRows.replaceAll(noticeLines(text, cols));
-		setNoticed(text != "");
+	function notify(text: string): void {
+		notice.showNotice(text, noticeCols(viewWidth(), padding(), cellWidth()));
 	}
 
 	function applySettings(): boolean {
@@ -294,13 +287,13 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 
 	entry.onConfig((c: Config | null, error: string): void => {
 		if (c === null) {
-			showNotice(`config.ms: ${error}`);
+			notify(`config.ms: ${error}`);
 			return;
 		}
 		settings = c;
 		controls.keybinds = c.keybinds;
 		setPadding(c.padding);
-		showNotice(restartNeeded(c, started) ? RESTART_NOTICE : "");
+		notify(restartNeeded(c, started) ? RESTART_NOTICE : "");
 		if (settingsApplied && applySettings()) { refresh(); }
 	});
 
@@ -360,7 +353,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 			return;
 		}
 		setViewWidth(e.width);
-		showNotice(notice);
+		notify(notice.text);
 		dialog.shownFor = null;
 		mouseGeometry = {
 			cellWidth: cellPx,
@@ -378,7 +371,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		const fitted = t.fit(size.value[0], size.value[1]);
 		if (!fitted.ok) {
 			if (fitted.error == TermError.PtyOpenFailed) {
-				showNotice("the shell did not start: check command in config.ms, or --shell");
+				notify("the shell did not start: check command in config.ms, or --shell");
 			} else {
 				fatal("fit", fitted.error);
 			}
@@ -520,16 +513,6 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 		refresh();
 	};
 
-	const noticeRow = (item: Accessor<string>): NeonNode => {
-		return element(
-			<Text
-				style={{ fontSize: fontSize, color: NOTICE_TEXT, height: rowHeight() }}
-				cellWidth={cellWidth()}
-				spans={[{ text: item(), style: {} }]}
-			/>
-		);
-	};
-
 	const cursorBox = (item: Accessor<Box>): NeonNode => {
 		return element(
 			<View
@@ -623,24 +606,7 @@ export function App(t: Term, entry: Entry, started: Config): NeonNode {
 				onConfirm={confirmPaste}
 				onCancel={cancelPaste}
 			/>
-			{Show({
-				when: noticed,
-				children: element(
-					<View
-						style={{
-							position: "absolute",
-							left: padding(),
-							right: padding(),
-							top: padding(),
-							padding: NOTICE_PADDING,
-							backgroundColor: NOTICE_BACKGROUND,
-							borderRadius: 4,
-						}}
-						onPointerDown={(e: NeonEvent): void => { showNotice(""); }}>
-						{ForList<string>({ each: noticeRows, children: noticeRow })}
-					</View>
-				),
-			})}
+			<Notice model={notice} metrics={metrics} inset={padding()} />
 		</Void>
 	);
 }

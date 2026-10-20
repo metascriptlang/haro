@@ -43,7 +43,7 @@ export function pointRange(at: Point): Range {
 	return { start: at, end: at };
 }
 
-function before(a: Point, b: Point): boolean {
+function precedes(this a: Point, b: Point): boolean {
 	return a.row < b.row || (a.row == b.row && a.col < b.col);
 }
 
@@ -69,8 +69,8 @@ export function bounds(this sel: Selection): Range {
 		const right = Math.max(Math.max(a.start.col, a.end.col), Math.max(b.start.col, b.end.col));
 		return { start: { row: top, col: left }, end: { row: bottom, col: right } };
 	}
-	const start = before(b.start, a.start) ? b.start : a.start;
-	const end = before(a.end, b.end) ? b.end : a.end;
+	const start = b.start.precedes(a.start) ? b.start : a.start;
+	const end = a.end.precedes(b.end) ? b.end : a.end;
 	return { start: start, end: end };
 }
 
@@ -124,13 +124,13 @@ export function rebased(this sel: Selection, was: Range, now: Marked | null): Se
 	if (shift == 0) { return sel; }
 	const moved: Selection | null = {
 		...sel,
-		origin: shifted(sel.origin, shift),
-		focus: shifted(sel.focus, shift),
+		origin: sel.origin.shiftedBy(shift),
+		focus: sel.focus.shiftedBy(shift),
 	};
 	return moved;
 }
 
-function shifted(r: Range, rows: int32): Range {
+function shiftedBy(this r: Range, rows: int32): Range {
 	return {
 		start: { row: r.start.row + rows, col: r.start.col },
 		end: { row: r.end.row + rows, col: r.end.col },

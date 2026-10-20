@@ -26,7 +26,8 @@ export function Button(props: {
 		onPress={(): void => { props.onPress(); }}>
 		<Text
 			style={{
-				fontSize: m.fontSize,
+				fontSize: m.fontSize(),
+				fontFamily: m.fontFamily(),
 				height: m.rowHeight(),
 				width: props.label().length * m.cellWidth(),
 			}}

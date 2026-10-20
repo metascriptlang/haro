@@ -15,7 +15,7 @@ import { App } from "./app";
 import { Pace } from "./pace";
 import { stats, mark, noteWake } from "./stats";
 import { logStatsEverySecond } from "./statsLog";
-import { registerFonts } from "./fonts";
+import { familyList, registerFallbacks } from "./fonts";
 import { Config } from "../config/config";
 import { cacheDir, configPath } from "../config/source";
 import { ConfigWatch, forFile, readConfig, watchConfig } from "./configWatch";
@@ -110,7 +110,8 @@ function inFrame(run: () => void): void {
 }
 
 function openWindow(t: Term, exited: (code: int32) => void): int32 {
-	const families = registerFonts(config.loaded.faces);
+	registerFallbacks();
+	const families = familyList(config.loaded.faces);
 	const host: AppHost = {
 		onWake: (handler: () => void): void => {
 			onWake((): void => {
@@ -137,10 +138,15 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 				if (name == "menu.click" && id == CLOSE_WINDOW) { handler(); }
 			});
 		},
-		onConfig: (handler: (c: Config | null, error: string) => void): void => {
-			if (config.error != "") { handler(null, config.error); }
-			config.watchConfig(handler);
+		onConfig: (
+			handler: (c: Config | null, fontFamily: string, error: string) => void,
+		): void => {
+			if (config.error != "") { handler(null, "", config.error); }
+			config.watchConfig((c: Config | null, error: string): void => {
+				handler(c, c === null ? "" : familyList(config.loaded.faces).join(", "), error);
+			});
 		},
+		fontFamily: families.join(", "),
 	};
 	if (hasFlag("--stats")) { logStatsEverySecond(pace); }
 	when (macos) {

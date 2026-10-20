@@ -43,8 +43,13 @@ when (windows) {
 	}
 }
 
+let registeredFamilies: string[] = [];
+let fallbackFamilies: string[] = [];
+
 function registerFamily(faces: Faces): string {
 	const family = faces.regular;
+	if (registeredFamilies.includes(family)) { return family; }
+	registeredFamilies.push(family);
 	const bold = faces.bold;
 	const italic = faces.italic;
 	const boldItalic = faces.boldItalic;
@@ -55,14 +60,17 @@ function registerFamily(faces: Faces): string {
 	return family;
 }
 
-export function registerFonts(configured: Vec<Faces>): string[] {
-	const builtIn = registerFamily(BUILT_IN);
-	let families: string[] = [];
-	for (const faces of configured) { families.push(registerFamily(faces)); }
-	families.push(builtIn);
+export function registerFallbacks(): void {
+	fallbackFamilies.push(registerFamily(BUILT_IN));
 	for (const face of fallbackFaces()) {
 		registerFace(face.path, face.family, 400, FontStyle.Normal);
-		families.push(face.family);
+		fallbackFamilies.push(face.family);
 	}
+}
+
+export function familyList(configured: Vec<Faces>): string[] {
+	let families: string[] = [];
+	for (const faces of configured) { families.push(registerFamily(faces)); }
+	for (const family of fallbackFamilies) { families.push(family); }
 	return families;
 }

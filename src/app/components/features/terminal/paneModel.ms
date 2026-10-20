@@ -31,8 +31,7 @@ import { Term, TermError, exitCodeText, exitedAbnormally, pumpFrame, shellExitCo
 
 const PROBE = "MMMMMMMMMM";
 const HOLD_RECHECK_MS = 100;
-const RESTART_NOTICE =
-	"config.ms: fontFamily, fontSize, command and workingDirectory apply when Haro restarts";
+const RESTART_NOTICE = "config.ms: command and workingDirectory apply when Haro restarts";
 
 export interface AppHost {
 	onWake: (handler: () => void) => void;
@@ -42,7 +41,8 @@ export interface AppHost {
 	openLink: (uri: string) => void;
 	close: () => void;
 	onCloseKey: (handler: () => void) => void;
-	onConfig: (handler: (c: Config | null, error: string) => void) => void;
+	onConfig: (handler: (c: Config | null, fontFamily: string, error: string) => void) => void;
+	fontFamily: string;
 }
 
 export interface PaneModel {
@@ -55,6 +55,8 @@ export interface PaneModel {
 	notice: NoticeModel;
 	dialog: PasteDialogModel;
 	metrics: CellMetrics;
+	setFontSize: Setter<number>;
+	setFontFamily: Setter<string>;
 	setCellWidth: Setter<number>;
 	setRowHeight: Setter<number>;
 	background: Accessor<string>;
@@ -85,6 +87,8 @@ export function createPane(
 	notice: NoticeModel,
 	dialog: PasteDialogModel,
 ): PaneModel {
+	const [fontSize, setFontSize] = createSignal<number>(started.fontPx());
+	const [fontFamily, setFontFamily] = createSignal<string>(host.fontFamily);
 	const [cellWidth, setCellWidth] = createSignal<number>(0);
 	const [rowHeight, setRowHeight] = createSignal<number>(0);
 	const [background, setBackground] = createSignal<string>(hexOf(started.background));
@@ -93,7 +97,8 @@ export function createPane(
 	const [padding, setPadding] = createSignal<number>(started.padding);
 	const [viewWidth, setViewWidth] = createSignal<number>(0);
 	const metrics: CellMetrics = {
-		fontSize: started.fontPx(),
+		fontSize: fontSize,
+		fontFamily: fontFamily,
 		cellWidth: cellWidth,
 		rowHeight: rowHeight,
 	};
@@ -109,6 +114,8 @@ export function createPane(
 		notice: notice,
 		dialog: dialog,
 		metrics: metrics,
+		setFontSize: setFontSize,
+		setFontFamily: setFontFamily,
 		setCellWidth: setCellWidth,
 		setRowHeight: setRowHeight,
 		background: background,
@@ -241,9 +248,7 @@ function notify(this m: PaneModel, text: string): void {
 }
 
 function restartNeeded(now: Config, started: Config): boolean {
-	return now.fontFamily.join("\n") != started.fontFamily.join("\n") ||
-		now.fontSize != started.fontSize ||
-		now.command != started.command ||
+	return now.command != started.command ||
 		now.workingDirectory != started.workingDirectory;
 }
 
@@ -261,17 +266,21 @@ function applySettings(this m: PaneModel): boolean {
 	return true;
 }
 
-function reconfigure(this m: PaneModel, c: Config | null, error: string): void {
+function reconfigure(this m: PaneModel, c: Config | null, family: string, error: string): void {
 	if (c === null) {
 		m.notify(`config.ms: ${error}`);
 		return;
 	}
 	m.settings = c;
 	m.controls.keybinds = c.keybinds;
+	const resized = c.fontPx() != m.metrics.fontSize() || family != m.metrics.fontFamily();
 	m.setPadding(c.padding);
+	m.setFontSize(c.fontPx());
+	m.setFontFamily(family);
 	flush();
 	const restart = restartNeeded(c, m.started) ? RESTART_NOTICE : "";
 	m.notify(error != "" ? `config.ms: ${error}` : restart);
+	if (resized && m.layoutWidth > 0) { m.fitLayout(); }
 	if (m.settingsApplied && m.applySettings()) { m.refresh(); }
 }
 
@@ -290,7 +299,9 @@ function woke(this m: PaneModel): void {
 }
 
 export function connectHost(this m: PaneModel): void {
-	m.host.onConfig((c: Config | null, error: string): void => { m.reconfigure(c, error); });
+	m.host.onConfig((c: Config | null, family: string, error: string): void => {
+		m.reconfigure(c, family, error);
+	});
 	m.host.onCloseKey((): void => { m.closeKeyPressed(); });
 	m.host.onWake((): void => { m.woke(); });
 	createEffect((): number => PixelRatio.get(), (ratio: number, was: number | null): Cleanup | null => {
@@ -312,7 +323,10 @@ function fitLayout(this m: PaneModel): void {
 		m.host.fail("the grid laid out before its handle arrived");
 		return;
 	}
-	const probe = handle.measureText(PROBE, { fontSize: m.metrics.fontSize });
+	const probe = handle.measureText(PROBE, {
+		fontSize: m.metrics.fontSize(),
+		fontFamily: m.metrics.fontFamily(),
+	});
 	const advance = probe.width / PROBE.length;
 	const lineHeight = probe.height;
 	const ratio = PixelRatio.get();

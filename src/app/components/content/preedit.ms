@@ -35,7 +35,8 @@ export function Preedit(props: {
 			}}>
 			<Text
 				style={{
-					fontSize: m.fontSize,
+					fontSize: m.fontSize(),
+					fontFamily: m.fontFamily(),
 					color: props.foreground(),
 					height: m.rowHeight(),
 					textDecorationLine: "underline",

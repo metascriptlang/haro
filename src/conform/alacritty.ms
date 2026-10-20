@@ -42,11 +42,9 @@ function loadFixture(name: string): Result<Fixture, string> {
 }
 
 function colorOf(token: string, fallback: Rgb, own: boolean): Rgb {
-	return match (token[0]) {
-		"d" => fallback,
-		"i" => indexed(token.slice(1).parseInt() as int32, own),
-		_ => fromCssHex(token),
-	};
+	if (token == "d") { return fallback; }
+	if (token[0] == "i") { return indexed(token.slice(1).parseInt() as int32, own); }
+	return fromCssHex(token);
 }
 
 function underlineOf(flags: string): Underline {

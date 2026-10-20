@@ -31,7 +31,7 @@ import { homeDir } from "std/os";
 import { Pty, PtyError } from "../pty/transport";
 import { NativePty } from "../pty/pty";
 import { Replay } from "../pty/replay";
-import { App, Entry } from "./app";
+import { App } from "./app";
 import { Pace } from "./pace";
 import { stats, launched, launchLine, line, mark, noteWake, reset } from "./stats";
 import { Config, defaults } from "../config/config";
@@ -39,6 +39,7 @@ import { Loaded, cacheDir, configPath, load, stampOf } from "../config/source";
 import { Faces } from "../config/fonts";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { Term, openTerm, shutdown } from "./components/features/terminal/term";
+import { AppHost } from "./components/features/terminal/paneModel";
 
 extern function appWireWake(): void;
 
@@ -260,7 +261,7 @@ function inFrame(run: () => void): void {
 
 function openWindow(t: Term, exited: (code: int32) => void): int32 {
 	const families = registerFamilies();
-	const entry: Entry = {
+	const host: AppHost = {
 		onWake: (handler: () => void): void => {
 			onWake((): void => {
 				stats.noteWake(performance.now());
@@ -301,7 +302,7 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 		font: families[0],
 		fontFamily: families.join(", "),
 	};
-	const code = runWindow(opts, (): NeonNode => App(t, entry, loaded.config));
+	const code = runWindow(opts, (): NeonNode => App(t, host, loaded.config));
 	note("the window closed");
 	t.shutdown();
 	return code;

@@ -111,6 +111,66 @@ Kitty graphics is a later decision.
   the font.
 - When nothing changed, a frame draws nothing.
 
+## A programmable terminal
+
+Decided by the person on 2026-10-20. Haro goes deep (blocks, an input editor, a
+palette, panels), but Haro keeps a small core and exposes it, and those
+features are written against that surface as user code and plugins rather than built into Haro.
+
+The surface is the `haro` package (`assets/haro/index.ms`), and `~/.config/haro/config.ms` is
+written against it:
+
+- `export const config: HaroConfig`: the settings, checked by msc against the type before Haro
+  reads them: a config table, but typed.
+- Exported hooks (`onKey`, `onPrompt`, `onCommandDone`, `onOutput`, …) receive events. Haro
+  already reads the OSC 133 prompt marks a block needs.
+- Host routines (`send`, `decorate`, `openFloat`, …) act on the terminal.
+- Plugins draw in **cells**: floating windows, decorations over a range of
+  cells, and virtual text. Haro's own blocks are written as the first plugin, so the
+  surface is proven by a real consumer.
+
+### It needs Raiser embedded in Haro
+
+A hook needs an interpreter that lives in Haro and keeps state between calls. A subprocess
+cannot give it that. So Haro links the compiler's embed API (`recompiler/src/embed/index.ms`:
+`createInterpreter`, `evalModule`, `callRoutine`, `implementRoutine`).
+
+This reverses the decision of 2026-10-19, which read config as data and did not embed. The
+numbers behind that decision still stand; the hooks are what now outweigh them. Measured by the
+recompiler session raiser-embed on 2026-10-19, a host and a 1000-ball loop, not Haro:
+
+| | embedded Raiser | `msc run` subprocess | Lua 5.4 |
+|---|---|---|---|
+| host binary | 15,753,832 B | Haro alone 6.3 MB | — |
+| cold config eval | 0.42 s, 110 MB peak RSS | 0.31 s, 104 MB | — |
+| host → script call | 99–101 ns | — | 15 ns |
+| `update` per frame | 0.58–0.61 ms | — | 0.068 ms |
+
+The call cost is fine for a hook per key or per event. It is not fine for a hook per cell or
+per output line during a flood.
+
+### Rejected, and why
+
+- **Plugins that build Neon components** (free-form UI). Script code would have
+  to run Neon's component model inside Raiser and hand the nodes to the host to draw. That is a
+  new mechanism in both Neon and the compiler, and it would grow the API into all of Neon. Cells
+  first; this stays open.
+- **`haro.on("key", fn)` closures** for now. No closure crosses the embed boundary yet, so hooks
+  are exported functions found by name. The closure form can be added on top later.
+- **Config as JSON for good.** It stays only until the embed API carries structs. Until then
+  Haro's runner prints `JSON.stringify(config)`, and `src/config/config.ms` `parse` re-checks
+  what msc already checked.
+
+### What the embed path waits on
+
+Each of these is a compiler change, tracked in `~/metascript/.inbox/compiler/`:
+- the installed msc carrying `src/embed`;
+- `evalModule` resolving the `haro` package the way `msc run` does through `deps` in a
+  `build.ms`;
+- structs and arrays crossing `callRoutine`;
+- `JSON.stringify` taking a string-literal union field. Until then `Keybind.mode` and `action`
+  are typed `string`.
+
 ## Platforms
 
 - **Windows first**, then **Linux** and **macOS**.

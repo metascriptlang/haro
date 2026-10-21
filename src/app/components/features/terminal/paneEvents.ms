@@ -76,17 +76,25 @@ export function committed(this m: PaneModel, e: NeonEvent): void {
 	if (sent.value > 0) { m.afterInput(); }
 }
 
+function gridX(this m: PaneModel, e: NeonEvent): float64 {
+	return e.locationX - m.padding();
+}
+
+function gridY(this m: PaneModel, e: NeonEvent): float64 {
+	return e.locationY - m.padding();
+}
+
 function spot(this m: PaneModel, e: NeonEvent): Spot {
 	const cellWidth = m.metrics.cellWidth();
 	const rowHeight = m.metrics.rowHeight();
-	return spotAt(e.locationX, e.locationY, cellWidth, rowHeight, m.term.cols, m.term.rows);
+	return spotAt(m.gridX(e), m.gridY(e), cellWidth, rowHeight, m.term.cols, m.term.rows);
 }
 
 function hit(this m: PaneModel, e: NeonEvent): Hit {
 	return {
 		at: m.spot(e),
-		x: e.locationX,
-		y: e.locationY,
+		x: m.gridX(e),
+		y: m.gridY(e),
 		scale: PixelRatio.get(),
 		mods: (e.mods as uint16) as BitSet<KeyMod>,
 		cell: m.mouseGeometry,

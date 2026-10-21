@@ -13,7 +13,7 @@ export function App(t: Term, host: AppHost, started: Config): NeonNode {
 	const dialog = createPasteDialog();
 	const pane = createPane(t, host, started, notice, dialog);
 	pane.connectHost();
-	return <Void style={{ backgroundColor: pane.background(), padding: pane.padding() }}>
+	return <Void style={{ backgroundColor: pane.background() }}>
 		<TerminalPane model={pane} />
 		<PasteDialog
 			model={dialog}

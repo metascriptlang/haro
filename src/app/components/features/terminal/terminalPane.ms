@@ -28,19 +28,18 @@ export function TerminalPane(props: { model: PaneModel }): NeonNode {
 		spans={item().spans}
 	/>;
 	return <View
-		style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, pointerEvents: "box-only" }}
+		style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: m.padding(), pointerEvents: "box-only" }}
 		focusable
 		ref={(h: ViewHandle): void => {
 			m.grid = h;
 			h.focus();
 		}}
 		imeRect={{
-			x: m.cursor.col() * metrics.cellWidth(),
-			y: m.cursor.row() * metrics.rowHeight(),
+			x: m.padding() + m.cursor.col() * metrics.cellWidth(),
+			y: m.padding() + m.cursor.row() * metrics.rowHeight(),
 			width: metrics.cellWidth(),
 			height: metrics.rowHeight(),
 		}}
-		onLayout={(e: NeonEvent): void => { m.laidOut(e); }}
 		onKeyDown={(e: NeonEvent): void => { m.keyed(e); }}
 		onKeyUp={(e: NeonEvent): void => { m.keyReleased(e); }}
 		onTextInput={(e: NeonEvent): void => { m.committed(e); }}
@@ -51,16 +50,20 @@ export function TerminalPane(props: { model: PaneModel }): NeonNode {
 		onFocus={(e: NeonEvent): void => { m.focusChanged(true); }}
 		onBlur={(e: NeonEvent): void => { m.focusChanged(false); }}
 		onWheel={(e: NeonEvent): void => { m.wheeled(e); }}>
-		<ForList each={m.term.grid}>{row}</ForList>
-		<Shades model={m.shades} metrics={metrics} color={m.foreground()} />
-		<CursorBoxes model={m.cursor} color={m.cursorColor()} />
-		<Preedit
-			model={m.preedit}
-			metrics={metrics}
-			col={m.cursor.col()}
-			row={m.cursor.row()}
-			background={m.background()}
-			foreground={m.foreground()}
-		/>
+		<View
+			style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}
+			onLayout={(e: NeonEvent): void => { m.laidOut(e); }}>
+			<ForList each={m.term.grid}>{row}</ForList>
+			<Shades model={m.shades} metrics={metrics} color={m.foreground()} />
+			<CursorBoxes model={m.cursor} color={m.cursorColor()} />
+			<Preedit
+				model={m.preedit}
+				metrics={metrics}
+				col={m.cursor.col()}
+				row={m.cursor.row()}
+				background={m.background()}
+				foreground={m.foreground()}
+			/>
+		</View>
 	</View>;
 }

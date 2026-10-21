@@ -13,7 +13,7 @@ export function recorder(text: string, sink: Sink): Pty {
 	return {
 		wait: base.wait,
 		read: base.read,
-		write: (data: Span<uint8>): Result<int32, PtyError> => {
+		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => {
 			for (const byte of data) { sink.sent += String.fromCharCode(byte as int32); }
 			return Result.ok(data.length as int32);
 		},

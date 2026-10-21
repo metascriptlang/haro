@@ -62,7 +62,7 @@ export function screen(this s: Session): Result<Vec<string>, SessionError> {
 	return Result.ok(lines.value);
 }
 
-export function send(this s: Session, data: Span<uint8>): Result<int32, SessionError> {
+export function send(this s: Session, data: Readonly<Span<uint8>>): Result<int32, SessionError> {
 	const wrote = s.pty.write(data);
 	if (wrote.ok) { return Result.ok(wrote.value); }
 	if (s.pty.exitCode() !== null) { return Result.ok(0); }
@@ -275,7 +275,7 @@ function sentAfterExit(running: boolean): string {
 	const base = Replay.ofText("bye").toPty();
 	const pty: Pty = {
 		...base,
-		write: (data: Span<uint8>): Result<int32, PtyError> => {
+		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => {
 			return Result.err(PtyError.Closed);
 		},
 		resize: (cols: int32, rows: int32): Result<void, PtyError> => {

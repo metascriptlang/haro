@@ -14,7 +14,7 @@ import { Pty, PtyError } from "./transport";
 extern function ptyOpen(commandLine: cstring, cwd: cstring, cols: int32, rows: int32): int32;
 extern function ptyRead(id: int32, buf: Span<uint8>): int64;
 extern function ptyWait(id: int32, timeoutMs: int32): int32;
-extern function ptyWrite(id: int32, data: Span<uint8>): int64;
+extern function ptyWrite(id: int32, data: Readonly<Span<uint8>>): int64;
 extern function ptyResize(id: int32, cols: int32, rows: int32): int32;
 extern function ptyExited(id: int32): int32;
 extern function ptyExitCode(id: int32): int32;
@@ -53,7 +53,7 @@ export function wait(this p: NativePty, timeoutMs: int32): Result<boolean, PtyEr
 	};
 }
 
-export function write(this p: NativePty, data: Span<uint8>): Result<int32, PtyError> {
+export function write(this p: NativePty, data: Readonly<Span<uint8>>): Result<int32, PtyError> {
 	const n = ptyWrite(p.id, data);
 	return match (n) {
 		-2 => Result.err(PtyError.OutOfMemory),
@@ -80,7 +80,7 @@ export function toPty(this p: NativePty): Pty {
 	return {
 		wait: (timeoutMs: int32): Result<boolean, PtyError> => { return p.wait(timeoutMs); },
 		read: (buf: Span<uint8>): Result<int32, PtyError> => { return p.read(buf); },
-		write: (data: Span<uint8>): Result<int32, PtyError> => { return p.write(data); },
+		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => { return p.write(data); },
 		resize: (cols: int32, rows: int32): Result<void, PtyError> => {
 			const _resized = try p.resize(cols, rows);
 			return Result.ok(null);

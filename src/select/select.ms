@@ -108,7 +108,7 @@ export function covering(this s: RowSpan, first: CellWidth, last: CellWidth): Ro
 	return { row: s.row, from: from, to: to };
 }
 
-export function merged(spans: Vec<RowSpan>): Vec<Block> {
+export function merged(spans: Readonly<Span<RowSpan>>): Vec<Block> {
 	let out: Vec<Block> = [];
 	for (const s of spans) {
 		const n = out.length as int32;

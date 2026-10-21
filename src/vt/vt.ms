@@ -1316,7 +1316,7 @@ export function dirtyRows(this vt: Vt): Result<Vec<Row>, VtError> {
 	return Result.ok(out);
 }
 
-function isScalar(cp: uint32): boolean {
+export function isUnicodeScalar(cp: uint32): boolean {
 	return cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF);
 }
 
@@ -1328,11 +1328,11 @@ export function text(this row: Row): Result<string, VtError> {
 			text += " ";
 			continue;
 		}
-		if (!isScalar(cell.cp)) { return Result.err(VtError.CodepointInvalid); }
+		if (!isUnicodeScalar(cell.cp)) { return Result.err(VtError.CodepointInvalid); }
 		text += fromCodePoint(cell.cp as number);
 		for (let i = 0; i < (cell.extra as int32); i++) {
 			const cp = row.extra[extraAt + i];
-			if (!isScalar(cp)) { return Result.err(VtError.CodepointInvalid); }
+			if (!isUnicodeScalar(cp)) { return Result.err(VtError.CodepointInvalid); }
 			text += fromCodePoint(cp as number);
 		}
 		extraAt += cell.extra as int32;

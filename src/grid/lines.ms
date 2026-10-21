@@ -1,5 +1,5 @@
 import { fromCodePoint } from "std/core/string";
-import { Cell, CellFlag, Row, Rgb, Underline, Vt } from "../vt/vt";
+import { Cell, CellFlag, Row, Rgb, Underline, Vt, isUnicodeScalar } from "../vt/vt";
 
 export enum GridError {
 	CodepointInvalid,
@@ -81,10 +81,6 @@ function breaksShapingBefore(this row: Row, i: int32, cursorCell: int32): boolea
 	if (i == cursorCell || i == cursorCell + 1) { return true; }
 	const prev = row.cells[i - 1];
 	return prev.extra == 0 && isUnligatedPair(prev.cp, cell.cp);
-}
-
-function isUnicodeScalar(cp: uint32): boolean {
-	return cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF);
 }
 
 function isEmpty(this cell: Cell, background: Rgb): boolean {

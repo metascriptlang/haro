@@ -61,6 +61,44 @@ export function withNumLockApplied(this e: KeyEvent): KeyEvent {
 	return { ...e, key: key, unshifted: 0, text: "" };
 }
 
+export function heldAfter(held: KeyEvent | null, e: KeyEvent): KeyEvent | null {
+	let kept: KeyEvent = { ...e, text: "" };
+	if (e.action == KeyAction.Release) {
+		if (held === null) { return null; }
+		if (held.key == e.key) { kept = { ...kept, key: "" }; }
+	}
+	if (kept.key == "" && kept.mods.isEmpty()) { return null; }
+	return kept;
+}
+
+struct ModifierKeys {
+	mod: KeyMod;
+	side: KeyMod;
+	right: string;
+	left: string;
+}
+
+const MODIFIER_KEYS: Vec<ModifierKeys> = [
+	{ mod: KeyMod.Shift, side: KeyMod.ShiftRight, right: "ShiftRight", left: "ShiftLeft" },
+	{ mod: KeyMod.Ctrl, side: KeyMod.CtrlRight, right: "ControlRight", left: "ControlLeft" },
+	{ mod: KeyMod.Alt, side: KeyMod.AltRight, right: "AltRight", left: "AltLeft" },
+	{ mod: KeyMod.Super, side: KeyMod.SuperRight, right: "MetaRight", left: "MetaLeft" },
+];
+
+export function releasesOf(held: KeyEvent): Vec<KeyEvent> {
+	let release: KeyEvent = { ...held, action: KeyAction.Release };
+	let out: Vec<KeyEvent> = [];
+	if (release.key != "") { out.push(release); }
+	for (const m of MODIFIER_KEYS) {
+		if (!release.mods.has(m.mod)) { continue; }
+		release = { ...release, mods: release.mods.excl(m.mod).excl(m.side) };
+		for (const key of [m.right, m.left]) {
+			if (key != held.key) { out.push({ ...release, key: key, unshifted: 0 }); }
+		}
+	}
+	return out;
+}
+
 export function modsMask(mods: BitSet<KeyMod>): uint16 {
 	return (mods as uint32) as uint16;
 }
@@ -149,4 +187,32 @@ test "the modifier mask keeps libghostty-vt's bit order" {
 	assert modsMask(none.incl(KeyMod.NumLock)) == 0x20;
 	assert modsMask(none.incl(KeyMod.ShiftRight)) == 0x40;
 	assert modsMask(none.incl(KeyMod.AltRight)) == 0x100;
+}
+
+function event(action: KeyAction, key: string, mods: BitSet<KeyMod>): KeyEvent {
+	return { action: action, key: key, mods: mods, consumedMods: 0 as BitSet<KeyMod>, unshifted: 0, text: "" };
+}
+
+test "the key still held is the last one pressed, until its release leaves only the modifiers held with it" {
+	const empty = 0 as BitSet<KeyMod>;
+	const ctrl = empty.incl(KeyMod.Ctrl);
+	const a = event(KeyAction.Press, "KeyA", ctrl);
+	const held = heldAfter(null, a);
+	assert held !== null && held.key == "KeyA";
+	const left = heldAfter(held, event(KeyAction.Release, "KeyA", ctrl));
+	assert left !== null && left.key == "" && left.mods == ctrl;
+	assert heldAfter(held, event(KeyAction.Release, "KeyA", empty)) === null;
+	assert heldAfter(null, event(KeyAction.Release, "KeyA", ctrl)) === null;
+}
+
+test "a focus loss releases the held key, then each held modifier on both sides" {
+	const ctrlShift = KeyMod.Shift | KeyMod.Ctrl;
+	const sent = releasesOf(event(KeyAction.Press, "KeyA", ctrlShift))
+		.map((e: KeyEvent): string => `${e.key}:${modsMask(e.mods)}`).join(" ");
+	assert sent == "KeyA:3 ShiftRight:2 ShiftLeft:2 ControlRight:0 ControlLeft:0";
+	const shift = ctrlShift.excl(KeyMod.Ctrl);
+	const own = releasesOf(event(KeyAction.Press, "ShiftLeft", shift)).map((e: KeyEvent): string => e.key).join(" ");
+	assert own == "ShiftLeft ShiftRight";
+	const plain = releasesOf(event(KeyAction.Press, "KeyA", 0 as BitSet<KeyMod>));
+	assert plain.length == 1 && plain[0].action == KeyAction.Release;
 }

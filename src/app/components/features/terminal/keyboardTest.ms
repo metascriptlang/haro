@@ -1,6 +1,6 @@
 import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { selected } from "../../../../input/pointer";
-import { sendKey, shutdown } from "./term";
+import { releaseHeldKey, sendKey, shutdown } from "./term";
 import { Sink, termOf } from "./termTest";
 import { Controls } from "./controls";
 import { closeKey, keyDown, keyUp } from "./keyboard";
@@ -270,6 +270,28 @@ test "a key release reaches a program only once it asks for event types" {
 	if (t !== null) {
 		assert t.sendKey(released("KeyA", 0x61)).ok;
 		assert kitty.sent == "\x1b[97;1:3u";
+		t.shutdown();
+	}
+}
+
+test "a focus loss releases the key still held, once, to a program that asks for event types" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("[>3u", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const a = key("KeyA", 0);
+		a.unshifted = 0x61;
+		assert t.sendKey(a).ok;
+		sink.sent = "";
+		assert t.releaseHeldKey().ok;
+		assert sink.sent == "[97;1:3u";
+		assert t.releaseHeldKey().ok;
+		assert sink.sent == "[97;1:3u";
+		assert t.sendKey(a).ok;
+		assert t.sendKey(released("KeyA", 0x61)).ok;
+		sink.sent = "";
+		assert t.releaseHeldKey().ok;
+		assert sink.sent == "";
 		t.shutdown();
 	}
 }

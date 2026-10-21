@@ -16,13 +16,17 @@ import {
 	refresh,
 	scheduleRefresh,
 } from "./paneModel";
-import { sendFocus, sendKey, sendText } from "./term";
+import { releaseHeldKey, sendFocus, sendKey, sendText } from "./term";
 
 const AUTOSCROLL_MS = 15;
 
 export function focusChanged(this m: PaneModel, gained: boolean): void {
 	m.cursor.focusCursor(gained);
-	if (!gained) { m.controls.focusLost(); }
+	if (!gained) {
+		m.controls.focusLost();
+		const released = m.term.releaseHeldKey();
+		if (!released.ok) { m.failed("focus", released.error.toString()); }
+	}
 	const sent = m.term.sendFocus(gained);
 	if (!sent.ok) { m.failed("focus", sent.error.toString()); }
 }

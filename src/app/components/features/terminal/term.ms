@@ -1,6 +1,14 @@
 import { createList, List } from "../../../../../../neon/src/core/list";
 import { NeonEvent } from "../../../../../../neon/src/render/event";
-import { KeyAction, KeyEvent, KeyMod, withNumLockApplied, withoutAltGr } from "../../../../keys/keys";
+import {
+	KeyAction,
+	KeyEvent,
+	KeyMod,
+	heldAfter,
+	releasesOf,
+	withNumLockApplied,
+	withoutAltGr,
+} from "../../../../keys/keys";
 import { Pty, PtyError } from "../../../../pty/transport";
 import { Replay } from "../../../../pty/replay";
 import { Session } from "../../../../session/session";
@@ -48,6 +56,7 @@ export interface Term {
 	open: OpenPty;
 	session: Session | null;
 	keys: Keys;
+	held: KeyEvent | null;
 	grid: List<RowSlot>;
 	styles: Styles;
 	buf: Vec<uint8>;
@@ -96,6 +105,7 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 		open: open,
 		session: null,
 		keys: keys.value,
+		held: null,
 		grid: createList<RowSlot>([]),
 		styles: Styles.empty(),
 		buf: buf,
@@ -232,12 +242,28 @@ export function keyEventOf(e: NeonEvent): KeyEvent {
 	}
 }
 
+function sendKeyEvent(this t: Term, s: Session, key: KeyEvent): Result<int32, TermError> {
+	const encoded = t.keys.encode(s.vt, key, t.buf);
+	if (!encoded.ok) { return Result.err(TermError.EncodeFailed); }
+	return t.sendBuffered(s, encoded.value);
+}
+
 export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(0); }
-	const encoded = t.keys.encode(s.vt, keyEventOf(e), t.buf);
-	if (!encoded.ok) { return Result.err(TermError.EncodeFailed); }
-	return t.sendBuffered(s, encoded.value);
+	const key = keyEventOf(e);
+	t.held = heldAfter(t.held, key);
+	return t.sendKeyEvent(s, key);
+}
+
+export function releaseHeldKey(this t: Term): Result<int32, TermError> {
+	const s = t.session;
+	const held = t.held;
+	t.held = null;
+	if (s === null || held === null) { return Result.ok(0); }
+	let sent = 0;
+	for (const key of releasesOf(held)) { sent += try t.sendKeyEvent(s, key); }
+	return Result.ok(sent);
 }
 
 export function sendText(this t: Term, text: string): Result<int32, TermError> {

@@ -4,7 +4,7 @@ when (!macos) {
 }
 import { homeDir } from "std/os";
 import { changeStamp, ensureDir, exists, readFile, writeFile } from "std/fs";
-import { relative } from "std/fs/path";
+import { isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
 import { Faces, installedFaces } from "./fonts";
 
@@ -64,7 +64,7 @@ function evaluate(path: string, dir: string): Result<string, string> {
 		return Result.err(`running config.ms needs msc on PATH or at ${installedMsc}`);
 	}
 	const target = relative(dir, path);
-	const importPath = target.startsWith(".") || target.indexOf(":") > 0 ? target : `./${target}`;
+	const importPath = target.startsWith(".") || isAbsolute(target) ? target : `./${target}`;
 	const runner = `import { config } from ${JSON.stringify(importPath)};\n` +
 		"console.log(JSON.stringify(config));\n";
 	if (!writeFile(`${dir}/evaluate.ms`, runner).ok) {

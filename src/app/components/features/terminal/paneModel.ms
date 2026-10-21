@@ -1,5 +1,7 @@
 import { Accessor, Setter, createSignal } from "../../../../../../neon/src/core/signal";
 import { flush } from "../../../../../../neon/src/core/runtime";
+import { createEffect } from "../../../../../../neon/src/core/effect";
+import { Cleanup } from "../../../../../../neon/src/core/types";
 import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { PixelRatio } from "../../../../../../neon/src/api/pixelRatio";
 import { Clipboard } from "../../../../../../neon/src/api/clipboard";
@@ -25,7 +27,7 @@ import { Bridge, Controls, refit } from "./controls";
 import { clipboardAsked } from "./clipboard";
 import { closeKey } from "./keyboard";
 import { shades } from "./mouse";
-import { Term, TermError, exitCodeText, exitedAbnormally, fit, pumpFrame, shellExitCode } from "./term";
+import { Term, TermError, exitCodeText, exitedAbnormally, pumpFrame, shellExitCode } from "./term";
 
 const PROBE = "MMMMMMMMMM";
 const HOLD_RECHECK_MS = 100;
@@ -72,6 +74,8 @@ export interface PaneModel {
 	holdTimer: number;
 	scrollTimer: number;
 	mouseGeometry: MouseGeometry;
+	layoutWidth: number;
+	layoutHeight: number;
 }
 
 export function createPane(
@@ -124,6 +128,8 @@ export function createPane(
 		holdTimer: -1,
 		scrollTimer: -1,
 		mouseGeometry: { cellWidth: 1, cellHeight: 1, width: 1, height: 1 },
+		layoutWidth: 0,
+		layoutHeight: 0,
 	};
 }
 
@@ -278,10 +284,20 @@ export function connectHost(this m: PaneModel): void {
 	m.host.onConfig((c: Config | null, error: string): void => { m.reconfigure(c, error); });
 	m.host.onCloseKey((): void => { m.closeKeyPressed(); });
 	m.host.onWake((): void => { m.woke(); });
+	createEffect((): number => PixelRatio.get(), (ratio: number, was: number | null): Cleanup | null => {
+		if (was !== null && m.layoutWidth > 0) { m.fitLayout(); }
+		return null;
+	});
 }
 
 export function laidOut(this m: PaneModel, e: NeonEvent): void {
 	if (e.width <= 0 || e.height <= 0) { return; }
+	m.layoutWidth = e.width;
+	m.layoutHeight = e.height;
+	m.fitLayout();
+}
+
+function fitLayout(this m: PaneModel): void {
 	const handle = m.grid;
 	if (handle === null) {
 		m.host.fail("the grid laid out before its handle arrived");
@@ -293,8 +309,8 @@ export function laidOut(this m: PaneModel, e: NeonEvent): void {
 	const ratio = PixelRatio.get();
 	const cellPx = Math.ceil(advance * ratio) as int32;
 	const rowPx = Math.ceil(lineHeight * ratio) as int32;
-	const widthPx = PixelRatio.getPixelSizeForLayoutSize(e.width) as int32;
-	const heightPx = PixelRatio.getPixelSizeForLayoutSize(e.height) as int32;
+	const widthPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutWidth) as int32;
+	const heightPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutHeight) as int32;
 	const size = gridSize(widthPx, heightPx, cellPx, rowPx);
 	if (!size.ok) {
 		m.host.fail(`cell ${advance}x${lineHeight} is not a grid size`);
@@ -302,7 +318,7 @@ export function laidOut(this m: PaneModel, e: NeonEvent): void {
 	}
 	const cols = size.value[0];
 	const rows = size.value[1];
-	m.setViewWidth(e.width);
+	m.setViewWidth(m.layoutWidth);
 	m.setCellWidth(cellPx / ratio);
 	m.setRowHeight(rowPx / ratio);
 	flush();
@@ -316,7 +332,7 @@ export function laidOut(this m: PaneModel, e: NeonEvent): void {
 	};
 	m.cursor.paintCursor();
 	console.log(
-		`haro: layout ${e.width}x${e.height} ratio ${ratio} ` +
+		`haro: layout ${m.layoutWidth}x${m.layoutHeight} ratio ${ratio} ` +
 			`cell ${advance}x${lineHeight} grid ${cols}x${rows}`
 	);
 	const fitted = m.controls.refit(m.term, cols, rows);

@@ -100,16 +100,22 @@ function readArray(v: JsonValue, key: string): Result<JsonValue[], string> {
 	return Result.ok(v.items);
 }
 
+function readEach<T>(
+	items: JsonValue[],
+	key: string,
+	read: (v: JsonValue, key: string) => Result<T, string>,
+): Result<Vec<T>, string> {
+	let out: Vec<T> = [];
+	for (let n = 0; n < items.length; n++) { out.push(try read(items[n], `${key}[${n}]`)); }
+	return Result.ok(out);
+}
+
 function readFamilies(v: JsonValue, key: string): Result<Vec<string>, string> {
 	if (v.kind == JsonKind.String) { return Result.ok([v.strVal]); }
 	if (v.kind != JsonKind.Array) {
 		return Result.err(`${key} must be a family name or a list of them`);
 	}
-	let out: Vec<string> = [];
-	for (let n = 0; n < v.items.length; n++) {
-		out.push(try readString(v.items[n], `${key}[${n}]`));
-	}
-	return Result.ok(out);
+	return readEach(v.items, key, readString);
 }
 
 function actionOf(name: string, key: string): Result<BindAction, string> {
@@ -221,15 +227,10 @@ export function parse(json: string): Result<Config, string> {
 						`palette has ${list.length} colours, at most ${PALETTE_SIZE}`,
 					);
 				}
-				for (let n = 0; n < list.length; n++) {
-					c.palette.push(try readColor(list[n], `palette[${n}]`));
-				}
+				c.palette = try readEach(list, key, readColor);
 			},
 			"keybinds" => {
-				const list = try readArray(v, key);
-				for (let n = 0; n < list.length; n++) {
-					c.keybinds.push(try readKeybind(list[n], `keybinds[${n}]`));
-				}
+				c.keybinds = try readEach(try readArray(v, key), key, readKeybind);
 			},
 			_ => { return Result.err(`unknown config field "${key}"`); },
 		}

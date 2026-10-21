@@ -1,9 +1,10 @@
 import { Accessor, Setter, createSignal } from "../../../../../neon/src/core/signal";
 import { NeonNode } from "../../../../../neon/src/render/node";
 import { frameNow, requestFrame } from "../../../../../neon/src/animation/frame";
-import { Graphics, Scene2D } from "../../../../../neon/src/components/scene2d";
+import { Graphics, Scene2D, TileGroup } from "../../../../../neon/src/components/scene2d";
 import { GraphicsOp } from "../../../../../neon/src/render/graphics";
-import { Color, Vec2, rgba, vec2 } from "../../../../../void/src/void2d/types";
+import { Color, Vec2, rgba, vec2, whiteTile } from "../../../../../void/src/void2d/types";
+import { TileCell } from "../../../../../void/src/void2d/node";
 import { Cursor, CursorLook, CursorShape, Rgb } from "../../../vt/vt";
 import { BLINK_MS, blinks, drawn, resets, shapeOf } from "../../../term/cursor";
 import { Trail, particleAlpha } from "../../../term/trail";
@@ -22,6 +23,8 @@ export interface CursorModel {
 	setRow: Setter<number>;
 	drawing: Accessor<GraphicsOp[]>;
 	setDrawing: Setter<GraphicsOp[]>;
+	dust: Accessor<TileCell[]>;
+	setDust: Setter<TileCell[]>;
 	trail: Trail;
 	tint: Rgb;
 	frame: int32;
@@ -38,6 +41,7 @@ export function createCursor(metrics: CellMetrics, padding: Accessor<number>, ti
 	const [col, setCol] = createSignal<number>(0);
 	const [row, setRow] = createSignal<number>(0);
 	const [drawing, setDrawing] = createSignal<GraphicsOp[]>([]);
+	const [dust, setDust] = createSignal<TileCell[]>([]);
 	return {
 		metrics: metrics,
 		padding: padding,
@@ -47,6 +51,8 @@ export function createCursor(metrics: CellMetrics, padding: Accessor<number>, ti
 		setRow: setRow,
 		drawing: drawing,
 		setDrawing: setDrawing,
+		dust: dust,
+		setDust: setDust,
 		trail: Trail.start(),
 		tint: tint,
 		frame: 0,
@@ -93,18 +99,25 @@ function operations(this c: CursorModel): GraphicsOp[] {
 			ops.push({ kind: "fillConvex", points: points, color: colorOf(c.tint, alpha) });
 		}
 	}
+	return ops;
+}
+
+function dustCells(this c: CursorModel): TileCell[] {
 	const side = c.metrics.cellWidth() * PARTICLE_SIDE;
+	const tile = whiteTile(side as float32, side as float32);
+	let cells: TileCell[] = [];
 	for (const p of c.trail.particles) {
-		ops.push({
-			kind: "fillRect",
+		cells.push({
 			x: (p.pos.x - side / 2) as float32,
 			y: (p.pos.y - side / 2) as float32,
-			w: side as float32,
-			h: side as float32,
+			tile: tile,
 			color: colorOf(c.tint, particleAlpha(p)),
+			scaleX: 1,
+			scaleY: 1,
+			rotation: 0,
 		});
 	}
-	return ops;
+	return cells;
 }
 
 function step(this c: CursorModel, now: number): void {
@@ -113,6 +126,7 @@ function step(this c: CursorModel, now: number): void {
 	const shape = c.look.shapeOf(c.focused);
 	const moving = c.trail.animate(dt, shape, c.cursorWidth(), c.metrics.rowHeight(), false);
 	c.setDrawing(c.operations());
+	c.setDust(c.dustCells());
 	c.frame = moving ? requestFrame((next: number): void => { c.step(next); }) : 0;
 }
 
@@ -181,6 +195,7 @@ export function wakeCursor(this c: CursorModel, now: float64): void {
 export function CursorTrail(props: { model: CursorModel }): NeonNode {
 	return <Scene2D>
 		<Graphics operations={props.model.drawing()} />
+		<TileGroup cells={props.model.dust()} />
 	</Scene2D>;
 }
 
@@ -238,14 +253,9 @@ test "each particle is a square a fifth of a cell wide that fades with its lifet
 	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
 	c.trail.moveTo(34, 244);
 	const _moving = c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false);
-	const ops = c.operations();
-	assert ops.length == c.trail.particles.length;
-	assert ops.length > 0;
-	const dust = ops[0];
-	if (dust.kind == "fillRect") {
-		assert dust.w == 2;
-		assert dust.color.a <= 1;
-	} else {
-		assert false;
-	}
+	const cells = c.dustCells();
+	assert cells.length == c.trail.particles.length;
+	assert cells.length > 0;
+	assert cells[0].tile.w == 2;
+	assert cells[0].color.a <= 1;
 }

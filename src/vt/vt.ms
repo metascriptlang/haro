@@ -257,7 +257,6 @@ extern function cellHasStyling(
 	key: GhosttyRenderStateRowCellsData,
 	out styled: boolean,
 ): GhosttyResult from "ghostty_render_state_row_cells_get";
-extern function styleDefault(out style: GhosttyStyle): void from "ghostty_style_default";
 extern function cellStyle(
 	cells: GhosttyRenderStateRowCells,
 	key: GhosttyRenderStateRowCellsData,
@@ -1230,9 +1229,7 @@ function readCell(
 		GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_HAS_STYLING;
 	if (!ok(cellHasStyling(cells, styledKey, styled))) { return Result.err(VtError.ReadFailed); }
 	if (styled) {
-		let style: GhosttyStyle;
-		styleDefault(style);
-		style.size = sizeof GhosttyStyle;
+		let style: GhosttyStyle = { size: sizeof GhosttyStyle };
 		const styleKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE;
 		if (!ok(cellStyle(cells, styleKey, style))) { return Result.err(VtError.ReadFailed); }
 		flags = styleFlags(style);

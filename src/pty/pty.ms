@@ -314,15 +314,19 @@ when (testBuild) {
 
 	struct LineCheck {
 		linesInOrder: int32;
-		digits: string;
+		number: int64;
+		hasDigits: boolean;
 		inNumber: boolean;
 		inEscape: boolean;
 		byteCount: int64;
 	}
 
+	const CANNOT_MATCH: int64 = -1;
+
 	const NO_LINES: LineCheck = {
 		linesInOrder: 0,
-		digits: "",
+		number: 0,
+		hasDigits: false,
 		inNumber: false,
 		inEscape: false,
 		byteCount: 0,
@@ -338,11 +342,16 @@ when (testBuild) {
 				c.inEscape = true;
 			} else if (b == "L".code) {
 				c.inNumber = true;
-				c.digits = "";
+				c.number = 0;
+				c.hasDigits = false;
 			} else if (c.inNumber && b >= "0".code && b <= "9".code) {
-				c.digits += String.fromCharCode(b as int32);
+				const leadingZero = c.hasDigits && c.number == 0;
+				const canMatch = c.number >= 0 && c.number <= c.linesInOrder && !leadingZero;
+				c.number = canMatch ? c.number * 10 + (b - "0".code) : CANNOT_MATCH;
+				c.hasDigits = true;
 			} else if (c.inNumber) {
-				if (b == ".".code && c.digits == `${c.linesInOrder}`) { c.linesInOrder++; }
+				const ended = b == ".".code && c.hasDigits;
+				if (ended && c.number == c.linesInOrder) { c.linesInOrder++; }
 				c.inNumber = false;
 			}
 		}
@@ -352,6 +361,11 @@ when (testBuild) {
 	test "the flood check counts a line ended by a cursor move, not a newline, and skips its escapes" {
 		const text = "\x1b]0;cmd\x07line L0.\x1b[2;1Hline\x1b[1CL1.\x1b[K\r\nline L3.\r\nline L2.\r\n";
 		assert NO_LINES.feed(text.asBytes()).linesInOrder == 3;
+	}
+
+	test "the flood check counts no line whose number has a leading zero or runs past the count" {
+		const text = "L0.L01.L99999999999999999999999999.L1.";
+		assert NO_LINES.feed(text.asBytes()).linesInOrder == 2;
 	}
 
 	test "output past the read buffer's limit arrives whole and in order while the app reads late" {

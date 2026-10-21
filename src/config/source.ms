@@ -15,6 +15,10 @@ export interface Loaded {
 	notice: string;
 }
 
+export function empty(this typeof Loaded): Loaded {
+	return { config: defaults(), faces: [], stamp: "", notice: "" };
+}
+
 export function configPath(): string {
 	return `${homeDir().replaceAll("\\", "/")}/.config/haro/config.ms`;
 }
@@ -131,7 +135,7 @@ function decodeCache(lines: string[], stamp: string): Loaded | null {
 
 export function load(path: string): Result<Loaded, string> {
 	const stamp = stampOf(path);
-	if (stamp == "") { return Result.ok({ config: defaults(), faces: [], stamp: "", notice: "" }); }
+	if (stamp == "") { return Result.ok(Loaded.empty()); }
 	const dir = cacheDir();
 	const cacheFile = `${dir}/config.cache`;
 	const previous = readFile(cacheFile);

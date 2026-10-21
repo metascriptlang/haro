@@ -3,9 +3,7 @@ import { Pty, PtyError } from "./transport";
 export struct Replay { bytes: Vec<uint8>; }
 
 export function ofText(this typeof Replay, text: string): Replay {
-	let bytes: Vec<uint8> = [];
-	for (const b of text.asBytes()) { bytes.push(b); }
-	return { bytes: bytes };
+	return { bytes: [...text.asBytes()] };
 }
 
 export function toPty(this r: Replay): Pty {

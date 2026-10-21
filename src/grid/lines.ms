@@ -124,16 +124,14 @@ export function line(
 			extraAt += cell.extra as int32;
 			continue;
 		}
-		let codepoints: Vec<uint32> = [cell.cp];
-		for (let k = 0; k < (cell.extra as int32); k++) { codepoints.push(row.extra[extraAt + k]); }
-		extraAt += cell.extra as int32;
-		for (let k = 0; k < (codepoints.length as int32); k++) {
-			const cp = codepoints[k];
+		const extra = cell.extra as int32;
+		for (let k = 0; k <= extra; k++) {
+			const cp = k == 0 ? cell.cp : row.extra[extraAt + k - 1];
 			if (!isUnicodeScalar(cp)) { return Result.err(GridError.CodepointInvalid); }
-			const unit = fromCodePoint(cp as number);
-			text += unit;
-			pushUnits(runs, run, unit.length as int32, split && k == 0);
+			text += fromCodePoint(cp as number);
+			pushUnits(runs, run, cp > 0xFFFF ? 2 : 1, split && k == 0);
 		}
+		extraAt += extra;
 	}
 	return Result.ok({ text: text, runs: runs, cursorCell: cursorCell });
 }

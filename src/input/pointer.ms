@@ -326,8 +326,7 @@ test "the highlight follows the selection into scrolled rows and out of view" {
 
 function prunedLines(from: int32, count: int32): string {
 	let text = "";
-	for (let i = 0; i < count; i++) { text += `
-r${from + i}`; }
+	for (let i = 0; i < count; i++) { text += `\nr${from + i}`; }
 	return text;
 }
 

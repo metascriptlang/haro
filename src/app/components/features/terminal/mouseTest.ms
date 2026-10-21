@@ -4,7 +4,7 @@ import { releaseHeldKey, sendKey, shutdown } from "./term";
 import { Sink, termOf } from "./termTest";
 import { Controls, Hit } from "./controls";
 import { keyDown } from "./keyboard";
-import { autoscrollTick, focusLost, pointerDown, pointerMove, pointerUp, roll, shades } from "./mouse";
+import { autoscrollTick, endDrag, pointerDown, pointerMove, pointerUp, roll, shades } from "./mouse";
 import { CLIPBOARD_MODS, CTRL } from "../../../../input/bindings";
 import {
 	at,
@@ -302,7 +302,7 @@ test "losing focus mid-drag ends the drag and its scrolling, and keeps the selec
 		assert c.pointerDown(t, clip, 1, hitAt(3, 2), 0).ok;
 		const above: Hit = { ...hitAt(3, 0), y: -12 };
 		assert c.pointerMove(t, above, true).ok;
-		c.focusLost();
+		c.endDrag();
 		assert !handled(c.autoscrollTick(t));
 		assert offsetOf(t) == bottom;
 		assert !c.pointer.dragging;

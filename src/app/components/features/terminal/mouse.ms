@@ -100,8 +100,7 @@ export function pointerMove(
 		return Result.ok(false);
 	}
 	if (!pressed) {
-		c.pointer.release();
-		c.autoscroll = 0;
+		c.endDrag();
 		return Result.ok(false);
 	}
 	c.autoscroll = autoscrollOf(h.y * h.scale, h.cell.height);
@@ -117,14 +116,13 @@ export function pointerUp(
 	h: Hit,
 ): Result<boolean, TermError> {
 	const reported = c.button != 0;
-	c.pointer.release();
-	c.autoscroll = 0;
+	c.endDrag();
 	if (!reported || c.holding()) { return Result.ok(false); }
 	c.button = 0;
 	return c.reportMouse(t, MouseAction.Release, button, h, false);
 }
 
-export function focusLost(this c: Controls): void {
+export function endDrag(this c: Controls): void {
 	c.pointer.release();
 	c.autoscroll = 0;
 }

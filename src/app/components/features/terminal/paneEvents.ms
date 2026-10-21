@@ -54,6 +54,12 @@ export function keyed(this m: PaneModel, e: NeonEvent): void {
 	if (sent.value > 0) { m.afterInput(); }
 }
 
+export function keyReleased(this m: PaneModel, e: NeonEvent): void {
+	if (m.controls.keyUp(e)) { return; }
+	const sent = m.term.sendKey(e);
+	if (!sent.ok) { m.failed("key", sent.error.toString()); }
+}
+
 export function committed(this m: PaneModel, e: NeonEvent): void {
 	m.preedit.setText("");
 	if (m.controls.holding()) { return; }

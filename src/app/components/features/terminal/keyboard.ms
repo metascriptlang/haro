@@ -51,6 +51,21 @@ export function keyDown(
 	e: NeonEvent,
 	host: Bridge,
 ): Result<boolean, ControlError> {
+	const handled = try c.controlKey(t, e, host);
+	c.consumedKey = handled ? e.code : "";
+	return Result.ok(handled);
+}
+
+export function keyUp(this c: Controls, e: NeonEvent): boolean {
+	return c.holding() || e.code == c.consumedKey;
+}
+
+function controlKey(
+	this c: Controls,
+	t: Term,
+	e: NeonEvent,
+	host: Bridge,
+): Result<boolean, ControlError> {
 	if (c.holding()) { return c.answerHeld(t, e); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }

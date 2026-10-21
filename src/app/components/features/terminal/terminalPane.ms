@@ -14,6 +14,7 @@ import {
 	dragged,
 	focusChanged,
 	keyed,
+	keyReleased,
 	pressed,
 	released,
 	wheeled,
@@ -41,6 +42,7 @@ export function TerminalPane(props: { model: PaneModel }): NeonNode {
 		}}
 		onLayout={(e: NeonEvent): void => { m.laidOut(e); }}
 		onKeyDown={(e: NeonEvent): void => { m.keyed(e); }}
+		onKeyUp={(e: NeonEvent): void => { m.keyReleased(e); }}
 		onTextInput={(e: NeonEvent): void => { m.committed(e); }}
 		onPreedit={(e: NeonEvent): void => { m.preedit.setText(e.text); }}
 		onPointerDown={(e: NeonEvent): void => { m.pressed(e); }}

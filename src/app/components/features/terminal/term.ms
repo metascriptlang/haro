@@ -218,7 +218,7 @@ function sendBuffered(this t: Term, s: Session, n: int32): Result<int32, TermErr
 
 export function keyEventOf(e: NeonEvent): KeyEvent {
 	const key: KeyEvent = {
-		action: e.repeat ? KeyAction.Repeat : KeyAction.Press,
+		action: e.type == "keyup" ? KeyAction.Release : e.repeat ? KeyAction.Repeat : KeyAction.Press,
 		key: e.code,
 		mods: (e.mods as uint16) as BitSet<KeyMod>,
 		consumedMods: (e.consumedMods as uint16) as BitSet<KeyMod>,

@@ -1,8 +1,9 @@
+import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { selected } from "../../../../input/pointer";
 import { sendKey, shutdown } from "./term";
 import { Sink, termOf } from "./termTest";
 import { Controls } from "./controls";
-import { closeKey, keyDown } from "./keyboard";
+import { closeKey, keyDown, keyUp } from "./keyboard";
 import { Warning } from "../../../../input/paste";
 import {
 	ALT,
@@ -243,6 +244,48 @@ test "a ctrl alt keybind leaves the character AltGr types on the same key to the
 		assert sink.sent == "";
 		assert handled(c.keyDown(t, key("KeyQ", CTRL | ALT), clip));
 		assert sink.sent == "x";
+		t.shutdown();
+	}
+}
+
+function released(code: string, unshifted: int32): NeonEvent {
+	const up = key(code, 0);
+	up.type = "keyup";
+	up.unshifted = unshifted;
+	return up;
+}
+
+test "a key release reaches a program only once it asks for event types" {
+	const legacy: Sink = { sent: "" };
+	const plain = termOf("ready", 20, 5, legacy);
+	assert plain !== null;
+	if (plain !== null) {
+		assert plain.sendKey(released("KeyA", 0x61)).ok;
+		assert legacy.sent == "";
+		plain.shutdown();
+	}
+	const kitty: Sink = { sent: "" };
+	const t = termOf("\x1b[>3u", 20, 5, kitty);
+	assert t !== null;
+	if (t !== null) {
+		assert t.sendKey(released("KeyA", 0x61)).ok;
+		assert kitty.sent == "\x1b[97;1:3u";
+		t.shutdown();
+	}
+}
+
+test "the release of a key a control consumed is consumed too, and any other goes on" {
+	const sink: Sink = { sent: "" };
+	const t = termOf(lines(30), 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf(""));
+		assert handled(c.keyDown(t, key("PageUp", 3), clip));
+		assert c.keyUp(released("PageUp", 0));
+		assert !c.keyUp(released("KeyA", 0x61));
+		assert !handled(c.keyDown(t, key("KeyA", 0), clip));
+		assert !c.keyUp(released("PageUp", 0));
 		t.shutdown();
 	}
 }

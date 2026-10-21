@@ -39,6 +39,7 @@ export interface Controls {
 	button: int32;
 	autoscroll: int32;
 	keybinds: Vec<Keybind>;
+	consumedKey: string;
 }
 
 export function open(this typeof Controls): Controls {
@@ -50,6 +51,7 @@ export function open(this typeof Controls): Controls {
 		button: 0,
 		autoscroll: 0,
 		keybinds: [],
+		consumedKey: "",
 	};
 }
 

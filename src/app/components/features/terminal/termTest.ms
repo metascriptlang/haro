@@ -14,7 +14,7 @@ export function recorder(text: string, sink: Sink): Pty {
 		wait: base.wait,
 		read: base.read,
 		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => {
-			for (const byte of data) { sink.sent += String.fromCharCode(byte as int32); }
+			sink.sent += data.asString();
 			return Result.ok(data.length as int32);
 		},
 		resize: base.resize,
@@ -112,6 +112,17 @@ test "a clipboard read waits in the frame and its answer goes out through the re
 		const sent = t.sendReplies();
 		assert sent.ok;
 		assert sink.sent == "\x1b]52;c;eA==\x07";
+		t.shutdown();
+	}
+}
+
+test "text past ASCII reaches the program as the same text" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("ready", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		assert t.sendText("hé").ok;
+		assert sink.sent == "hé";
 		t.shutdown();
 	}
 }

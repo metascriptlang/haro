@@ -149,14 +149,15 @@ export function applyFrame(
 	let chars: int32 = 0;
 	const last = grid.length() - 1;
 	for (let i = 0; i < p.scrolled; i++) { grid.move(0, last); }
-	for (const row of p.rows) {
-		const slot = try slotOf(styles, row, cursor, colors.value.bg);
+	for (let i = 0; i < p.rows.length; i++) {
+		const slot = try slotOf(styles, p.rows[i], cursor, colors.value.bg);
 		chars += slot.line.text.length as int32;
-		grid.set(row.y, slot);
+		grid.set(p.rows[i].y, slot);
 	}
-	for (const row of vt.painted.rows) {
-		if (grid.at(row.y).line.cursorCell != cursorCellOf(cursor, row.y)) {
-			grid.set(row.y, try slotOf(styles, row, cursor, colors.value.bg));
+	for (let i = 0; i < vt.painted.rows.length; i++) {
+		const y = vt.painted.rows[i].y;
+		if (grid.at(y).line.cursorCell != cursorCellOf(cursor, y)) {
+			grid.set(y, try slotOf(styles, vt.painted.rows[i], cursor, colors.value.bg));
 		}
 	}
 	stats.noteApplied(p.rows.length as int32, p.scrolled, chars, performance.now());

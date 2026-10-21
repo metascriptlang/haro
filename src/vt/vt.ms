@@ -1299,7 +1299,8 @@ export function rows(this vt: Vt): Result<Vec<Row>, VtError> {
 	let out: Vec<Row> = [];
 	let y = 0;
 	while (ghostty_render_state_row_iterator_next(iterator)) {
-		out.push(try vt.readRow(iterator, y, colors));
+		const row = try vt.readRow(iterator, y, colors);
+		out.push(row);
 		y++;
 	}
 	return Result.ok(out);
@@ -1311,7 +1312,8 @@ export function dirtyRows(this vt: Vt): Result<Vec<Row>, VtError> {
 	let out: Vec<Row> = [];
 	let y: uint16 = 0;
 	while (ghostty_render_state_row_iterator_next_dirty(iterator, y)) {
-		out.push(try vt.readRow(iterator, y as int32, colors));
+		const row = try vt.readRow(iterator, y as int32, colors);
+		out.push(row);
 	}
 	return Result.ok(out);
 }

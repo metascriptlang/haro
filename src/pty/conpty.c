@@ -346,7 +346,10 @@ int ptyResize(int id, int cols, int rows) {
 	Pty* p = slot(id);
 	if (!p) return -1;
 	COORD size = { (SHORT)cols, (SHORT)rows };
-	return SUCCEEDED(api.resize(p->console, size)) ? 0 : -1;
+	EnterCriticalSection(&p->lock);
+	int resized = !p->consoleClosed && SUCCEEDED(api.resize(p->console, size));
+	LeaveCriticalSection(&p->lock);
+	return resized ? 0 : -1;
 }
 
 int ptyExited(int id) {

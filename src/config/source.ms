@@ -34,10 +34,6 @@ export function cacheDir(): string {
 	}
 }
 
-export function stampOf(path: string): string {
-	return changeStamp(path);
-}
-
 function isCsiFinal(c: string): boolean {
 	return c >= "@" && c <= "~";
 }
@@ -134,7 +130,7 @@ function decodeCache(lines: string[], stamp: string): Loaded | null {
 }
 
 export function load(path: string): Result<Loaded, string> {
-	const stamp = stampOf(path);
+	const stamp = changeStamp(path);
 	if (stamp == "") { return Result.ok(Loaded.empty()); }
 	const dir = cacheDir();
 	const cacheFile = `${dir}/config.cache`;

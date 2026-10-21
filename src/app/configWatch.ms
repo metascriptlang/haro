@@ -1,5 +1,6 @@
+import { changeStamp } from "std/fs";
 import { Config, defaults } from "../config/config";
-import { Loaded, empty, load, stampOf } from "../config/source";
+import { Loaded, empty, load } from "../config/source";
 
 // Polled until card 2026-09-26-await-on-fs-watch-never-resumes.md lets a watch resume in an Ion window
 const CONFIG_POLL_MS = 1000;
@@ -28,11 +29,11 @@ export function readConfig(this w: ConfigWatch): void {
 		return;
 	}
 	w.error = got.error;
-	w.loaded.stamp = stampOf(w.file);
+	w.loaded.stamp = changeStamp(w.file);
 }
 
 function poll(this w: ConfigWatch, handler: (c: Config | null, error: string) => void): void {
-	const stamp = stampOf(w.file);
+	const stamp = changeStamp(w.file);
 	if (stamp == w.loaded.stamp) { return; }
 	if (stamp == "") {
 		w.loaded.stamp = stamp;

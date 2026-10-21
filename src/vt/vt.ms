@@ -2074,10 +2074,10 @@ test "a press in the padding reports the nearest cell, and the grid starts past 
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		vt.writeText("[?1000h[?1006h");
-		assert pressAt(vt, 5, 5) == "[<0;1;1M";
-		assert pressAt(vt, 45, 55) == "[<0;2;2M";
-		assert pressAt(vt, 255, 135) == "[<0;20;4M";
+		vt.writeText("\x1b[?1000h\x1b[?1006h");
+		assert pressAt(vt, 5, 5) == "\x1b[<0;1;1M";
+		assert pressAt(vt, 45, 55) == "\x1b[<0;2;2M";
+		assert pressAt(vt, 255, 135) == "\x1b[<0;20;4M";
 		vt.free();
 	}
 }
@@ -2367,7 +2367,7 @@ test "an OSC 52 write reaches the host once, and only for the standard clipboard
 		const second = vt.takeClipboard();
 		assert second.ok;
 		if (second.ok) { assert second.value === null; }
-		vt.writeText("]52;c;");
+		vt.writeText("\x1b]52;c;\x07");
 		const cleared = vt.takeClipboard();
 		assert cleared.ok;
 		if (cleared.ok) { assert cleared.value == ""; }
@@ -2921,8 +2921,7 @@ function numberedLines(count: int32): string {
 
 function linefeedLines(count: int32): string {
 	let text = "";
-	for (let i = 0; i < count; i++) { text += `
-q${i}`; }
+	for (let i = 0; i < count; i++) { text += `\nq${i}`; }
 	return text;
 }
 

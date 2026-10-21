@@ -11,18 +11,16 @@ function firstSpanColor(s: Screen, y: int32): string {
 test "an OSC 4 palette change repaints the cells that use the entry, OSC 104 puts it back" {
 	const s = blankScreen(10, 3);
 	assert s !== null;
-	if (s !== null) {
-		assert s.feedsInStep("\x1b[31mr\x1b[0m\r\n\x1b[41m \x1b[0m");
-		assert firstSpanColor(s, 0) == "#cc6666";
-		assert s.feedsInStep("\x1b]4;1;rgb:00/ff/00\x07");
-		assert firstSpanColor(s, 0) == "#00ff00";
-		assert s.spans(1)[0].style!.backgroundColor == "#00ff00";
-		assert s.feedsInStep("\x1b]104;1\x07");
-		assert firstSpanColor(s, 0) == "#cc6666";
-		assert s.feedsInStep("\x1b]4;1;rgb:12/34/56\x07\x1b]104\x07");
-		assert firstSpanColor(s, 0) == "#cc6666";
-		s.close();
-	}
+	defer s.close();
+	assert s.feedsInStep("\x1b[31mr\x1b[0m\r\n\x1b[41m \x1b[0m");
+	assert firstSpanColor(s, 0) == "#cc6666";
+	assert s.feedsInStep("\x1b]4;1;rgb:00/ff/00\x07");
+	assert firstSpanColor(s, 0) == "#00ff00";
+	assert s.spans(1)[0].style!.backgroundColor == "#00ff00";
+	assert s.feedsInStep("\x1b]104;1\x07");
+	assert firstSpanColor(s, 0) == "#cc6666";
+	assert s.feedsInStep("\x1b]4;1;rgb:12/34/56\x07\x1b]104\x07");
+	assert firstSpanColor(s, 0) == "#cc6666";
 }
 
 test "a new default colour (OSC 10, OSC 11, DECSCNM) repaints rows already drawn" {
@@ -30,22 +28,20 @@ test "a new default colour (OSC 10, OSC 11, DECSCNM) repaints rows already drawn
 	const bg = blankScreen(10, 3);
 	const reverse = blankScreen(10, 3);
 	assert fg !== null && bg !== null && reverse !== null;
-	if (fg !== null && bg !== null && reverse !== null) {
-		assert fg.feedsInStep("abc\r\n");
-		assert fg.feed("\x1b]10;rgb:ff/00/00\x07").ok;
-		assert firstSpanColor(fg, 0) == "#ff0000";
-		assert fg.mismatch() == "";
-		assert bg.feedsInStep("abc\x1b[44mb\x1b[0m");
-		assert bg.feed("\x1b]11;rgb:10/10/10\x07").ok;
-		assert bg.mismatch() == "";
-		assert bg.spans(0)[0].style!.backgroundColor === undefined;
-		assert reverse.feedsInStep("abc\r\n");
-		assert reverse.feed("\x1b[?5h").ok;
-		assert reverse.mismatch() == "";
-		fg.close();
-		bg.close();
-		reverse.close();
-	}
+	defer fg.close();
+	defer bg.close();
+	defer reverse.close();
+	assert fg.feedsInStep("abc\r\n");
+	assert fg.feed("\x1b]10;rgb:ff/00/00\x07").ok;
+	assert firstSpanColor(fg, 0) == "#ff0000";
+	assert fg.mismatch() == "";
+	assert bg.feedsInStep("abc\x1b[44mb\x1b[0m");
+	assert bg.feed("\x1b]11;rgb:10/10/10\x07").ok;
+	assert bg.mismatch() == "";
+	assert bg.spans(0)[0].style!.backgroundColor === undefined;
+	assert reverse.feedsInStep("abc\r\n");
+	assert reverse.feed("\x1b[?5h").ok;
+	assert reverse.mismatch() == "";
 }
 
 function isRedAt(s: Screen, y: int32, unit: int32): boolean {
@@ -74,30 +70,25 @@ test "erasing, inserting and deleting fill the vacated cells with the current ba
 	const bg = "\x1b[48;2;255;0;0m";
 	assert index !== null && ech !== null && ich !== null &&
 		el !== null && ed !== null && dl !== null;
-	if (
-		index !== null && ech !== null && ich !== null &&
-		el !== null && ed !== null && dl !== null
-	) {
-		assert index.feedsInStep("\x1b[5;1HA" + bg + "\x1bD");
-		assert index.lines() == "\n\n\nA\n";
-		assert redExactly(index, 4, 0, 5);
-		assert ech.feedsInStep("ABC\x1b[1;1H" + bg + "\x1b[2X");
-		assert ech.text(0) == "  C" && redExactly(ech, 0, 0, 2);
-		assert ich.feedsInStep("ABC\x1b[1;1H" + bg + "\x1b[2@");
-		assert ich.text(0) == "  ABC" && redExactly(ich, 0, 0, 2);
-		assert el.feedsInStep("ABCDE\x1b[1;2H" + bg + "\x1b[K");
-		assert el.text(0) == "A" && redExactly(el, 0, 1, 4);
-		assert ed.feedsInStep("ABC\r\nDEF\r\nGHI\x1b[2;2H" + bg + "\x1b[J");
-		assert ed.lines() == "ABC\nD\n\n\n";
-		assert redExactly(ed, 1, 1, 4) && redExactly(ed, 2, 0, 5) && redExactly(ed, 4, 0, 5);
-		assert dl.feedsInStep("ABC\r\nDEF\r\nGHI\x1b[2;2H" + bg + "\x1b[M");
-		assert dl.lines() == "ABC\nGHI\n\n\n";
-		assert redExactly(dl, 4, 0, 5);
-		index.close();
-		ech.close();
-		ich.close();
-		el.close();
-		ed.close();
-		dl.close();
-	}
+	defer index.close();
+	defer ech.close();
+	defer ich.close();
+	defer el.close();
+	defer ed.close();
+	defer dl.close();
+	assert index.feedsInStep("\x1b[5;1HA" + bg + "\x1bD");
+	assert index.lines() == "\n\n\nA\n";
+	assert redExactly(index, 4, 0, 5);
+	assert ech.feedsInStep("ABC\x1b[1;1H" + bg + "\x1b[2X");
+	assert ech.text(0) == "  C" && redExactly(ech, 0, 0, 2);
+	assert ich.feedsInStep("ABC\x1b[1;1H" + bg + "\x1b[2@");
+	assert ich.text(0) == "  ABC" && redExactly(ich, 0, 0, 2);
+	assert el.feedsInStep("ABCDE\x1b[1;2H" + bg + "\x1b[K");
+	assert el.text(0) == "A" && redExactly(el, 0, 1, 4);
+	assert ed.feedsInStep("ABC\r\nDEF\r\nGHI\x1b[2;2H" + bg + "\x1b[J");
+	assert ed.lines() == "ABC\nD\n\n\n";
+	assert redExactly(ed, 1, 1, 4) && redExactly(ed, 2, 0, 5) && redExactly(ed, 4, 0, 5);
+	assert dl.feedsInStep("ABC\r\nDEF\r\nGHI\x1b[2;2H" + bg + "\x1b[M");
+	assert dl.lines() == "ABC\nGHI\n\n\n";
+	assert redExactly(dl, 4, 0, 5);
 }

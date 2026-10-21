@@ -204,7 +204,7 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 			{
 				code: "Enter",
 				mods: SHIFT,
-				text: "[13;2u",
+				text: "\x1b[13;2u",
 				action: BindAction.SendText,
 				screen: Screen.Any,
 			},
@@ -219,10 +219,10 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 		const clip = clipOf(boardOf(""));
 		assert handled(c.keyDown(t, key("PageUp", CTRL | SHIFT), clip));
 		assert handled(c.keyDown(t, key("Enter", SHIFT), clip));
-		assert sink.sent == "[13;2u";
+		assert sink.sent == "\x1b[13;2u";
 		assert atBottomOf(t);
 		assert handled(c.keyDown(t, key("KeyC", CTRL | SHIFT), clip));
-		assert sink.sent == "[13;2uc";
+		assert sink.sent == "\x1b[13;2uc";
 		assert !handled(c.keyDown(t, key("Enter", CTRL), clip));
 		t.shutdown();
 	}
@@ -277,7 +277,7 @@ test "a key release reaches a program only once it asks for event types" {
 
 test "a focus loss releases the key still held, once, to a program that asks for event types" {
 	const sink: Sink = { sent: "" };
-	const t = termOf("[>3u", 20, 5, sink);
+	const t = termOf("\x1b[>3u", 20, 5, sink);
 	assert t !== null;
 	if (t !== null) {
 		const a = key("KeyA", 0);
@@ -285,9 +285,9 @@ test "a focus loss releases the key still held, once, to a program that asks for
 		assert t.sendKey(a).ok;
 		sink.sent = "";
 		assert t.releaseHeldKey().ok;
-		assert sink.sent == "[97;1:3u";
+		assert sink.sent == "\x1b[97;1:3u";
 		assert t.releaseHeldKey().ok;
-		assert sink.sent == "[97;1:3u";
+		assert sink.sent == "\x1b[97;1:3u";
 		assert t.sendKey(a).ok;
 		assert t.sendKey(released("KeyA", 0x61)).ok;
 		sink.sent = "";

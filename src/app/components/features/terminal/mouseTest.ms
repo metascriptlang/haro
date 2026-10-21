@@ -179,7 +179,7 @@ test "shift hands the mouse back from an app that tracks it, and a wheel reporte
 		assert c.pointer.selected();
 		assert handled(c.roll(t, 1, hitAt(0, 0)));
 		assert !c.pointer.selected();
-		assert sink.sent == "[<64;1;1M[<64;1;1M[<64;1;1M";
+		assert sink.sent == "\x1b[<64;1;1M\x1b[<64;1;1M\x1b[<64;1;1M";
 		t.shutdown();
 	}
 }
@@ -314,7 +314,7 @@ test "losing focus mid-drag ends the drag and its scrolling, and keeps the selec
 
 test "a press in the padding reaches a tracking app as the nearest cell" {
 	const sink: Sink = { sent: "" };
-	const t = termOf("[?1000h[?1006h", 20, 5, sink);
+	const t = termOf("\x1b[?1000h\x1b[?1006h", 20, 5, sink);
 	assert t !== null;
 	if (t !== null) {
 		const c = Controls.open();
@@ -327,7 +327,7 @@ test "a press in the padding reaches a tracking app as the nearest cell" {
 			cell: { ...base.cell, width: 180, height: 100, padLeft: 10, padTop: 10, padRight: 10, padBottom: 10 },
 		};
 		assert handled(c.pointerDown(t, clip, 1, padded, 0));
-		assert sink.sent == "[<0;1;1M";
+		assert sink.sent == "\x1b[<0;1;1M";
 		t.shutdown();
 	}
 }

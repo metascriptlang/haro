@@ -6,11 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "byteQueue.h"
 #include "nativePty.h"
 
 #define PTY_MAX 16
-#define READ_LIMIT (4 << 20)
-#define BATCH_KEEP (4 << 20)
 
 typedef struct {
 	int used;
@@ -25,13 +24,8 @@ typedef struct {
 	CRITICAL_SECTION lock;
 	CONDITION_VARIABLE space;
 	CONDITION_VARIABLE pending;
-	uint8_t* data;
-	int64_t head;
-	int64_t len;
-	int64_t cap;
-	uint8_t* out;
-	int64_t outLen;
-	int64_t outCap;
+	ByteQueue in;
+	ByteQueue out;
 	int writeFailed;
 	int stopping;
 	int closed;
@@ -77,34 +71,20 @@ static void wake(void) {
 
 static int append(Pty* p, const uint8_t* bytes, int64_t n) {
 	EnterCriticalSection(&p->lock);
-	while (!p->stopping && p->len - p->head + n > READ_LIMIT) {
+	while (!p->stopping && p->in.len - p->in.head + n > READ_LIMIT) {
 		SleepConditionVariableCS(&p->space, &p->lock, INFINITE);
 	}
 	if (p->stopping) {
 		LeaveCriticalSection(&p->lock);
 		return 1;
 	}
-	if (p->head > 0 && p->len + n > p->cap) {
-		memmove(p->data, p->data + p->head, (size_t)(p->len - p->head));
-		p->len -= p->head;
-		p->head = 0;
+	if (!queuePush(&p->in, bytes, n, 65536)) {
+		p->outOfMemory = 1;
+		SetEvent(p->ready);
+		LeaveCriticalSection(&p->lock);
+		wake();
+		return 0;
 	}
-	if (p->len + n > p->cap) {
-		int64_t cap = p->cap ? p->cap : 65536;
-		while (cap < p->len + n) cap *= 2;
-		uint8_t* grown = realloc(p->data, (size_t)cap);
-		if (!grown) {
-			p->outOfMemory = 1;
-			SetEvent(p->ready);
-			LeaveCriticalSection(&p->lock);
-			wake();
-			return 0;
-		}
-		p->data = grown;
-		p->cap = cap;
-	}
-	memcpy(p->data + p->len, bytes, (size_t)n);
-	p->len += n;
 	SetEvent(p->ready);
 	LeaveCriticalSection(&p->lock);
 	wake();
@@ -128,40 +108,35 @@ static DWORD WINAPI readLoop(LPVOID arg) {
 
 static DWORD WINAPI writeLoop(LPVOID arg) {
 	Pty* p = arg;
-	uint8_t* batch = NULL;
-	int64_t batchCap = 0;
+	ByteQueue batch = {0};
 	EnterCriticalSection(&p->lock);
 	for (;;) {
-		while (!p->stopping && p->outLen == 0) {
+		while (!p->stopping && p->out.len == 0) {
 			SleepConditionVariableCS(&p->pending, &p->lock, INFINITE);
 		}
 		if (p->stopping) break;
-		uint8_t* full = p->out;
-		int64_t fullCap = p->outCap;
-		int64_t n = p->outLen;
+		ByteQueue full = p->out;
 		p->out = batch;
-		p->outCap = batchCap;
-		p->outLen = 0;
+		p->out.len = 0;
 		batch = full;
-		batchCap = fullCap;
 		LeaveCriticalSection(&p->lock);
+		int64_t n = batch.len;
 		int ok = 1;
 		for (int64_t done = 0; ok && done < n;) {
 			DWORD wrote = 0;
 			DWORD want = n - done > (1 << 30) ? (1 << 30) : (DWORD)(n - done);
-			ok = WriteFile(p->input, batch + done, want, &wrote, NULL);
+			ok = WriteFile(p->input, batch.data + done, want, &wrote, NULL);
 			done += wrote;
 		}
-		if (batchCap > BATCH_KEEP) {
-			free(batch);
-			batch = NULL;
-			batchCap = 0;
+		if (batch.cap > BATCH_KEEP) {
+			free(batch.data);
+			batch = (ByteQueue){0};
 		}
 		EnterCriticalSection(&p->lock);
 		if (!ok) p->writeFailed = 1;
 	}
 	LeaveCriticalSection(&p->lock);
-	free(batch);
+	free(batch.data);
 	return 0;
 }
 
@@ -304,16 +279,10 @@ int64_t ptyRead(int id, uint8_t* buf, int64_t cap) {
 		LeaveCriticalSection(&p->lock);
 		return -2;
 	}
-	int64_t held = p->len - p->head;
-	int64_t n = held < cap ? held : cap;
-	if (n > 0) {
-		memcpy(buf, p->data + p->head, (size_t)n);
-		p->head += n;
-		if (p->head == p->len) p->head = p->len = 0;
-		WakeConditionVariable(&p->space);
-	}
-	int ended = p->closed && p->len == 0;
-	if (p->len == 0 && !p->closed) ResetEvent(p->ready);
+	int64_t n = queueTake(&p->in, buf, cap);
+	if (n > 0) WakeConditionVariable(&p->space);
+	int ended = p->closed && p->in.len == 0;
+	if (p->in.len == 0 && !p->closed) ResetEvent(p->ready);
 	LeaveCriticalSection(&p->lock);
 	if (n == 0 && ended) return -1;
 	return n;
@@ -336,19 +305,10 @@ int64_t ptyWrite(int id, const uint8_t* data, int64_t len) {
 		LeaveCriticalSection(&p->lock);
 		return -1;
 	}
-	if (p->outLen + len > p->outCap) {
-		int64_t cap = p->outCap ? p->outCap : 4096;
-		while (cap < p->outLen + len) cap *= 2;
-		uint8_t* grown = realloc(p->out, (size_t)cap);
-		if (!grown) {
-			LeaveCriticalSection(&p->lock);
-			return -2;
-		}
-		p->out = grown;
-		p->outCap = cap;
+	if (!queuePush(&p->out, data, len, 4096)) {
+		LeaveCriticalSection(&p->lock);
+		return -2;
 	}
-	memcpy(p->out + p->outLen, data, (size_t)len);
-	p->outLen += len;
 	WakeConditionVariable(&p->pending);
 	LeaveCriticalSection(&p->lock);
 	return len;
@@ -406,7 +366,7 @@ void ptyClose(int id) {
 	CloseHandle(p->process);
 	if (p->ready) CloseHandle(p->ready);
 	DeleteCriticalSection(&p->lock);
-	free(p->data);
-	free(p->out);
+	free(p->in.data);
+	free(p->out.data);
 	memset(p, 0, sizeof *p);
 }

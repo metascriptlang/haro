@@ -8,6 +8,12 @@ const FONT_REGULAR = `${ASSETS}/JetBrainsMonoNL-Regular.ttf`;
 const FONT_BOLD = `${ASSETS}/JetBrainsMonoNL-Bold.ttf`;
 const FONT_ITALIC = `${ASSETS}/JetBrainsMonoNL-Italic.ttf`;
 const FONT_BOLD_ITALIC = `${ASSETS}/JetBrainsMonoNL-BoldItalic.ttf`;
+const BUILT_IN: Faces = {
+	regular: FONT_REGULAR,
+	bold: FONT_BOLD,
+	italic: FONT_ITALIC,
+	boldItalic: FONT_BOLD_ITALIC,
+};
 
 interface SystemFace {
 	path: string;
@@ -37,13 +43,6 @@ when (windows) {
 	}
 }
 
-function registerBuiltIn(): void {
-	registerFace(FONT_BOLD, FONT_REGULAR, 700, FontStyle.Normal);
-	registerFace(FONT_ITALIC, FONT_REGULAR, 400, FontStyle.Italic);
-	registerFace(FONT_BOLD_ITALIC, FONT_REGULAR, 700, FontStyle.Italic);
-	registerFace(FONT_REGULAR, FONT_REGULAR, 400, FontStyle.Normal);
-}
-
 function registerFamily(faces: Faces): string {
 	const family = faces.regular;
 	const bold = faces.bold;
@@ -57,10 +56,10 @@ function registerFamily(faces: Faces): string {
 }
 
 export function registerFonts(configured: Vec<Faces>): string[] {
-	registerBuiltIn();
+	const builtIn = registerFamily(BUILT_IN);
 	let families: string[] = [];
 	for (const faces of configured) { families.push(registerFamily(faces)); }
-	families.push(FONT_REGULAR);
+	families.push(builtIn);
 	for (const face of fallbackFaces()) {
 		registerFace(face.path, face.family, 400, FontStyle.Normal);
 		families.push(face.family);

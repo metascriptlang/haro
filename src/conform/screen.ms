@@ -136,13 +136,23 @@ function runText(r: LineRun): string {
 	const fg = `${r.fg.r},${r.fg.g},${r.fg.b}`;
 	const bg = `${r.bg.r},${r.bg.g},${r.bg.b}`;
 	const look = `${r.bold ? "B" : ""}${r.italic ? "I" : ""}${r.strikethrough ? "S" : ""}`;
-	return `${r.units}:${fg}/${bg}/u${r.underline as int32}${look}`;
+	const lineColor = r.underlineColor;
+	const ul = lineColor === null ? "" : `@${lineColor.r},${lineColor.g},${lineColor.b}`;
+	return `${r.units}:${fg}/${bg}/u${r.underline as int32}${ul}${look}`;
 }
 
 export function runsText(runs: Vec<LineRun>): string {
 	let out = "";
 	for (const r of runs) { out += runText(r) + " "; }
 	return out;
+}
+
+function sameRuns(a: Vec<LineRun>, b: Vec<LineRun>): boolean {
+	if (a.length != b.length) { return false; }
+	for (let i = 0; i < a.length; i++) {
+		if (a[i] != b[i]) { return false; }
+	}
+	return true;
 }
 
 export function mismatch(this s: Screen): string {
@@ -163,9 +173,10 @@ export function mismatch(this s: Screen): string {
 		if (vtLine.value.text != s.untrimmedText(y)) {
 			return `row ${y}: text [${s.untrimmedText(y)}] but the vt has [${vtLine.value.text}]`;
 		}
-		const have = runsText(s.runs(y));
-		const want = runsText(vtLine.value.runs);
-		if (have != want) { return `row ${y}: runs ${have} but the vt has ${want}`; }
+		const have = s.runs(y);
+		if (!sameRuns(have, vtLine.value.runs)) {
+			return `row ${y}: runs ${runsText(have)} but the vt has ${runsText(vtLine.value.runs)}`;
+		}
 		const spans = s.spans(y);
 		let spanned = "";
 		for (const sp of spans) { spanned += sp.text; }

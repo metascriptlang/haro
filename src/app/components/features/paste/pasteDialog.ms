@@ -99,12 +99,6 @@ export function showPending(
 	cellWidth: number,
 	viewWidth: number,
 ): void {
-	if (held === null && reading === null) {
-		d.shownFor = null;
-		d.shownRead = null;
-		d.setVisible(false);
-		return;
-	}
 	const cols = dialogCols(viewWidth, cellWidth);
 	if (held !== null) {
 		if (d.shownFor === held) { return; }
@@ -114,10 +108,15 @@ export function showPending(
 		d.shownRead = null;
 		return;
 	}
-	const text = reading as string;
-	if (d.shownRead === text) { return; }
-	d.present(askDialogOf(text, cols, PREVIEW_ROWS), cols, READ_CONFIRM, READ_CANCEL);
-	d.shownRead = text;
+	if (reading === null) {
+		d.shownFor = null;
+		d.shownRead = null;
+		d.setVisible(false);
+		return;
+	}
+	if (d.shownRead === reading) { return; }
+	d.present(askDialogOf(reading, cols, PREVIEW_ROWS), cols, READ_CONFIRM, READ_CANCEL);
+	d.shownRead = reading;
 	d.shownFor = null;
 }
 

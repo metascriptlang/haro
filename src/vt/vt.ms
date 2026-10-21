@@ -381,9 +381,13 @@ export struct Vt {
 	painted: Painted;
 }
 
+struct MouseCodec {
+	encoder: GhosttyMouseEncoder;
+	event: GhosttyMouseEvent;
+}
+
 export interface Mouse {
-	encoder: GhosttyMouseEncoder | null;
-	event: GhosttyMouseEvent | null;
+	codec: MouseCodec | null;
 	stale: boolean;
 	geometry: MouseGeometry | null;
 }
@@ -689,7 +693,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 			iterator: iterator,
 			cells: cells,
 			effects: effects.value,
-			mouse: { encoder: null, event: null, stale: true, geometry: null },
+			mouse: { codec: null, stale: true, geometry: null },
 			anchor: anchor,
 			painted: { alternate: false, rows: [], palette: null },
 		});
@@ -1013,8 +1017,9 @@ export struct MouseGeometry {
 	padBottom: int32;
 }
 
-function open(this m: Mouse): Result<void, VtError> {
-	if (m.encoder !== null && m.event !== null) { return Result.ok(null); }
+function open(this m: Mouse): Result<MouseCodec, VtError> {
+	const known = m.codec;
+	if (known !== null) { return Result.ok(known); }
 	let encoder: GhosttyMouseEncoder;
 	let event: GhosttyMouseEvent;
 	if (!ok(ghostty_mouse_encoder_new(vtAllocator(), encoder))) {
@@ -1027,9 +1032,9 @@ function open(this m: Mouse): Result<void, VtError> {
 	let track = true;
 	const trackOption = GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL;
 	mouseSetFlag(encoder, trackOption, track);
-	m.encoder = encoder;
-	m.event = event;
-	return Result.ok(null);
+	const codec: MouseCodec = { encoder: encoder, event: event };
+	m.codec = codec;
+	return Result.ok(codec);
 }
 
 // x and y are surface pixels with the grid at the origin.
@@ -1041,10 +1046,9 @@ export function mouseReport(
 	buf: Span<uint8>,
 ): Result<int32, VtError> {
 	const m = vt.mouse;
-	const _opened = try m.open();
-	const encoder = m.encoder;
-	const event = m.event;
-	if (encoder === null || event === null) { return Result.err(VtError.ReadFailed); }
+	const codec = try m.open();
+	const encoder = codec.encoder;
+	const event = codec.event;
 	if (m.stale) {
 		ghostty_mouse_encoder_setopt_from_terminal(encoder, vt.terminal);
 		m.stale = false;
@@ -1368,10 +1372,11 @@ export function clean(this vt: Vt): void {
 export function free(this vt: Vt): void {
 	ghostty_tracked_grid_ref_free(vt.anchor);
 	closeEffects(vt.terminal);
-	const encoder = vt.mouse.encoder;
-	const event = vt.mouse.event;
-	if (encoder !== null) { ghostty_mouse_encoder_free(encoder); }
-	if (event !== null) { ghostty_mouse_event_free(event); }
+	const codec = vt.mouse.codec;
+	if (codec !== null) {
+		ghostty_mouse_encoder_free(codec.encoder);
+		ghostty_mouse_event_free(codec.event);
+	}
 	freeHandles(vt.terminal, vt.state, vt.iterator, vt.cells);
 }
 

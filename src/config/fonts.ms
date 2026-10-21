@@ -63,7 +63,8 @@ when (windows) {
 		if (found !== null) {
 			for (let i: int64 = 0; i < CFArrayGetCount(found); i++) {
 				const d = CFArrayGetValueAtIndex(found, i);
-				if (attributeText(d, kCTFontFamilyNameAttribute) != family) { continue; }
+				const name = attributeText(d, kCTFontFamilyNameAttribute);
+				if (name === null || name.toLowerCase() != family.toLowerCase()) { continue; }
 				const style = attributeText(d, kCTFontStyleNameAttribute);
 				const path = attributePath(d);
 				if (style !== null && path !== null) {
@@ -119,13 +120,15 @@ function facesAmong(files: Vec<FontFile>, family: string): Result<Faces, string>
 	let bold: string | null = null;
 	let italic: string | null = null;
 	let boldItalic: string | null = null;
+	const wanted = family.toLowerCase();
 	for (const f of files) {
-		if (!f.name.startsWith(family)) { continue; }
-		match (f.name.slice(family.length, f.name.length)) {
-			"" | " Regular" => { regular = regular ?? f.path; },
-			" Bold" => { bold = bold ?? f.path; },
-			" Italic" => { italic = italic ?? f.path; },
-			" Bold Italic" => { boldItalic = boldItalic ?? f.path; },
+		const name = f.name.toLowerCase();
+		if (!name.startsWith(wanted)) { continue; }
+		match (name.slice(wanted.length, name.length)) {
+			"" | " regular" => { regular = regular ?? f.path; },
+			" bold" => { bold = bold ?? f.path; },
+			" italic" => { italic = italic ?? f.path; },
+			" bold italic" => { boldItalic = boldItalic ?? f.path; },
 			_ => {},
 		}
 	}
@@ -204,6 +207,13 @@ test "machine fonts resolve in the fonts folder, and a collection answers each o
 	assert yahei.value.regular == "W:/Fonts/msyh.ttc";
 }
 
+test "a family name matches whatever its case, as Windows font lookup does" {
+	const f = facesIn(REGISTRY_LISTING, "segoe ui", "W:/Fonts");
+	assert f.ok;
+	assert f.value.regular == "W:/Fonts/segoeui.ttf";
+	assert f.value.bold == "W:/Fonts/segoeuib.ttf";
+}
+
 test "a family with no regular face is refused by name" {
 	const missing = facesIn(REGISTRY_LISTING, "Operator", "W:/Fonts");
 	assert !missing.ok;
@@ -226,6 +236,7 @@ when (macos) {
 		if (symbols.ok) {
 			assert symbols.value.regular == "/System/Library/Fonts/Apple Symbols.ttf";
 		}
+		assert installedFaces("apple symbols").ok;
 		assert !installedFaces("No Such Family Haro").ok;
 	}
 }

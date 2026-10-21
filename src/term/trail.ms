@@ -6,7 +6,7 @@ export const TRAIL_SIZE: float64 = 1.0;
 export const BAR_FRACTION: float64 = 1.0 / 8;
 export const PARTICLE_OPACITY: float64 = 200.0 / 255;
 export const PARTICLE_LIFETIME: float64 = 4.0;
-export const PARTICLE_DENSITY: float64 = 21.0;
+export const PARTICLE_DENSITY: float64 = 7.0;
 export const PARTICLE_SPEED: float64 = 10.0;
 export const PARTICLE_CURL: float64 = 1.0;
 
@@ -359,7 +359,7 @@ test "a jump of ten rows sprays density particles per row that fade out within t
 	const t = placed(30, 40);
 	t.moveTo(30, 240);
 	assert t.animate(FRAME, CursorShape.Block, 10, 20, false);
-	assert t.particles.length == 210;
+	assert t.particles.length == ((10 * PARTICLE_DENSITY) as int32);
 	for (const p of t.particles) {
 		assert p.lifetime <= PARTICLE_LIFETIME;
 		assert particleAlpha(p) <= PARTICLE_OPACITY;
@@ -371,10 +371,10 @@ test "a jump of ten rows sprays density particles per row that fade out within t
 
 test "the fraction of a particle a short move earns carries into the next move" {
 	const t = placed(30, 40);
-	t.moveTo(30.5, 40);
+	t.moveTo(31.5, 40);
 	const _a = t.animate(FRAME, CursorShape.Block, 10, 20, false);
 	const before = t.particles.length;
-	t.moveTo(31, 40);
+	t.moveTo(33, 40);
 	const _b = t.animate(FRAME, CursorShape.Block, 10, 20, false);
 	assert before == 0;
 	assert t.particles.length == 1;

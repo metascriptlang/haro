@@ -38,16 +38,29 @@ export function boxes(
 	cellWidth: float64,
 	rowHeight: float64,
 	thickness: float64,
-): Vec<Box> {
+): Box[BOX_SLOTS] {
 	const x = (col as float64) * cellWidth;
 	const y = (row as float64) * rowHeight;
 	const sideHeight = rowHeight - 2 * thickness;
 	const rightX = x + cellWidth - thickness;
 	return match (shape) {
-		CursorShape.Block => [{ x: x, y: y, w: cellWidth, h: rowHeight, alpha: 0.5 }],
-		CursorShape.Bar => [{ x: x - thickness / 2, y: y, w: thickness, h: rowHeight, alpha: 1 }],
+		CursorShape.Block => [
+			{ x: x, y: y, w: cellWidth, h: rowHeight, alpha: 0.5 },
+			NO_BOX,
+			NO_BOX,
+			NO_BOX,
+		],
+		CursorShape.Bar => [
+			{ x: x - thickness / 2, y: y, w: thickness, h: rowHeight, alpha: 1 },
+			NO_BOX,
+			NO_BOX,
+			NO_BOX,
+		],
 		CursorShape.Underline => [
 			{ x: x, y: y + rowHeight - 2 * thickness, w: cellWidth, h: thickness, alpha: 1 },
+			NO_BOX,
+			NO_BOX,
+			NO_BOX,
 		],
 		CursorShape.BlockHollow => [
 			{ x: x, y: y, w: cellWidth, h: thickness, alpha: 1 },
@@ -87,23 +100,24 @@ test "an unfocused window shows a hollow block that does not blink" {
 
 test "a block cursor is one translucent box over its cell" {
 	const block = boxes(CursorShape.Block, 2, 1, 8, 16, 1);
-	assert block.length == 1;
 	assert block[0] == box(16, 16, 8, 16, 0.5);
+	assert block[1] == NO_BOX && block[2] == NO_BOX && block[3] == NO_BOX;
 }
 
 test "a bar cursor is a thin box centred on the cell's left edge" {
 	const bar = boxes(CursorShape.Bar, 2, 1, 8, 16, 1);
 	assert bar[0] == box(15.5, 16, 1, 16, 1);
+	assert bar[1] == NO_BOX && bar[2] == NO_BOX && bar[3] == NO_BOX;
 }
 
 test "an underline cursor is a thin box near the cell's bottom" {
 	const underline = boxes(CursorShape.Underline, 2, 1, 8, 16, 1);
 	assert underline[0] == box(16, 30, 8, 1, 1);
+	assert underline[1] == NO_BOX && underline[2] == NO_BOX && underline[3] == NO_BOX;
 }
 
 test "a hollow block is four edges that do not overlap" {
 	const edges = boxes(CursorShape.BlockHollow, 0, 0, 8, 16, 1);
-	assert edges.length == 4;
 	assert edges[0] == box(0, 0, 8, 1, 1);
 	assert edges[1] == box(0, 15, 8, 1, 1);
 	assert edges[2] == box(0, 1, 1, 14, 1);

@@ -25,7 +25,7 @@ export interface CursorModel {
 	row: Accessor<number>;
 	setRow: Setter<number>;
 	boxes: List<Box>;
-	lit: Vec<Box>;
+	lit: Box[BOX_SLOTS];
 	at: Cursor | null;
 	look: CursorLook;
 	focused: boolean;
@@ -55,7 +55,7 @@ export function createCursor(metrics: CellMetrics): CursorModel {
 }
 
 export function paintCursor(this c: CursorModel): void {
-	let next: Vec<Box> = [];
+	let next: Box[BOX_SLOTS] = [NO_BOX, NO_BOX, NO_BOX, NO_BOX];
 	const at = c.at;
 	if (at !== null && c.look.drawn(c.focused, c.blinkOn)) {
 		const cellWidth = c.metrics.cellWidth();
@@ -64,7 +64,7 @@ export function paintCursor(this c: CursorModel): void {
 		next = boxes(shape, at.x, at.y, width, c.metrics.rowHeight(), 1 / PixelRatio.get());
 	}
 	for (let i = 0; i < BOX_SLOTS; i++) {
-		const box = i < next.length ? next[i] : NO_BOX;
+		const box = next[i];
 		if (box == c.lit[i]) { continue; }
 		c.lit[i] = box;
 		c.boxes.set(i, box);

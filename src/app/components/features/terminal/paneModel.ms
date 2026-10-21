@@ -249,7 +249,8 @@ function reconfigure(this m: PaneModel, c: Config | null, error: string): void {
 	m.controls.keybinds = c.keybinds;
 	m.setPadding(c.padding);
 	flush();
-	m.notify(restartNeeded(c, m.started) ? RESTART_NOTICE : "");
+	const restart = restartNeeded(c, m.started) ? RESTART_NOTICE : "";
+	m.notify(error != "" ? `config.ms: ${error}` : restart);
 	if (m.settingsApplied && m.applySettings()) { m.refresh(); }
 }
 

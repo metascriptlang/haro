@@ -12,6 +12,7 @@ export interface Loaded {
 	config: Config;
 	faces: Vec<Faces>;
 	stamp: string;
+	notice: string;
 }
 
 export function configPath(): string {
@@ -76,10 +77,24 @@ function evaluate(path: string, dir: string): Result<string, string> {
 	return Result.ok(lastLine(ran.value));
 }
 
-function fontFaces(this c: Config): Result<Vec<Faces>, string> {
+interface FontsFound {
+	faces: Vec<Faces>;
+	notice: string;
+}
+
+function fontsFound(families: Vec<string>): FontsFound {
 	let faces: Vec<Faces> = [];
-	for (const family of c.fontFamily) { faces.push(try installedFaces(family)); }
-	return Result.ok(faces);
+	let missing: string[] = [];
+	for (const family of families) {
+		const found = installedFaces(family);
+		if (found.ok) {
+			faces.push(found.value);
+		} else {
+			missing.push(found.error);
+		}
+	}
+	const notice = missing.length == 0 ? "" : `${missing.join("; ")}, so the next font in line draws instead`;
+	return { faces: faces, notice: notice };
 }
 
 const LINES_PER_FAMILY = 4;
@@ -111,12 +126,12 @@ function decodeCache(lines: string[], stamp: string): Loaded | null {
 			boldItalic: pathOrNull(lines[at + 3]),
 		});
 	}
-	return { config: c.value, faces: faces, stamp: stamp };
+	return { config: c.value, faces: faces, stamp: stamp, notice: "" };
 }
 
 export function load(path: string): Result<Loaded, string> {
 	const stamp = stampOf(path);
-	if (stamp == "") { return Result.ok({ config: defaults(), faces: [], stamp: "" }); }
+	if (stamp == "") { return Result.ok({ config: defaults(), faces: [], stamp: "", notice: "" }); }
 	const dir = cacheDir();
 	const cacheFile = `${dir}/config.cache`;
 	const previous = readFile(cacheFile);
@@ -127,11 +142,11 @@ export function load(path: string): Result<Loaded, string> {
 	if (!ensureDir(dir).ok) { return Result.err(`cannot create ${dir}`); }
 	const json = try evaluate(path, dir);
 	const config = try parse(json);
-	const faces = try config.fontFaces();
-	if (!writeFile(cacheFile, encodeCache(stamp, json, faces)).ok) {
+	const fonts = fontsFound(config.fontFamily);
+	if (fonts.notice == "" && !writeFile(cacheFile, encodeCache(stamp, json, fonts.faces)).ok) {
 		return Result.err(`cannot write ${cacheFile}`);
 	}
-	return Result.ok({ config: config, faces: faces, stamp: stamp });
+	return Result.ok({ config: config, faces: fonts.faces, stamp: stamp, notice: fonts.notice });
 }
 
 test "styles in the compiler's diagnostics are dropped, the text kept" {
@@ -160,4 +175,21 @@ test "a cached record gives back each family's faces in order" {
 	}
 	assert decodeCache(encodeCache("s1", json, faces).split("\n"), "s2") === null;
 	assert decodeCache(encodeCache("s1", json, [faces[0]]).split("\n"), "s1") === null;
+}
+
+test "a font family that is not installed is skipped with a notice naming it" {
+	const found = fontsFound(["No Such Family Haro"]);
+	assert found.faces.length == 0;
+	assert found.notice.includes(`"No Such Family Haro"`);
+	assert found.notice.endsWith("so the next font in line draws instead");
+	assert fontsFound([]).notice == "";
+}
+
+when (windows) {
+	test "the families that are installed still load beside one that is not" {
+		const found = fontsFound(["No Such Family Haro", "segoe ui"]);
+		assert found.faces.length == 1;
+		assert found.faces[0].regular.toLowerCase().endsWith("/segoeui.ttf");
+		assert found.notice.includes(`"No Such Family Haro"`);
+	}
 }

@@ -11,7 +11,7 @@ export interface ConfigWatch {
 }
 
 export function forFile(this typeof ConfigWatch, file: string): ConfigWatch {
-	return { file: file, loaded: { config: defaults(), faces: [], stamp: "" }, error: "" };
+	return { file: file, loaded: { config: defaults(), faces: [], stamp: "", notice: "" }, error: "" };
 }
 
 function reload(this w: ConfigWatch): Result<Config, string> {
@@ -23,7 +23,10 @@ function reload(this w: ConfigWatch): Result<Config, string> {
 
 export function readConfig(this w: ConfigWatch): void {
 	const got = w.reload();
-	if (got.ok) { return; }
+	if (got.ok) {
+		w.error = w.loaded.notice;
+		return;
+	}
 	w.error = got.error;
 	w.loaded.stamp = stampOf(w.file);
 }
@@ -38,7 +41,7 @@ function poll(this w: ConfigWatch, handler: (c: Config | null, error: string) =>
 	}
 	const got = w.reload();
 	if (got.ok) {
-		handler(got.value, "");
+		handler(got.value, w.loaded.notice);
 	} else {
 		w.loaded.stamp = stamp;
 		handler(null, got.error);
@@ -57,7 +60,7 @@ export function watchConfig(
 
 test "a config file that disappears keeps the last config and says so once" {
 	const w = ConfigWatch.forFile("/no/such/haro/config.ms");
-	w.loaded = { config: { ...defaults(), fontSize: 20 }, faces: [], stamp: "seen" };
+	w.loaded = { config: { ...defaults(), fontSize: 20 }, faces: [], stamp: "seen", notice: "" };
 	let calls = 0;
 	let said = "";
 	const handler = (c: Config | null, error: string): void => {

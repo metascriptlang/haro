@@ -29,10 +29,10 @@ void vtScroll(GhosttyTerminal terminal, GhosttyTerminalScrollViewportTag tag, in
 	ghostty_terminal_scroll_viewport(terminal, v);
 }
 
-int vtTopTrack(GhosttyTerminal terminal, GhosttyTrackedGridRef* out) {
-	return (int)ghostty_terminal_grid_ref_track(terminal, pointAt(GHOSTTY_POINT_TAG_VIEWPORT, 0, 0), out);
+GhosttyResult vtTopTrack(GhosttyTerminal terminal, GhosttyTrackedGridRef* out) {
+	return ghostty_terminal_grid_ref_track(terminal, pointAt(GHOSTTY_POINT_TAG_VIEWPORT, 0, 0), out);
 }
 
-int vtTopAnchor(GhosttyTrackedGridRef ref, GhosttyTerminal terminal) {
-	return (int)ghostty_tracked_grid_ref_set(ref, terminal, pointAt(GHOSTTY_POINT_TAG_VIEWPORT, 0, 0));
+GhosttyResult vtTopAnchor(GhosttyTrackedGridRef ref, GhosttyTerminal terminal) {
+	return ghostty_tracked_grid_ref_set(ref, terminal, pointAt(GHOSTTY_POINT_TAG_VIEWPORT, 0, 0));
 }

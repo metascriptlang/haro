@@ -129,8 +129,14 @@ extern function terminalText(
 	key: GhosttyTerminalData,
 	out text: GhosttyString,
 ): GhosttyResult from "ghostty_terminal_get";
-extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
-extern function vtTopAnchor(ref: GhosttyTrackedGridRef, terminal: GhosttyTerminal): int32;
+extern function vtTopTrack(
+	terminal: GhosttyTerminal,
+	out ref: GhosttyTrackedGridRef,
+): GhosttyResult;
+extern function vtTopAnchor(
+	ref: GhosttyTrackedGridRef,
+	terminal: GhosttyTerminal,
+): GhosttyResult;
 extern function terminalScrollbar(
 	terminal: GhosttyTerminal,
 	key: GhosttyTerminalData,
@@ -674,7 +680,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 	}
 	const effects = openEffects(terminal, state);
 	let anchor: GhosttyTrackedGridRef;
-	if (effects.ok && vtTopTrack(terminal, anchor) == 0
+	if (effects.ok && ok(vtTopTrack(terminal, anchor))
 		&& applyColors(terminal, { r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 }).ok
 		&& applyBlinkDefault(terminal, true).ok && applyScrollback(terminal, SCROLLBACK_LINES).ok) {
 		return Result.ok({
@@ -1363,7 +1369,7 @@ export function anchoredRow(this vt: Vt): Result<int32 | null, VtError> {
 }
 
 export function anchorTop(this vt: Vt): Result<void, VtError> {
-	if (vtTopAnchor(vt.anchor, vt.terminal) != 0) { return Result.err(VtError.ReadFailed); }
+	if (!ok(vtTopAnchor(vt.anchor, vt.terminal))) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(null);
 }
 

@@ -6,7 +6,7 @@
 
 GhosttyResult vtGridRef(GhosttyTerminal terminal, GhosttyPointTag tag, int x, int y, GhosttyGridRef* out);
 void vtScroll(GhosttyTerminal terminal, GhosttyTerminalScrollViewportTag tag, int64_t amount);
-int vtTopTrack(GhosttyTerminal terminal, GhosttyTrackedGridRef* out);
-int vtTopAnchor(GhosttyTrackedGridRef ref, GhosttyTerminal terminal);
+GhosttyResult vtTopTrack(GhosttyTerminal terminal, GhosttyTrackedGridRef* out);
+GhosttyResult vtTopAnchor(GhosttyTrackedGridRef ref, GhosttyTerminal terminal);
 
 #endif

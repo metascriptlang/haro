@@ -460,9 +460,7 @@ const HOLD_LIMIT_MS: float64 = 1000;
 export interface Effects {
 	state: GhosttyRenderState;
 	replies: Vec<uint8>;
-	bells: int32;
-	titleChanged: boolean;
-	pwdChanged: boolean;
+	events: VtEvents;
 	held: boolean;
 	heldAtMs: float64;
 	holdLimitMs: float64;
@@ -478,9 +476,7 @@ function openEffects(
 	const e: Effects = {
 		state: state,
 		replies: [],
-		bells: 0,
-		titleChanged: false,
-		pwdChanged: false,
+		events: NO_EVENTS,
 		held: false,
 		heldAtMs: 0,
 		holdLimitMs: HOLD_LIMIT_MS,
@@ -523,17 +519,17 @@ function writePty(effects: Ptr<void>, bytes: Ptr<uint8>, n: uint64): void {
 
 @exportName("haroVtBell")
 function bell(terminal: GhosttyTerminal, effects: Ptr<void>): void {
-	effectsAt(effects).bells += 1;
+	effectsAt(effects).events.bells += 1;
 }
 
 @exportName("haroVtTitleChanged")
 function titleChanged(terminal: GhosttyTerminal, effects: Ptr<void>): void {
-	effectsAt(effects).titleChanged = true;
+	effectsAt(effects).events.titleChanged = true;
 }
 
 @exportName("haroVtPwdChanged")
 function pwdChanged(terminal: GhosttyTerminal, effects: Ptr<void>): void {
-	effectsAt(effects).pwdChanged = true;
+	effectsAt(effects).events.pwdChanged = true;
 }
 
 @exportName("haroVtRenderHold")
@@ -742,16 +738,12 @@ export struct VtEvents {
 	pwdChanged: boolean;
 }
 
+const NO_EVENTS: VtEvents = { bells: 0, titleChanged: false, pwdChanged: false };
+
 export function takeEvents(this vt: Vt): VtEvents {
 	const e = vt.effects;
-	const events: VtEvents = {
-		bells: e.bells,
-		titleChanged: e.titleChanged,
-		pwdChanged: e.pwdChanged,
-	};
-	e.bells = 0;
-	e.titleChanged = false;
-	e.pwdChanged = false;
+	const events = e.events;
+	e.events = NO_EVENTS;
 	return events;
 }
 

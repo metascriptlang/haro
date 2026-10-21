@@ -1715,16 +1715,15 @@ function markedOf(terminal: GhosttyTerminal, selection: GhosttySelection): Resul
 	return Result.ok({ range: { start: start, end: end }, block: selection.rectangle });
 }
 
-function rangeFound(
+function markedFound(
 	terminal: GhosttyTerminal,
 	r: GhosttyResult,
 	selection: GhosttySelection,
-): Result<Range | null, VtError> {
+): Result<Marked | null, VtError> {
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
 	if (!ok(r)) { return Result.err(VtError.SelectFailed); }
-	const m = try markedOf(terminal, selection);
-	const found: Range | null = m.range;
-	return Result.ok(found);
+	const m: Marked | null = try markedOf(terminal, selection);
+	return Result.ok(m);
 }
 
 export function selectionSet(this vt: Vt, m: Marked): Result<void, VtError> {
@@ -1749,10 +1748,7 @@ export function selection(this vt: Vt): Result<Marked | null, VtError> {
 	let selection: GhosttySelection = { size: sizeof GhosttySelection };
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SELECTION;
 	const r = terminalSelection(vt.terminal, key, selection);
-	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
-	if (!ok(r)) { return Result.err(VtError.SelectFailed); }
-	const got: Marked | null = try markedOf(vt.terminal, selection);
-	return Result.ok(got);
+	return markedFound(vt.terminal, r, selection);
 }
 
 export function cellWidthAt(this vt: Vt, at: Point): Result<CellWidth, VtError> {
@@ -1762,23 +1758,23 @@ export function cellWidthAt(this vt: Vt, at: Point): Result<CellWidth, VtError> 
 	return widthOf(cell);
 }
 
-function wordAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
+function wordAt(this vt: Vt, at: Point): Result<Marked | null, VtError> {
 	let options: GhosttyTerminalSelectWordOptions = {
 		size: sizeof GhosttyTerminalSelectWordOptions,
 		ref: try screenRef(vt.terminal, at),
 	};
 	let selection: GhosttySelection = { size: sizeof GhosttySelection };
-	return rangeFound(vt.terminal, selectWord(vt.terminal, options, selection), selection);
+	return markedFound(vt.terminal, selectWord(vt.terminal, options, selection), selection);
 }
 
-function lineAt(this vt: Vt, at: Point): Result<Range | null, VtError> {
+function lineAt(this vt: Vt, at: Point): Result<Marked | null, VtError> {
 	let options: GhosttyTerminalSelectLineOptions = {
 		size: sizeof GhosttyTerminalSelectLineOptions,
 		ref: try screenRef(vt.terminal, at),
 		semantic_prompt_boundary: true,
 	};
 	let selection: GhosttySelection = { size: sizeof GhosttySelection };
-	return rangeFound(vt.terminal, selectLine(vt.terminal, options, selection), selection);
+	return markedFound(vt.terminal, selectLine(vt.terminal, options, selection), selection);
 }
 
 export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtError> {
@@ -1788,14 +1784,14 @@ export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtErro
 		Unit.Line => {
 			const line = try vt.lineAt(at);
 			if (line === null) { return Result.ok(here); }
-			return Result.ok(line);
+			return Result.ok(line.range);
 		},
 		Unit.Word => {
 			const word = try vt.wordAt(at);
-			if (word !== null) { return Result.ok(word); }
+			if (word !== null) { return Result.ok(word.range); }
 			if (at.col > 0) {
 				const head = try vt.wordAt({ row: at.row, col: at.col - 1 });
-				if (head !== null) { return Result.ok(head); }
+				if (head !== null) { return Result.ok(head.range); }
 			}
 			return Result.ok(here);
 		},

@@ -94,8 +94,8 @@ function framePass(
 	const linesStart: float64 = performance.now();
 	const cursor: Cursor | null = cursorRead.value;
 	let built: Vec<GridLine> = [];
-	for (const row of planned.value.rows) {
-		const l = row.line(cursor.cellOnRow(row.y), colors.value.bg);
+	for (const y of planned.value.ys) {
+		const l = vt.painted.rows[y].line(cursor.cellOnRow(y), colors.value.bg);
 		if (l.ok) { built.push(l.value); } else { totals.lineErrors += 1; }
 	}
 	const spansStart: float64 = performance.now();
@@ -107,7 +107,7 @@ function framePass(
 	totals.plan += linesStart - planStart;
 	totals.lines += spansStart - linesStart;
 	totals.spans += spansEnd - spansStart;
-	totals.rows += planned.value.rows.length as int32;
+	totals.rows += planned.value.ys.length as int32;
 	totals.spanCount += spanCount;
 	return Result.ok(null);
 }

@@ -10,7 +10,7 @@ export enum PlanKind {
 export struct Plan {
 	kind: PlanKind;
 	scrolled: int32;
-	rows: Vec<Row>;
+	ys: Vec<int32>;
 	colors: Palette;
 }
 
@@ -27,12 +27,12 @@ function scrolledRows(this vt: Vt): Result<int32 | null, VtError> {
 	return Result.ok(scrolled);
 }
 
-function changedRowsAfterScroll(all: Vec<Row>, painted: Vec<Row>, scrolled: int32): Vec<Row> {
+function changedRowsAfterScroll(all: Vec<Row>, painted: Vec<Row>, scrolled: int32): Vec<int32> {
 	const rowCount = all.length as int32;
-	let out: Vec<Row> = [];
+	let out: Vec<int32> = [];
 	for (let y = 0; y < rowCount; y++) {
 		const isNew = y >= rowCount - scrolled;
-		if (isNew || !all[y].sameContent(painted[y + scrolled])) { out.push(all[y]); }
+		if (isNew || !all[y].sameContent(painted[y + scrolled])) { out.push(y); }
 	}
 	return out;
 }
@@ -56,14 +56,23 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 		kind = PlanKind.Scroll;
 		moved = scrolled;
 	}
-	let rows: Vec<Row> = [];
+	let ys: Vec<int32> = [];
 	if (kind == PlanKind.Rows) {
-		rows = try vt.dirtyRows();
-		if (rows.length == 0) { kind = PlanKind.Idle; }
-		for (const row of rows) { painted.rows[row.y] = row; }
+		let dirty = try vt.dirtyRows();
+		if (dirty.length == 0) { kind = PlanKind.Idle; }
+		while (dirty.length > 0) {
+			const row = dirty.pop();
+			ys.push(row.y);
+			painted.rows[row.y] = row;
+		}
+		ys.reverse();
 	} else {
 		const all = try vt.rows();
-		rows = kind == PlanKind.Scroll ? changedRowsAfterScroll(all, painted.rows, moved) : all;
+		if (kind == PlanKind.Scroll) {
+			ys = changedRowsAfterScroll(all, painted.rows, moved);
+		} else {
+			for (let y = 0; y < (all.length as int32); y++) { ys.push(y); }
+		}
 		painted.rows = all;
 	}
 	painted.alternate = alternate;
@@ -72,7 +81,7 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 		const _anchored = try vt.anchorTop();
 	}
 	vt.clean();
-	return Result.ok({ kind: kind, scrolled: moved, rows: rows, colors: colors });
+	return Result.ok({ kind: kind, scrolled: moved, ys: ys, colors: colors });
 }
 
 function newLines(from: int32, count: int32): string {
@@ -88,9 +97,9 @@ function filledScreen(cols: int32): Result<Vt, VtError> {
 	return Result.ok(vt);
 }
 
-function rowNumbers(rows: Vec<Row>): string {
+function rowNumbers(ys: Vec<int32>): string {
 	let out: string[] = [];
-	for (const row of rows) { out.push(`${row.y}`); }
+	for (const y of ys) { out.push(`${y}`); }
 	return out.join(",");
 }
 
@@ -110,15 +119,15 @@ test "the first frame repaints every row, the next one is idle" {
 		assert first.ok;
 		if (first.ok) {
 			assert first.value.kind == PlanKind.Repaint;
-			assert first.value.rows.length == 24;
-			assert textOf(first.value.rows[0]) == "hello";
+			assert first.value.ys.length == 24;
+			assert textOf(vt.painted.rows[first.value.ys[0]]) == "hello";
 		}
 		const second = vt.plan();
 		assert second.ok;
 		if (second.ok) {
 			assert second.value.kind == PlanKind.Idle;
 			assert second.value.scrolled == 0;
-			assert second.value.rows.length == 0;
+			assert second.value.ys.length == 0;
 		}
 		vt.free();
 	}
@@ -135,8 +144,8 @@ test "overwriting a row gives that row and the one the cursor left" {
 		if (p.ok) {
 			assert p.value.kind == PlanKind.Rows;
 			assert p.value.scrolled == 0;
-			assert rowNumbers(p.value.rows) == "5,23";
-			assert textOf(p.value.rows[0]) == "overwrite";
+			assert rowNumbers(p.value.ys) == "5,23";
+			assert textOf(vt.painted.rows[p.value.ys[0]]) == "overwrite";
 		}
 		vt.free();
 	}
@@ -153,8 +162,8 @@ test "new lines at the bottom scroll by their count and give only the new rows" 
 		if (one.ok) {
 			assert one.value.kind == PlanKind.Scroll;
 			assert one.value.scrolled == 1;
-			assert rowNumbers(one.value.rows) == "23";
-			assert textOf(one.value.rows[0]) == "row 24";
+			assert rowNumbers(one.value.ys) == "23";
+			assert textOf(vt.painted.rows[one.value.ys[0]]) == "row 24";
 		}
 		vt.writeText(newLines(25, 3));
 		const three = vt.plan();
@@ -162,8 +171,8 @@ test "new lines at the bottom scroll by their count and give only the new rows" 
 		if (three.ok) {
 			assert three.value.kind == PlanKind.Scroll;
 			assert three.value.scrolled == 3;
-			assert rowNumbers(three.value.rows) == "21,22,23";
-			assert textOf(three.value.rows[2]) == "row 27";
+			assert rowNumbers(three.value.ys) == "21,22,23";
+			assert textOf(vt.painted.rows[three.value.ys[2]]) == "row 27";
 		}
 		vt.writeText(newLines(28, 23));
 		const most = vt.plan();
@@ -171,9 +180,9 @@ test "new lines at the bottom scroll by their count and give only the new rows" 
 		if (most.ok) {
 			assert most.value.kind == PlanKind.Scroll;
 			assert most.value.scrolled == 23;
-			assert most.value.rows.length == 23;
-			assert most.value.rows[0].y == 1;
-			assert textOf(most.value.rows[22]) == "row 50";
+			assert most.value.ys.length == 23;
+			assert most.value.ys[0] == 1;
+			assert textOf(vt.painted.rows[most.value.ys[22]]) == "row 50";
 		}
 		const after = vt.plan();
 		assert after.ok;
@@ -192,15 +201,15 @@ test "a screenful of new lines or more repaints" {
 		assert exact.ok;
 		if (exact.ok) {
 			assert exact.value.kind == PlanKind.Repaint;
-			assert exact.value.rows.length == 24;
-			assert textOf(exact.value.rows[23]) == "row 47";
+			assert exact.value.ys.length == 24;
+			assert textOf(vt.painted.rows[exact.value.ys[23]]) == "row 47";
 		}
 		vt.writeText(newLines(48, 30));
 		const more = vt.plan();
 		assert more.ok;
 		if (more.ok) {
 			assert more.value.kind == PlanKind.Repaint;
-			assert textOf(more.value.rows[23]) == "row 77";
+			assert textOf(vt.painted.rows[more.value.ys[23]]) == "row 77";
 		}
 		vt.writeText(newLines(78, 1));
 		const next = vt.plan();
@@ -224,16 +233,16 @@ test "a row changed in the frame that scrolls is rewritten with the new rows" {
 		if (edited.ok) {
 			assert edited.value.kind == PlanKind.Scroll;
 			assert edited.value.scrolled == 2;
-			assert rowNumbers(edited.value.rows) == "2,22,23";
-			assert textOf(edited.value.rows[0]) == "MOD 4";
+			assert rowNumbers(edited.value.ys) == "2,22,23";
+			assert textOf(vt.painted.rows[edited.value.ys[0]]) == "MOD 4";
 		}
 		vt.writeText("!!" + newLines(26, 1));
 		const appended = vt.plan();
 		assert appended.ok;
 		if (appended.ok) {
 			assert appended.value.kind == PlanKind.Scroll;
-			assert rowNumbers(appended.value.rows) == "22,23";
-			assert textOf(appended.value.rows[0]) == "row 25!!";
+			assert rowNumbers(appended.value.ys) == "22,23";
+			assert textOf(vt.painted.rows[appended.value.ys[0]]) == "row 25!!";
 		}
 		vt.free();
 	}
@@ -253,7 +262,7 @@ test "a row an earlier frame painted is not rewritten when a later one scrolls" 
 		assert scrolled.ok;
 		if (scrolled.ok) {
 			assert scrolled.value.kind == PlanKind.Scroll;
-			assert rowNumbers(scrolled.value.rows) == "23";
+			assert rowNumbers(scrolled.value.ys) == "23";
 		}
 		vt.free();
 	}
@@ -270,8 +279,8 @@ test "a clear rewrites every row without scrolling" {
 		if (p.ok) {
 			assert p.value.kind == PlanKind.Rows;
 			assert p.value.scrolled == 0;
-			assert p.value.rows.length == 24;
-			assert textOf(p.value.rows[0]) == "";
+			assert p.value.ys.length == 24;
+			assert textOf(vt.painted.rows[p.value.ys[0]]) == "";
 		}
 		vt.free();
 	}
@@ -287,7 +296,7 @@ test "entering and leaving the alternate screen each repaint, then scrolling res
 		assert entered.ok;
 		if (entered.ok) {
 			assert entered.value.kind == PlanKind.Repaint;
-			assert entered.value.rows.length == 24;
+			assert entered.value.ys.length == 24;
 		}
 		vt.writeText("alt" + newLines(1, 30));
 		const inside = vt.plan();
@@ -298,7 +307,7 @@ test "entering and leaving the alternate screen each repaint, then scrolling res
 		assert left.ok;
 		if (left.ok) {
 			assert left.value.kind == PlanKind.Repaint;
-			assert textOf(left.value.rows[0]) == "row 0";
+			assert textOf(vt.painted.rows[left.value.ys[0]]) == "row 0";
 		}
 		vt.writeText(newLines(24, 1));
 		const next = vt.plan();
@@ -325,7 +334,7 @@ test "a top row pruned from scrollback repaints and anchors again" {
 		assert p.ok;
 		if (p.ok) {
 			assert p.value.kind == PlanKind.Repaint;
-			assert textOf(p.value.rows[23]) == "row 5023";
+			assert textOf(vt.painted.rows[p.value.ys[23]]) == "row 5023";
 		}
 		vt.writeText(newLines(5024, 1));
 		const next = vt.plan();
@@ -349,7 +358,7 @@ test "a resize repaints at the new size" {
 		assert p.ok;
 		if (p.ok) {
 			assert p.value.kind == PlanKind.Repaint;
-			assert p.value.rows.length == 12;
+			assert p.value.ys.length == 12;
 		}
 		vt.writeText(newLines(24, 1));
 		const next = vt.plan();
@@ -375,8 +384,8 @@ test "scrolling the viewport down plans a scroll by that many rows and up repain
 		assert up.ok;
 		if (up.ok) {
 			assert up.value.kind == PlanKind.Repaint;
-			assert up.value.rows.length == 24;
-			assert textOf(up.value.rows[0]) == "row 73";
+			assert up.value.ys.length == 24;
+			assert textOf(vt.painted.rows[up.value.ys[0]]) == "row 73";
 		}
 		const idle = vt.plan();
 		assert idle.ok;
@@ -387,8 +396,8 @@ test "scrolling the viewport down plans a scroll by that many rows and up repain
 		if (down.ok) {
 			assert down.value.kind == PlanKind.Scroll;
 			assert down.value.scrolled == 2;
-			assert rowNumbers(down.value.rows) == "22,23";
-			assert textOf(down.value.rows[1]) == "row 98";
+			assert rowNumbers(down.value.ys) == "22,23";
+			assert textOf(vt.painted.rows[down.value.ys[1]]) == "row 98";
 		}
 		vt.free();
 	}
@@ -415,7 +424,7 @@ test "output while scrolled up plans nothing, and snapping back to the bottom pl
 		if (snapped.ok) {
 			assert snapped.value.kind == PlanKind.Scroll;
 			assert snapped.value.scrolled == 8;
-			assert textOf(snapped.value.rows[7]) == "row 104";
+			assert textOf(vt.painted.rows[snapped.value.ys[7]]) == "row 104";
 		}
 		vt.free();
 	}

@@ -142,10 +142,10 @@ export function applyFrame(
 	let chars: int32 = 0;
 	const last = grid.length() - 1;
 	for (let i = 0; i < p.scrolled; i++) { grid.move(0, last); }
-	for (let i = 0; i < p.rows.length; i++) {
-		const slot = try slotOf(styles, p.rows[i], cursor, p.colors.bg);
+	for (const y of p.ys) {
+		const slot = try slotOf(styles, vt.painted.rows[y], cursor, p.colors.bg);
 		chars += slot.line.text.length as int32;
-		grid.set(p.rows[i].y, slot);
+		grid.set(y, slot);
 	}
 	for (let i = 0; i < vt.painted.rows.length; i++) {
 		const y = vt.painted.rows[i].y;
@@ -153,7 +153,7 @@ export function applyFrame(
 			grid.set(y, try slotOf(styles, vt.painted.rows[i], cursor, p.colors.bg));
 		}
 	}
-	stats.noteApplied(p.rows.length as int32, p.scrolled, chars, performance.now());
+	stats.noteApplied(p.ys.length as int32, p.scrolled, chars, performance.now());
 	return Result.ok(cursor);
 }
 

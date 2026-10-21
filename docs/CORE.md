@@ -12,7 +12,7 @@ were rejected.
   Moving the pin is its own commit, with the build and the gate re-run: upstream marks the C API
   unstable.
 - Getters that write through `void* out` are bound as typed externs in `src/vt/vt.ms`
-  (`stateCols`, `cellColor`, `cellStyle`…) rather than called through the header import. Through
+  (`stateU16`, `cellColor`, `cellStyle`…) rather than called through the header import. Through
   the import a `void*` out takes any variable, so a `uint32` handed to a key that writes a
   `uint16` compiles and corrupts memory. The typed extern pins each key to its type. A getter that
   writes a handle has to be an extern anyway: since msc `1718d72c` the import refuses a handle out.

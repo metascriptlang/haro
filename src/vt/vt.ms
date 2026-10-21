@@ -202,16 +202,6 @@ extern function encoderEncode(
 	out written: uint64,
 ): GhosttyResult from "ghostty_key_encoder_encode";
 
-extern function stateCols(
-	s: GhosttyRenderState,
-	key: GhosttyRenderStateData,
-	out cols: uint16,
-): GhosttyResult from "ghostty_render_state_get";
-extern function stateRows(
-	s: GhosttyRenderState,
-	key: GhosttyRenderStateData,
-	out rows: uint16,
-): GhosttyResult from "ghostty_render_state_get";
 extern function stateRowIterator(
 	s: GhosttyRenderState,
 	key: GhosttyRenderStateData,
@@ -242,6 +232,11 @@ extern function stateFlag(
 	key: GhosttyRenderStateData,
 	out value: boolean,
 ): GhosttyResult from "ghostty_render_state_get";
+extern function stateU16(
+	s: GhosttyRenderState,
+	key: GhosttyRenderStateData,
+	out value: uint16,
+): GhosttyResult from "ghostty_render_state_get";
 extern function stateCursorStyle(
 	s: GhosttyRenderState,
 	key: GhosttyRenderStateData,
@@ -251,16 +246,6 @@ extern function stateColors(
 	s: GhosttyRenderState,
 	key: GhosttyRenderStateData,
 	out colors: Colors256,
-): GhosttyResult from "ghostty_render_state_get";
-extern function stateCursorX(
-	s: GhosttyRenderState,
-	key: GhosttyRenderStateData,
-	out x: uint16,
-): GhosttyResult from "ghostty_render_state_get";
-extern function stateCursorY(
-	s: GhosttyRenderState,
-	key: GhosttyRenderStateData,
-	out y: uint16,
 ): GhosttyResult from "ghostty_render_state_get";
 extern function cellColor(
 	cells: GhosttyRenderStateRowCells,
@@ -867,8 +852,8 @@ export function size(this vt: Vt): Result<[int32, int32], VtError> {
 	let cols: uint16 = 0;
 	let rows: uint16 = 0;
 	if (
-		!ok(stateCols(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLS, cols)) ||
-		!ok(stateRows(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROWS, rows))
+		!ok(stateU16(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLS, cols)) ||
+		!ok(stateU16(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROWS, rows))
 	) {
 		return Result.err(VtError.ReadFailed);
 	}
@@ -892,7 +877,7 @@ export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	let y: uint16 = 0;
 	const xKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X;
 	const yKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y;
-	if (!ok(stateCursorX(vt.state, xKey, x)) || !ok(stateCursorY(vt.state, yKey, y))) {
+	if (!ok(stateU16(vt.state, xKey, x)) || !ok(stateU16(vt.state, yKey, y))) {
 		return Result.err(VtError.ReadFailed);
 	}
 	let tail = false;

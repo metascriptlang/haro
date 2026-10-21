@@ -44,6 +44,7 @@ import {
 	ghostty_mouse_event_new,
 	ghostty_mouse_event_free,
 	ghostty_mouse_event_clear_button,
+	ghostty_mouse_event_set_action,
 	ghostty_mouse_event_set_position,
 	GhosttyAllocator,
 	GhosttyResult,
@@ -87,6 +88,7 @@ import {
 	GhosttyMouseEncoderOption,
 	GhosttyMouseEncoderSize,
 	GhosttyMouseEvent,
+	GhosttyMouseAction,
 	GhosttyKeyEvent,
 	GhosttyKeyAction,
 	GhosttyKey,
@@ -112,8 +114,6 @@ extern function mouseSetSize(
 	option: GhosttyMouseEncoderOption,
 	ref size: GhosttyMouseEncoderSize,
 ): void from "ghostty_mouse_encoder_setopt";
-extern function mouseSetAction(event: GhosttyMouseEvent, action: int32): void
-	from "ghostty_mouse_event_set_action";
 extern function mouseSetButton(event: GhosttyMouseEvent, button: int32): void
 	from "ghostty_mouse_event_set_button";
 extern function mouseSetMods(event: GhosttyMouseEvent, mods: uint16): void
@@ -1017,6 +1017,14 @@ export struct MouseGeometry {
 	padBottom: int32;
 }
 
+function mouseActionOf(a: MouseAction): GhosttyMouseAction {
+	return match (a) {
+		MouseAction.Press => GhosttyMouseAction.GHOSTTY_MOUSE_ACTION_PRESS,
+		MouseAction.Release => GhosttyMouseAction.GHOSTTY_MOUSE_ACTION_RELEASE,
+		MouseAction.Motion => GhosttyMouseAction.GHOSTTY_MOUSE_ACTION_MOTION,
+	};
+}
+
 function open(this m: Mouse): Result<MouseCodec, VtError> {
 	const known = m.codec;
 	if (known !== null) { return Result.ok(known); }
@@ -1072,13 +1080,13 @@ export function mouseReport(
 	let pressed = anyPressed;
 	const pressedOption = GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED;
 	mouseSetFlag(encoder, pressedOption, pressed);
-	mouseSetAction(event, input.action as int32);
+	ghostty_mouse_event_set_action(event, mouseActionOf(input.action));
 	if (input.button == 0) {
 		ghostty_mouse_event_clear_button(event);
 	} else {
 		mouseSetButton(event, input.button);
 	}
-	mouseSetMods(event, modsMask(input.mods) as uint16);
+	mouseSetMods(event, modsMask(input.mods));
 	ghostty_mouse_event_set_position(event, { x: input.x, y: input.y });
 	let written: uint64 = 0;
 	if (!ok(mouseEncode(encoder, event, buf, written))) { return Result.err(VtError.ReadFailed); }

@@ -1328,14 +1328,13 @@ export function text(this row: Row): Result<string, VtError> {
 			text += " ";
 			continue;
 		}
-		if (!isUnicodeScalar(cell.cp)) { return Result.err(VtError.CodepointInvalid); }
-		text += fromCodePoint(cell.cp as number);
-		for (let i = 0; i < (cell.extra as int32); i++) {
-			const cp = row.extra[extraAt + i];
+		const extra = cell.extra as int32;
+		for (let k = 0; k <= extra; k++) {
+			const cp = k == 0 ? cell.cp : row.extra[extraAt + k - 1];
 			if (!isUnicodeScalar(cp)) { return Result.err(VtError.CodepointInvalid); }
 			text += fromCodePoint(cp as number);
 		}
-		extraAt += cell.extra as int32;
+		extraAt += extra;
 	}
 	return Result.ok(text);
 }
@@ -2608,6 +2607,20 @@ test "a combining mark joins its base cell" {
 			assert row.extra[0] == 0x301;
 			assert row.cells[1].cp == 0x78;
 		}
+		vt.free();
+	}
+}
+
+test "a line's text keeps each cell's combining marks with that cell" {
+	const created = Vt.create(10, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("éậx");
+		assert vt.update().ok;
+		const lines = vt.lines();
+		assert lines.ok;
+		if (lines.ok) { assert lines.value[0] == "éậx"; }
 		vt.free();
 	}
 }

@@ -6,15 +6,6 @@ import { Held } from "../../../../input/paste";
 import { MouseGeometry, Vt } from "../../../../vt/vt";
 import { Term, TermError, fit } from "./term";
 
-export enum ControlError {
-	VtFailed,
-	KeyFailed,
-	WriteFailed,
-	PasteEncodeFailed,
-	PasteUnsafe,
-	MouseFailed,
-}
-
 export interface Bridge {
 	write: (text: string) => void;
 	read: (done: (text: string) => void) => void;
@@ -73,11 +64,11 @@ export function refit(this c: Controls, t: Term, cols: int32, rows: int32): Resu
 	return fitted;
 }
 
-export function typed(this c: Controls, t: Term): Result<boolean, ControlError> {
+export function typed(this c: Controls, t: Term): Result<boolean, TermError> {
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const bottom = vt.atBottom();
-	if (!bottom.ok) { return Result.err(ControlError.VtFailed); }
+	if (!bottom.ok) { return Result.err(TermError.VtFailed); }
 	if (c.pointer.sel === null && bottom.value) { return Result.ok(false); }
 	c.pointer.clear(vt);
 	vt.scrollBottom();

@@ -2,9 +2,9 @@ import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
 import { KeyMod } from "../../../../keys/keys";
 import { Spot } from "../../../../input/pointer";
 import { atBottom, scrollOffset } from "../../../../vt/vt";
-import { Term, shutdown } from "./term";
+import { Term, TermError, shutdown } from "./term";
 import { Sink, termOf } from "./termTest";
-import { Bridge, ControlError, Controls, Hit, holding, refit, typed } from "./controls";
+import { Bridge, Controls, Hit, holding, refit, typed } from "./controls";
 import { Pasted, cancel, clipboardAsked, confirm, normalized, paste } from "./clipboard";
 import { keyDown } from "./keyboard";
 import { pointerDown, pointerMove, pointerUp, roll } from "./mouse";
@@ -64,7 +64,7 @@ export function at(col: int32, row: int32): Spot {
 	return { col: col, row: row };
 }
 
-export function handled(r: Result<boolean, ControlError>): boolean {
+export function handled(r: Result<boolean, TermError>): boolean {
 	return r.ok && r.value;
 }
 

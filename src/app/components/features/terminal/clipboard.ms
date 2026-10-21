@@ -3,7 +3,7 @@ import { Reply, replyTo, replyToRead, warningFor, Warning } from "../../../../in
 import { clear, copyText } from "../../../../input/pointer";
 import { answerClipboard, modes } from "../../../../vt/vt";
 import { Term, TermError } from "./term";
-import { Bridge, ControlError, Controls, typed, vtOf } from "./controls";
+import { Bridge, Controls, typed, vtOf } from "./controls";
 
 export enum Pasted {
 	Sent,
@@ -21,23 +21,16 @@ function send(
 	t: Term,
 	text: string,
 	allowUnsafe: boolean,
-): Result<boolean, ControlError> {
-	const sent = t.sendPaste(text, allowUnsafe);
-	if (!sent.ok) {
-		return Result.err(match (sent.error) {
-			TermError.PasteUnsafe => ControlError.PasteUnsafe,
-			TermError.WriteFailed => ControlError.WriteFailed,
-			_ => ControlError.PasteEncodeFailed,
-		});
-	}
+): Result<boolean, TermError> {
+	const _sent = try t.sendPaste(text, allowUnsafe);
 	return c.typed(t);
 }
 
-export function paste(this c: Controls, t: Term, text: string): Result<Pasted, ControlError> {
+export function paste(this c: Controls, t: Term, text: string): Result<Pasted, TermError> {
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(Pasted.Empty); }
 	const modes = vt.modes();
-	if (!modes.ok) { return Result.err(ControlError.VtFailed); }
+	if (!modes.ok) { return Result.err(TermError.VtFailed); }
 	const bracketed = modes.value.bracketedPaste;
 	const clean = normalized(text, bracketed);
 	if (clean == "" && !bracketed) { return Result.ok(Pasted.Empty); }
@@ -55,11 +48,11 @@ function answerRead(
 	t: Term,
 	text: string,
 	allow: boolean,
-): Result<boolean, ControlError> {
+): Result<boolean, TermError> {
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
-	if (!vt.answerClipboard(text, allow).ok) { return Result.err(ControlError.VtFailed); }
-	if (!t.sendReplies().ok) { return Result.err(ControlError.WriteFailed); }
+	if (!vt.answerClipboard(text, allow).ok) { return Result.err(TermError.VtFailed); }
+	const _replied = try t.sendReplies();
 	return Result.ok(true);
 }
 
@@ -76,7 +69,7 @@ export function clipboardAsked(this c: Controls, t: Term, host: Bridge): void {
 	});
 }
 
-export function confirm(this c: Controls, t: Term): Result<boolean, ControlError> {
+export function confirm(this c: Controls, t: Term): Result<boolean, TermError> {
 	const held = c.held;
 	if (held !== null) {
 		c.held = null;
@@ -89,7 +82,7 @@ export function confirm(this c: Controls, t: Term): Result<boolean, ControlError
 	return c.answerRead(t, reading, true);
 }
 
-export function cancel(this c: Controls, t: Term): Result<boolean, ControlError> {
+export function cancel(this c: Controls, t: Term): Result<boolean, TermError> {
 	if (c.held !== null) {
 		c.held = null;
 		return Result.ok(true);
@@ -99,7 +92,7 @@ export function cancel(this c: Controls, t: Term): Result<boolean, ControlError>
 	return c.answerRead(t, "", false);
 }
 
-export function answerHeld(this c: Controls, t: Term, e: NeonEvent): Result<boolean, ControlError> {
+export function answerHeld(this c: Controls, t: Term, e: NeonEvent): Result<boolean, TermError> {
 	const reply = c.held !== null ? replyTo(e.code, e.mods) : replyToRead(e.code, e.mods);
 	match (reply) {
 		Reply.Confirm => { const _sent = try c.confirm(t); },
@@ -120,11 +113,11 @@ export function copySelection(
 	this c: Controls,
 	t: Term,
 	host: Bridge,
-): Result<boolean, ControlError> {
+): Result<boolean, TermError> {
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const text = c.pointer.copyText(vt);
-	if (!text.ok) { return Result.err(ControlError.VtFailed); }
+	if (!text.ok) { return Result.err(TermError.VtFailed); }
 	const got = text.value;
 	if (got === null) { return Result.ok(false); }
 	host.write(got);

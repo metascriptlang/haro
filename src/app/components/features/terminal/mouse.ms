@@ -6,7 +6,7 @@ import { WheelRoute, reportButton, route } from "../../../../input/wheel";
 import { openable } from "../../../../term/link";
 import { MouseAction, MouseInput } from "../../../../vt/vt";
 import { Term, TermError } from "./term";
-import { Bridge, ControlError, Controls, Hit, holding, vtOf } from "./controls";
+import { Bridge, Controls, Hit, holding, vtOf } from "./controls";
 import { copySelection, pasteFrom } from "./clipboard";
 
 const LEFT: int32 = 1;
@@ -19,7 +19,7 @@ function reportMouse(
 	button: int32,
 	h: Hit,
 	anyPressed: boolean,
-): Result<boolean, ControlError> {
+): Result<boolean, TermError> {
 	const input: MouseInput = {
 		action: action,
 		button: button,
@@ -27,14 +27,8 @@ function reportMouse(
 		x: (h.x * h.scale + h.cell.padLeft) as float32,
 		y: (h.y * h.scale + h.cell.padTop) as float32,
 	};
-	const sent = t.sendMouse(input, h.cell, anyPressed);
-	if (!sent.ok) {
-		return Result.err(match (sent.error) {
-			TermError.WriteFailed => ControlError.WriteFailed,
-			_ => ControlError.MouseFailed,
-		});
-	}
-	return Result.ok(sent.value > 0);
+	const sent = try t.sendMouse(input, h.cell, anyPressed);
+	return Result.ok(sent > 0);
 }
 
 function openLink(host: Bridge, uri: string): void {
@@ -52,15 +46,15 @@ export function pointerDown(
 	button: int32,
 	h: Hit,
 	time: float64,
-): Result<boolean, ControlError> {
+): Result<boolean, TermError> {
 	if (c.holding()) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const modes = vt.modes();
-	if (!modes.ok) { return Result.err(ControlError.VtFailed); }
+	if (!modes.ok) { return Result.err(TermError.VtFailed); }
 	if (button == LEFT && h.mods.has(KeyMod.Ctrl)) {
 		const link = vt.linkAt(h.at.col, h.at.row);
-		if (!link.ok) { return Result.err(ControlError.VtFailed); }
+		if (!link.ok) { return Result.err(TermError.VtFailed); }
 		const uri = link.value;
 		if (uri !== null) {
 			openLink(host, uri);
@@ -75,7 +69,7 @@ export function pointerDown(
 	if (button == LEFT) {
 		const reach = (h.cell.cellWidth as float64) / h.scale;
 		const pressed = c.pointer.press(vt, h.at, h.x, h.y, time, reach);
-		if (!pressed.ok) { return Result.err(ControlError.VtFailed); }
+		if (!pressed.ok) { return Result.err(TermError.VtFailed); }
 		return Result.ok(true);
 	}
 	if (button == RIGHT) {
@@ -91,12 +85,12 @@ export function pointerMove(
 	t: Term,
 	h: Hit,
 	pressed: boolean,
-): Result<boolean, ControlError> {
+): Result<boolean, TermError> {
 	if (c.holding()) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const modes = vt.modes();
-	if (!modes.ok) { return Result.err(ControlError.VtFailed); }
+	if (!modes.ok) { return Result.err(TermError.VtFailed); }
 	if (claimsMouse(modes.value.mouseTracking, h.mods.has(KeyMod.Shift))) {
 		if (!pressed) { c.button = 0; }
 		const _reported = try c.reportMouse(t, MouseAction.Motion, c.button, h, c.button != 0);
@@ -113,7 +107,7 @@ export function pointerMove(
 	}
 	c.autoscroll = autoscrollOf(h.y * h.scale, h.cell.height);
 	const dragged = c.pointer.drag(vt, h.at);
-	if (!dragged.ok) { return Result.err(ControlError.VtFailed); }
+	if (!dragged.ok) { return Result.err(TermError.VtFailed); }
 	return Result.ok(dragged.value);
 }
 
@@ -122,7 +116,7 @@ export function pointerUp(
 	t: Term,
 	button: int32,
 	h: Hit,
-): Result<boolean, ControlError> {
+): Result<boolean, TermError> {
 	const reported = c.button != 0;
 	c.pointer.release();
 	c.autoscroll = 0;
@@ -136,7 +130,7 @@ export function focusLost(this c: Controls): void {
 	c.autoscroll = 0;
 }
 
-export function autoscrollTick(this c: Controls, t: Term): Result<boolean, ControlError> {
+export function autoscrollTick(this c: Controls, t: Term): Result<boolean, TermError> {
 	const vt = vtOf(t);
 	if (vt === null || !c.pointer.dragging || c.autoscroll == 0) {
 		c.autoscroll = 0;
@@ -144,7 +138,7 @@ export function autoscrollTick(this c: Controls, t: Term): Result<boolean, Contr
 	}
 	vt.scrollLines(c.autoscroll);
 	const dragged = c.pointer.drag(vt, c.pointer.last);
-	if (!dragged.ok) { return Result.err(ControlError.VtFailed); }
+	if (!dragged.ok) { return Result.err(TermError.VtFailed); }
 	return Result.ok(true);
 }
 
@@ -153,13 +147,13 @@ export function roll(
 	t: Term,
 	notches: float64,
 	h: Hit,
-): Result<boolean, ControlError> {
+): Result<boolean, TermError> {
 	if (c.holding()) { return Result.ok(false); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
 	const modes = vt.modes();
-	if (!alt.ok || !modes.ok) { return Result.err(ControlError.VtFailed); }
+	if (!alt.ok || !modes.ok) { return Result.err(TermError.VtFailed); }
 	const rows = c.wheel.rows(notches);
 	if (rows == 0) { return Result.ok(false); }
 	const shift = h.mods.has(KeyMod.Shift);
@@ -182,7 +176,7 @@ export function roll(
 			const key = neonEvent("keydown");
 			key.code = rows < 0 ? "ArrowUp" : "ArrowDown";
 			for (let i = 0; i < presses; i++) {
-				if (!t.sendKey(key).ok) { return Result.err(ControlError.KeyFailed); }
+				const _sent = try t.sendKey(key);
 			}
 			return Result.ok(shown);
 		},
@@ -190,18 +184,18 @@ export function roll(
 			vt.scrollLines(rows);
 			if (c.pointer.dragging) {
 				const dragged = c.pointer.drag(vt, c.pointer.last);
-				if (!dragged.ok) { return Result.err(ControlError.VtFailed); }
+				if (!dragged.ok) { return Result.err(TermError.VtFailed); }
 			}
 			return Result.ok(true);
 		},
 	}
 }
 
-export function shades(this c: Controls, t: Term): Result<Vec<Block>, ControlError> {
+export function shades(this c: Controls, t: Term): Result<Vec<Block>, TermError> {
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok([]); }
-	if (!c.pointer.sync(vt).ok) { return Result.err(ControlError.VtFailed); }
+	if (!c.pointer.sync(vt).ok) { return Result.err(TermError.VtFailed); }
 	const drawn = c.pointer.blocks(vt, t.rows, t.cols);
-	if (!drawn.ok) { return Result.err(ControlError.VtFailed); }
+	if (!drawn.ok) { return Result.err(TermError.VtFailed); }
 	return Result.ok(drawn.value);
 }

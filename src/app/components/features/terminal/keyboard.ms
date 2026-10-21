@@ -11,8 +11,8 @@ import {
 	scrollPages,
 	scrollTop,
 } from "../../../../vt/vt";
-import { Term, keyEventOf } from "./term";
-import { Bridge, ControlError, Controls, holding, typed, vtOf } from "./controls";
+import { Term, TermError, keyEventOf } from "./term";
+import { Bridge, Controls, holding, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";
 
 const SUPER_ONLY: BitSet<KeyMod> = (0 as BitSet<KeyMod>).incl(KeyMod.Super);
@@ -23,22 +23,22 @@ function runKeybind(
 	t: Term,
 	bind: Keybind | null,
 	host: Bridge,
-): Result<boolean, ControlError> {
+): Result<boolean, TermError> {
 	if (bind === null) { return Result.ok(false); }
 	if (bind.action == BindAction.CloseWindow) {
 		host.close();
 		return Result.ok(true);
 	}
-	if (!t.sendText(bind.text).ok) { return Result.err(ControlError.WriteFailed); }
+	const _sent = try t.sendText(bind.text);
 	const _snapped = try c.typed(t);
 	return Result.ok(true);
 }
 
-export function closeKey(this c: Controls, t: Term, host: Bridge): Result<boolean, ControlError> {
+export function closeKey(this c: Controls, t: Term, host: Bridge): Result<boolean, TermError> {
 	const vt = vtOf(t);
 	if (vt !== null) {
 		const alt = vt.alternateScreen();
-		if (!alt.ok) { return Result.err(ControlError.VtFailed); }
+		if (!alt.ok) { return Result.err(TermError.VtFailed); }
 		const bind = bindFor(c.keybinds, "KeyW", SUPER_ONLY as uint16, alt.value);
 		if (try c.runKeybind(t, bind, host)) { return Result.ok(true); }
 	}
@@ -51,7 +51,7 @@ export function keyDown(
 	t: Term,
 	e: NeonEvent,
 	host: Bridge,
-): Result<boolean, ControlError> {
+): Result<boolean, TermError> {
 	const handled = try c.controlKey(t, e, host);
 	c.consumedKey = handled ? e.code : "";
 	return Result.ok(handled);
@@ -66,12 +66,12 @@ function controlKey(
 	t: Term,
 	e: NeonEvent,
 	host: Bridge,
-): Result<boolean, ControlError> {
+): Result<boolean, TermError> {
 	if (c.holding()) { return c.answerHeld(t, e); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
-	if (!alt.ok) { return Result.err(ControlError.VtFailed); }
+	if (!alt.ok) { return Result.err(TermError.VtFailed); }
 	const mods = modsMask(keyEventOf(e).mods) as number;
 	if (try c.runKeybind(t, bindFor(c.keybinds, e.code, mods, alt.value), host)) {
 		return Result.ok(true);
@@ -83,11 +83,11 @@ function controlKey(
 		Action.Paste => { c.pasteFrom(t, host); },
 		Action.PageUp | Action.PageDown => {
 			const pages: int32 = action == Action.PageUp ? -1 : 1;
-			if (!vt.scrollPages(pages).ok) { return Result.err(ControlError.VtFailed); }
+			if (!vt.scrollPages(pages).ok) { return Result.err(TermError.VtFailed); }
 		},
 		Action.PromptUp | Action.PromptDown => {
 			const toward = action == Action.PromptUp ? PromptJump.Previous : PromptJump.Next;
-			if (!vt.jumpToPrompt(toward).ok) { return Result.err(ControlError.VtFailed); }
+			if (!vt.jumpToPrompt(toward).ok) { return Result.err(TermError.VtFailed); }
 		},
 		Action.LineUp => { vt.scrollLines(-KEYBOARD_ROWS); },
 		Action.LineDown => { vt.scrollLines(KEYBOARD_ROWS); },

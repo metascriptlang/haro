@@ -47,6 +47,7 @@ export enum TermError {
 	ClipboardFailed,
 	FocusFailed,
 	MouseFailed,
+	VtFailed,
 }
 
 export type OpenPty = (cols: int32, rows: int32) => Result<Pty, PtyError>;

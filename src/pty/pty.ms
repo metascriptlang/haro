@@ -35,13 +35,18 @@ export function open(
 	return Result.ok({ id: id });
 }
 
-export function read(this p: NativePty, buf: Span<uint8>): Result<int32, PtyError> {
-	const n = ptyRead(p.id, buf);
+const PTY_OUT_OF_MEMORY: int64 = -2;
+
+function transferred(n: int64): Result<int32, PtyError> {
 	return match (n) {
-		-2 => Result.err(PtyError.OutOfMemory),
+		PTY_OUT_OF_MEMORY => Result.err(PtyError.OutOfMemory),
 		_ when n < 0 => Result.err(PtyError.Closed),
 		_ => Result.ok(n as int32),
 	};
+}
+
+export function read(this p: NativePty, buf: Span<uint8>): Result<int32, PtyError> {
+	return transferred(ptyRead(p.id, buf));
 }
 
 export function wait(this p: NativePty, timeoutMs: int32): Result<boolean, PtyError> {
@@ -54,12 +59,7 @@ export function wait(this p: NativePty, timeoutMs: int32): Result<boolean, PtyEr
 }
 
 export function write(this p: NativePty, data: Readonly<Span<uint8>>): Result<int32, PtyError> {
-	const n = ptyWrite(p.id, data);
-	return match (n) {
-		-2 => Result.err(PtyError.OutOfMemory),
-		_ when n < 0 => Result.err(PtyError.Closed),
-		_ => Result.ok(n as int32),
-	};
+	return transferred(ptyWrite(p.id, data));
 }
 
 export function resize(this p: NativePty, cols: int32, rows: int32): Result<NativePty, PtyError> {

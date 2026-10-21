@@ -59,12 +59,17 @@ export function fontPx(this c: Config): float64 {
 	return c.fontSize * SCREEN_DPI / POINTS_PER_INCH;
 }
 
-function hexDigit(c: string): int32 | null {
-	const code = c.charCodeAt(0) as int32;
+function hexDigit(code: int32): int32 | null {
 	if (code >= "0".code && code <= "9".code) { return code - "0".code; }
 	if (code >= "a".code && code <= "f".code) { return code - "a".code + 10; }
 	if (code >= "A".code && code <= "F".code) { return code - "A".code + 10; }
 	return null;
+}
+
+function channelAt(text: string, at: int32): uint8 | null {
+	const high = hexDigit(text.charCodeAt(at));
+	const low = hexDigit(text.charCodeAt(at + 1));
+	return high === null || low === null ? null : (high * 16 + low) as uint8;
 }
 
 function readString(v: JsonValue, key: string): Result<string, string> {
@@ -76,14 +81,11 @@ function readColor(v: JsonValue, key: string): Result<Rgb, string> {
 	const text = try readString(v, key);
 	const notColour = `${key}: "${text}" is not a #rrggbb colour`;
 	if (text.length != 7 || text[0] != "#") { return Result.err(notColour); }
-	let channels: Vec<uint8> = [];
-	for (let i = 1; i < 7; i += 2) {
-		const high = hexDigit(text[i]);
-		const low = hexDigit(text[i + 1]);
-		if (high === null || low === null) { return Result.err(notColour); }
-		channels.push((high * 16 + low) as uint8);
-	}
-	return Result.ok({ r: channels[0], g: channels[1], b: channels[2] });
+	const r = channelAt(text, 1);
+	const g = channelAt(text, 3);
+	const b = channelAt(text, 5);
+	if (r === null || g === null || b === null) { return Result.err(notColour); }
+	return Result.ok({ r: r, g: g, b: b });
 }
 
 function readNumber(v: JsonValue, key: string): Result<float64, string> {

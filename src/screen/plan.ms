@@ -1,4 +1,4 @@
-import { Row, Vt, VtError } from "../vt/vt";
+import { Palette, Row, Vt, VtError } from "../vt/vt";
 
 export enum PlanKind {
 	Idle,
@@ -11,6 +11,7 @@ export struct Plan {
 	kind: PlanKind;
 	scrolled: int32;
 	rows: Vec<Row>;
+	colors: Palette;
 }
 
 function sameContent(this a: Row, b: Row): boolean {
@@ -71,7 +72,7 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 		const _anchored = try vt.anchorTop();
 	}
 	vt.clean();
-	return Result.ok({ kind: kind, scrolled: moved, rows: rows });
+	return Result.ok({ kind: kind, scrolled: moved, rows: rows, colors: colors });
 }
 
 function newLines(from: int32, count: int32): string {

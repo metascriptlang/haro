@@ -3,7 +3,7 @@ import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style } from "../../../neon/src/render/style";
 import { GridLine, LineRun, line } from "../grid/lines";
 import { plan } from "../screen/plan";
-import { Cursor, Rgb, Row, Underline, Vt, palette } from "../vt/vt";
+import { Cursor, Rgb, Row, Underline, Vt } from "../vt/vt";
 import { stats, noteApplied } from "./stats";
 
 export interface RowSlot {
@@ -142,22 +142,20 @@ export function applyFrame(
 	if (!planned.ok) { return Result.err(FrameError.PlanFailed); }
 	const at = vt.cursor();
 	if (!at.ok) { return Result.err(FrameError.CursorFailed); }
-	const colors = vt.palette();
-	if (!colors.ok) { return Result.err(FrameError.PaletteFailed); }
 	const cursor = at.value;
 	const p = planned.value;
 	let chars: int32 = 0;
 	const last = grid.length() - 1;
 	for (let i = 0; i < p.scrolled; i++) { grid.move(0, last); }
 	for (let i = 0; i < p.rows.length; i++) {
-		const slot = try slotOf(styles, p.rows[i], cursor, colors.value.bg);
+		const slot = try slotOf(styles, p.rows[i], cursor, p.colors.bg);
 		chars += slot.line.text.length as int32;
 		grid.set(p.rows[i].y, slot);
 	}
 	for (let i = 0; i < vt.painted.rows.length; i++) {
 		const y = vt.painted.rows[i].y;
 		if (grid.at(y).line.cursorCell != cursorCellOf(cursor, y)) {
-			grid.set(y, try slotOf(styles, vt.painted.rows[i], cursor, colors.value.bg));
+			grid.set(y, try slotOf(styles, vt.painted.rows[i], cursor, p.colors.bg));
 		}
 	}
 	stats.noteApplied(p.rows.length as int32, p.scrolled, chars, performance.now());

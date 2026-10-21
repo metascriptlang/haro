@@ -190,7 +190,7 @@ export function scheduleRefresh(this m: PaneModel): void {
 }
 
 export function refresh(this m: PaneModel): void {
-	stats.refreshes += 1;
+	stats.tally.refreshes += 1;
 	const frame = m.term.pumpFrame();
 	if (!frame.ok) {
 		m.failed("frame", frame.error.toString());
@@ -201,7 +201,7 @@ export function refresh(this m: PaneModel): void {
 	if (copied !== null) { copyToClipboard(copied); }
 	if (f.asked) { m.controls.clipboardAsked(m.term, m.bridge()); }
 	if (f.held) {
-		stats.held += 1;
+		stats.tally.held += 1;
 		m.watchHold();
 	} else {
 		const colors = f.colors;
@@ -220,7 +220,7 @@ export function refresh(this m: PaneModel): void {
 		m.viewWidth(),
 	);
 	if (f.more) {
-		stats.more += 1;
+		stats.tally.more += 1;
 		m.scheduleRefresh();
 	}
 	if (f.ended) { m.shellEnded(); }

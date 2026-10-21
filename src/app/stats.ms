@@ -1,20 +1,15 @@
-export interface Stats {
+export struct Tally {
 	refreshes: int32;
 	more: int32;
 	held: int32;
 	rows: int32;
 	scrolled: int32;
 	chars: int32;
-	keyAt: float64;
-	wakeAt: float64;
 	echoes: Vec<float64>;
 	settles: Vec<float64>;
-	marks: Vec<Mark>;
 }
 
-export struct Mark { name: string; at: float64; }
-
-export function empty(this typeof Stats): Stats {
+function zero(this typeof Tally): Tally {
 	return {
 		refreshes: 0,
 		more: 0,
@@ -22,12 +17,22 @@ export function empty(this typeof Stats): Stats {
 		rows: 0,
 		scrolled: 0,
 		chars: 0,
-		keyAt: -1,
-		wakeAt: -1,
 		echoes: [],
 		settles: [],
-		marks: [],
 	};
+}
+
+export interface Stats {
+	tally: Tally;
+	keyAt: float64;
+	wakeAt: float64;
+	marks: Vec<Mark>;
+}
+
+export struct Mark { name: string; at: float64; }
+
+export function empty(this typeof Stats): Stats {
+	return { tally: Tally.zero(), keyAt: -1, wakeAt: -1, marks: [] };
 }
 
 export const stats: Stats = Stats.empty();
@@ -70,13 +75,13 @@ export function noteApplied(
 	chars: int32,
 	at: float64,
 ): void {
-	s.rows += rows;
-	s.scrolled += scrolled;
-	s.chars += chars;
+	s.tally.rows += rows;
+	s.tally.scrolled += scrolled;
+	s.tally.chars += chars;
 	if (chars > 0) { s.mark("painted", Date.now()); }
 	if (rows > 0 && s.keyAt >= 0) {
-		s.echoes.push(at - s.keyAt);
-		if (s.wakeAt >= 0) { s.settles.push(at - s.wakeAt); }
+		s.tally.echoes.push(at - s.keyAt);
+		if (s.wakeAt >= 0) { s.tally.settles.push(at - s.wakeAt); }
 		s.keyAt = -1;
 		s.wakeAt = -1;
 	}
@@ -96,19 +101,13 @@ function summary(name: string, samples: Vec<float64>): string {
 }
 
 export function line(this s: Stats): string {
-	return `refreshes=${s.refreshes} more=${s.more} held=${s.held} rows=${s.rows} scrolled=${s.scrolled} ` +
-		`chars=${s.chars} ${summary("echo", s.echoes)} ${summary("settle", s.settles)}`;
+	return `refreshes=${s.tally.refreshes} more=${s.tally.more} held=${s.tally.held} ` +
+		`rows=${s.tally.rows} scrolled=${s.tally.scrolled} chars=${s.tally.chars} ` +
+		`${summary("echo", s.tally.echoes)} ${summary("settle", s.tally.settles)}`;
 }
 
 export function reset(this s: Stats): void {
-	s.refreshes = 0;
-	s.more = 0;
-	s.held = 0;
-	s.rows = 0;
-	s.scrolled = 0;
-	s.chars = 0;
-	s.echoes = [];
-	s.settles = [];
+	s.tally = Tally.zero();
 }
 
 test "a key's echo runs to the first apply with rows, its settle from the last wake before it" {

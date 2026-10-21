@@ -228,6 +228,21 @@ when (testBuild) {
 			}
 			assert env.get("TERM_PROGRAM") == "OtherTerminal";
 		}
+
+		test "a shell that exits ends the stream, though a job in its own session still writes" {
+			let ticks = "";
+			for (let i = 0; i < 300; i++) { ticks += " x"; }
+			const job = `setsid sh -c "for t in${ticks}; do echo spam; sleep 0.01; done"`;
+			const opened = NativePty.open(`sh -c '${job} & sleep 0.2; echo done'`, 80, 24);
+			assert opened.ok;
+			if (opened.ok) {
+				const start: float64 = performance.now();
+				assert opened.value.toPty().drainText(4096).includes("done");
+				assert performance.now() - start < 2500;
+				assert opened.value.exitCode() === 0;
+				opened.value.close();
+			}
+		}
 	}
 
 	when (windows) {

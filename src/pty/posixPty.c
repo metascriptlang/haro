@@ -23,6 +23,8 @@
 #define READ_LIMIT (4 << 20)
 #define BATCH_KEEP (4 << 20)
 #define CLOSE_GRACE_MS 1000
+#define EXIT_QUIET_MS 50
+#define EXIT_DRAIN_MS 1000
 
 typedef struct {
 	int used;
@@ -103,20 +105,44 @@ static int append(Pty* p, const uint8_t* bytes, int64_t n) {
 	return 1;
 }
 
+static int64_t nowMs(void) {
+	struct timespec at;
+	clock_gettime(CLOCK_MONOTONIC, &at);
+	return (int64_t)at.tv_sec * 1000 + at.tv_nsec / 1000000;
+}
+
+static int stopping(Pty* p) {
+	pthread_mutex_lock(&p->lock);
+	int stop = p->stopping;
+	pthread_mutex_unlock(&p->lock);
+	return stop;
+}
+
 static void* readLoop(void* arg) {
 	Pty* p = arg;
 	uint8_t chunk[16384];
 	int top = p->master > p->stop[0] ? p->master : p->stop[0];
+	int64_t drainUntil = -1;
 	for (;;) {
 		fd_set fds;
 		FD_ZERO(&fds);
 		FD_SET(p->master, &fds);
 		FD_SET(p->stop[0], &fds);
-		if (select(top + 1, &fds, NULL, NULL, NULL) < 0) {
+		struct timeval quiet = { 0, EXIT_QUIET_MS * 1000 };
+		int ready = select(top + 1, &fds, NULL, NULL, drainUntil < 0 ? NULL : &quiet);
+		if (ready < 0) {
 			if (errno == EINTR) continue;
 			break;
 		}
-		if (FD_ISSET(p->stop[0], &fds)) break;
+		if (ready == 0 || (drainUntil >= 0 && nowMs() > drainUntil)) break;
+		if (FD_ISSET(p->stop[0], &fds)) {
+			if (drainUntil >= 0 || stopping(p)) break;
+			char exited;
+			ssize_t _read = read(p->stop[0], &exited, 1);
+			(void)_read;
+			drainUntil = nowMs() + EXIT_DRAIN_MS;
+			continue;
+		}
 		ssize_t got = read(p->master, chunk, sizeof chunk);
 		if (got < 0 && errno == EINTR) continue;
 		if (got <= 0 || !append(p, chunk, got)) break;
@@ -177,6 +203,8 @@ static void* waitLoop(void* arg) {
 	p->exited = 1;
 	pthread_cond_broadcast(&p->changed);
 	pthread_mutex_unlock(&p->lock);
+	ssize_t _wrote = write(p->stop[1], "", 1);
+	(void)_wrote;
 	return NULL;
 }
 

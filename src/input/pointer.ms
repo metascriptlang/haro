@@ -176,6 +176,11 @@ function click(p: Pointer, vt: Vt, col: int32, row: int32, time: float64): boole
 	return p.press(vt, spot(col, row), x, y, time, REACH).ok;
 }
 
+function copied(p: Pointer, vt: Vt): string {
+	const text = p.copyText(vt);
+	return text.ok ? (text.value ?? "none") : "read failed";
+}
+
 test "the spot under a point is its cell, held inside the grid" {
 	assert spotAt(0, 0, 8, 16, 80, 24) == spot(0, 0);
 	assert spotAt(7.9, 15.9, 8, 16, 80, 24) == spot(0, 0);
@@ -194,9 +199,7 @@ test "a press with no drag leaves nothing selected and a drag selects the cells 
 		assert p.copyText(vt).ok;
 		assert p.drag(vt, spot(4, 0)).ok;
 		assert p.selected();
-		const text = p.copyText(vt);
-		assert text.ok;
-		if (text.ok) { assert text.value == "ello"; }
+		assert copied(p, vt) == "ello";
 		p.release();
 		assert p.selected();
 		vt.free();
@@ -210,9 +213,7 @@ test "a drag back past the press selects the other way" {
 		const p = Pointer.open();
 		assert click(p, vt, 8, 0, 0);
 		assert p.drag(vt, spot(6, 0)).ok;
-		const text = p.copyText(vt);
-		assert text.ok;
-		if (text.ok) { assert text.value == "wor"; }
+		assert copied(p, vt) == "wor";
 		vt.free();
 	}
 }
@@ -225,13 +226,9 @@ test "a double click selects a word, a triple click the line, and a fourth start
 		assert click(p, vt, 5, 0, 0);
 		assert !p.selected();
 		assert click(p, vt, 5, 0, 100);
-		const word = p.copyText(vt);
-		assert word.ok;
-		if (word.ok) { assert word.value == "bar-baz"; }
+		assert copied(p, vt) == "bar-baz";
 		assert click(p, vt, 5, 0, 200);
-		const line = p.copyText(vt);
-		assert line.ok;
-		if (line.ok) { assert line.value == "foo bar-baz qux"; }
+		assert copied(p, vt) == "foo bar-baz qux";
 		assert click(p, vt, 5, 0, 300);
 		assert !p.selected();
 		vt.free();
@@ -245,9 +242,7 @@ test "a double click takes its word from the first press, though the second drif
 		const p = Pointer.open();
 		assert click(p, vt, 4, 0, 0);
 		assert click(p, vt, 3, 0, 100);
-		const word = p.copyText(vt);
-		assert word.ok;
-		if (word.ok) { assert word.value == "bar"; }
+		assert copied(p, vt) == "bar";
 		vt.free();
 	}
 }
@@ -260,9 +255,7 @@ test "a drag after a double click grows the selection by whole words" {
 		assert click(p, vt, 5, 0, 0);
 		assert click(p, vt, 5, 0, 100);
 		assert p.drag(vt, spot(9, 0)).ok;
-		const text = p.copyText(vt);
-		assert text.ok;
-		if (text.ok) { assert text.value == "bar baz"; }
+		assert copied(p, vt) == "bar baz";
 		vt.free();
 	}
 }
@@ -410,9 +403,7 @@ test "new output that scrolls the terminal moves the selection with its text" {
 		const kept = p.sync(vt);
 		assert kept.ok;
 		if (kept.ok) { assert kept.value; }
-		const text = p.copyText(vt);
-		assert text.ok;
-		if (text.ok) { assert text.value == "two"; }
+		assert copied(p, vt) == "two";
 		vt.free();
 	}
 }
@@ -453,10 +444,9 @@ test "a drag within a pixel of the top or the bottom scrolls that way" {
 function shadedAndCopied(p: Pointer, vt: Vt, from: int32, to: int32): string {
 	if (!click(p, vt, from, 0, 0) || !p.drag(vt, spot(to, 0)).ok) { return "select failed"; }
 	const shown = p.blocks(vt, 1, 10);
-	const text = p.copyText(vt);
-	if (!shown.ok || !text.ok) { return "read failed"; }
+	if (!shown.ok) { return "read failed"; }
 	const cells = shown.value.map((b: Block): string => `${b.col}+${b.cols}`).join(",");
-	return `${cells} ${text.value ?? "none"}`;
+	return `${cells} ${copied(p, vt)}`;
 }
 
 test "a wide character is shaded whole and copied whichever of its cells the selection reaches" {

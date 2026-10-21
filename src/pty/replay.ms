@@ -48,6 +48,12 @@ when (testBuild) {
 		assert replay.toPty().drainText(1) == "hello, replay";
 	}
 
+	test "text split inside a character across reads drains back whole" {
+		const text = "hé € 😀!";
+		assert Replay.ofText(text).toPty().drainText(1) == text;
+		assert Replay.ofText(text).toPty().drainText(3) == text;
+	}
+
 	test "a replay is ready until its last byte, then ends like a child that exited" {
 		const pty = Replay.ofText("ab").toPty();
 		let buf: Vec<uint8> = new Array(8);

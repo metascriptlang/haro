@@ -278,3 +278,23 @@ test "losing focus mid-drag ends the drag and its scrolling, and keeps the selec
 		t.shutdown();
 	}
 }
+
+test "a press in the padding reaches a tracking app as the nearest cell" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("[?1000h[?1006h", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf(""));
+		const base = hitAt(0, 0);
+		const padded: Hit = {
+			...base,
+			x: -6,
+			y: -6,
+			cell: { ...base.cell, width: 180, height: 100, padLeft: 10, padTop: 10, padRight: 10, padBottom: 10 },
+		};
+		assert handled(c.pointerDown(t, clip, 1, padded, 0));
+		assert sink.sent == "[<0;1;1M";
+		t.shutdown();
+	}
+}

@@ -139,7 +139,16 @@ test "focus reports go out only while the program asked for them" {
 }
 
 test "a mouse report is the program's encoding of the pointer, nothing while it asked for none" {
-	const geometry: MouseGeometry = { cellWidth: 8, cellHeight: 16, width: 160, height: 80 };
+	const geometry: MouseGeometry = {
+		cellWidth: 8,
+		cellHeight: 16,
+		width: 160,
+		height: 80,
+		padLeft: 0,
+		padTop: 0,
+		padRight: 0,
+		padBottom: 0,
+	};
 	const none = 0 as BitSet<KeyMod>;
 	const press: MouseInput = { action: MouseAction.Press, button: 1, mods: none, x: 17, y: 17 };
 	const release: MouseInput = { ...press, action: MouseAction.Release };

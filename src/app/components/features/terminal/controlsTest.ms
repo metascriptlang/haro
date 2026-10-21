@@ -79,7 +79,16 @@ export function hitWith(col: int32, row: int32, mods: int32): Hit {
 		y: row as float64 * 16,
 		scale: 1,
 		mods: (mods as uint16) as BitSet<KeyMod>,
-		cell: { cellWidth: 8, cellHeight: 16, width: 160, height: 80 },
+		cell: {
+			cellWidth: 8,
+			cellHeight: 16,
+			width: 160,
+			height: 80,
+			padLeft: 0,
+			padTop: 0,
+			padRight: 0,
+			padBottom: 0,
+		},
 	};
 }
 

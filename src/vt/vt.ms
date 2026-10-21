@@ -1018,6 +1018,10 @@ export struct MouseGeometry {
 	cellHeight: int32;
 	width: int32;
 	height: int32;
+	padLeft: int32;
+	padTop: int32;
+	padRight: int32;
+	padBottom: int32;
 }
 
 const MOUSE_MODES: uint16[] = [9, 1000, 1002, 1003, 1005, 1006, 1015, 1016];
@@ -1078,6 +1082,10 @@ export function mouseReport(
 			screen_height: geometry.height as uint32,
 			cell_width: geometry.cellWidth as uint32,
 			cell_height: geometry.cellHeight as uint32,
+			padding_top: geometry.padTop as uint32,
+			padding_bottom: geometry.padBottom as uint32,
+			padding_right: geometry.padRight as uint32,
+			padding_left: geometry.padLeft as uint32,
 		};
 		mouseSetSize(encoder, GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_SIZE, size);
 		m.geometry = geometry;
@@ -2008,7 +2016,16 @@ test "a focus change is reported only once the program asked for it" {
 	}
 }
 
-const GEOMETRY: MouseGeometry = { cellWidth: 10, cellHeight: 20, width: 200, height: 80 };
+const GEOMETRY: MouseGeometry = {
+	cellWidth: 10,
+	cellHeight: 20,
+	width: 200,
+	height: 80,
+	padLeft: 0,
+	padTop: 0,
+	padRight: 0,
+	padBottom: 0,
+};
 
 function mouseBytes(
 	vt: Vt,
@@ -2048,6 +2065,28 @@ test "SGR reporting names the cell, the button and the modifiers" {
 		assert mouseBytes(vt, MouseAction.Press, 4, none, false) == "\x1b[<64;3;2M";
 		const shift = none.incl(KeyMod.Shift);
 		assert mouseBytes(vt, MouseAction.Press, 1, shift, true) == "\x1b[<4;3;2M";
+		vt.free();
+	}
+}
+
+function pressAt(vt: Vt, x: float32, y: float32): string {
+	const padded: MouseGeometry = { ...GEOMETRY, width: 260, height: 140, padLeft: 30, padTop: 30, padRight: 30, padBottom: 30 };
+	const e: MouseInput = { action: MouseAction.Press, button: 1, mods: 0 as BitSet<KeyMod>, x: x, y: y };
+	let buf: Vec<uint8> = new Array(32);
+	const n = vt.mouseReport(e, padded, true, buf);
+	if (!n.ok) { return "error"; }
+	return ascii(buf[0..n.value]);
+}
+
+test "a press in the padding reports the nearest cell, and the grid starts past the padding" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		vt.writeText("[?1000h[?1006h");
+		assert pressAt(vt, 5, 5) == "[<0;1;1M";
+		assert pressAt(vt, 45, 55) == "[<0;2;2M";
+		assert pressAt(vt, 255, 135) == "[<0;20;4M";
 		vt.free();
 	}
 }

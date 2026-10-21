@@ -127,7 +127,16 @@ export function createPane(
 		grid: null,
 		holdTimer: -1,
 		scrollTimer: -1,
-		mouseGeometry: { cellWidth: 1, cellHeight: 1, width: 1, height: 1 },
+		mouseGeometry: {
+			cellWidth: 1,
+			cellHeight: 1,
+			width: 1,
+			height: 1,
+			padLeft: 0,
+			padTop: 0,
+			padRight: 0,
+			padBottom: 0,
+		},
 		layoutWidth: 0,
 		layoutHeight: 0,
 	};
@@ -324,11 +333,16 @@ function fitLayout(this m: PaneModel): void {
 	flush();
 	m.notify(m.notice.text);
 	m.dialog.shownFor = null;
+	const padPx = PixelRatio.getPixelSizeForLayoutSize(m.padding()) as int32;
 	m.mouseGeometry = {
 		cellWidth: cellPx,
 		cellHeight: rowPx,
-		width: cols * cellPx,
-		height: rows * rowPx,
+		width: widthPx + 2 * padPx,
+		height: heightPx + 2 * padPx,
+		padLeft: padPx,
+		padTop: padPx,
+		padRight: widthPx - cols * cellPx + padPx,
+		padBottom: heightPx - rows * rowPx + padPx,
 	};
 	m.cursor.paintCursor();
 	console.log(

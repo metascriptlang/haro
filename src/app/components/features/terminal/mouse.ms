@@ -24,8 +24,8 @@ function reportMouse(
 		action: action,
 		button: button,
 		mods: h.mods,
-		x: (h.x * h.scale) as float32,
-		y: (h.y * h.scale) as float32,
+		x: (h.x * h.scale + h.cell.padLeft) as float32,
+		y: (h.y * h.scale + h.cell.padTop) as float32,
 	};
 	const sent = t.sendMouse(input, h.cell, anyPressed);
 	if (!sent.ok) {

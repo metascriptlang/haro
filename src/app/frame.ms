@@ -1,7 +1,7 @@
 import { List, createList } from "../../../neon/src/core/list";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style } from "../../../neon/src/render/style";
-import { GridLine, LineRun, line } from "../grid/lines";
+import { GridLine, LineRun, cellOnRow, line } from "../grid/lines";
 import { plan } from "../screen/plan";
 import { Cursor, Rgb, Row, Underline, Vt } from "../vt/vt";
 import { stats, noteApplied } from "./stats";
@@ -116,17 +116,13 @@ export function spansOf(styles: Styles, l: GridLine, background: Rgb): TextSpan[
 	return spans;
 }
 
-function cursorCellOf(cursor: Cursor | null, y: int32): int32 {
-	return cursor !== null && cursor.y == y ? cursor.x : -1;
-}
-
 function slotOf(
 	styles: Styles,
 	row: Row,
 	cursor: Cursor | null,
 	background: Rgb,
 ): Result<RowSlot, FrameError> {
-	const built = row.line(cursorCellOf(cursor, row.y), background);
+	const built = row.line(cursor.cellOnRow(row.y), background);
 	if (!built.ok) { return Result.err(FrameError.LineFailed); }
 	const spans = spansOf(styles, built.value, background);
 	return Result.ok({ line: move built.value, spans: spans });
@@ -153,7 +149,7 @@ export function applyFrame(
 	}
 	for (let i = 0; i < vt.painted.rows.length; i++) {
 		const y = vt.painted.rows[i].y;
-		if (grid.at(y).line.cursorCell != cursorCellOf(cursor, y)) {
+		if (grid.at(y).line.cursorCell != cursor.cellOnRow(y)) {
 			grid.set(y, try slotOf(styles, vt.painted.rows[i], cursor, p.colors.bg));
 		}
 	}

@@ -1,5 +1,5 @@
 import { fromCodePoint } from "std/core/string";
-import { Cell, CellFlag, Row, Rgb, Underline, Vt, isUnicodeScalar } from "../vt/vt";
+import { Cell, CellFlag, Cursor, Row, Rgb, Underline, Vt, isUnicodeScalar } from "../vt/vt";
 
 export enum GridError {
 	CodepointInvalid,
@@ -87,6 +87,10 @@ function isEmpty(this cell: Cell, background: Rgb): boolean {
 	const run = cell.lineRun();
 	return (cell.cp == 0 || cell.cp == 0x20) && cell.extra == 0 && run.bg == background &&
 		run.underline == Underline.None && !run.strikethrough;
+}
+
+export function cellOnRow(this cursor: Cursor | null, y: int32): int32 {
+	return cursor !== null && cursor.y == y ? cursor.x : -1;
 }
 
 export function line(

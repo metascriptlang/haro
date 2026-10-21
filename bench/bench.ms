@@ -1,7 +1,7 @@
 import { argv } from "std/process";
 import { createList } from "../../neon/src/core/list";
 import { RowSlot, Styles, applyFrame, empty, spansOf } from "../src/app/frame";
-import { GridLine, line } from "../src/grid/lines";
+import { GridLine, cellOnRow, line } from "../src/grid/lines";
 import { plan } from "../src/screen/plan";
 import { Cursor, Vt, palette } from "../src/vt/vt";
 import {
@@ -95,8 +95,7 @@ function framePass(
 	const cursor: Cursor | null = cursorRead.value;
 	let built: Vec<GridLine> = [];
 	for (const row of planned.value.rows) {
-		const cursorCell = cursor !== null && cursor.y == row.y ? cursor.x : -1;
-		const l = row.line(cursorCell, colors.value.bg);
+		const l = row.line(cursor.cellOnRow(row.y), colors.value.bg);
 		if (l.ok) { built.push(l.value); } else { totals.lineErrors += 1; }
 	}
 	const spansStart: float64 = performance.now();

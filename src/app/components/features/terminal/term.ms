@@ -216,9 +216,7 @@ function sendBuffered(this t: Term, s: Session, n: int32): Result<int32, TermErr
 	return Result.ok(n);
 }
 
-export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
-	const s = t.session;
-	if (s === null) { return Result.ok(0); }
+export function keyEventOf(e: NeonEvent): KeyEvent {
 	const key: KeyEvent = {
 		action: e.repeat ? KeyAction.Repeat : KeyAction.Press,
 		key: e.code,
@@ -227,7 +225,13 @@ export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
 		unshifted: e.unshifted as uint32,
 		text: e.text,
 	};
-	const encoded = t.keys.encode(s.vt, key.withoutAltGr(), t.buf);
+	return key.withoutAltGr();
+}
+
+export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
+	const s = t.session;
+	if (s === null) { return Result.ok(0); }
+	const encoded = t.keys.encode(s.vt, keyEventOf(e), t.buf);
 	if (!encoded.ok) { return Result.err(TermError.EncodeFailed); }
 	return t.sendBuffered(s, encoded.value);
 }

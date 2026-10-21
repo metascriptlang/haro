@@ -1,5 +1,5 @@
 import { NeonEvent } from "../../../../../../neon/src/render/event";
-import { KeyMod } from "../../../../keys/keys";
+import { KeyMod, modsMask } from "../../../../keys/keys";
 import { Action, BindAction, Keybind, bindFor, resolve } from "../../../../input/bindings";
 import { ROWS_PER_NOTCH } from "../../../../input/wheel";
 import {
@@ -10,7 +10,7 @@ import {
 	scrollPages,
 	scrollTop,
 } from "../../../../vt/vt";
-import { Term } from "./term";
+import { Term, keyEventOf } from "./term";
 import { Bridge, ControlError, Controls, holding, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";
 
@@ -56,10 +56,11 @@ export function keyDown(
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
 	if (!alt.ok) { return Result.err(ControlError.VtFailed); }
-	if (try c.runKeybind(t, bindFor(c.keybinds, e.code, e.mods, alt.value), host)) {
+	const mods = modsMask(keyEventOf(e).mods) as number;
+	if (try c.runKeybind(t, bindFor(c.keybinds, e.code, mods, alt.value), host)) {
 		return Result.ok(true);
 	}
-	const action = resolve(e.code, e.mods, alt.value);
+	const action = resolve(e.code, mods, alt.value);
 	match (action) {
 		Action.None => { return Result.ok(false); },
 		Action.Copy => { return c.copySelection(t, host); },

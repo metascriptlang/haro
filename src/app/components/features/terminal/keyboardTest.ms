@@ -4,7 +4,7 @@ import { Sink, termOf } from "./termTest";
 import { Controls } from "./controls";
 import { closeKey, keyDown } from "./keyboard";
 import { Warning } from "../../../../input/paste";
-import { BindAction, CLIPBOARD_MODS, CTRL, Keybind, SHIFT, SUPER, Screen } from "../../../../input/bindings";
+import { ALT, BindAction, CLIPBOARD_MODS, CTRL, Keybind, SHIFT, SUPER, Screen } from "../../../../input/bindings";
 import {
 	at,
 	atBottomOf,
@@ -212,6 +212,27 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 		assert handled(c.keyDown(t, key("KeyC", 3), clip));
 		assert sink.sent == "[13;2uc";
 		assert !handled(c.keyDown(t, key("Enter", 2), clip));
+		t.shutdown();
+	}
+}
+
+test "a ctrl alt keybind leaves the character AltGr types on the same key to the program" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("ready", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		c.keybinds = [
+			{ code: "KeyQ", mods: CTRL | ALT, text: "x", action: BindAction.SendText, screen: Screen.Any },
+		];
+		const clip = clipOf(boardOf(""));
+		const altGr = key("KeyQ", CTRL | ALT);
+		altGr.consumedMods = CTRL | ALT;
+		altGr.text = "@";
+		assert !handled(c.keyDown(t, altGr, clip));
+		assert sink.sent == "";
+		assert handled(c.keyDown(t, key("KeyQ", CTRL | ALT), clip));
+		assert sink.sent == "x";
 		t.shutdown();
 	}
 }

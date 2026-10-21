@@ -499,6 +499,18 @@ function closeEffects(terminal: GhosttyTerminal): void {
 	const _cleared = vtEffectsWire(terminal, null);
 }
 
+function freeHandles(
+	terminal: GhosttyTerminal,
+	state: GhosttyRenderState,
+	iterator: GhosttyRenderStateRowIterator,
+	cells: GhosttyRenderStateRowCells,
+): void {
+	ghostty_render_state_row_cells_free(cells);
+	ghostty_render_state_row_iterator_free(iterator);
+	ghostty_render_state_free(state);
+	ghostty_terminal_free(terminal);
+}
+
 function effectsAt(p: Ptr<void>): Effects {
 	return Handle.at<Effects>(p).value();
 }
@@ -681,7 +693,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		!ok(ghostty_render_state_row_iterator_new(vtAllocator(), iterator)) ||
 		!ok(ghostty_render_state_row_cells_new(vtAllocator(), cells))
 	) {
-		ghostty_terminal_free(terminal);
+		freeHandles(terminal, state, iterator, cells);
 		return Result.err(VtError.CreateFailed);
 	}
 	const effects = openEffects(terminal, state);
@@ -701,10 +713,8 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		});
 	}
 	if (effects.ok) { closeEffects(terminal); }
-	ghostty_render_state_row_cells_free(cells);
-	ghostty_render_state_row_iterator_free(iterator);
-	ghostty_render_state_free(state);
-	ghostty_terminal_free(terminal);
+	ghostty_tracked_grid_ref_free(anchor);
+	freeHandles(terminal, state, iterator, cells);
 	return Result.err(VtError.CreateFailed);
 }
 
@@ -1390,10 +1400,7 @@ export function free(this vt: Vt): void {
 	const event = vt.mouse.event;
 	if (encoder !== null) { ghostty_mouse_encoder_free(encoder); }
 	if (event !== null) { ghostty_mouse_event_free(event); }
-	ghostty_render_state_row_cells_free(vt.cells);
-	ghostty_render_state_row_iterator_free(vt.iterator);
-	ghostty_render_state_free(vt.state);
-	ghostty_terminal_free(vt.terminal);
+	freeHandles(vt.terminal, vt.state, vt.iterator, vt.cells);
 }
 
 export enum KeysError {

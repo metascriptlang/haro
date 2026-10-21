@@ -900,17 +900,16 @@ export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	}
 	let under: GhosttyGridRef;
 	let cell: GhosttyCell = 0;
-	let wide = GhosttyCellWide.GHOSTTY_CELL_WIDE_NARROW;
 	const viewport = GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT;
 	if (!ok(vtGridRef(vt.terminal, viewport, x as int32, y as int32, under))
-		|| !ok(gridRefCell(under, cell))
-		|| !ok(cellWide(cell, GhosttyCellData.GHOSTTY_CELL_DATA_WIDE, wide))) {
+		|| !ok(gridRefCell(under, cell))) {
 		return Result.err(VtError.ReadFailed);
 	}
+	const width = try widthOf(cell);
 	const at: Cursor | null = {
 		x: x as int32,
 		y: y as int32,
-		wide: wide == GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE,
+		wide: width == CellWidth.Wide,
 	};
 	return Result.ok(at);
 }
@@ -1201,6 +1200,18 @@ function underlineColorOf(
 	};
 }
 
+function widthOf(raw: GhosttyCell): Result<CellWidth, VtError> {
+	let wide = GhosttyCellWide.GHOSTTY_CELL_WIDE_NARROW;
+	if (!ok(cellWide(raw, GhosttyCellData.GHOSTTY_CELL_DATA_WIDE, wide))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	return Result.ok(match (wide) {
+		GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE => CellWidth.Wide,
+		GhosttyCellWide.GHOSTTY_CELL_WIDE_SPACER_TAIL => CellWidth.Tail,
+		_ => CellWidth.Narrow,
+	});
+}
+
 function readCell(
 	state: GhosttyRenderState,
 	cells: GhosttyRenderStateRowCells,
@@ -1245,11 +1256,8 @@ function readCell(
 	let raw: GhosttyCell = 0;
 	const rawKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW;
 	if (!ok(cellRaw(cells, rawKey, raw))) { return Result.err(VtError.ReadFailed); }
-	let wide = GhosttyCellWide.GHOSTTY_CELL_WIDE_NARROW;
-	if (!ok(cellWide(raw, GhosttyCellData.GHOSTTY_CELL_DATA_WIDE, wide))) {
-		return Result.err(VtError.ReadFailed);
-	}
-	if (wide == GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE) { flags = flags.incl(CellFlag.Wide); }
+	const width = try widthOf(raw);
+	if (width == CellWidth.Wide) { flags = flags.incl(CellFlag.Wide); }
 	return Result.ok({
 		cp: base,
 		extra: (count - 1) as uint16,
@@ -1749,15 +1757,8 @@ export function selection(this vt: Vt): Result<Marked | null, VtError> {
 export function cellWidthAt(this vt: Vt, at: Point): Result<CellWidth, VtError> {
 	let ref = try screenRef(vt.terminal, at);
 	let cell: GhosttyCell = 0;
-	let wide = GhosttyCellWide.GHOSTTY_CELL_WIDE_NARROW;
-	if (!ok(gridRefCell(ref, cell)) || !ok(cellWide(cell, GhosttyCellData.GHOSTTY_CELL_DATA_WIDE, wide))) {
-		return Result.err(VtError.ReadFailed);
-	}
-	return Result.ok(match (wide) {
-		GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE => CellWidth.Wide,
-		GhosttyCellWide.GHOSTTY_CELL_WIDE_SPACER_TAIL => CellWidth.Tail,
-		_ => CellWidth.Narrow,
-	});
+	if (!ok(gridRefCell(ref, cell))) { return Result.err(VtError.ReadFailed); }
+	return widthOf(cell);
 }
 
 function wordAt(this vt: Vt, at: Point): Result<Range | null, VtError> {

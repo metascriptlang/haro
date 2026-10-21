@@ -27,12 +27,13 @@ export interface Stats {
 	keyAt: float64;
 	wakeAt: float64;
 	marks: Vec<Mark>;
+	recording: boolean;
 }
 
 export struct Mark { name: string; at: float64; }
 
 export function empty(this typeof Stats): Stats {
-	return { tally: Tally.zero(), keyAt: -1, wakeAt: -1, marks: [] };
+	return { tally: Tally.zero(), keyAt: -1, wakeAt: -1, marks: [], recording: false };
 }
 
 export const stats: Stats = Stats.empty();
@@ -60,7 +61,7 @@ export function launchLine(this s: Stats): string {
 }
 
 export function noteKey(this s: Stats, at: float64): void {
-	if (s.keyAt < 0) { s.keyAt = at; }
+	if (s.recording && s.keyAt < 0) { s.keyAt = at; }
 }
 
 export function noteWake(this s: Stats, at: float64): void {
@@ -112,6 +113,7 @@ export function reset(this s: Stats): void {
 
 test "a key's echo runs to the first apply with rows, its settle from the last wake before it" {
 	const s = Stats.empty();
+	s.recording = true;
 	s.noteWake(9);
 	s.noteKey(10);
 	s.noteKey(12);
@@ -135,4 +137,12 @@ test "each launch mark keeps its first time, and the launch ends at the first pa
 	s.mark("painted", 40);
 	assert s.launched();
 	assert s.launchLine() == "config=5 spawn=9 painted=40";
+}
+
+test "without stats logging a key leaves no echo or settle sample behind" {
+	const s = Stats.empty();
+	s.noteKey(10);
+	s.noteWake(14);
+	s.noteApplied(2, 0, 160, 15.5);
+	assert s.line() == "refreshes=0 more=0 held=0 rows=2 scrolled=0 chars=160 echo n=0 settle n=0";
 }

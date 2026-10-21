@@ -58,5 +58,6 @@ function logSince(
 }
 
 export function logStatsEverySecond(pace: Pace): void {
+	stats.recording = true;
 	logSince(pace, 0, 0, 0, 0);
 }

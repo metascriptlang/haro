@@ -47,9 +47,7 @@ export function feed(this s: Screen, bytes: string): Result<void, ScreenError> {
 	return s.paint();
 }
 
-export function feedBytes(this s: Screen, values: int32[]): Result<void, ScreenError> {
-	let bytes: Vec<uint8> = new Array(values.length);
-	for (let i = 0; i < values.length; i++) { bytes[i] = values[i] as uint8; }
+export function feedBytes(this s: Screen, bytes: uint8[]): Result<void, ScreenError> {
 	s.vt.write(bytes);
 	return s.paint();
 }
@@ -61,11 +59,9 @@ export function feedsInStep(this s: Screen, bytes: string): boolean {
 export function feedChunks(this s: Screen, text: string, chunk: int32): Result<void, ScreenError> {
 	const view = text.asBytes();
 	const total = view.length as int32;
-	let bytes: Vec<uint8> = new Array(total);
-	for (let i = 0; i < total; i++) { bytes[i] = view[i]; }
 	const size = chunk > 0 ? chunk : total;
 	for (let at = 0; at < total; at += size) {
-		s.vt.write(bytes[at..at + Math.min(size, total - at)]);
+		s.vt.write(view[at..at + Math.min(size, total - at)]);
 		const _painted = try s.paint();
 	}
 	return Result.ok(null);

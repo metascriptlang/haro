@@ -461,8 +461,7 @@ export interface Effects {
 	state: GhosttyRenderState;
 	replies: Vec<uint8>;
 	events: VtEvents;
-	held: boolean;
-	heldAtMs: float64;
+	heldSinceMs: float64 | null;
 	holdLimitMs: float64;
 	clipboard: string | null;
 	readFrame: Vec<uint8> | null;
@@ -477,8 +476,7 @@ function openEffects(
 		state: state,
 		replies: [],
 		events: NO_EVENTS,
-		held: false,
-		heldAtMs: 0,
+		heldSinceMs: null,
 		holdLimitMs: HOLD_LIMIT_MS,
 		clipboard: null,
 		readFrame: null,
@@ -535,10 +533,12 @@ function pwdChanged(terminal: GhosttyTerminal, effects: Ptr<void>): void {
 @exportName("haroVtRenderHold")
 function renderHold(terminal: GhosttyTerminal, effects: Ptr<void>, held: boolean): void {
 	const e = effectsAt(effects);
-	e.held = held;
-	if (!held) { return; }
+	if (!held) {
+		e.heldSinceMs = null;
+		return;
+	}
 	const _captured = ghostty_render_state_update(e.state, terminal);
-	e.heldAtMs = performance.now();
+	e.heldSinceMs = performance.now();
 }
 
 @exportName("haroVtClipboardWritten")
@@ -846,11 +846,12 @@ export function answerClipboard(this vt: Vt, text: string, allow: boolean): Resu
 // releases would freeze the screen (terminal.h, "Timeouts").
 export function holding(this vt: Vt): boolean {
 	const e = vt.effects;
-	if (!e.held) { return false; }
-	if (performance.now() - e.heldAtMs < e.holdLimitMs) { return true; }
+	const since = e.heldSinceMs;
+	if (since === null) { return false; }
+	if (performance.now() - since < e.holdLimitMs) { return true; }
 	let mode: GhosttyTerminalModeConfig = { mode: MODE_SYNC_OUTPUT, value: false };
 	const _released = setMode(vt.terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode);
-	e.held = false;
+	e.heldSinceMs = null;
 	return false;
 }
 

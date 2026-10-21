@@ -3,7 +3,7 @@
 #include "shim.h"
 
 /* msc cannot import GhosttyPoint or the scroll viewport union, which hold a fixed array:
-   .inbox/compiler/2026-10-15-cimport-fixed-array-field-emits-unresolved-sizedarray.md */
+   .inbox/compiler/2026-10-15-c-import-fixed-array-member-sizedarray.md */
 
 static GhosttyPoint pointAt(GhosttyPointTag tag, int x, int y) {
 	GhosttyPoint p;
@@ -35,14 +35,4 @@ int vtTopTrack(GhosttyTerminal terminal, GhosttyTrackedGridRef* out) {
 
 int vtTopAnchor(GhosttyTrackedGridRef ref, GhosttyTerminal terminal) {
 	return (int)ghostty_tracked_grid_ref_set(ref, terminal, pointAt(GHOSTTY_POINT_TAG_VIEWPORT, 0, 0));
-}
-
-/* msc cannot copy out of GhosttyString.ptr yet:
-   .inbox/compiler/2026-10-19-element-of-an-imported-const-pointer-field-into-an-array-slot-dies-in-codegen.md */
-int64_t vtString(GhosttyTerminal terminal, GhosttyTerminalData key, uint8_t* buf, int64_t cap) {
-	GhosttyString s;
-	memset(&s, 0, sizeof s);
-	if (ghostty_terminal_get(terminal, key, &s) != GHOSTTY_SUCCESS) return -1;
-	if ((int64_t)s.len <= cap) memcpy(buf, s.ptr, s.len);
-	return (int64_t)s.len;
 }

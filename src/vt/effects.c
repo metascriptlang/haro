@@ -5,7 +5,7 @@
 
 #ifdef __EMSCRIPTEN__
 /* msc cannot build the vtable's function pointers:
-   .inbox/compiler/2026-10-19-a-function-passed-to-a-c-function-pointer-fails-at-clang.md */
+   .inbox/compiler/2026-10-16-function-into-c-function-pointer-emits-msclosure.md */
 static const uint8_t maxLog2Align = 4;
 
 static void* heapAlloc(void* ctx, size_t len, uint8_t log2Align, uintptr_t ra) {
@@ -54,6 +54,7 @@ void haroVtRenderHold(GhosttyTerminal terminal, void* effects, bool held);
 void haroVtClipboardWritten(void* effects, uint8_t* text, uint64_t n);
 int64_t haroVtRepliesLength(void* effects);
 void haroVtClipboardRead(void* effects, int64_t mark);
+GhosttyString haroVtXtversion(GhosttyTerminal terminal, void* effects);
 
 /* msc has no integer as wide as size_t on every target (32 bits on wasm32) for a callback's
    parameter. */
@@ -63,7 +64,7 @@ static void writePty(GhosttyTerminal terminal, void* userdata, const uint8_t* by
 }
 
 /* msc cannot fill the fixed features array:
-   .inbox/compiler/2026-10-15-cimport-fixed-array-field-emits-unresolved-sizedarray.md */
+   .inbox/compiler/2026-10-15-c-import-fixed-array-member-sizedarray.md */
 static bool onDeviceAttributes(GhosttyTerminal terminal, void* userdata, GhosttyDeviceAttributes* out) {
 	(void)terminal; (void)userdata;
 	memset(out, 0, sizeof *out);
@@ -76,16 +77,8 @@ static bool onDeviceAttributes(GhosttyTerminal terminal, void* userdata, Ghostty
 	return true;
 }
 
-/* msc cannot return a GhosttyString, whose ptr imports as Borrow<uint8>:
-   .inbox/compiler/2026-10-19-element-of-an-imported-const-pointer-field-into-an-array-slot-dies-in-codegen.md */
-static GhosttyString onXtversion(GhosttyTerminal terminal, void* userdata) {
-	(void)terminal; (void)userdata;
-	GhosttyString name = { (const uint8_t*)"haro", 4 };
-	return name;
-}
-
 /* msc cannot call the reply function pointer:
-   .inbox/compiler/2026-10-19-a-function-passed-to-a-c-function-pointer-fails-at-clang.md */
+   .inbox/compiler/2026-10-16-function-into-c-function-pointer-emits-msclosure.md */
 static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const GhosttyClipboardWrite* write) {
 	(void)terminal;
 	GhosttyClipboardWriteReply reply = { sizeof reply, GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED, false };
@@ -121,7 +114,7 @@ int vtEffectsWire(GhosttyTerminal terminal, void* effects) {
 		{ GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*)haroVtPwdChanged },
 		{ GHOSTTY_TERMINAL_OPT_RENDER_HOLD, (const void*)haroVtRenderHold },
 		{ GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, (const void*)onDeviceAttributes },
-		{ GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*)onXtversion },
+		{ GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*)haroVtXtversion },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*)onClipboardWrite },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ, (const void*)onClipboardRead },
 	};

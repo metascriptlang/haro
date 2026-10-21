@@ -54,6 +54,7 @@ import {
 	GhosttyFocusEvent,
 	GhosttyTerminalScreen,
 	GhosttyTerminalScrollbar,
+	GhosttyString,
 	GhosttyTrackedGridRef,
 	GhosttyGridRef,
 	GhosttySelection,
@@ -124,11 +125,11 @@ extern function mouseEncode(
 	buf: Span<uint8>,
 	out written: uint64,
 ): GhosttyResult from "ghostty_mouse_encoder_encode";
-extern function vtString(
+extern function terminalText(
 	terminal: GhosttyTerminal,
 	key: GhosttyTerminalData,
-	buf: Span<uint8>,
-): int64;
+	out text: GhosttyString,
+): GhosttyResult from "ghostty_terminal_get";
 extern function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): int32;
 extern function vtTopAnchor(ref: GhosttyTrackedGridRef, terminal: GhosttyTerminal): int32;
 extern function terminalScrollbar(
@@ -539,6 +540,15 @@ function clipboardWritten(effects: Ptr<void>, text: Ptr<uint8>, n: uint64): void
 	effectsAt(effects).clipboard = bytes[0..bytes.length].asString();
 }
 
+const XTVERSION_NAME: cstring = "haro";
+const XTVERSION_NAME_BYTES = 4;
+
+@exportName("haroVtXtversion")
+function xtversion(terminal: GhosttyTerminal, effects: Ptr<void>): GhosttyString {
+	const name: GhosttyString = { ptr: XTVERSION_NAME as Borrow<uint8>, len: XTVERSION_NAME_BYTES };
+	return name;
+}
+
 @exportName("haroVtRepliesLength")
 function repliesLength(effects: Ptr<void>): int64 {
 	return effectsAt(effects).replies.length;
@@ -739,14 +749,11 @@ function terminalString(
 	terminal: GhosttyTerminal,
 	key: GhosttyTerminalData,
 ): Result<string, VtError> {
-	let buf: Vec<uint8> = new Array(256);
-	let n = vtString(terminal, key, buf);
-	if (n > (buf.length as int64)) {
-		buf = new Array(n as int32);
-		n = vtString(terminal, key, buf);
-	}
-	if (n < 0) { return Result.err(VtError.ReadFailed); }
-	return Result.ok(buf[0..(n as int32)].asString());
+	let text: GhosttyString;
+	if (!ok(terminalText(terminal, key, text))) { return Result.err(VtError.ReadFailed); }
+	let bytes: Vec<uint8> = [];
+	for (let i = 0; i < (text.len as int32); i++) { bytes.push(text.ptr[i]); }
+	return Result.ok(bytes[0..bytes.length].asString());
 }
 
 export function title(this vt: Vt): Result<string, VtError> {

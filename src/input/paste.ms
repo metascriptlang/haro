@@ -124,12 +124,22 @@ function body(warning: Warning): string {
 	};
 }
 
-function previewOf(text: string, cols: int32, maxCode: int32): Vec<Line> {
-	const all = text.split("\n");
-	const total = all.length as int32;
+function lineCount(text: string): int32 {
+	let total: int32 = 1;
+	for (let at = text.indexOf("\n"); at >= 0; at = text.indexOf("\n", at + 1)) { total += 1; }
+	return total;
+}
+
+function previewOf(text: string, total: int32, cols: int32, maxCode: int32): Vec<Line> {
 	let code: Vec<Line> = [];
 	const shown = Math.min(total, maxCode);
-	for (let i = 0; i < shown; i++) { code.push({ text: visible(all[i], cols), tone: Tone.Code }); }
+	let from = 0;
+	for (let i = 0; i < shown; i++) {
+		const at = text.indexOf("\n", from);
+		const end = at < 0 ? text.length : at;
+		code.push({ text: visible(text.slice(from, end), cols), tone: Tone.Code });
+		from = end + 1;
+	}
 	const more = total - shown;
 	if (more > 0) {
 		const rest = more == 1 ? "… 1 more line" : `… ${more} more lines`;
@@ -138,8 +148,7 @@ function previewOf(text: string, cols: int32, maxCode: int32): Vec<Line> {
 	return code;
 }
 
-function measure(text: string): string {
-	const total = text.split("\n").length as int32;
+function measure(text: string, total: int32): string {
 	const count = total == 1 ? "1 line" : `${total} lines`;
 	return `${count}, ${sizeOf(text.length as int32)}`;
 }
@@ -153,8 +162,9 @@ function dialogWith(
 ): Dialog {
 	let top: Vec<Line> = [{ text: heading, tone: Tone.Title }];
 	for (const row of wrap(message, cols)) { top.push({ text: row, tone: Tone.Body }); }
-	top.push({ text: measure(text), tone: Tone.Dim });
-	return { top: top, code: previewOf(text, cols, maxCode) };
+	const total = lineCount(text);
+	top.push({ text: measure(text, total), tone: Tone.Dim });
+	return { top: top, code: previewOf(text, total, cols, maxCode) };
 }
 
 export function dialogOf(warning: Warning, text: string, cols: int32, maxCode: int32): Dialog {
@@ -249,6 +259,14 @@ test "a preview that fits shows no more-lines row and a large text says its size
 	const many = dialogOf(Warning.MultiLine, "a\nb\nc\nd\ne\nf\ng\nh\ni\nj", 30, 8);
 	assert many.code.length == 9;
 	assert many.code[8].text == "… 2 more lines";
+}
+
+test "a trailing line break previews and counts a last empty line" {
+	const d = dialogOf(Warning.MultiLine, "a\nb\n", 40, 8);
+	assert d.top[d.top.length - 1] == line("3 lines, 4 characters", Tone.Dim);
+	assert d.code.length == 3;
+	assert d.code[1] == line("b", Tone.Code);
+	assert d.code[2] == line("", Tone.Code);
 }
 
 test "a clipboard read is denied by escape or enter and allowed only by ctrl enter" {

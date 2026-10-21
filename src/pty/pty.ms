@@ -62,9 +62,9 @@ export function write(this p: NativePty, data: Readonly<Span<uint8>>): Result<in
 	return transferred(ptyWrite(p.id, data));
 }
 
-export function resize(this p: NativePty, cols: int32, rows: int32): Result<NativePty, PtyError> {
+export function resize(this p: NativePty, cols: int32, rows: int32): Result<void, PtyError> {
 	if (ptyResize(p.id, cols, rows) != 0) { return Result.err(PtyError.ResizeFailed); }
-	return Result.ok(p);
+	return Result.ok(null);
 }
 
 export function exitCode(this p: NativePty): int32 | null {
@@ -82,8 +82,7 @@ export function toPty(this p: NativePty): Pty {
 		read: (buf: Span<uint8>): Result<int32, PtyError> => { return p.read(buf); },
 		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => { return p.write(data); },
 		resize: (cols: int32, rows: int32): Result<void, PtyError> => {
-			const _resized = try p.resize(cols, rows);
-			return Result.ok(null);
+			return p.resize(cols, rows);
 		},
 		exitCode: (): int32 | null => { return p.exitCode(); },
 		close: (): void => { p.close(); },
@@ -174,13 +173,11 @@ when (testBuild) {
 		}
 	}
 
-	test "a resize of a live console succeeds and hands the pty back" {
+	test "a resize of a live console succeeds" {
 		const opened = NativePty.open(QUIET_FOR_3S, 80, 24);
 		assert opened.ok;
 		if (opened.ok) {
-			const resized = opened.value.resize(120, 40);
-			assert resized.ok;
-			if (resized.ok) { assert resized.value.id == opened.value.id; }
+			assert opened.value.resize(120, 40).ok;
 			opened.value.close();
 		}
 	}

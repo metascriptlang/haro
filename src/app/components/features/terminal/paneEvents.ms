@@ -1,7 +1,7 @@
 import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { PixelRatio } from "../../../../../../neon/src/api/pixelRatio";
 import { Spot, spotAt } from "../../../../input/pointer";
-import { KeyMod } from "../../../../keys/keys";
+import { modsOf } from "../../../../keys/keys";
 import { noteKey, stats } from "../../../stats";
 import { focusCursor } from "../../content/cursor";
 import { Hit, holding, typed } from "./controls";
@@ -96,7 +96,7 @@ function hit(this m: PaneModel, e: NeonEvent): Hit {
 		x: m.gridX(e),
 		y: m.gridY(e),
 		scale: PixelRatio.get(),
-		mods: (e.mods as uint16) as BitSet<KeyMod>,
+		mods: modsOf(e.mods),
 		cell: m.mouseGeometry,
 	};
 }

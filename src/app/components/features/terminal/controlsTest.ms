@@ -1,5 +1,5 @@
 import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
-import { KeyMod } from "../../../../keys/keys";
+import { modsOf } from "../../../../keys/keys";
 import { Spot } from "../../../../input/pointer";
 import { atBottom, scrollOffset } from "../../../../vt/vt";
 import { Term, TermError, shutdown } from "./term";
@@ -78,7 +78,7 @@ export function hitWith(col: int32, row: int32, mods: int32): Hit {
 		x: col as float64 * 8,
 		y: row as float64 * 16,
 		scale: 1,
-		mods: (mods as uint16) as BitSet<KeyMod>,
+		mods: modsOf(mods),
 		cell: {
 			cellWidth: 8,
 			cellHeight: 16,

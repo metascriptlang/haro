@@ -5,6 +5,7 @@ import {
 	KeyEvent,
 	KeyMod,
 	heldAfter,
+	modsOf,
 	releasesOf,
 	withNumLockApplied,
 	withoutAltGr,
@@ -227,8 +228,8 @@ export function keyEventOf(e: NeonEvent): KeyEvent {
 	const key: KeyEvent = {
 		action: e.type == "keyup" ? KeyAction.Release : e.repeat ? KeyAction.Repeat : KeyAction.Press,
 		key: e.code,
-		mods: (e.mods as uint16) as BitSet<KeyMod>,
-		consumedMods: (e.consumedMods as uint16) as BitSet<KeyMod>,
+		mods: modsOf(e.mods),
+		consumedMods: modsOf(e.consumedMods),
 		unshifted: e.unshifted as uint32,
 		text: e.text,
 	};

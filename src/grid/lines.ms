@@ -101,10 +101,10 @@ export function line(
 	while (end > 0 && row.cells[end - 1].isEmpty(background)) { end--; }
 	for (let i = 0; i < end; i++) {
 		const cell = row.cells[i];
-		if (row.isWideSpacer(i)) {
-			extraAt += cell.extra as int32;
-			continue;
-		}
+		const extra = cell.extra as int32;
+		const extraStart = extraAt;
+		extraAt += extra;
+		if (row.isWideSpacer(i)) { continue; }
 		const run = cell.lineRun();
 		const split = row.breaksShapingBefore(i, cursorCell);
 		if (cell.cp == 0) {
@@ -117,17 +117,14 @@ export function line(
 			text += blank;
 			const hidden: LineRun = { ...run, underline: Underline.None, strikethrough: false };
 			pushUnits(runs, hidden, blank.length as int32, split);
-			extraAt += cell.extra as int32;
 			continue;
 		}
-		const extra = cell.extra as int32;
 		for (let k = 0; k <= extra; k++) {
-			const cp = k == 0 ? cell.cp : row.extra[extraAt + k - 1];
+			const cp = k == 0 ? cell.cp : row.extra[extraStart + k - 1];
 			if (!isUnicodeScalar(cp)) { return Result.err(GridError.CodepointInvalid); }
 			text += fromCodePoint(cp as number);
 			pushUnits(runs, run, cp > 0xFFFF ? 2 : 1, split && k == 0);
 		}
-		extraAt += extra;
 	}
 	return Result.ok({ text: text, runs: runs, cursorCell: cursorCell });
 }

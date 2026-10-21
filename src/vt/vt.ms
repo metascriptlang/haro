@@ -374,6 +374,7 @@ export enum VtError {
 	UpdateFailed,
 	ResizeFailed,
 	ReadFailed,
+	WriteFailed,
 	GraphemeTooLong,
 	CodepointInvalid,
 	SelectFailed,
@@ -614,7 +615,7 @@ function applyColors(terminal: GhosttyTerminal, fg: Rgb, bg: Rgb): Result<void, 
 	const fgOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND;
 	const bgOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND;
 	if (!ok(setColor(terminal, fgOption, f)) || !ok(setColor(terminal, bgOption, b))) {
-		return Result.err(VtError.ReadFailed);
+		return Result.err(VtError.WriteFailed);
 	}
 	return Result.ok(null);
 }
@@ -626,7 +627,7 @@ function applyBlinkDefault(terminal: GhosttyTerminal, on: boolean): Result<void,
 	const blinkOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK;
 	if (!ok(setMode(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode))
 		|| !ok(setFlag(terminal, blinkOption, blink))) {
-		return Result.err(VtError.ReadFailed);
+		return Result.err(VtError.WriteFailed);
 	}
 	return Result.ok(null);
 }
@@ -637,7 +638,7 @@ function applyScrollback(terminal: GhosttyTerminal, lines: int64): Result<void, 
 	const bytesOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES;
 	const linesOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES;
 	if (!ok(setSize(terminal, bytesOption, bytes)) || !ok(setSize(terminal, linesOption, kept))) {
-		return Result.err(VtError.ReadFailed);
+		return Result.err(VtError.WriteFailed);
 	}
 	return Result.ok(null);
 }
@@ -798,7 +799,7 @@ export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<Vt,
 	for (let i = 0; i < colors.length; i++) {
 		palette.c[i] = ghosttyColor(colors[i]);
 	}
-	if (!ok(setColors(vt.terminal, option, palette))) { return Result.err(VtError.ReadFailed); }
+	if (!ok(setColors(vt.terminal, option, palette))) { return Result.err(VtError.WriteFailed); }
 	vt.painted.rows = [];
 	return Result.ok(vt);
 }
@@ -812,7 +813,7 @@ export function setPullScrollback(this vt: Vt, pull: boolean): Result<Vt, VtErro
 	let on = pull;
 	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_RESIZE_PULL_SCROLLBACK;
 	if (!ok(setFlag(vt.terminal, option, on))) {
-		return Result.err(VtError.ReadFailed);
+		return Result.err(VtError.WriteFailed);
 	}
 	return Result.ok(vt);
 }

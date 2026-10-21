@@ -2203,13 +2203,8 @@ function lookAfter(input: string): CursorLook | null {
 }
 
 test "a fresh cursor is a visible blinking block" {
-	const look = lookAfter("");
-	assert look !== null;
-	if (look !== null) {
-		assert look.visible;
-		assert look.shape == CursorShape.Block;
-		assert look.blinking;
-	}
+	const blinkingBlock: CursorLook = { visible: true, shape: CursorShape.Block, blinking: true };
+	assert lookAfter("") == blinkingBlock;
 }
 
 test "DECTCEM hides and shows the cursor" {
@@ -2222,24 +2217,16 @@ test "DECTCEM hides and shows the cursor" {
 }
 
 test "DECSCUSR picks the cursor's shape and blink" {
-	const bar = lookAfter("\x1b[5 q");
-	assert bar !== null;
-	if (bar !== null) {
-		assert bar.shape == CursorShape.Bar;
-		assert bar.blinking;
-	}
-	const underline = lookAfter("\x1b[4 q");
-	assert underline !== null;
-	if (underline !== null) {
-		assert underline.shape == CursorShape.Underline;
-		assert !underline.blinking;
-	}
-	const block = lookAfter("\x1b[6 q\x1b[2 q");
-	assert block !== null;
-	if (block !== null) {
-		assert block.shape == CursorShape.Block;
-		assert !block.blinking;
-	}
+	const blinkingBar: CursorLook = { visible: true, shape: CursorShape.Bar, blinking: true };
+	const steadyUnderline: CursorLook = {
+		visible: true,
+		shape: CursorShape.Underline,
+		blinking: false,
+	};
+	const steadyBlock: CursorLook = { visible: true, shape: CursorShape.Block, blinking: false };
+	assert lookAfter("\x1b[5 q") == blinkingBar;
+	assert lookAfter("\x1b[4 q") == steadyUnderline;
+	assert lookAfter("\x1b[6 q\x1b[2 q") == steadyBlock;
 }
 
 function replyTo(query: string): string {
@@ -2287,24 +2274,24 @@ test "a theme the host sets is what a colour query reports" {
 	}
 }
 
-function cursorColorAfter(text: string): string {
-	const created = Vt.create(20, 4);
-	if (!created.ok) { return "create failed"; }
-	const vt = created.value;
+function cursorColorAfter(text: string): Result<Rgb | null, VtError> {
+	const vt = try Vt.create(20, 4);
 	vt.writeText(text);
 	const updated = vt.update();
 	const colors = vt.palette();
 	vt.free();
-	if (!updated.ok || !colors.ok) { return "read failed"; }
-	const cursor = colors.value.cursor;
-	if (cursor === null) { return "none"; }
-	return `${cursor.r},${cursor.g},${cursor.b}`;
+	if (!updated.ok || !colors.ok) { return Result.err(VtError.ReadFailed); }
+	return Result.ok(colors.value.cursor);
 }
 
 test "a program sets the cursor colour with OSC 12 and resets it with OSC 112" {
-	assert cursorColorAfter("") == "none";
-	assert cursorColorAfter("\x1b]12;#ff0000\x07") == "255,0,0";
-	assert cursorColorAfter("\x1b]12;#ff0000\x07\x1b]112\x07") == "none";
+	const red: Rgb = { r: 255, g: 0, b: 0 };
+	const fresh = cursorColorAfter("");
+	assert fresh.ok && fresh.value === null;
+	const set = cursorColorAfter("\x1b]12;#ff0000\x07");
+	assert set.ok && set.value == red;
+	const reset = cursorColorAfter("\x1b]12;#ff0000\x07\x1b]112\x07");
+	assert reset.ok && reset.value === null;
 }
 
 function rowsAfterGrowing(pull: boolean): string {
@@ -2533,13 +2520,8 @@ test "an underline carries the SGR 58 colour, resolved from the palette when it 
 		assert rows.ok;
 		if (rows.ok) {
 			const cells = rows.value[0].cells;
-			const rgb = cells[0].underlineColor;
-			assert rgb !== null;
-			if (rgb !== null) {
-				assert rgb.r == 255;
-				assert rgb.g == 80;
-				assert rgb.b == 80;
-			}
+			const salmon: Rgb = { r: 255, g: 80, b: 80 };
+			assert cells[0].underlineColor == salmon;
 			const indexed = cells[1].underlineColor;
 			assert indexed !== null;
 			if (indexed !== null) {
@@ -2830,25 +2812,26 @@ test "a committed grapheme arrives as its utf-8 bytes" {
 	}
 }
 
-function cursorAfter(text: string): string {
+function cursorAfter(text: string): Cursor | null {
 	const created = Vt.create(20, 4);
-	if (!created.ok) { return "create failed"; }
+	if (!created.ok) { return null; }
 	const vt = created.value;
 	vt.writeText(text);
 	const updated = vt.update();
 	const at = vt.cursor();
 	vt.free();
-	if (!updated.ok || !at.ok) { return "read failed"; }
-	const c = at.value;
-	if (c === null) { return "none"; }
-	return `${c.x}${c.wide ? " wide" : ""}`;
+	if (!updated.ok || !at.ok) { return null; }
+	return at.value;
 }
 
 test "a cursor on a wide character covers both its cells, from the character or its tail" {
-	assert cursorAfter("\u4e2d\x1b[1G") == "0 wide";
-	assert cursorAfter("\u4e2d\x1b[2G") == "0 wide";
-	assert cursorAfter("\u4e2d") == "2";
-	assert cursorAfter("ab\x1b[2G") == "1";
+	const wideAtZero: Cursor = { x: 0, y: 0, wide: true };
+	const afterWide: Cursor = { x: 2, y: 0, wide: false };
+	const second: Cursor = { x: 1, y: 0, wide: false };
+	assert cursorAfter("\u4e2d\x1b[1G") == wideAtZero;
+	assert cursorAfter("\u4e2d\x1b[2G") == wideAtZero;
+	assert cursorAfter("\u4e2d") == afterWide;
+	assert cursorAfter("ab\x1b[2G") == second;
 }
 
 test "the cursor reports where the next write lands" {
@@ -2858,28 +2841,16 @@ test "the cursor reports where the next write lands" {
 		const vt = created.value;
 		vt.writeText("ab");
 		assert vt.update().ok;
+		const pastText: Cursor = { x: 2, y: 0, wide: false };
+		const nextLine: Cursor = { x: 0, y: 1, wide: false };
 		const afterText = vt.cursor();
 		assert afterText.ok;
-		if (afterText.ok) {
-			const at = afterText.value;
-			assert at !== null;
-			if (at !== null) {
-				assert at.x == 2;
-				assert at.y == 0;
-			}
-		}
+		if (afterText.ok) { assert afterText.value == pastText; }
 		vt.writeText("\r\n");
 		assert vt.update().ok;
 		const afterNewline = vt.cursor();
 		assert afterNewline.ok;
-		if (afterNewline.ok) {
-			const at = afterNewline.value;
-			assert at !== null;
-			if (at !== null) {
-				assert at.x == 0;
-				assert at.y == 1;
-			}
-		}
+		if (afterNewline.ok) { assert afterNewline.value == nextLine; }
 		vt.free();
 	}
 }

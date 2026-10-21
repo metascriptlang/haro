@@ -1,12 +1,12 @@
 import { selected } from "../../../../input/pointer";
 import { bounds } from "../../../../select/select";
 import { releaseHeldKey, sendKey, shutdown } from "./term";
-import { Sink, termOf } from "./termTest";
 import { Controls, Hit } from "./controls";
 import { keyDown } from "./keyboard";
 import { autoscrollTick, endDrag, pointerDown, pointerMove, pointerUp, roll, shades } from "./mouse";
 import { CLIPBOARD_MODS, CTRL, SHIFT } from "../../../../input/bindings";
 import {
+	Sink,
 	at,
 	boardOf,
 	clipOf,
@@ -17,7 +17,8 @@ import {
 	key,
 	lines,
 	offsetOf,
-} from "./controlsTest";
+	termOf,
+} from "./terminalRig";
 
 test "while a paste is held the wheel, the buttons and the pointer do nothing" {
 	const sink: Sink = { sent: "" };

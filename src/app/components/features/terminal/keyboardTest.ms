@@ -1,7 +1,6 @@
 import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { selected } from "../../../../input/pointer";
 import { releaseHeldKey, sendKey, shutdown } from "./term";
-import { Sink, termOf } from "./termTest";
 import { Controls } from "./controls";
 import { closeKey, keyDown, keyUp } from "./keyboard";
 import { Warning } from "../../../../input/paste";
@@ -17,6 +16,7 @@ import {
 	Screen,
 } from "../../../../input/bindings";
 import {
+	Sink,
 	at,
 	atBottomOf,
 	boardOf,
@@ -26,7 +26,8 @@ import {
 	key,
 	lines,
 	offsetOf,
-} from "./controlsTest";
+	termOf,
+} from "./terminalRig";
 
 test "ctrl shift page, arrow, home and end keys move the viewport and say they did" {
 	const sink: Sink = { sent: "" };

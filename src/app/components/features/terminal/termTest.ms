@@ -1,43 +1,7 @@
-import { Pty, PtyError } from "../../../../pty/transport";
-import { Replay } from "../../../../pty/replay";
 import { KeyMod } from "../../../../keys/keys";
 import { MouseAction, MouseGeometry, MouseInput } from "../../../../vt/vt";
-import { Term, openTerm } from "./term";
-
-export interface Sink {
-	sent: string;
-}
-
-export function recorder(text: string, sink: Sink): Pty {
-	const base = Replay.ofText(text).toPty();
-	return {
-		wait: base.wait,
-		read: base.read,
-		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => {
-			sink.sent += data.asString();
-			return Result.ok(data.length as int32);
-		},
-		resize: base.resize,
-		exitCode: base.exitCode,
-		close: base.close,
-	};
-}
-
-function fitted(text: string, cols: int32, rows: int32, sink: Sink): Term | null {
-	const opened = openTerm((c: int32, r: int32): Result<Pty, PtyError> => {
-		return Result.ok(recorder(text, sink));
-	});
-	if (!opened.ok) { return null; }
-	const t = opened.value;
-	if (!t.fit(cols, rows).ok) { return null; }
-	return t;
-}
-
-export function termOf(text: string, cols: int32, rows: int32, sink: Sink): Term | null {
-	const t = fitted(text, cols, rows, sink);
-	if (t === null || !t.pumpFrame().ok) { return null; }
-	return t;
-}
+import { Term } from "./term";
+import { Sink, fitted, termOf } from "./terminalRig";
 
 function termFresh(text: string, sink: Sink): Term | null {
 	return fitted(text, 20, 5, sink);

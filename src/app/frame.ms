@@ -27,7 +27,6 @@ export function empty(this typeof Styles): Styles {
 export enum FrameError {
 	PlanFailed,
 	CursorFailed,
-	PaletteFailed,
 	LineFailed,
 }
 

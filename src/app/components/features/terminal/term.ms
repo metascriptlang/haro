@@ -36,7 +36,6 @@ export enum TermError {
 	PumpFailed,
 	FramePlanFailed,
 	FrameCursorFailed,
-	FramePaletteFailed,
 	FrameLineFailed,
 	EncodeFailed,
 	WriteFailed,
@@ -148,7 +147,6 @@ function frameFailure(error: FrameError): TermError {
 	return match (error) {
 		FrameError.PlanFailed => TermError.FramePlanFailed,
 		FrameError.CursorFailed => TermError.FrameCursorFailed,
-		FrameError.PaletteFailed => TermError.FramePaletteFailed,
 		FrameError.LineFailed => TermError.FrameLineFailed,
 	};
 }
@@ -203,13 +201,10 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
 	const look = vt.cursorLook();
 	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
-	const colors = vt.palette();
-	if (!colors.ok) { return Result.err(TermError.FramePaletteFailed); }
-	const current: Palette | null = colors.value;
 	return Result.ok({
 		cursor: applied.value,
 		look: look.value,
-		colors: current,
+		colors: vt.painted.palette,
 		more: more,
 		ended: ended,
 		held: false,

@@ -1844,10 +1844,7 @@ export function pasteBytes(
 }
 
 test "written text lands on the rows the render state reports" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("hello\r\nworld");
 		const updated = vt.update();
 		assert updated.ok;
@@ -1864,15 +1861,11 @@ test "written text lands on the rows the render state reports" {
 			assert lines.value[0] == "hello";
 			assert lines.value[1] == "world";
 		}
-		vt.free();
-	}
+	});
 }
 
 test "raw bytes keep a multi-byte UTF-8 character whole" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 2, (vt: Vt): void => {
 		let bytes: Vec<uint8> = new Array(4);
 		bytes[0] = 0x61;
 		bytes[1] = 0xC3;
@@ -1884,8 +1877,15 @@ test "raw bytes keep a multi-byte UTF-8 character whole" {
 		const lines = vt.lines();
 		assert lines.ok;
 		if (lines.ok) { assert lines.value[0] == "aéb"; }
-		vt.free();
-	}
+	});
+}
+
+function withVt(cols: int32, rows: int32, body: (vt: Vt) => void): boolean {
+	const created = Vt.create(cols, rows);
+	if (!created.ok) { return false; }
+	body(created.value);
+	created.value.free();
+	return true;
 }
 
 function ascii(bytes: Span<uint8>): string {
@@ -1895,21 +1895,14 @@ function ascii(bytes: Span<uint8>): string {
 }
 
 test "a cursor position query is answered with the cursor's place" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("ab\x1b[6n");
 		assert pending(vt) == "\x1b[1;3R";
-		vt.free();
-	}
+	});
 }
 
 test "bells, a title and a pwd reach the host as events once each" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x07a\x07\x1b]2;build: ok\x07\x1b]7;file:///C:/Users/me\x07");
 		const first = vt.takeEvents();
 		assert first.bells == 2;
@@ -1925,27 +1918,19 @@ test "bells, a title and a pwd reach the host as events once each" {
 		assert second.bells == 0;
 		assert !second.titleChanged;
 		assert !second.pwdChanged;
-		vt.free();
-	}
+	});
 }
 
 test "an untitled terminal has an empty title" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		const title = vt.title();
 		assert title.ok;
 		if (title.ok) { assert title.value == ""; }
-		vt.free();
-	}
+	});
 }
 
 test "ConPTY's request for win32-input-mode is tracked like any other mode" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		const fresh = vt.modes();
 		assert fresh.ok && !fresh.value.win32Input;
 		vt.writeText("\x1b[?9001h\x1b[?1004h");
@@ -1954,15 +1939,11 @@ test "ConPTY's request for win32-input-mode is tracked like any other mode" {
 		vt.writeText("\x1b[?9001l");
 		const ended = vt.modes();
 		assert ended.ok && !ended.value.win32Input;
-		vt.free();
-	}
+	});
 }
 
 test "a program's input modes are readable, and a fresh terminal sets only alternate scroll" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		const fresh = vt.modes();
 		assert fresh.ok;
 		if (fresh.ok) {
@@ -1982,15 +1963,11 @@ test "a program's input modes are readable, and a fresh terminal sets only alter
 			assert set.value.mouseTracking;
 			assert !set.value.altScroll;
 		}
-		vt.free();
-	}
+	});
 }
 
 test "a focus change is reported only once the program asked for it" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		let buf: Vec<uint8> = new Array(16);
 		const before = vt.focusReport(true, buf);
 		assert before.ok;
@@ -2002,8 +1979,7 @@ test "a focus change is reported only once the program asked for it" {
 		const lost = vt.focusReport(false, buf);
 		assert lost.ok;
 		if (lost.ok) { assert ascii(buf[0..lost.value]) == "\x1b[O"; }
-		vt.free();
-	}
+	});
 }
 
 const GEOMETRY: MouseGeometry = {
@@ -2032,21 +2008,14 @@ function mouseBytes(
 }
 
 test "a mouse event is silent until the program turns mouse reporting on" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		const none = 0 as BitSet<KeyMod>;
 		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "";
-		vt.free();
-	}
+	});
 }
 
 test "SGR reporting names the cell, the button and the modifiers" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		const none = 0 as BitSet<KeyMod>;
 		vt.writeText("\x1b[?1000h\x1b[?1006h");
 		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "\x1b[<0;3;2M";
@@ -2055,8 +2024,7 @@ test "SGR reporting names the cell, the button and the modifiers" {
 		assert mouseBytes(vt, MouseAction.Press, 4, none, false) == "\x1b[<64;3;2M";
 		const shift = none.incl(KeyMod.Shift);
 		assert mouseBytes(vt, MouseAction.Press, 1, shift, true) == "\x1b[<4;3;2M";
-		vt.free();
-	}
+	});
 }
 
 function pressAt(vt: Vt, x: float32, y: float32): string {
@@ -2069,23 +2037,16 @@ function pressAt(vt: Vt, x: float32, y: float32): string {
 }
 
 test "a press in the padding reports the nearest cell, and the grid starts past the padding" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x1b[?1000h\x1b[?1006h");
 		assert pressAt(vt, 5, 5) == "\x1b[<0;1;1M";
 		assert pressAt(vt, 45, 55) == "\x1b[<0;2;2M";
 		assert pressAt(vt, 255, 135) == "\x1b[<0;20;4M";
-		vt.free();
-	}
+	});
 }
 
 test "motion is reported only under button or any-event tracking" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		const none = 0 as BitSet<KeyMod>;
 		vt.writeText("\x1b[?1000h\x1b[?1006h");
 		assert mouseBytes(vt, MouseAction.Motion, 1, none, true) == "";
@@ -2093,30 +2054,22 @@ test "motion is reported only under button or any-event tracking" {
 		assert mouseBytes(vt, MouseAction.Motion, 1, none, true) == "\x1b[<32;3;2M";
 		vt.writeText("\x1b[?1003h");
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
-		vt.free();
-	}
+	});
 }
 
 test "the same cell is not reported twice for motion, and SGR-pixels reports pixels" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		const none = 0 as BitSet<KeyMod>;
 		vt.writeText("\x1b[?1003h\x1b[?1006h");
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "";
 		vt.writeText("\x1b[?1016h");
 		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "\x1b[<0;25;25M";
-		vt.free();
-	}
+	});
 }
 
 test "setting a mouse mode that is already on still switches the report format and event" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		const none = 0 as BitSet<KeyMod>;
 		vt.writeText("\x1b[?1000h\x1b[?1006h");
 		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "\x1b[<0;3;2M";
@@ -2128,30 +2081,22 @@ test "setting a mouse mode that is already on still switches the report format a
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
 		vt.writeText("\x1b[?1000h");
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "";
-		vt.free();
-	}
+	});
 }
 
 test "same-cell motion is reported again once after any write, because the encoder rereads its modes" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		const none = 0 as BitSet<KeyMod>;
 		vt.writeText("\x1b[?1003h\x1b[?1006h");
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
 		vt.writeText("x");
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "";
-		vt.free();
-	}
+	});
 }
 
 test "a frame drawn under synchronized output shows only once the program ends the hold" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("one");
 		assert vt.update().ok;
 		vt.writeText("\x1b[?2026h\x1b[2J\x1b[Hhalf");
@@ -2166,15 +2111,11 @@ test "a frame drawn under synchronized output shows only once the program ends t
 		const shown = vt.lines();
 		assert shown.ok;
 		if (shown.ok) { assert shown.value[0] == "half drawn"; }
-		vt.free();
-	}
+	});
 }
 
 test "a hold the program never ends is dropped after its limit" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.holdLimit(0);
 		vt.writeText("\x1b[?2026hstuck");
 		assert vt.update().ok;
@@ -2185,8 +2126,7 @@ test "a hold the program never ends is dropped after its limit" {
 		vt.writeText("\x1b[?2026h");
 		vt.holdLimit(1000);
 		assert vt.holding();
-		vt.free();
-	}
+	});
 }
 
 function lookAfter(input: string): CursorLook | null {
@@ -2263,15 +2203,11 @@ test "colour queries answer with the host's defaults, a program's override and t
 }
 
 test "a theme the host sets is what a colour query reports" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		assert vt.setDefaultColors({ r: 0x28, g: 0x2c, b: 0x34 }, { r: 0xff, g: 0xff, b: 0xfe }).ok;
 		vt.writeText("\x1b]11;?\x1b\\");
 		assert pending(vt) == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\";
-		vt.free();
-	}
+	});
 }
 
 function cursorColorAfter(text: string): Result<Rgb | null, VtError> {
@@ -2334,10 +2270,7 @@ test "growing the grid reveals scrollback unless the pty keeps its own screen" {
 }
 
 test "an OSC 52 write reaches the host once, and only for the standard clipboard" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		assert vt.takeClipboard() === null;
 		vt.writeText("\x1b]52;p;cHJpbWFyeQ==\x07");
 		assert vt.takeClipboard() === null;
@@ -2346,8 +2279,7 @@ test "an OSC 52 write reaches the host once, and only for the standard clipboard
 		assert vt.takeClipboard() === null;
 		vt.writeText("\x1b]52;c;\x07");
 		assert vt.takeClipboard() == "";
-		vt.free();
-	}
+	});
 }
 
 function shown(r: Result<string | null, VtError>): string {
@@ -2358,18 +2290,14 @@ function shown(r: Result<string | null, VtError>): string {
 }
 
 test "an OSC 8 link answers for each of its cells and for no others" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x1b]8;;https://example.com/a?b=1\x1b\\link\x1b]8;;\x1b\\ plain");
 		assert shown(vt.linkAt(0, 0)) == "https://example.com/a?b=1";
 		assert shown(vt.linkAt(3, 0)) == "https://example.com/a?b=1";
 		assert shown(vt.linkAt(4, 0)) == "<none>";
 		assert shown(vt.linkAt(0, 1)) == "<none>";
 		assert shown(vt.linkAt(0, 40)) == "<failed>";
-		vt.free();
-	}
+	});
 }
 
 function topAfterJump(vt: Vt, toward: PromptJump): string {
@@ -2381,10 +2309,7 @@ function topAfterJump(vt: Vt, toward: PromptJump): string {
 }
 
 test "the viewport jumps between OSC 133 prompts" {
-	const created = Vt.create(10, 3);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 3, (vt: Vt): void => {
 		const prompt = "\x1b]133;A\x07";
 		vt.writeText(`${prompt}p1\r\nout1\r\nout2\r\n${prompt}p2\r\nout3\r\n${prompt}p3`);
 		vt.update();
@@ -2392,38 +2317,26 @@ test "the viewport jumps between OSC 133 prompts" {
 		assert topAfterJump(vt, PromptJump.Previous) == "p1";
 		assert topAfterJump(vt, PromptJump.Previous) == "<none>";
 		assert topAfterJump(vt, PromptJump.Next) == "p2";
-		vt.free();
-	}
+	});
 }
 
 test "a screen without prompt marks has nothing to jump to" {
-	const created = Vt.create(10, 3);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 3, (vt: Vt): void => {
 		vt.writeText("a\r\nb\r\nc\r\nd\r\ne");
 		assert topAfterJump(vt, PromptJump.Previous) == "<none>";
 		assert topAfterJump(vt, PromptJump.Next) == "<none>";
-		vt.free();
-	}
+	});
 }
 
 test "text without a query leaves nothing to reply" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("hello");
 		assert vt.takeReplies().length == 0;
-		vt.free();
-	}
+	});
 }
 
 test "a styled cell carries its colour, flags and underline" {
-	const created = Vt.create(20, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 2, (vt: Vt): void => {
 		vt.writeText("\x1b[1;4;38;2;255;0;0mA\x1b[0mb");
 		assert vt.update().ok;
 		const rows = vt.rows();
@@ -2442,15 +2355,11 @@ test "a styled cell carries its colour, flags and underline" {
 			assert b.flags.isEmpty();
 			assert b.underline == Underline.None;
 		}
-		vt.free();
-	}
+	});
 }
 
 test "an erased line keeps its background on cells without text" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 2, (vt: Vt): void => {
 		vt.writeText("\x1b[48;2;0;0;255m\x1b[K");
 		assert vt.update().ok;
 		const rows = vt.rows();
@@ -2461,15 +2370,11 @@ test "an erased line keeps its background on cells without text" {
 			assert cell.cp == 0;
 			assert cell.bg == blue;
 		}
-		vt.free();
-	}
+	});
 }
 
 test "a cluster of forty codepoints is one cell that keeps them all" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 2, (vt: Vt): void => {
 		let cluster = "a";
 		for (let i = 0; i < 39; i++) { cluster += String.fromCharCode(0x301); }
 		vt.writeText(cluster + "b");
@@ -2485,15 +2390,11 @@ test "a cluster of forty codepoints is one cell that keeps them all" {
 			assert text.ok;
 			if (text.ok) { assert text.value.startsWith(cluster + "b"); }
 		}
-		vt.free();
-	}
+	});
 }
 
 test "a character above the basic plane reads back whole" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 2, (vt: Vt): void => {
 		vt.writeText("x😀");
 		assert vt.update().ok;
 		const rows = vt.rows();
@@ -2504,15 +2405,11 @@ test "a character above the basic plane reads back whole" {
 			assert text.ok;
 			if (text.ok) { assert text.value.startsWith("x😀"); }
 		}
-		vt.free();
-	}
+	});
 }
 
 test "an underline carries the SGR 58 colour, resolved from the palette when it is an index" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 2, (vt: Vt): void => {
 		vt.writeText("\x1b[4:3m\x1b[58;2;255;80;80ma\x1b[58;5;1mb\x1b[59mc\x1b[24;58;2;1;2;3md");
 		assert vt.update().ok;
 		const rows = vt.rows();
@@ -2531,15 +2428,11 @@ test "an underline carries the SGR 58 colour, resolved from the palette when it 
 			assert cells[3].underline == Underline.None;
 			assert cells[3].underlineColor === null;
 		}
-		vt.free();
-	}
+	});
 }
 
 test "a wide character is flagged and its spacer holds no text" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 2, (vt: Vt): void => {
 		vt.writeText("中a");
 		assert vt.update().ok;
 		const rows = vt.rows();
@@ -2552,15 +2445,11 @@ test "a wide character is flagged and its spacer holds no text" {
 			assert cells[2].cp == 0x61;
 			assert !cells[2].flags.has(CellFlag.Wide);
 		}
-		vt.free();
-	}
+	});
 }
 
 test "a combining mark joins its base cell" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 2, (vt: Vt): void => {
 		vt.writeText("éx");
 		assert vt.update().ok;
 		const rows = vt.rows();
@@ -2573,29 +2462,21 @@ test "a combining mark joins its base cell" {
 			assert row.extra[0] == 0x301;
 			assert row.cells[1].cp == 0x78;
 		}
-		vt.free();
-	}
+	});
 }
 
 test "a line's text keeps each cell's combining marks with that cell" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 2, (vt: Vt): void => {
 		vt.writeText("éậx");
 		assert vt.update().ok;
 		const lines = vt.lines();
 		assert lines.ok;
 		if (lines.ok) { assert lines.value[0] == "éậx"; }
-		vt.free();
-	}
+	});
 }
 
 test "a grapheme longer than the inline buffer arrives whole" {
-	const created = Vt.create(10, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 2, (vt: Vt): void => {
 		vt.writeText(`e${"\u0301".repeat(20)}x`);
 		assert vt.update().ok;
 		const rows = vt.rows();
@@ -2608,15 +2489,11 @@ test "a grapheme longer than the inline buffer arrives whole" {
 			assert row.extra[19] == 0x301;
 			assert row.cells[1].cp == 0x78;
 		}
-		vt.free();
-	}
+	});
 }
 
 test "only rows written since the last clean are dirty" {
-	const created = Vt.create(10, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 4, (vt: Vt): void => {
 		vt.writeText("a\nb");
 		assert vt.update().ok;
 		vt.clean();
@@ -2629,8 +2506,7 @@ test "only rows written since the last clean are dirty" {
 			assert dirty.value[0].y == 1;
 			assert dirty.value[0].cells[1].cp == 0x62;
 		}
-		vt.free();
-	}
+	});
 }
 
 function press(key: string, text: string, unshifted: uint32, mods: BitSet<KeyMod>): KeyEvent {
@@ -2834,10 +2710,7 @@ test "a cursor on a wide character covers both its cells, from the character or 
 }
 
 test "the cursor reports where the next write lands" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("ab");
 		assert vt.update().ok;
 		const pastText: Cursor = { x: 2, y: 0, wide: false };
@@ -2850,8 +2723,7 @@ test "the cursor reports where the next write lands" {
 		const afterNewline = vt.cursor();
 		assert afterNewline.ok;
 		if (afterNewline.ok) { assert afterNewline.value == nextLine; }
-		vt.free();
-	}
+	});
 }
 
 function numberedLines(count: int32): string {
@@ -2938,38 +2810,27 @@ test "new output while scrolled up leaves the view where it was" {
 }
 
 test "a selection across two wrapped rows copies one logical line" {
-	const created = Vt.create(10, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 4, (vt: Vt): void => {
 		vt.writeText("abcdefghijklmnop\r\nnext");
 		assert vt.update().ok;
 		assert vt.selectionSet(marked(0, 2, 1, 4)).ok;
 		assert shown(vt.selectedText()) == "cdefghijklmno";
 		assert vt.selectionSet(marked(0, 0, 2, 3)).ok;
 		assert shown(vt.selectedText()) == "abcdefghijklmnop\nnext";
-		vt.free();
-	}
+	});
 }
 
 test "trailing spaces are trimmed on each copied line" {
-	const created = Vt.create(10, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 4, (vt: Vt): void => {
 		vt.writeText("hi   \r\nthere");
 		assert vt.update().ok;
 		assert vt.selectionSet(marked(0, 0, 1, 9)).ok;
 		assert shown(vt.selectedText()) == "hi\nthere";
-		vt.free();
-	}
+	});
 }
 
 test "a double click picks the word under the pointer and a triple click the logical line" {
-	const created = Vt.create(10, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 4, (vt: Vt): void => {
 		vt.writeText("foo bar-baz qux again");
 		assert vt.update().ok;
 		const word = vt.unitAt(Unit.Word, at(0, 5));
@@ -2987,15 +2848,11 @@ test "a double click picks the word under the pointer and a triple click the log
 			assert vt.selectionSet({ range: line.value, block: false }).ok;
 			assert shown(vt.selectedText()) == "foo bar-baz qux again";
 		}
-		vt.free();
-	}
+	});
 }
 
 test "a click on the second half of a wide character picks that character" {
-	const created = Vt.create(10, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 4, (vt: Vt): void => {
 		vt.writeText("中文 x");
 		assert vt.update().ok;
 		const first = vt.unitAt(Unit.Word, at(0, 1));
@@ -3011,15 +2868,11 @@ test "a click on the second half of a wide character picks that character" {
 			assert vt.selectionSet({ range: second.value, block: false }).ok;
 			assert shown(vt.selectedText()) == "文";
 		}
-		vt.free();
-	}
+	});
 }
 
 test "a selection survives five lines of new output" {
-	const created = Vt.create(10, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 4, (vt: Vt): void => {
 		vt.writeText(numberedLines(4));
 		assert vt.update().ok;
 		assert vt.selectionSet(marked(1, 0, 2, 1)).ok;
@@ -3037,8 +2890,7 @@ test "a selection survives five lines of new output" {
 			}
 		}
 		assert shown(vt.selectedText()) == "r1\nr2";
-		vt.free();
-	}
+	});
 }
 
 test "a selection follows its text when scrollback is pruned" {
@@ -3067,10 +2919,7 @@ test "a selection follows its text when scrollback is pruned" {
 }
 
 test "an erased selection is gone from the terminal" {
-	const created = Vt.create(10, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 4, (vt: Vt): void => {
 		vt.writeText("hello");
 		assert vt.update().ok;
 		assert vt.selectionSet(marked(0, 0, 0, 4)).ok;
@@ -3079,8 +2928,7 @@ test "an erased selection is gone from the terminal" {
 		assert none.ok;
 		if (none.ok) { assert none.value === null; }
 		assert shown(vt.selectedText()) == "<none>";
-		vt.free();
-	}
+	});
 }
 
 function pasted(vt: Vt, text: string, allowUnsafe: boolean): string {
@@ -3090,30 +2938,22 @@ function pasted(vt: Vt, text: string, allowUnsafe: boolean): string {
 }
 
 test "an unbracketed paste turns newlines into carriage returns and refuses them unconfirmed" {
-	const created = Vt.create(10, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 4, (vt: Vt): void => {
 		assert pasted(vt, "hello", false) == "hello";
 		assert pasted(vt, "a\nb", false) == "<unsafe>";
 		assert pasted(vt, "a\nb", true) == "a\rb";
-		vt.free();
-	}
+	});
 }
 
 test "a bracketed paste is framed and only its end marker is unsafe" {
-	const created = Vt.create(10, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(10, 4, (vt: Vt): void => {
 		vt.writeText("\x1b[?2004h");
 		assert pasted(vt, "a\nb", false) == "\x1b[200~a\nb\x1b[201~";
 		assert pasted(vt, "x\x1b[31my", false) == "\x1b[200~x [31my\x1b[201~";
 		assert pasted(vt, "evil\x1b[201~rm", false) == "<unsafe>";
 		vt.writeText("\x1b[?2004l");
 		assert pasted(vt, "plain", false) == "plain";
-		vt.free();
-	}
+	});
 }
 
 function pending(vt: Vt): string {
@@ -3122,10 +2962,7 @@ function pending(vt: Vt): string {
 }
 
 test "an OSC 52 read waits for the host and is answered in the frame the program used" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		assert !vt.clipboardAsked();
 		vt.writeText("\x1b]52;c;?\x1b\\");
 		assert pending(vt) == "";
@@ -3138,15 +2975,11 @@ test "an OSC 52 read waits for the host and is answered in the frame the program
 		assert vt.clipboardAsked();
 		assert vt.answerClipboard("secret", false).ok;
 		assert pending(vt) == "\x1b]52;c;\x07";
-		vt.free();
-	}
+	});
 }
 
 test "base64 in an OSC 52 answer pads one and two leftover bytes" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x1b]52;c;?\x1b\\");
 		assert vt.answerClipboard("ab", true).ok;
 		assert pending(vt) == "\x1b]52;c;YWI=\x1b\\";
@@ -3156,41 +2989,29 @@ test "base64 in an OSC 52 answer pads one and two leftover bytes" {
 		vt.writeText("\x1b]52;c;?\x1b\\");
 		assert vt.answerClipboard("", true).ok;
 		assert pending(vt) == "\x1b]52;c;\x1b\\";
-		vt.free();
-	}
+	});
 }
 
 test "an OSC 5522 clipboard read is refused at once rather than waiting for an OSC 52 answer" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x1b]5522;type=read:id=r1;dGV4dC9wbGFpbg==\x1b\\");
 		assert !vt.clipboardAsked();
 		assert pending(vt) == "\x1b]5522;type=read:status=EPERM:id=r1\x1b\\";
-		vt.free();
-	}
+	});
 }
 
 test "clipboard writes while a read waits leave the waiting answer intact" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x1b]52;c;?\x1b\\");
 		assert vt.clipboardAsked();
 		vt.writeText("\x1b]52;c;YQ==\x1b\\\x1b]52;c;Yg==\x1b\\");
 		assert vt.answerClipboard("hello", true).ok;
 		assert pending(vt) == "\x1b]52;c;aGVsbG8=\x1b\\";
-		vt.free();
-	}
+	});
 }
 
 test "a second read while one waits, and a primary-selection read, get an empty answer at once" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
+	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x1b]52;c;?\x1b\\");
 		assert vt.clipboardAsked();
 		vt.writeText("\x1b]52;c;?\x1b\\");
@@ -3201,8 +3022,7 @@ test "a second read while one waits, and a primary-selection read, get an empty 
 		vt.writeText("\x1b]52;p;?\x1b\\");
 		assert pending(vt) == "\x1b]52;p;\x1b\\";
 		assert !vt.clipboardAsked();
-		vt.free();
-	}
+	});
 }
 
 test "the cursor blinks until the program asks for a steady one, and DECSCUSR 0 blinks again" {

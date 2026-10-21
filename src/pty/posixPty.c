@@ -198,15 +198,60 @@ static void closeOnExec(int fd) {
 	fcntl(fd, F_SETFD, FD_CLOEXEC);
 }
 
-static void execChild(char** argv, const char* cwd, int failed) {
+extern char** environ;
+
+#define COUNT(a) (sizeof (a) / sizeof (a)[0])
+
+static const char* const REPLACED[] = {
+	"TERM=", "COLORTERM=", "TERM_PROGRAM=", "TERM_PROGRAM_VERSION=", "TERM_SESSION_ID=", "VTE_VERSION=",
+};
+static const char* const ADDED[] = { "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=Haro" };
+
+static int replaced(const char* entry, int newPwd) {
+	if (newPwd && strncmp(entry, "PWD=", 4) == 0) return 1;
+	for (size_t i = 0; i < COUNT(REPLACED); i++) {
+		if (strncmp(entry, REPLACED[i], strlen(REPLACED[i])) == 0) return 1;
+	}
+	return 0;
+}
+
+static char** childEnv(const char* cwd, char** pwd) {
+	int newPwd = cwd[0] != '\0';
+	size_t count = 0;
+	while (environ[count] != NULL) count++;
+	char** env = malloc((count + COUNT(ADDED) + 2) * sizeof *env);
+	*pwd = newPwd ? malloc(strlen(cwd) + sizeof "PWD=") : NULL;
+	if (env == NULL || (newPwd && *pwd == NULL)) {
+		free(env);
+		free(*pwd);
+		return NULL;
+	}
+	size_t n = 0;
+	for (size_t i = 0; i < count; i++) {
+		if (!replaced(environ[i], newPwd)) env[n++] = environ[i];
+	}
+	for (size_t i = 0; i < COUNT(ADDED); i++) env[n++] = (char*)ADDED[i];
+	if (newPwd) {
+		strcpy(*pwd, "PWD=");
+		strcat(*pwd, cwd);
+		env[n++] = *pwd;
+	}
+	env[n] = NULL;
+	return env;
+}
+
+static void execChild(char** argv, char** env, const char* cwd, int failed) {
 	sigset_t none;
 	sigemptyset(&none);
 	sigprocmask(SIG_SETMASK, &none, NULL);
 	int inherited[] = { SIGPIPE, SIGINT, SIGQUIT, SIGTERM, SIGHUP, SIGCHLD };
-	for (size_t i = 0; i < sizeof inherited / sizeof inherited[0]; i++) signal(inherited[i], SIG_DFL);
-	setenv("TERM", "xterm-256color", 1);
-	setenv("COLORTERM", "truecolor", 1);
-	if (cwd[0] != '\0' && chdir(cwd) == 0) setenv("PWD", cwd, 1);
+	for (size_t i = 0; i < COUNT(inherited); i++) signal(inherited[i], SIG_DFL);
+	if (cwd[0] != '\0' && chdir(cwd) != 0) {
+		size_t last = 0;
+		while (env[last] != NULL) last++;
+		env[last - 1] = NULL;
+	}
+	environ = env;
 	execvp(argv[0], argv);
 	int err = errno;
 	ssize_t _wrote = write(failed, &err, sizeof err);
@@ -227,8 +272,12 @@ int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows) {
 		if (parsed == WRDE_NOSPACE) wordfree(&words);
 		return -1;
 	}
+	char* pwd = NULL;
+	char** env = words.we_wordc == 0 ? NULL : childEnv(cwd, &pwd);
 	int failed[2];
-	if (words.we_wordc == 0 || pipe(failed) != 0) {
+	if (env == NULL || pipe(failed) != 0) {
+		free(env);
+		free(pwd);
 		wordfree(&words);
 		return -1;
 	}
@@ -238,7 +287,9 @@ int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows) {
 	struct winsize size = { (unsigned short)rows, (unsigned short)cols, 0, 0 };
 	int master = -1;
 	pid_t pid = forkpty(&master, NULL, NULL, &size);
-	if (pid == 0) execChild(words.we_wordv, cwd, failed[1]);
+	if (pid == 0) execChild(words.we_wordv, env, cwd, failed[1]);
+	free(env);
+	free(pwd);
 	wordfree(&words);
 	close(failed[1]);
 	if (pid < 0) {

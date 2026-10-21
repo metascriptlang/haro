@@ -214,6 +214,22 @@ when (testBuild) {
 		}
 	}
 
+	when (!windows) {
+		import { env } from "std/process";
+
+		test "the child is told the terminal is Haro, not the one Haro was started from" {
+			assert env.set("TERM_PROGRAM", "OtherTerminal");
+			assert env.set("TERM_SESSION_ID", "w0t0");
+			const opened = NativePty.open("sh -c 'echo \"[$TERM_PROGRAM|$TERM_SESSION_ID|$TERM]\"'", 80, 24);
+			assert opened.ok;
+			if (opened.ok) {
+				assert opened.value.toPty().drainText(4096).includes("[Haro||xterm-256color]");
+				opened.value.close();
+			}
+			assert env.get("TERM_PROGRAM") == "OtherTerminal";
+		}
+	}
+
 	when (windows) {
 		test "a resize after the child exited is refused, since its console is already closed" {
 			const opened = NativePty.open(ECHO_HELLO, 80, 24);

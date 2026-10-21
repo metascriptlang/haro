@@ -1,6 +1,7 @@
 export interface Stats {
 	refreshes: int32;
 	more: int32;
+	held: int32;
 	rows: int32;
 	scrolled: int32;
 	chars: int32;
@@ -17,6 +18,7 @@ export function empty(this typeof Stats): Stats {
 	return {
 		refreshes: 0,
 		more: 0,
+		held: 0,
 		rows: 0,
 		scrolled: 0,
 		chars: 0,
@@ -94,13 +96,14 @@ function summary(name: string, samples: Vec<float64>): string {
 }
 
 export function line(this s: Stats): string {
-	return `refreshes=${s.refreshes} more=${s.more} rows=${s.rows} scrolled=${s.scrolled} ` +
+	return `refreshes=${s.refreshes} more=${s.more} held=${s.held} rows=${s.rows} scrolled=${s.scrolled} ` +
 		`chars=${s.chars} ${summary("echo", s.echoes)} ${summary("settle", s.settles)}`;
 }
 
 export function reset(this s: Stats): void {
 	s.refreshes = 0;
 	s.more = 0;
+	s.held = 0;
 	s.rows = 0;
 	s.scrolled = 0;
 	s.chars = 0;
@@ -118,10 +121,10 @@ test "a key's echo runs to the first apply with rows, its settle from the last w
 	s.noteApplied(0, 0, 0, 13);
 	s.noteApplied(2, 0, 160, 15.5);
 	s.noteApplied(1, 0, 80, 20);
-	assert s.line() == "refreshes=0 more=0 rows=3 scrolled=0 chars=240 " +
+	assert s.line() == "refreshes=0 more=0 held=0 rows=3 scrolled=0 chars=240 " +
 		"echo n=1 p50=5.5 max=5.5 settle n=1 p50=0.5 max=0.5";
 	s.reset();
-	assert s.line() == "refreshes=0 more=0 rows=0 scrolled=0 chars=0 echo n=0 settle n=0";
+	assert s.line() == "refreshes=0 more=0 held=0 rows=0 scrolled=0 chars=0 echo n=0 settle n=0";
 }
 
 test "each launch mark keeps its first time, and the launch ends at the first painted rows" {

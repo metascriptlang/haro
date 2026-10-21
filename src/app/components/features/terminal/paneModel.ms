@@ -181,6 +181,7 @@ export function refresh(this m: PaneModel): void {
 	if (copied !== null) { copyToClipboard(copied); }
 	if (f.asked) { m.controls.clipboardAsked(m.term, m.bridge()); }
 	if (f.held) {
+		stats.held += 1;
 		m.watchHold();
 	} else {
 		const colors = f.colors;

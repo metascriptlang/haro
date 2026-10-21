@@ -214,7 +214,7 @@ try {
 $lines = @(Get-Content "$out.out" | Select-Object -Skip $fromLine |
 	Where-Object { $_ -like 'haro stats:*' })
 $sum = [ordered]@{
-	refreshes = 0; more = 0; rows = 0; scrolled = 0; chars = 0
+	refreshes = 0; more = 0; held = 0; rows = 0; scrolled = 0; chars = 0
 	wakes = 0; applies = 0; requested = 0; drawn = 0
 }
 $echo = @{ n = 0; p50 = @(); max = 0 }

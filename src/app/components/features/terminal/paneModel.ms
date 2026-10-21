@@ -59,6 +59,8 @@ export interface PaneModel {
 	setBackground: Setter<string>;
 	foreground: Accessor<string>;
 	setForeground: Setter<string>;
+	cursorColor: Accessor<string>;
+	setCursorColor: Setter<string>;
 	padding: Accessor<number>;
 	setPadding: Setter<number>;
 	viewWidth: Accessor<number>;
@@ -83,6 +85,7 @@ export function createPane(
 	const [rowHeight, setRowHeight] = createSignal<number>(0);
 	const [background, setBackground] = createSignal<string>(hexOf(started.background));
 	const [foreground, setForeground] = createSignal<string>(hexOf(started.foreground));
+	const [cursorColor, setCursorColor] = createSignal<string>(hexOf(started.foreground));
 	const [padding, setPadding] = createSignal<number>(started.padding);
 	const [viewWidth, setViewWidth] = createSignal<number>(0);
 	const metrics: CellMetrics = {
@@ -108,6 +111,8 @@ export function createPane(
 		setBackground: setBackground,
 		foreground: foreground,
 		setForeground: setForeground,
+		cursorColor: cursorColor,
+		setCursorColor: setCursorColor,
 		padding: padding,
 		setPadding: setPadding,
 		viewWidth: viewWidth,
@@ -188,6 +193,7 @@ export function refresh(this m: PaneModel): void {
 		if (colors !== null) {
 			m.setBackground(hexOf(colors.bg));
 			m.setForeground(hexOf(colors.fg));
+			m.setCursorColor(hexOf(colors.cursor ?? colors.fg));
 		}
 		m.cursor.showCursor(f.cursor, f.look);
 		m.paintSelection();

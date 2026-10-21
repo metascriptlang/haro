@@ -53,7 +53,7 @@ export function TerminalPane(props: { model: PaneModel }): NeonNode {
 		onWheel={(e: NeonEvent): void => { m.wheeled(e); }}>
 		<ForList each={m.term.grid}>{row}</ForList>
 		<Shades model={m.shades} metrics={metrics} color={m.foreground()} />
-		<CursorBoxes model={m.cursor} color={m.foreground()} />
+		<CursorBoxes model={m.cursor} color={m.cursorColor()} />
 		<Preedit
 			model={m.preedit}
 			metrics={metrics}

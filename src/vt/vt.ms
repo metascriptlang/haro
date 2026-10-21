@@ -449,7 +449,7 @@ export interface Painted {
 	palette: Palette | null;
 }
 
-export struct Palette { fg: Rgb; bg: Rgb; }
+export struct Palette { fg: Rgb; bg: Rgb; cursor: Rgb | null; }
 
 function ok(r: GhosttyResult): boolean {
 	return r == GhosttyResult.GHOSTTY_SUCCESS;
@@ -1114,7 +1114,13 @@ export function palette(this vt: Vt): Result<Palette, VtError> {
 	if (!ok(stateColor(vt.state, fgKey, fg)) || !ok(stateColor(vt.state, bgKey, bg))) {
 		return Result.err(VtError.ReadFailed);
 	}
-	return Result.ok({ fg: rgb(fg), bg: rgb(bg) });
+	let set = false;
+	const setKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLOR_CURSOR_HAS_VALUE;
+	if (!ok(stateFlag(vt.state, setKey, set))) { return Result.err(VtError.ReadFailed); }
+	let cursor: GhosttyColorRgb = { r: 0, g: 0, b: 0 };
+	const cursorKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLOR_CURSOR;
+	if (set && !ok(stateColor(vt.state, cursorKey, cursor))) { return Result.err(VtError.ReadFailed); }
+	return Result.ok({ fg: rgb(fg), bg: rgb(bg), cursor: set ? rgb(cursor) : null });
 }
 
 function colorOr(
@@ -2203,6 +2209,26 @@ test "a theme the host sets is what a colour query reports" {
 		assert ascii(buf[0..n]) == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\";
 		vt.free();
 	}
+}
+
+function cursorColorAfter(text: string): string {
+	const created = Vt.create(20, 4);
+	if (!created.ok) { return "create failed"; }
+	const vt = created.value;
+	vt.writeText(text);
+	const updated = vt.update();
+	const colors = vt.palette();
+	vt.free();
+	if (!updated.ok || !colors.ok) { return "read failed"; }
+	const cursor = colors.value.cursor;
+	if (cursor === null) { return "none"; }
+	return `${cursor.r},${cursor.g},${cursor.b}`;
+}
+
+test "a program sets the cursor colour with OSC 12 and resets it with OSC 112" {
+	assert cursorColorAfter("") == "none";
+	assert cursorColorAfter("\x1b]12;#ff0000\x07") == "255,0,0";
+	assert cursorColorAfter("\x1b]12;#ff0000\x07\x1b]112\x07") == "none";
 }
 
 function rowsAfterGrowing(pull: boolean): string {

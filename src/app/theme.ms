@@ -3,7 +3,7 @@ import { Style } from "../../../neon/src/render/style";
 export const SHADE_OPACITY: number = 0.35;
 
 export const NOTICE_BACKGROUND = "#5c1f24";
-export const NOTICE_TEXT = "#ffffff";
+const NOTICE_TEXT = "#ffffff";
 export const NOTICE_PADDING: number = 8;
 export const NOTICE_RADIUS: number = 4;
 
@@ -27,6 +27,7 @@ const ON_PRIMARY = "#0c0c0c";
 export const TITLE_STYLE: Style = { color: WARNING, fontWeight: "bold" };
 export const BODY_STYLE: Style = { color: TEXT };
 export const DIM_STYLE: Style = { color: DIM };
+export const NOTICE_STYLE: Style = { color: NOTICE_TEXT };
 
 export struct ButtonLook {
 	background: string;

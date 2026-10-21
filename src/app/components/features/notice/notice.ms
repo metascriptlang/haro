@@ -3,10 +3,10 @@ import { List, createList } from "../../../../../../neon/src/core/list";
 import { ForList, Show } from "../../../../../../neon/src/macros/ui/flow";
 import { NeonNode } from "../../../../../../neon/src/render/node";
 import { NeonEvent } from "../../../../../../neon/src/render/event";
-import { Text, View } from "../../../../../../neon/src/components/primitives";
+import { View } from "../../../../../../neon/src/components/primitives";
 import { visible } from "../../../../input/paste";
-import { NOTICE_BACKGROUND, NOTICE_PADDING, NOTICE_RADIUS, NOTICE_TEXT } from "../../../theme";
-import { CellMetrics } from "../../ui/cellText";
+import { NOTICE_BACKGROUND, NOTICE_PADDING, NOTICE_RADIUS, NOTICE_STYLE } from "../../../theme";
+import { CellMetrics, CellText } from "../../ui/cellText";
 
 const FALLBACK_COLS: int32 = 80;
 
@@ -61,11 +61,8 @@ export function Notice(props: {
 }): NeonNode {
 	const n = props.model;
 	const m = props.metrics;
-	const row = (item: Accessor<string>): NeonNode => <Text
-		style={{ fontSize: m.fontSize, color: NOTICE_TEXT, height: m.rowHeight() }}
-		cellWidth={m.cellWidth()}
-		spans={[{ text: item(), style: {} }]}
-	/>;
+	const row = (item: Accessor<string>): NeonNode =>
+		<CellText metrics={m} spans={[{ text: item(), style: NOTICE_STYLE }]} />;
 	return <Show when={n.shown()}>
 		<View
 			style={{

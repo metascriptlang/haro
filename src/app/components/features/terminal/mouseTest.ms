@@ -5,7 +5,7 @@ import { Sink, termOf } from "./termTest";
 import { Controls, Hit } from "./controls";
 import { keyDown } from "./keyboard";
 import { autoscrollTick, endDrag, pointerDown, pointerMove, pointerUp, roll, shades } from "./mouse";
-import { CLIPBOARD_MODS, CTRL } from "../../../../input/bindings";
+import { CLIPBOARD_MODS, CTRL, SHIFT } from "../../../../input/bindings";
 import {
 	at,
 	boardOf,
@@ -168,12 +168,12 @@ test "shift hands the mouse back from an app that tracks it, and a wheel reporte
 		const c = Controls.open();
 		const clip = clipOf(boardOf("x"));
 		const bottom = offsetOf(t);
-		assert handled(c.pointerDown(t, clip, 1, hitWith(0, 1, 1), 0));
+		assert handled(c.pointerDown(t, clip, 1, hitWith(0, 1, SHIFT), 0));
 		assert c.pointer.dragging;
-		assert handled(c.pointerMove(t, hitWith(5, 1, 1), true));
+		assert handled(c.pointerMove(t, hitWith(5, 1, SHIFT), true));
 		assert c.pointer.selected();
 		assert sink.sent == "";
-		assert handled(c.roll(t, 1, hitWith(0, 0, 1)));
+		assert handled(c.roll(t, 1, hitWith(0, 0, SHIFT)));
 		assert offsetOf(t) == bottom - 3;
 		assert c.pointer.selected();
 		assert handled(c.roll(t, 1, hitAt(0, 0)));
@@ -193,12 +193,12 @@ test "a ctrl click on an http link opens it, on any other link or text it does n
 		const c = Controls.open();
 		const board = boardOf("");
 		const clip = clipOf(board);
-		assert handled(c.pointerDown(t, clip, 1, hitWith(1, 0, 2), 0));
+		assert handled(c.pointerDown(t, clip, 1, hitWith(1, 0, CTRL), 0));
 		assert board.opened == "https://example.com/a";
 		board.opened = "";
-		assert handled(c.pointerDown(t, clip, 1, hitWith(6, 0, 2), 0));
+		assert handled(c.pointerDown(t, clip, 1, hitWith(6, 0, CTRL), 0));
 		assert board.opened == "";
-		assert handled(c.pointerDown(t, clip, 1, hitWith(12, 0, 2), 10000));
+		assert handled(c.pointerDown(t, clip, 1, hitWith(12, 0, CTRL), 10000));
 		assert board.opened == "";
 		assert handled(c.pointerDown(t, clip, 1, hitWith(1, 0, 0), 20000));
 		assert board.opened == "";

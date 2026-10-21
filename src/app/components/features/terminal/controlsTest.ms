@@ -9,7 +9,7 @@ import { Pasted, cancel, clipboardAsked, confirm, normalized, paste } from "./cl
 import { keyDown } from "./keyboard";
 import { pointerDown, pointerMove, pointerUp, roll } from "./mouse";
 import { Warning } from "../../../../input/paste";
-import { CLIPBOARD_MODS } from "../../../../input/bindings";
+import { CLIPBOARD_MODS, CTRL, SHIFT } from "../../../../input/bindings";
 
 export interface Board {
 	opened: string;
@@ -186,14 +186,14 @@ test "typing or pasting snaps the viewport to the bottom and drops the selection
 		const c = Controls.open();
 		const clip = clipOf(boardOf("x"));
 		assert !handled(c.typed(t));
-		assert handled(c.keyDown(t, key("PageUp", 3), clip));
+		assert handled(c.keyDown(t, key("PageUp", CTRL | SHIFT), clip));
 		assert drag(c, t, clip, at(0, 0), at(3, 0));
 		assert c.pointer.selected();
 		assert handled(c.typed(t));
 		assert atBottomOf(t);
 		assert !c.pointer.selected();
 		assert !handled(c.typed(t));
-		assert handled(c.keyDown(t, key("Home", 3), clip));
+		assert handled(c.keyDown(t, key("Home", CTRL | SHIFT), clip));
 		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
 		assert atBottomOf(t);
 		assert sink.sent == "x";
@@ -226,7 +226,7 @@ test "a clipboard read waits for an answer: escape or enter deny it, ctrl enter 
 		const c = Controls.open();
 		const clip = clipOf(boardOf("secret"));
 		c.clipboardAsked(b, clip);
-		assert handled(c.keyDown(b, key("Enter", 2), clip));
+		assert handled(c.keyDown(b, key("Enter", CTRL), clip));
 		assert allow.sent == "\x1b]52;c;c2VjcmV0\x1b\\";
 		b.shutdown();
 	}

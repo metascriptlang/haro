@@ -38,17 +38,17 @@ test "ctrl shift page, arrow, home and end keys move the viewport and say they d
 		const bottom = offsetOf(t);
 		assert bottom > 0;
 		assert atBottomOf(t);
-		assert handled(c.keyDown(t, key("PageUp", 3), clip));
+		assert handled(c.keyDown(t, key("PageUp", CTRL | SHIFT), clip));
 		assert offsetOf(t) == bottom - 5;
-		assert handled(c.keyDown(t, key("ArrowUp", 3), clip));
+		assert handled(c.keyDown(t, key("ArrowUp", CTRL | SHIFT), clip));
 		assert offsetOf(t) == bottom - 8;
-		assert handled(c.keyDown(t, key("ArrowDown", 3), clip));
+		assert handled(c.keyDown(t, key("ArrowDown", CTRL | SHIFT), clip));
 		assert offsetOf(t) == bottom - 5;
-		assert handled(c.keyDown(t, key("Home", 3), clip));
+		assert handled(c.keyDown(t, key("Home", CTRL | SHIFT), clip));
 		assert offsetOf(t) == 0;
-		assert handled(c.keyDown(t, key("PageDown", 3), clip));
+		assert handled(c.keyDown(t, key("PageDown", CTRL | SHIFT), clip));
 		assert offsetOf(t) == 5;
-		assert handled(c.keyDown(t, key("End", 3), clip));
+		assert handled(c.keyDown(t, key("End", CTRL | SHIFT), clip));
 		assert atBottomOf(t);
 		assert !handled(c.keyDown(t, key("ArrowUp", 0), clip));
 		assert !handled(c.keyDown(t, key("PageUp", 0), clip));
@@ -79,7 +79,7 @@ test "the copy chord and enter alike copy the selection to the clipboard and dis
 		assert board.copied == "beta";
 		when (!macos) {
 			assert drag(c, t, clip, at(0, 1), at(4, 1));
-			assert handled(c.keyDown(t, key("Insert", 2), clip));
+			assert handled(c.keyDown(t, key("Insert", CTRL), clip));
 			assert board.copied == "gamma";
 		}
 		t.shutdown();
@@ -98,11 +98,11 @@ test "paste sends the clipboard through the terminal's paste encoding" {
 		assert board.reads == 1;
 		assert sink.sent == "echo hi";
 		when (!macos) {
-			assert handled(c.keyDown(t, key("Insert", 1), clip));
+			assert handled(c.keyDown(t, key("Insert", SHIFT), clip));
 			assert sink.sent == "echo hiecho hi";
 		}
 		const reads = board.reads;
-		assert !handled(c.keyDown(t, key("KeyV", 2), clip));
+		assert !handled(c.keyDown(t, key("KeyV", CTRL), clip));
 		assert board.reads == reads;
 		t.shutdown();
 	}
@@ -125,7 +125,7 @@ test "a paste with a line break waits for an answer and sends nothing meanwhile"
 		}
 		assert sink.sent == "";
 		assert handled(c.keyDown(t, key("KeyA", 0), clip));
-		assert handled(c.keyDown(t, key("ArrowUp", 3), clip));
+		assert handled(c.keyDown(t, key("ArrowUp", CTRL | SHIFT), clip));
 		assert handled(c.keyDown(t, key("KeyC", CLIPBOARD_MODS), clip));
 		assert sink.sent == "";
 		assert c.holding();
@@ -185,9 +185,9 @@ test "ctrl alt up and down move the viewport between prompts the shell marked" {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		const bottom = offsetOf(t);
-		assert handled(c.keyDown(t, key("ArrowUp", 6), clip));
+		assert handled(c.keyDown(t, key("ArrowUp", CTRL | ALT), clip));
 		assert offsetOf(t) < bottom;
-		assert handled(c.keyDown(t, key("ArrowDown", 6), clip));
+		assert handled(c.keyDown(t, key("ArrowDown", CTRL | ALT), clip));
 		assert sink.sent == "";
 		t.shutdown();
 	}
@@ -216,13 +216,13 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 			},
 		];
 		const clip = clipOf(boardOf(""));
-		assert handled(c.keyDown(t, key("PageUp", 3), clip));
-		assert handled(c.keyDown(t, key("Enter", 1), clip));
+		assert handled(c.keyDown(t, key("PageUp", CTRL | SHIFT), clip));
+		assert handled(c.keyDown(t, key("Enter", SHIFT), clip));
 		assert sink.sent == "[13;2u";
 		assert atBottomOf(t);
-		assert handled(c.keyDown(t, key("KeyC", 3), clip));
+		assert handled(c.keyDown(t, key("KeyC", CTRL | SHIFT), clip));
 		assert sink.sent == "[13;2uc";
-		assert !handled(c.keyDown(t, key("Enter", 2), clip));
+		assert !handled(c.keyDown(t, key("Enter", CTRL), clip));
 		t.shutdown();
 	}
 }
@@ -303,7 +303,7 @@ test "the release of a key a control consumed is consumed too, and any other goe
 	if (t !== null) {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
-		assert handled(c.keyDown(t, key("PageUp", 3), clip));
+		assert handled(c.keyDown(t, key("PageUp", CTRL | SHIFT), clip));
 		assert c.keyUp(released("PageUp", 0));
 		assert !c.keyUp(released("KeyA", 0x61));
 		assert !handled(c.keyDown(t, key("KeyA", 0), clip));

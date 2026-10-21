@@ -103,6 +103,10 @@ export function modsMask(mods: BitSet<KeyMod>): uint16 {
 	return (mods as uint32) as uint16;
 }
 
+export function modsOf(mask: number): BitSet<KeyMod> {
+	return (mask as uint16) as BitSet<KeyMod>;
+}
+
 const DELETE: int32 = 0x7F;
 const MAC_FUNCTION_KEY_LEAD: int32 = 0xEF;
 const MAC_FUNCTION_KEY_SECOND_MIN: int32 = 0x9C;
@@ -187,6 +191,8 @@ test "the modifier mask keeps libghostty-vt's bit order" {
 	assert modsMask(none.incl(KeyMod.NumLock)) == 0x20;
 	assert modsMask(none.incl(KeyMod.ShiftRight)) == 0x40;
 	assert modsMask(none.incl(KeyMod.AltRight)) == 0x100;
+	const wide = none.incl(KeyMod.Ctrl).incl(KeyMod.AltRight);
+	assert modsOf(modsMask(wide)) == wide;
 }
 
 function event(action: KeyAction, key: string, mods: BitSet<KeyMod>): KeyEvent {

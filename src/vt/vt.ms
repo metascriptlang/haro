@@ -2527,164 +2527,87 @@ function encoded(k: Keys, vt: Vt, e: KeyEvent): string {
 	return ascii(buf[0..r.value]);
 }
 
+function withKeys(body: (k: Keys, vt: Vt) => void): boolean {
+	const opened = Keys.openKeys();
+	if (!opened.ok) { return false; }
+	const k = opened.value;
+	const made = withVt(20, 4, (vt: Vt): void => { body(k, vt); });
+	k.freeKeys();
+	return made;
+}
+
 test "AltGr text reaches the program as the text once the consumed Ctrl+Alt is dropped" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		const opened = Keys.openKeys();
-		assert opened.ok;
-		if (opened.ok) {
-			const k = opened.value;
-			const none = 0 as BitSet<KeyMod>;
-			const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt);
-			const brace: KeyEvent = {
-				...press("Digit7", "{", 0x37, ctrlAlt),
-				consumedMods: ctrlAlt,
-			};
-			assert encoded(k, vt, brace.withoutAltGr()) == "{";
-			const polish: KeyEvent = { ...brace, key: "KeyA", unshifted: 0x61, text: "ą" };
-			assert encoded(k, vt, polish.withoutAltGr()) == "Ä";
-			k.freeKeys();
-		}
-		vt.free();
-	}
+	assert withKeys((k: Keys, vt: Vt): void => {
+		const none = 0 as BitSet<KeyMod>;
+		const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt);
+		const brace: KeyEvent = { ...press("Digit7", "{", 0x37, ctrlAlt), consumedMods: ctrlAlt };
+		assert encoded(k, vt, brace.withoutAltGr()) == "{";
+		const polish: KeyEvent = { ...brace, key: "KeyA", unshifted: 0x61, text: "ą" };
+		assert encoded(k, vt, polish.withoutAltGr()) == "Ä";
+	});
 }
 
 test "enter encodes as a carriage return" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		const opened = Keys.openKeys();
-		assert opened.ok;
-		if (opened.ok) {
-			const k = opened.value;
-			const none = 0 as BitSet<KeyMod>;
-			assert encoded(k, vt, press("Enter", "\r", 0x0D, none)) == "\r";
-			k.freeKeys();
-		}
-		vt.free();
-	}
+	assert withKeys((k: Keys, vt: Vt): void => {
+		const none = 0 as BitSet<KeyMod>;
+		assert encoded(k, vt, press("Enter", "\r", 0x0D, none)) == "\r";
+	});
 }
 
 test "ctrl+c encodes as ETX even when the platform reports the byte as text" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		const opened = Keys.openKeys();
-		assert opened.ok;
-		if (opened.ok) {
-			const k = opened.value;
-			const ctrl = (0 as BitSet<KeyMod>).incl(KeyMod.Ctrl);
-			assert encoded(k, vt, press("KeyC", "\x03", 0x63, ctrl)) == "\x03";
-			k.freeKeys();
-		}
-		vt.free();
-	}
+	assert withKeys((k: Keys, vt: Vt): void => {
+		const ctrl = (0 as BitSet<KeyMod>).incl(KeyMod.Ctrl);
+		assert encoded(k, vt, press("KeyC", "\x03", 0x63, ctrl)) == "\x03";
+	});
 }
 
 test "arrow up follows the cursor key mode the vt is in" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		const opened = Keys.openKeys();
-		assert opened.ok;
-		if (opened.ok) {
-			const k = opened.value;
-			const none = 0 as BitSet<KeyMod>;
-			assert encoded(k, vt, press("ArrowUp", "", 0, none)) == "\x1b[A";
-			vt.writeText("\x1b[?1h");
-			assert encoded(k, vt, press("ArrowUp", "", 0, none)) == "\x1bOA";
-			k.freeKeys();
-		}
-		vt.free();
-	}
+	assert withKeys((k: Keys, vt: Vt): void => {
+		const none = 0 as BitSet<KeyMod>;
+		assert encoded(k, vt, press("ArrowUp", "", 0, none)) == "\x1b[A";
+		vt.writeText("\x1b[?1h");
+		assert encoded(k, vt, press("ArrowUp", "", 0, none)) == "\x1bOA";
+	});
 }
 
 test "alt prefixes the escape" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		const opened = Keys.openKeys();
-		assert opened.ok;
-		if (opened.ok) {
-			const k = opened.value;
-			const alt = (0 as BitSet<KeyMod>).incl(KeyMod.Alt);
-			assert encoded(k, vt, press("KeyX", "x", 0x78, alt)) == "\x1bx";
-			k.freeKeys();
-		}
-		vt.free();
-	}
+	assert withKeys((k: Keys, vt: Vt): void => {
+		const alt = (0 as BitSet<KeyMod>).incl(KeyMod.Alt);
+		assert encoded(k, vt, press("KeyX", "x", 0x78, alt)) == "\x1bx";
+	});
 }
 
 test "a consumed alt lets the text through unprefixed" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		const opened = Keys.openKeys();
-		assert opened.ok;
-		if (opened.ok) {
-			const k = opened.value;
-			const none = 0 as BitSet<KeyMod>;
-			const alt = none.incl(KeyMod.Alt);
-			const e: KeyEvent = { ...press("BracketLeft", "{", 0x5B, alt), consumedMods: alt };
-			assert encoded(k, vt, e) == "{";
-			k.freeKeys();
-		}
-		vt.free();
-	}
+	assert withKeys((k: Keys, vt: Vt): void => {
+		const none = 0 as BitSet<KeyMod>;
+		const alt = none.incl(KeyMod.Alt);
+		const e: KeyEvent = { ...press("BracketLeft", "{", 0x5B, alt), consumedMods: alt };
+		assert encoded(k, vt, e) == "{";
+	});
 }
 
 test "ctrl with printable text encodes as fixterms csi u" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		const opened = Keys.openKeys();
-		assert opened.ok;
-		if (opened.ok) {
-			const k = opened.value;
-			const none = 0 as BitSet<KeyMod>;
-			const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt);
-			const e: KeyEvent = {
-				...press("BracketLeft", "{", 0x5B, ctrlAlt),
-				consumedMods: ctrlAlt,
-			};
-			assert encoded(k, vt, e) == "\x1b[123;7u";
-			k.freeKeys();
-		}
-		vt.free();
-	}
+	assert withKeys((k: Keys, vt: Vt): void => {
+		const none = 0 as BitSet<KeyMod>;
+		const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt);
+		const e: KeyEvent = { ...press("BracketLeft", "{", 0x5B, ctrlAlt), consumedMods: ctrlAlt };
+		assert encoded(k, vt, e) == "\x1b[123;7u";
+	});
 }
 
 test "a committed grapheme arrives as its utf-8 bytes" {
-	const created = Vt.create(20, 4);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		const opened = Keys.openKeys();
-		assert opened.ok;
-		if (opened.ok) {
-			const k = opened.value;
-			const none = 0 as BitSet<KeyMod>;
-			let buf: Vec<uint8> = new Array(64);
-			const r = k.encode(vt, press("Unidentified", "ệ", 0, none), buf);
-			assert r.ok;
-			if (r.ok) {
-				assert r.value == 3;
-				assert buf[0] == 0xE1;
-				assert buf[1] == 0xBB;
-				assert buf[2] == 0x87;
-			}
-			k.freeKeys();
+	assert withKeys((k: Keys, vt: Vt): void => {
+		const none = 0 as BitSet<KeyMod>;
+		let buf: Vec<uint8> = new Array(64);
+		const r = k.encode(vt, press("Unidentified", "ệ", 0, none), buf);
+		assert r.ok;
+		if (r.ok) {
+			assert r.value == 3;
+			assert buf[0] == 0xE1;
+			assert buf[1] == 0xBB;
+			assert buf[2] == 0x87;
 		}
-		vt.free();
-	}
+	});
 }
 
 function cursorAfter(text: string): Cursor | null {

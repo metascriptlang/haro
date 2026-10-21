@@ -85,7 +85,7 @@ function hit(this m: PaneModel, e: NeonEvent): Hit {
 export function pressed(this m: PaneModel, e: NeonEvent): void {
 	if (m.metrics.cellWidth() <= 0) { return; }
 	const button = e.button as int32;
-	const handled = m.controls.pointerDown(m.term, m.bridge(), button, m.hit(e), Date.now());
+	const handled = m.controls.pointerDown(m.term, m.bridge(), button, m.hit(e), performance.now());
 	if (!handled.ok) {
 		m.failed("press", handled.error.toString());
 		return;

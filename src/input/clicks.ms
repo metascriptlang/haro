@@ -23,10 +23,13 @@ export function register(
 ): int32 {
 	const dx = x - c.x;
 	const dy = y - c.y;
-	const near = c.count > 0 && time - c.time <= REPEAT_MS && dx * dx + dy * dy <= reach * reach;
+	const since = time - c.time;
+	const near = c.count > 0 && since >= 0 && since <= REPEAT_MS && dx * dx + dy * dy <= reach * reach;
 	c.count = near ? (c.count % MAX_CLICKS) + 1 : 1;
-	c.x = x;
-	c.y = y;
+	if (c.count == 1) {
+		c.x = x;
+		c.y = y;
+	}
 	c.time = time;
 	return c.count;
 }
@@ -68,6 +71,20 @@ test "the interval runs from the previous click, not from the first" {
 	assert c.register(0, 0, 0, 8) == 1;
 	assert c.register(0, 0, 450, 8) == 2;
 	assert c.register(0, 0, 900, 8) == 3;
+}
+
+test "repeats are measured from the first click, so a drifting pointer starts over" {
+	const c = Clicks.open();
+	assert c.register(0, 0, 0, 8) == 1;
+	assert c.register(6, 0, 100, 8) == 2;
+	assert c.register(12, 0, 200, 8) == 1;
+}
+
+test "a click stamped before the previous one starts a new count" {
+	const c = Clicks.open();
+	assert c.register(0, 0, 1000, 8) == 1;
+	assert c.register(0, 0, 900, 8) == 1;
+	assert c.register(0, 0, 1000, 8) == 2;
 }
 
 test "one click selects by cell, two by word, three by line" {

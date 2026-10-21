@@ -1,4 +1,4 @@
-import { Block, Selection, Unit } from "../select/select";
+import { Block, Point, Selection, Unit } from "../select/select";
 import { Vt, VtError } from "../vt/vt";
 import { Clicks, unitOf } from "./clicks";
 
@@ -9,13 +9,20 @@ export struct Spot {
 
 export interface Pointer {
 	clicks: Clicks;
+	anchor: Point;
 	sel: Selection | null;
 	dragging: boolean;
 	last: Spot;
 }
 
 export function open(this typeof Pointer): Pointer {
-	return { clicks: Clicks.open(), sel: null, dragging: false, last: { col: 0, row: 0 } };
+	return {
+		clicks: Clicks.open(),
+		anchor: { row: 0, col: 0 },
+		sel: null,
+		dragging: false,
+		last: { col: 0, row: 0 },
+	};
 }
 
 export function spotAt(
@@ -72,9 +79,11 @@ export function press(
 	time: float64,
 	reach: float64,
 ): Result<boolean, VtError> {
-	const unit = unitOf(p.clicks.register(x, y, time, reach));
+	const count = p.clicks.register(x, y, time, reach);
 	const top = try vt.scrollOffset();
-	const range = try vt.unitAt(unit, { row: top + at.row, col: at.col });
+	if (count == 1) { p.anchor = { row: top + at.row, col: at.col }; }
+	const unit = unitOf(count);
+	const range = try vt.unitAt(unit, p.anchor);
 	p.sel = Selection.press(unit, range, false);
 	p.dragging = true;
 	p.last = at;
@@ -219,6 +228,20 @@ test "a double click selects a word, a triple click the line, and a fourth start
 		if (line.ok) { assert line.value == "foo bar-baz qux"; }
 		assert click(p, vt, 5, 0, 300);
 		assert !p.selected();
+		vt.free();
+	}
+}
+
+test "a double click takes its word from the first press, though the second drifts a cell" {
+	const vt = viewOf(20, 3, "foo bar baz");
+	assert vt !== null;
+	if (vt !== null) {
+		const p = Pointer.open();
+		assert click(p, vt, 4, 0, 0);
+		assert click(p, vt, 3, 0, 100);
+		const word = p.copyText(vt);
+		assert word.ok;
+		if (word.ok) { assert word.value == "bar"; }
 		vt.free();
 	}
 }

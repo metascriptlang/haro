@@ -1,3 +1,4 @@
+import { resolve } from "std/fs/path";
 when (windows) {
 	import { env, execFileCapture } from "std/process";
 } else when (macos) {
@@ -105,9 +106,7 @@ function registryFiles(listing: string, fontsDir: string): Vec<FontFile> {
 		const line = raw.trim();
 		const at = line.indexOf(VALUE_SEPARATOR);
 		if (at < 0) { continue; }
-		const value = line.slice(at + VALUE_SEPARATOR.length).trim();
-		const absolute = value.indexOf(":") > 0;
-		const path = (absolute ? value : `${fontsDir}/${value}`).replaceAll("\\", "/");
+		const path = resolve(line.slice(at + VALUE_SEPARATOR.length).trim(), fontsDir);
 		for (const name of withoutFormatSuffix(line.slice(0, at)).split(" & ")) {
 			files.push({ name: name, path: path });
 		}

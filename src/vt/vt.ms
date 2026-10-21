@@ -96,7 +96,6 @@ import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe, withoutAltGr } from ".
 import { CellWidth, Marked, Point, Range, Selection, Unit } from "../select/select";
 import { Handle } from "std/ffi";
 
-struct InlineGraphemes { cp: uint32[16]; }
 struct Colors256 { c: GhosttyColorRgb[256]; }
 
 extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<Span<uint8>>): void
@@ -227,11 +226,6 @@ extern function cellGraphemeCount(
 	cells: GhosttyRenderStateRowCells,
 	key: GhosttyRenderStateRowCellsData,
 	out count: uint32,
-): GhosttyResult from "ghostty_render_state_row_cells_get";
-extern function cellGraphemes(
-	cells: GhosttyRenderStateRowCells,
-	key: GhosttyRenderStateRowCellsData,
-	out graphemes: InlineGraphemes,
 ): GhosttyResult from "ghostty_render_state_row_cells_get";
 extern function cellGraphemesInto(
 	cells: GhosttyRenderStateRowCells,
@@ -1168,25 +1162,32 @@ function underlineOf(style: GhosttyStyle): Underline {
 	};
 }
 
+function graphemesFrom(
+	cells: GhosttyRenderStateRowCells,
+	buf: Span<uint32>,
+	count: uint32,
+	ref extra: Vec<uint32>,
+): Result<uint32, VtError> {
+	const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
+	if (!ok(cellGraphemesInto(cells, bufKey, buf as Ptr<uint32>))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	pushAll(extra, buf[1..count as int32]);
+	return Result.ok(buf[0]);
+}
+
 function graphemesOf(
 	cells: GhosttyRenderStateRowCells,
 	count: uint32,
 	ref extra: Vec<uint32>,
 ): Result<uint32, VtError> {
-	const bufKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF;
 	if (count <= INLINE_GRAPHEMES) {
-		let graphemes: InlineGraphemes = { cp: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
-		if (!ok(cellGraphemes(cells, bufKey, graphemes))) { return Result.err(VtError.ReadFailed); }
-		for (let i = 1; i < (count as int32); i++) { extra.push(graphemes.cp[i]); }
-		return Result.ok(graphemes.cp[0]);
+		let small: uint32[16] = [];
+		return graphemesFrom(cells, small, count, extra);
 	}
 	if (count > MAX_CELL_EXTRA) { return Result.err(VtError.GraphemeTooLong); }
 	let all: Vec<uint32> = new Array(count as int32);
-	if (!ok(cellGraphemesInto(cells, bufKey, all as Span<uint32> as Ptr<uint32>))) {
-		return Result.err(VtError.ReadFailed);
-	}
-	for (let i = 1; i < (count as int32); i++) { extra.push(all[i]); }
-	return Result.ok(all[0]);
+	return graphemesFrom(cells, all, count, extra);
 }
 
 function underlineColorOf(

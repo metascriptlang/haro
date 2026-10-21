@@ -1,4 +1,4 @@
-import { Block, Selection } from "../select/select";
+import { Block, Selection, Unit } from "../select/select";
 import { Vt, VtError } from "../vt/vt";
 import { Clicks, unitOf } from "./clicks";
 
@@ -106,8 +106,11 @@ export function sync(this p: Pointer, vt: Vt): Result<boolean, VtError> {
 	if (sel === null) { return Result.ok(false); }
 	const now = try vt.selection();
 	p.sel = sel.rebased(sel.bounds(), now);
-	if (p.sel === null) { p.dragging = false; }
-	return Result.ok(p.sel !== null);
+	if (p.shown() === null) {
+		p.clear(vt);
+		return Result.ok(false);
+	}
+	return Result.ok(true);
 }
 
 export function copyText(this p: Pointer, vt: Vt): Result<string | null, VtError> {
@@ -295,6 +298,73 @@ test "the highlight follows the selection into scrolled rows and out of view" {
 		const out = p.blocks(vt, 3, 10);
 		assert out.ok;
 		if (out.ok) { assert out.value.length == 0; }
+		vt.free();
+	}
+}
+
+function prunedLines(from: int32, count: int32): string {
+	let text = "";
+	for (let i = 0; i < count; i++) { text += `
+r${from + i}`; }
+	return text;
+}
+
+function prunable(): Vt | null {
+	const vt = viewOf(80, 4, "r0");
+	if (vt === null || !vt.setScrollback(1000).ok) { return null; }
+	vt.writeText(prunedLines(1, 6000));
+	if (!vt.update().ok) { return null; }
+	return vt;
+}
+
+test "a selection whose start is pruned from scrollback shows what the terminal still holds" {
+	const vt = prunable();
+	assert vt !== null;
+	if (vt !== null) {
+		const bottom = (try vt.scrollOffset() catch 0) + 3;
+		const p = Pointer.open();
+		const sel = Selection.press(Unit.Cell, { start: { row: 0, col: 1 }, end: { row: 0, col: 1 } }, false)
+			.drag({ start: { row: bottom, col: 2 }, end: { row: bottom, col: 2 } });
+		p.sel = sel;
+		assert vt.selectionSet(sel.marked()).ok;
+		vt.writeText(prunedLines(6001, 400));
+		assert vt.update().ok;
+		const kept = p.sync(vt);
+		assert kept.ok;
+		if (kept.ok) { assert kept.value; }
+		const now = vt.selection();
+		assert now.ok;
+		if (now.ok) {
+			const m = now.value;
+			assert m !== null;
+			if (m !== null) {
+				assert m.range.start.row == 0 && m.range.start.col == 0;
+				assert p.sel !== null;
+				if (p.sel !== null) { assert p.sel.marked().range == m.range; }
+			}
+		}
+		vt.free();
+	}
+}
+
+test "a selection pruned whole from scrollback is gone" {
+	const vt = prunable();
+	assert vt !== null;
+	if (vt !== null) {
+		const p = Pointer.open();
+		const sel = Selection.press(Unit.Cell, { start: { row: 0, col: 0 }, end: { row: 0, col: 0 } }, false)
+			.drag({ start: { row: 1, col: 1 }, end: { row: 1, col: 1 } });
+		p.sel = sel;
+		assert vt.selectionSet(sel.marked()).ok;
+		vt.writeText(prunedLines(6001, 400));
+		assert vt.update().ok;
+		const kept = p.sync(vt);
+		assert kept.ok;
+		if (kept.ok) { assert !kept.value; }
+		assert !p.selected();
+		const now = vt.selection();
+		assert now.ok;
+		if (now.ok) { assert now.value === null; }
 		vt.free();
 	}
 }

@@ -118,9 +118,12 @@ function shiftedBy(this r: Range, rows: int32): Range {
 
 export function rebased(this sel: Selection, was: Range, now: Marked | null): Selection | null {
 	if (now === null) { return null; }
-	const shift = now.range.start.row - was.start.row;
-	if (shift == 0) { return sel; }
-	return { ...sel, origin: sel.origin.shiftedBy(shift), focus: sel.focus.shiftedBy(shift) };
+	const shift = now.range.end.row - was.end.row;
+	if (now.range == was.shiftedBy(shift)) {
+		if (shift == 0) { return sel; }
+		return { ...sel, origin: sel.origin.shiftedBy(shift), focus: sel.focus.shiftedBy(shift) };
+	}
+	return { ...sel, unit: Unit.Cell, origin: pointRange(now.range.start), focus: pointRange(now.range.end) };
 }
 
 function pointRange(at: Point): Range {

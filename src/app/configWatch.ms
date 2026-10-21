@@ -1,5 +1,5 @@
 import { Config, defaults } from "../config/config";
-import { Loaded, load, stampOf } from "../config/source";
+import { Loaded, empty, load, stampOf } from "../config/source";
 
 // Polled until card 2026-09-26-await-on-fs-watch-never-resumes.md lets a watch resume in an Ion window
 const CONFIG_POLL_MS = 1000;
@@ -11,7 +11,7 @@ export interface ConfigWatch {
 }
 
 export function forFile(this typeof ConfigWatch, file: string): ConfigWatch {
-	return { file: file, loaded: { config: defaults(), faces: [], stamp: "", notice: "" }, error: "" };
+	return { file: file, loaded: Loaded.empty(), error: "" };
 }
 
 function reload(this w: ConfigWatch): Result<Config, string> {

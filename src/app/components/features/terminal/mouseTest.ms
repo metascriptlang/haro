@@ -1,6 +1,6 @@
 import { selected } from "../../../../input/pointer";
 import { bounds } from "../../../../select/select";
-import { releaseHeldKey, sendKey, shutdown } from "./term";
+import { Term, releaseHeldKey, sendKey } from "./term";
 import { Controls, Hit } from "./controls";
 import { keyDown } from "./keyboard";
 import { autoscrollTick, endDrag, pointerDown, pointerMove, pointerUp, roll, shades } from "./mouse";
@@ -17,14 +17,11 @@ import {
 	key,
 	lines,
 	offsetOf,
-	termOf,
+	onTerm,
 } from "./terminalRig";
 
 test "while a paste is held the wheel, the buttons and the pointer do nothing" {
-	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30), 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("a\nb"));
 		const bottom = offsetOf(t);
@@ -35,15 +32,11 @@ test "while a paste is held the wheel, the buttons and the pointer do nothing" {
 		assert !c.pointer.dragging;
 		assert !handled(c.pointerDown(t, clip, 2, hitAt(0, 0), 0));
 		assert clip.write !== null;
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "wheel arrows on the alternate screen tap each key and leave the held key to be released" {
-	const ctrlSink: Sink = { sent: "" };
-	const ctrl = termOf("\x1b[?1049h\x1b[>11u", 20, 5, ctrlSink);
-	assert ctrl !== null;
-	if (ctrl !== null) {
+	assert onTerm("\x1b[?1049h\x1b[>11u", (ctrl: Term, ctrlSink: Sink): void => {
 		const c = Controls.open();
 		assert ctrl.sendKey(key("ControlLeft", CTRL)).ok;
 		ctrlSink.sent = "";
@@ -52,12 +45,8 @@ test "wheel arrows on the alternate screen tap each key and leave the held key t
 		ctrlSink.sent = "";
 		assert ctrl.releaseHeldKey().ok;
 		assert ctrlSink.sent == "\x1b[57442;5:3u\x1b[57448;1:3u";
-		ctrl.shutdown();
-	}
-	const letterSink: Sink = { sent: "" };
-	const letter = termOf("\x1b[?1049h\x1b[>3u", 20, 5, letterSink);
-	assert letter !== null;
-	if (letter !== null) {
+	}).ok;
+	assert onTerm("\x1b[?1049h\x1b[>3u", (letter: Term, letterSink: Sink): void => {
 		const c = Controls.open();
 		const a = key("KeyA", 0);
 		a.text = "a";
@@ -67,15 +56,11 @@ test "wheel arrows on the alternate screen tap each key and leave the held key t
 		letterSink.sent = "";
 		assert letter.releaseHeldKey().ok;
 		assert letterSink.sent == "\x1b[97;1:3u";
-		letter.shutdown();
-	}
+	}).ok;
 }
 
 test "the wheel scrolls three rows a notch on the primary screen and accumulates fractions" {
-	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30), 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const bottom = offsetOf(t);
 		assert handled(c.roll(t, 1, hitAt(0, 0)));
@@ -88,47 +73,31 @@ test "the wheel scrolls three rows a notch on the primary screen and accumulates
 		assert handled(c.roll(t, 0.25, hitAt(0, 0)));
 		assert offsetOf(t) == bottom - 7;
 		assert sink.sent == "";
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "on the alternate screen the wheel is arrow keys, in the cursor key mode the program set" {
-	const normal: Sink = { sent: "" };
-	const a = termOf("\x1b[?1049h", 20, 5, normal);
-	assert a !== null;
-	if (a !== null) {
+	assert onTerm("\x1b[?1049h", (a: Term, normal: Sink): void => {
 		const c = Controls.open();
 		assert !handled(c.roll(a, 1, hitAt(0, 0)));
 		assert normal.sent == "\x1b[A\x1b[A\x1b[A";
 		assert !handled(c.roll(a, -1, hitAt(0, 0)));
 		assert normal.sent == "\x1b[A\x1b[A\x1b[A\x1b[B\x1b[B\x1b[B";
-		a.shutdown();
-	}
-	const app: Sink = { sent: "" };
-	const b = termOf("\x1b[?1049h\x1b[?1h", 20, 5, app);
-	assert b !== null;
-	if (b !== null) {
+	}).ok;
+	assert onTerm("\x1b[?1049h\x1b[?1h", (b: Term, app: Sink): void => {
 		const c = Controls.open();
 		assert !handled(c.roll(b, 1, hitAt(0, 0)));
 		assert app.sent == "\x1bOA\x1bOA\x1bOA";
-		b.shutdown();
-	}
-	const off: Sink = { sent: "" };
-	const d = termOf("\x1b[?1049h\x1b[?1007l", 20, 5, off);
-	assert d !== null;
-	if (d !== null) {
+	}).ok;
+	assert onTerm("\x1b[?1049h\x1b[?1007l", (d: Term, off: Sink): void => {
 		const c = Controls.open();
 		assert c.roll(d, 1, hitAt(0, 0)).ok;
 		assert off.sent == "";
-		d.shutdown();
-	}
+	}).ok;
 }
 
 test "an app that tracks the mouse gets presses, releases and wheel notches as its own reports" {
-	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30) + "\x1b[?1000h\x1b[?1006h", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(lines(30) + "\x1b[?1000h\x1b[?1006h", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("x"));
 		const bottom = offsetOf(t);
@@ -141,15 +110,11 @@ test "an app that tracks the mouse gets presses, releases and wheel notches as i
 		assert offsetOf(t) == bottom;
 		assert sink.sent == "\x1b[<0;3;2M\x1b[<0;3;2m\x1b[<64;1;1M\x1b[<64;1;1M\x1b[<64;1;1M";
 		assert !handled(c.pointerUp(t, 1, hitAt(0, 0)));
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "motion is reported only in the modes that ask for it, and the held button rides along" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("\x1b[?1002h\x1b[?1006h", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("\x1b[?1002h\x1b[?1006h", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("x"));
 		assert !handled(c.pointerMove(t, hitAt(1, 1), false));
@@ -157,15 +122,11 @@ test "motion is reported only in the modes that ask for it, and the held button 
 		assert handled(c.pointerDown(t, clip, 1, hitAt(1, 1), 0));
 		assert !handled(c.pointerMove(t, hitAt(4, 1), true));
 		assert sink.sent == "\x1b[<0;2;2M\x1b[<32;5;2M";
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "shift hands the mouse back from an app that tracks it, and a wheel reported to the app drops the selection" {
-	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30) + "\x1b[?1000h\x1b[?1006h", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(lines(30) + "\x1b[?1000h\x1b[?1006h", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("x"));
 		const bottom = offsetOf(t);
@@ -180,17 +141,13 @@ test "shift hands the mouse back from an app that tracks it, and a wheel reporte
 		assert handled(c.roll(t, 1, hitAt(0, 0)));
 		assert !c.pointer.selected();
 		assert sink.sent == "\x1b[<64;1;1M\x1b[<64;1;1M\x1b[<64;1;1M";
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "a ctrl click on an http link opens it, on any other link or text it does not" {
-	const sink: Sink = { sent: "" };
 	const text = "\x1b]8;;https://example.com/a\x07link\x1b]8;;\x07 " +
 		"\x1b]8;;file:///c:/x.exe\x07bad\x1b]8;;\x07 plain";
-	const t = termOf(text, 30, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(text, (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const board = boardOf("");
 		const clip = clipOf(board);
@@ -203,15 +160,11 @@ test "a ctrl click on an http link opens it, on any other link or text it does n
 		assert board.opened == "";
 		assert handled(c.pointerDown(t, clip, 1, hitWith(1, 0, 0), 20000));
 		assert board.opened == "";
-		t.shutdown();
-	}
+	}, 30, 5).ok;
 }
 
 test "a right click copies a selection and otherwise pastes" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("alpha beta", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("alpha beta", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const board = boardOf("pasted");
 		const clip = clipOf(board);
@@ -222,15 +175,11 @@ test "a right click copies a selection and otherwise pastes" {
 		assert board.copied == "alpha";
 		assert sink.sent == "pasted";
 		assert !c.pointer.selected();
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "a move that finds the button released ends the drag, and a wheel while dragging extends it" {
-	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30), 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		assert c.pointerDown(t, clip, 1, hitAt(0, 4), 0).ok;
@@ -241,15 +190,11 @@ test "a move that finds the button released ends the drag, and a wheel while dra
 		if (kept !== null) { assert kept.bounds().start.row < kept.bounds().end.row; }
 		assert !handled(c.pointerMove(t, hitAt(5, 4), false));
 		assert !c.pointer.dragging;
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "the shades are the highlight rectangles of the viewport" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("alpha beta\r\ngamma", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("alpha beta\r\ngamma", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		const none = c.shades(t);
@@ -263,15 +208,11 @@ test "the shades are the highlight rectangles of the viewport" {
 			assert drawn.value[0].row == 0 && drawn.value[0].col == 2 && drawn.value[0].cols == 18;
 			assert drawn.value[1].row == 1 && drawn.value[1].col == 0 && drawn.value[1].cols == 4;
 		}
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "a drag held past the top edge scrolls back a row per tick, and the release stops it" {
-	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30), 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		const bottom = offsetOf(t);
@@ -288,15 +229,11 @@ test "a drag held past the top edge scrolls back a row per tick, and the release
 		assert c.pointerUp(t, 1, above).ok;
 		assert !handled(c.autoscrollTick(t));
 		assert offsetOf(t) == bottom - 2;
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "losing focus mid-drag ends the drag and its scrolling, and keeps the selection" {
-	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30), 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		const bottom = offsetOf(t);
@@ -308,15 +245,11 @@ test "losing focus mid-drag ends the drag and its scrolling, and keeps the selec
 		assert offsetOf(t) == bottom;
 		assert !c.pointer.dragging;
 		assert c.pointer.selected();
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "a press in the padding reaches a tracking app as the nearest cell" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("\x1b[?1000h\x1b[?1006h", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("\x1b[?1000h\x1b[?1006h", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		const base = hitAt(0, 0);
@@ -328,6 +261,5 @@ test "a press in the padding reaches a tracking app as the nearest cell" {
 		};
 		assert handled(c.pointerDown(t, clip, 1, padded, 0));
 		assert sink.sent == "\x1b[<0;1;1M";
-		t.shutdown();
-	}
+	}).ok;
 }

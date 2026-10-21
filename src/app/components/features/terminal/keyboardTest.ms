@@ -1,6 +1,6 @@
 import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { selected } from "../../../../input/pointer";
-import { releaseHeldKey, sendKey, shutdown } from "./term";
+import { Term, releaseHeldKey, sendKey } from "./term";
 import { Controls } from "./controls";
 import { closeKey, keyDown, keyUp } from "./keyboard";
 import { Warning } from "../../../../input/paste";
@@ -26,14 +26,11 @@ import {
 	key,
 	lines,
 	offsetOf,
-	termOf,
+	onTerm,
 } from "./terminalRig";
 
 test "ctrl shift page, arrow, home and end keys move the viewport and say they did" {
-	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30), 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		const bottom = offsetOf(t);
@@ -54,15 +51,11 @@ test "ctrl shift page, arrow, home and end keys move the viewport and say they d
 		assert !handled(c.keyDown(t, key("ArrowUp", 0), clip));
 		assert !handled(c.keyDown(t, key("PageUp", 0), clip));
 		assert sink.sent == "";
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "the copy chord and enter alike copy the selection to the clipboard and dismiss it" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("alpha beta\r\ngamma", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("alpha beta\r\ngamma", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const board = boardOf("");
 		const clip = clipOf(board);
@@ -83,15 +76,11 @@ test "the copy chord and enter alike copy the selection to the clipboard and dis
 			assert handled(c.keyDown(t, key("Insert", CTRL), clip));
 			assert board.copied == "gamma";
 		}
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "paste sends the clipboard through the terminal's paste encoding" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("ready", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("ready", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const board = boardOf("echo hi\r\n");
 		const clip = clipOf(board);
@@ -105,15 +94,11 @@ test "paste sends the clipboard through the terminal's paste encoding" {
 		const reads = board.reads;
 		assert !handled(c.keyDown(t, key("KeyV", CTRL), clip));
 		assert board.reads == reads;
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "a paste with a line break waits for an answer and sends nothing meanwhile" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("ready", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("ready", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("one\r\ntwo"));
 		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
@@ -130,41 +115,29 @@ test "a paste with a line break waits for an answer and sends nothing meanwhile"
 		assert handled(c.keyDown(t, key("KeyC", CLIPBOARD_MODS), clip));
 		assert sink.sent == "";
 		assert c.holding();
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "enter confirms a held paste and it goes out through the paste encoding" {
-	const plain: Sink = { sent: "" };
-	const a = termOf("ready", 20, 5, plain);
-	assert a !== null;
-	if (a !== null) {
+	assert onTerm("ready", (a: Term, plain: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("one\r\ntwo"));
 		assert handled(c.keyDown(a, key("KeyV", CLIPBOARD_MODS), clip));
 		assert handled(c.keyDown(a, key("Enter", 0), clip));
 		assert !c.holding();
 		assert plain.sent == "one\rtwo";
-		a.shutdown();
-	}
-	const chord: Sink = { sent: "" };
-	const b = termOf("ready", 20, 5, chord);
-	assert b !== null;
-	if (b !== null) {
+	}).ok;
+	assert onTerm("ready", (b: Term, chord: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("one\r\ntwo"));
 		assert handled(c.keyDown(b, key("KeyV", CLIPBOARD_MODS), clip));
 		assert handled(c.keyDown(b, key("KeyV", CLIPBOARD_MODS), clip));
 		assert chord.sent == "one\rtwo";
-		b.shutdown();
-	}
+	}).ok;
 }
 
 test "escape drops a held paste and the next key reaches the shell again" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("ready", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("ready", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf("one\r\ntwo"));
 		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
@@ -172,17 +145,13 @@ test "escape drops a held paste and the next key reaches the shell again" {
 		assert !c.holding();
 		assert sink.sent == "";
 		assert !handled(c.keyDown(t, key("KeyA", 0), clip));
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "ctrl alt up and down move the viewport between prompts the shell marked" {
-	const sink: Sink = { sent: "" };
 	const marked = "\x1b]133;A\x07p1\r\nout1\r\nout2\r\n" +
 		"\x1b]133;A\x07p2\r\nout3\r\n\x1b]133;A\x07p3";
-	const t = termOf(marked, 10, 3, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(marked, (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		const bottom = offsetOf(t);
@@ -190,15 +159,11 @@ test "ctrl alt up and down move the viewport between prompts the shell marked" {
 		assert offsetOf(t) < bottom;
 		assert handled(c.keyDown(t, key("ArrowDown", CTRL | ALT), clip));
 		assert sink.sent == "";
-		t.shutdown();
-	}
+	}, 10, 3).ok;
 }
 
 test "a configured keybind sends its text, ahead of a built-in chord on the same keys" {
-	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30), 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		c.keybinds = [
 			{
@@ -224,18 +189,20 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 		assert handled(c.keyDown(t, key("KeyC", CTRL | SHIFT), clip));
 		assert sink.sent == "\x1b[13;2uc";
 		assert !handled(c.keyDown(t, key("Enter", CTRL), clip));
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "a ctrl alt keybind leaves the character AltGr types on the same key to the program" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("ready", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("ready", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		c.keybinds = [
-			{ code: "KeyQ", mods: CTRL | ALT, text: "x", action: BindAction.SendText, screen: Screen.Any },
+			{
+				code: "KeyQ",
+				mods: CTRL | ALT,
+				text: "x",
+				action: BindAction.SendText,
+				screen: Screen.Any,
+			},
 		];
 		const clip = clipOf(boardOf(""));
 		const altGr = key("KeyQ", CTRL | ALT);
@@ -245,8 +212,7 @@ test "a ctrl alt keybind leaves the character AltGr types on the same key to the
 		assert sink.sent == "";
 		assert handled(c.keyDown(t, key("KeyQ", CTRL | ALT), clip));
 		assert sink.sent == "x";
-		t.shutdown();
-	}
+	}).ok;
 }
 
 function released(code: string, unshifted: int32): NeonEvent {
@@ -257,29 +223,18 @@ function released(code: string, unshifted: int32): NeonEvent {
 }
 
 test "a key release reaches a program only once it asks for event types" {
-	const legacy: Sink = { sent: "" };
-	const plain = termOf("ready", 20, 5, legacy);
-	assert plain !== null;
-	if (plain !== null) {
+	assert onTerm("ready", (plain: Term, legacy: Sink): void => {
 		assert plain.sendKey(released("KeyA", 0x61)).ok;
 		assert legacy.sent == "";
-		plain.shutdown();
-	}
-	const kitty: Sink = { sent: "" };
-	const t = termOf("\x1b[>3u", 20, 5, kitty);
-	assert t !== null;
-	if (t !== null) {
+	}).ok;
+	assert onTerm("\x1b[>3u", (t: Term, kitty: Sink): void => {
 		assert t.sendKey(released("KeyA", 0x61)).ok;
 		assert kitty.sent == "\x1b[97;1:3u";
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "a focus loss releases the key still held, once, to a program that asks for event types" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("\x1b[>3u", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("\x1b[>3u", (t: Term, sink: Sink): void => {
 		const a = key("KeyA", 0);
 		a.unshifted = 0x61;
 		assert t.sendKey(a).ok;
@@ -293,15 +248,11 @@ test "a focus loss releases the key still held, once, to a program that asks for
 		sink.sent = "";
 		assert t.releaseHeldKey().ok;
 		assert sink.sent == "";
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "the release of a key a control consumed is consumed too, and any other goes on" {
-	const sink: Sink = { sent: "" };
-	const t = termOf(lines(30), 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		assert handled(c.keyDown(t, key("PageUp", CTRL | SHIFT), clip));
@@ -309,15 +260,11 @@ test "the release of a key a control consumed is consumed too, and any other goe
 		assert !c.keyUp(released("KeyA", 0x61));
 		assert !handled(c.keyDown(t, key("KeyA", 0), clip));
 		assert !c.keyUp(released("PageUp", 0));
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "a keypad digit without NumLock is its navigation key on Windows, which alone reports NumLock" {
-	const sink: Sink = { sent: "" };
-	const t = termOf("ready", 20, 5, sink);
-	assert t !== null;
-	if (t !== null) {
+	assert onTerm("ready", (t: Term, sink: Sink): void => {
 		assert t.sendKey(key("Numpad8", 0)).ok;
 		when (windows) {
 			assert sink.sent == "\x1b[A";
@@ -329,8 +276,7 @@ test "a keypad digit without NumLock is its navigation key on Windows, which alo
 		locked.text = "8";
 		assert t.sendKey(locked).ok;
 		assert sink.sent == "8";
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "a keybind with a mode sends to a full-screen program and closes the window at the shell" {
@@ -350,25 +296,20 @@ test "a keybind with a mode sends to a full-screen program and closes the window
 			screen: Screen.Primary,
 		},
 	];
-	const atShell: Sink = { sent: "" };
-	const shell = termOf("$ ", 20, 5, atShell);
-	const inApp: Sink = { sent: "" };
-	const app = termOf("\x1b[?1049h", 20, 5, inApp);
-	assert shell !== null && app !== null;
-	if (shell !== null && app !== null) {
-		const c = Controls.open();
-		c.keybinds = binds;
-		const board = boardOf("");
-		const clip = clipOf(board);
-		assert handled(c.keyDown(app, key("KeyW", SUPER), clip));
-		assert inApp.sent == "\x1b[119;9u";
-		assert board.closed == 0;
-		assert handled(c.keyDown(shell, key("KeyW", SUPER), clip));
-		assert atShell.sent == "";
-		assert board.closed == 1;
-		shell.shutdown();
-		app.shutdown();
-	}
+	assert onTerm("$ ", (shell: Term, atShell: Sink): void => {
+		assert onTerm("\x1b[?1049h", (app: Term, inApp: Sink): void => {
+			const c = Controls.open();
+			c.keybinds = binds;
+			const board = boardOf("");
+			const clip = clipOf(board);
+			assert handled(c.keyDown(app, key("KeyW", SUPER), clip));
+			assert inApp.sent == "\x1b[119;9u";
+			assert board.closed == 0;
+			assert handled(c.keyDown(shell, key("KeyW", SUPER), clip));
+			assert atShell.sent == "";
+			assert board.closed == 1;
+		}).ok;
+	}).ok;
 }
 
 test "close window from the menu runs a super w keybind for this screen and otherwise closes" {
@@ -381,27 +322,22 @@ test "close window from the menu runs a super w keybind for this screen and othe
 			screen: Screen.Alternate,
 		},
 	];
-	const atShell: Sink = { sent: "" };
-	const shell = termOf("$ ", 20, 5, atShell);
-	const inApp: Sink = { sent: "" };
-	const app = termOf("\x1b[?1049h", 20, 5, inApp);
-	assert shell !== null && app !== null;
-	if (shell !== null && app !== null) {
-		const c = Controls.open();
-		c.keybinds = binds;
-		const board = boardOf("");
-		const clip = clipOf(board);
-		assert handled(c.closeKey(app, clip));
-		assert inApp.sent == "\x1b[119;9u";
-		assert board.closed == 0;
-		assert handled(c.closeKey(shell, clip));
-		assert atShell.sent == "";
-		assert board.closed == 1;
-		c.keybinds = [];
-		assert handled(c.closeKey(app, clip));
-		assert inApp.sent == "\x1b[119;9u";
-		assert board.closed == 2;
-		shell.shutdown();
-		app.shutdown();
-	}
+	assert onTerm("$ ", (shell: Term, atShell: Sink): void => {
+		assert onTerm("\x1b[?1049h", (app: Term, inApp: Sink): void => {
+			const c = Controls.open();
+			c.keybinds = binds;
+			const board = boardOf("");
+			const clip = clipOf(board);
+			assert handled(c.closeKey(app, clip));
+			assert inApp.sent == "\x1b[119;9u";
+			assert board.closed == 0;
+			assert handled(c.closeKey(shell, clip));
+			assert atShell.sent == "";
+			assert board.closed == 1;
+			c.keybinds = [];
+			assert handled(c.closeKey(app, clip));
+			assert inApp.sent == "\x1b[119;9u";
+			assert board.closed == 2;
+		}).ok;
+	}).ok;
 }

@@ -27,20 +27,38 @@ function recorder(text: string, sink: Sink): Pty {
 	};
 }
 
-export function fitted(text: string, cols: int32, rows: int32, sink: Sink): Term | null {
-	const opened = openTerm((c: int32, r: int32): Result<Pty, PtyError> => {
+function onFitted(
+	text: string,
+	pump: boolean,
+	cols: int32,
+	rows: int32,
+	body: (t: Term, sink: Sink) => void,
+): Result<void, TermError> {
+	const sink: Sink = { sent: "" };
+	const t = try openTerm((c: int32, r: int32): Result<Pty, PtyError> => {
 		return Result.ok(recorder(text, sink));
 	});
-	if (!opened.ok) { return null; }
-	const t = opened.value;
-	if (!t.fit(cols, rows).ok) { return null; }
-	return t;
+	defer t.shutdown();
+	const _fit = try t.fit(cols, rows);
+	if (pump) { const _frame = try t.pumpFrame(); }
+	body(t, sink);
+	return Result.ok(null);
 }
 
-export function termOf(text: string, cols: int32, rows: int32, sink: Sink): Term | null {
-	const t = fitted(text, cols, rows, sink);
-	if (t === null || !t.pumpFrame().ok) { return null; }
-	return t;
+export function onTerm(
+	text: string,
+	body: (t: Term, sink: Sink) => void,
+	cols: int32 = 20,
+	rows: int32 = 5,
+): Result<void, TermError> {
+	return onFitted(text, true, cols, rows, body);
+}
+
+export function onFresh(
+	text: string,
+	body: (t: Term, sink: Sink) => void,
+): Result<void, TermError> {
+	return onFitted(text, false, 20, 5, body);
 }
 
 export interface Board {

@@ -93,7 +93,7 @@ import {
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { fromCodePoint } from "std/core/string";
 import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe, withoutAltGr } from "../keys/keys";
-import { Marked, Point, Range, Selection, Unit } from "../select/select";
+import { CellWidth, Marked, Point, Range, Selection, Unit } from "../select/select";
 import { Handle } from "std/ffi";
 
 struct InlineGraphemes { cp: uint32[16]; }
@@ -1746,6 +1746,20 @@ export function selection(this vt: Vt): Result<Marked | null, VtError> {
 	if (!ok(r)) { return Result.err(VtError.SelectFailed); }
 	const got: Marked | null = try markedOf(vt.terminal, selection);
 	return Result.ok(got);
+}
+
+export function cellWidthAt(this vt: Vt, at: Point): Result<CellWidth, VtError> {
+	let ref = try screenRef(vt.terminal, at);
+	let cell: GhosttyCell = 0;
+	let wide = GhosttyCellWide.GHOSTTY_CELL_WIDE_NARROW;
+	if (!ok(gridRefCell(ref, cell)) || !ok(cellWide(cell, GhosttyCellData.GHOSTTY_CELL_DATA_WIDE, wide))) {
+		return Result.err(VtError.ReadFailed);
+	}
+	return Result.ok(match (wide) {
+		GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE => CellWidth.Wide,
+		GhosttyCellWide.GHOSTTY_CELL_WIDE_SPACER_TAIL => CellWidth.Tail,
+		_ => CellWidth.Narrow,
+	});
 }
 
 function wordAt(this vt: Vt, at: Point): Result<Range | null, VtError> {

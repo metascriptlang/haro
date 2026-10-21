@@ -26,7 +26,13 @@ export struct Selection {
 	block: boolean;
 }
 
-struct RowSpan {
+export enum CellWidth {
+	Narrow,
+	Wide,
+	Tail,
+}
+
+export struct RowSpan {
 	row: int32;
 	from: int32;
 	to: int32;
@@ -74,7 +80,7 @@ export function marked(this sel: Selection): Marked {
 	return { range: sel.bounds(), block: sel.block };
 }
 
-function spans(this m: Marked, top: int32, rows: int32, cols: int32): Vec<RowSpan> {
+export function spans(this m: Marked, top: int32, rows: int32, cols: int32): Vec<RowSpan> {
 	const r = m.range;
 	let out: Vec<RowSpan> = [];
 	for (let y = 0; y < rows; y++) {
@@ -96,9 +102,15 @@ function isContinuedBy(this b: Block, s: RowSpan): boolean {
 	return b.col == s.from && b.cols == s.width() && b.row + b.rows == s.row;
 }
 
-export function blocks(this m: Marked, top: int32, rows: int32, cols: int32): Vec<Block> {
+export function covering(this s: RowSpan, first: CellWidth, last: CellWidth): RowSpan {
+	const from = first == CellWidth.Tail ? s.from - 1 : s.from;
+	const to = last == CellWidth.Wide ? s.to + 1 : s.to;
+	return { row: s.row, from: from, to: to };
+}
+
+export function merged(spans: Vec<RowSpan>): Vec<Block> {
 	let out: Vec<Block> = [];
-	for (const s of m.spans(top, rows, cols)) {
+	for (const s of spans) {
 		const n = out.length as int32;
 		if (n > 0 && out[n - 1].isContinuedBy(s)) {
 			out[n - 1].rows += 1;
@@ -228,7 +240,7 @@ test "a rebase follows the terminal's shift and drops a selection the terminal l
 
 test "a linear selection draws as at most three rectangles: head, full middle rows, tail" {
 	const m: Marked = { range: range(10, 5, 14, 3), block: false };
-	const drawn = m.blocks(8, 10, 20);
+	const drawn = merged(m.spans(8, 10, 20));
 	assert drawn.length == 3;
 	assert drawn[0] == block(2, 5, 1, 15);
 	assert drawn[1] == block(3, 0, 3, 20);
@@ -237,7 +249,7 @@ test "a linear selection draws as at most three rectangles: head, full middle ro
 
 test "a head that starts at column 0 joins the full rows under it" {
 	const m: Marked = { range: range(2, 0, 4, 7), block: false };
-	const drawn = m.blocks(0, 10, 20);
+	const drawn = merged(m.spans(0, 10, 20));
 	assert drawn.length == 2;
 	assert drawn[0] == block(2, 0, 2, 20);
 	assert drawn[1] == block(4, 0, 1, 8);
@@ -245,12 +257,19 @@ test "a head that starts at column 0 joins the full rows under it" {
 
 test "a block selection is one rectangle however many rows it covers" {
 	const sel = Selection.press(Unit.Cell, pointRange(at(6, 12)), true).drag(pointRange(at(3, 3)));
-	const drawn = sel.marked().blocks(0, 10, 20);
+	const drawn = merged(sel.marked().spans(0, 10, 20));
 	assert drawn.length == 1;
 	assert drawn[0] == block(3, 3, 4, 10);
 }
 
+test "a wide character is shaded whole whichever of its cells the selection reaches" {
+	const s = span(0, 3, 6);
+	assert s.covering(CellWidth.Narrow, CellWidth.Wide) == span(0, 3, 7);
+	assert s.covering(CellWidth.Tail, CellWidth.Tail) == span(0, 2, 6);
+	assert span(0, 3, 3).covering(CellWidth.Tail, CellWidth.Tail) == span(0, 2, 3);
+}
+
 test "a selection scrolled out of view draws nothing" {
 	const m: Marked = { range: range(2, 5, 4, 3), block: false };
-	assert m.blocks(30, 5, 20).length == 0;
+	assert merged(m.spans(30, 5, 20)).length == 0;
 }

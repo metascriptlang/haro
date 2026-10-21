@@ -28,21 +28,47 @@ export function readConfig(this w: ConfigWatch): void {
 	w.loaded.stamp = stampOf(w.file);
 }
 
+function poll(this w: ConfigWatch, handler: (c: Config | null, error: string) => void): void {
+	const stamp = stampOf(w.file);
+	if (stamp == w.loaded.stamp) { return; }
+	if (stamp == "") {
+		w.loaded.stamp = stamp;
+		handler(null, `${w.file} is gone; the last config it gave stays`);
+		return;
+	}
+	const got = w.reload();
+	if (got.ok) {
+		handler(got.value, "");
+	} else {
+		w.loaded.stamp = stamp;
+		handler(null, got.error);
+	}
+}
+
 export function watchConfig(
 	this w: ConfigWatch,
 	handler: (c: Config | null, error: string) => void,
 ): void {
 	setTimeout((): void => {
-		const stamp = stampOf(w.file);
-		if (stamp != w.loaded.stamp) {
-			const got = w.reload();
-			if (got.ok) {
-				handler(got.value, "");
-			} else {
-				w.loaded.stamp = stamp;
-				handler(null, got.error);
-			}
-		}
+		w.poll(handler);
 		w.watchConfig(handler);
 	}, CONFIG_POLL_MS);
+}
+
+test "a config file that disappears keeps the last config and says so once" {
+	const w = ConfigWatch.forFile("/no/such/haro/config.ms");
+	w.loaded = { config: { ...defaults(), fontSize: 20 }, faces: [], stamp: "seen" };
+	let calls = 0;
+	let said = "";
+	const handler = (c: Config | null, error: string): void => {
+		calls++;
+		assert c === null;
+		said = error;
+	};
+	w.poll(handler);
+	assert calls == 1;
+	assert said.includes("is gone");
+	assert w.loaded.config.fontSize == 20;
+	w.poll(handler);
+	assert calls == 1;
 }

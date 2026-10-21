@@ -327,6 +327,22 @@ export function shellExitCode(this t: Term): int32 {
 	return code;
 }
 
+const BYTE_MAX: int32 = 255;
+
+export function exitCodeText(code: int32): string {
+	if (code >= 0 && code <= BYTE_MAX) { return `${code}`; }
+	const status = code as uint32;
+	return `${status} (0x${status.toString(16).padStart(8, "0")})`;
+}
+
+test "an exit code past a byte reads as the unsigned status with its hex, as Windows reports one" {
+	assert exitCodeText(0) == "0";
+	assert exitCodeText(127) == "127";
+	assert exitCodeText(-1073741510) == "3221225786 (0xc000013a)";
+	assert exitCodeText(-1) == "4294967295 (0xffffffff)";
+	assert exitCodeText(259) == "259 (0x00000103)";
+}
+
 test "output drained ahead of the frame shows in the grid only when the frame applies it" {
 	const replay = Replay.ofText("one\r\ntwo");
 	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {

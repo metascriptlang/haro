@@ -20,7 +20,7 @@ import { Config } from "../config/config";
 import { cacheDir, configPath } from "../config/source";
 import { ConfigWatch, forFile, readConfig, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
-import { Term, openTerm, shutdown } from "./components/features/terminal/term";
+import { Term, exitCodeText, openTerm, shutdown } from "./components/features/terminal/term";
 import { AppHost } from "./components/features/terminal/paneModel";
 
 extern function appWireWake(): void;
@@ -172,7 +172,7 @@ function runShell(shell: string): int32 {
 	if (hasFlag("--smoke")) { smoke(t); }
 	if (hasFlag("--flood")) { smokeFlood(t, pace); }
 	return openWindow(t, (code: int32): void => {
-		note(`the shell exited with code ${code}`);
+		note(`the shell exited with code ${exitCodeText(code)}`);
 		t.shutdown();
 		exit(0);
 	});
@@ -195,7 +195,7 @@ function runReplay(path: string): int32 {
 	const t = opened.value;
 	if (hasFlag("--smoke")) { smokeReplay(t); }
 	return openWindow(t, (code: int32): void => {
-		console.log(`haro: the recording ended with code ${code}`);
+		console.log(`haro: the recording ended with code ${exitCodeText(code)}`);
 	});
 }
 

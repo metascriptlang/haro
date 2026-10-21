@@ -31,7 +31,7 @@ export function cacheDir(): string {
 }
 
 export function stampOf(path: string): string {
-	return exists(path) ? changeStamp(path) : "";
+	return changeStamp(path);
 }
 
 function isCsiFinal(c: string): boolean {

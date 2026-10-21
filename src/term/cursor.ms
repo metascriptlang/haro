@@ -1,15 +1,5 @@
 import { CursorLook, CursorShape } from "../vt/vt";
 
-export struct Box {
-	x: float64;
-	y: float64;
-	w: float64;
-	h: float64;
-	alpha: float64;
-}
-
-export const NO_BOX: Box = { x: 0, y: 0, w: 0, h: 0, alpha: 0 };
-export const BOX_SLOTS: int32 = 4;
 export const BLINK_MS: int32 = 600;
 const BLINK_RESET_MS: float64 = 500;
 
@@ -29,50 +19,6 @@ export function blinks(this look: CursorLook, focused: boolean): boolean {
 
 export function resets(last: float64, now: float64): boolean {
 	return now - last > BLINK_RESET_MS;
-}
-
-export function boxes(
-	shape: CursorShape,
-	col: int32,
-	row: int32,
-	cellWidth: float64,
-	rowHeight: float64,
-	thickness: float64,
-): Box[BOX_SLOTS] {
-	const x = (col as float64) * cellWidth;
-	const y = (row as float64) * rowHeight;
-	const sideHeight = rowHeight - 2 * thickness;
-	const rightX = x + cellWidth - thickness;
-	return match (shape) {
-		CursorShape.Block => [
-			{ x: x, y: y, w: cellWidth, h: rowHeight, alpha: 0.5 },
-			NO_BOX,
-			NO_BOX,
-			NO_BOX,
-		],
-		CursorShape.Bar => [
-			{ x: x - thickness / 2, y: y, w: thickness, h: rowHeight, alpha: 1 },
-			NO_BOX,
-			NO_BOX,
-			NO_BOX,
-		],
-		CursorShape.Underline => [
-			{ x: x, y: y + rowHeight - 2 * thickness, w: cellWidth, h: thickness, alpha: 1 },
-			NO_BOX,
-			NO_BOX,
-			NO_BOX,
-		],
-		CursorShape.BlockHollow => [
-			{ x: x, y: y, w: cellWidth, h: thickness, alpha: 1 },
-			{ x: x, y: y + rowHeight - thickness, w: cellWidth, h: thickness, alpha: 1 },
-			{ x: x, y: y + thickness, w: thickness, h: sideHeight, alpha: 1 },
-			{ x: rightX, y: y + thickness, w: thickness, h: sideHeight, alpha: 1 },
-		],
-	};
-}
-
-function box(x: float64, y: float64, w: float64, h: float64, alpha: float64): Box {
-	return { x: x, y: y, w: w, h: h, alpha: alpha };
 }
 
 function look(visible: boolean, shape: CursorShape, blinking: boolean): CursorLook {
@@ -96,32 +42,6 @@ test "an unfocused window shows a hollow block that does not blink" {
 	assert blinking.blinks(true);
 	assert !look(true, CursorShape.Bar, false).blinks(true);
 	assert !look(false, CursorShape.Bar, true).blinks(true);
-}
-
-test "a block cursor is one translucent box over its cell" {
-	const block = boxes(CursorShape.Block, 2, 1, 8, 16, 1);
-	assert block[0] == box(16, 16, 8, 16, 0.5);
-	assert block[1] == NO_BOX && block[2] == NO_BOX && block[3] == NO_BOX;
-}
-
-test "a bar cursor is a thin box centred on the cell's left edge" {
-	const bar = boxes(CursorShape.Bar, 2, 1, 8, 16, 1);
-	assert bar[0] == box(15.5, 16, 1, 16, 1);
-	assert bar[1] == NO_BOX && bar[2] == NO_BOX && bar[3] == NO_BOX;
-}
-
-test "an underline cursor is a thin box near the cell's bottom" {
-	const underline = boxes(CursorShape.Underline, 2, 1, 8, 16, 1);
-	assert underline[0] == box(16, 30, 8, 1, 1);
-	assert underline[1] == NO_BOX && underline[2] == NO_BOX && underline[3] == NO_BOX;
-}
-
-test "a hollow block is four edges that do not overlap" {
-	const edges = boxes(CursorShape.BlockHollow, 0, 0, 8, 16, 1);
-	assert edges[0] == box(0, 0, 8, 1, 1);
-	assert edges[1] == box(0, 15, 8, 1, 1);
-	assert edges[2] == box(0, 1, 1, 14, 1);
-	assert edges[3] == box(7, 1, 1, 14, 1);
 }
 
 test "output resets the blink at most once every half second" {

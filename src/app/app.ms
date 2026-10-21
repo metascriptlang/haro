@@ -7,6 +7,7 @@ import { Term } from "./components/features/terminal/term";
 import { AppHost, connectHost, createPane } from "./components/features/terminal/paneModel";
 import { cancelPaste, confirmPaste } from "./components/features/terminal/paneEvents";
 import { TerminalPane } from "./components/features/terminal/terminalPane";
+import { CursorTrail } from "./components/content/cursor";
 
 export function App(t: Term, host: AppHost, started: Config): NeonNode {
 	const notice = createNotice();
@@ -15,6 +16,7 @@ export function App(t: Term, host: AppHost, started: Config): NeonNode {
 	pane.connectHost();
 	return <Void style={{ backgroundColor: pane.background() }}>
 		<TerminalPane model={pane} />
+		<CursorTrail model={pane.cursor} />
 		<PasteDialog
 			model={dialog}
 			metrics={pane.metrics}

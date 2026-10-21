@@ -5,7 +5,6 @@ import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { View, ViewHandle } from "../../../../../../neon/src/components/primitives";
 import { RowSlot } from "../../../frame";
 import { CellText } from "../../ui/cellText";
-import { CursorBoxes } from "../../content/cursor";
 import { Preedit } from "../../content/preedit";
 import { Shades } from "../../content/shades";
 import { PaneModel, laidOut } from "./paneModel";
@@ -55,7 +54,6 @@ export function TerminalPane(props: { model: PaneModel }): NeonNode {
 			onLayout={(e: NeonEvent): void => { m.laidOut(e); }}>
 			<ForList each={m.term.grid}>{row}</ForList>
 			<Shades model={m.shades} metrics={metrics} color={m.foreground()} />
-			<CursorBoxes model={m.cursor} color={m.cursorColor()} />
 			<Preedit
 				model={m.preedit}
 				metrics={metrics}

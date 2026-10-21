@@ -1900,8 +1900,7 @@ test "a cursor position query is answered with the cursor's place" {
 	if (created.ok) {
 		const vt = created.value;
 		vt.writeText("ab\x1b[6n");
-		let replies = vt.takeReplies();
-		assert ascii(replies) == "\x1b[1;3R";
+		assert pending(vt) == "\x1b[1;3R";
 		vt.free();
 	}
 }
@@ -2283,8 +2282,7 @@ test "a theme the host sets is what a colour query reports" {
 		const vt = created.value;
 		assert vt.setDefaultColors({ r: 0x28, g: 0x2c, b: 0x34 }, { r: 0xff, g: 0xff, b: 0xfe }).ok;
 		vt.writeText("\x1b]11;?\x1b\\");
-		let replies = vt.takeReplies();
-		assert ascii(replies) == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\";
+		assert pending(vt) == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\";
 		vt.free();
 	}
 }
@@ -2393,9 +2391,7 @@ function topAfterJump(vt: Vt, toward: PromptJump): string {
 	if (!jumped.ok) { return "<failed>"; }
 	if (!jumped.value) { return "<none>"; }
 	vt.update();
-	const lines = vt.lines();
-	if (!lines.ok) { return "<unreadable>"; }
-	return lines.value[0];
+	return topLine(vt);
 }
 
 test "the viewport jumps between OSC 133 prompts" {
@@ -2686,12 +2682,8 @@ test "AltGr text reaches the program as the text once the consumed Ctrl+Alt is d
 			const none = 0 as BitSet<KeyMod>;
 			const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt);
 			const brace: KeyEvent = {
-				action: KeyAction.Press,
-				key: "Digit7",
-				mods: ctrlAlt,
+				...press("Digit7", "{", 0x37, ctrlAlt),
 				consumedMods: ctrlAlt,
-				unshifted: 0x37,
-				text: "{",
 			};
 			assert encoded(k, vt, brace.withoutAltGr()) == "{";
 			const polish: KeyEvent = { ...brace, key: "KeyA", unshifted: 0x61, text: "ą" };
@@ -2783,14 +2775,7 @@ test "a consumed alt lets the text through unprefixed" {
 			const k = opened.value;
 			const none = 0 as BitSet<KeyMod>;
 			const alt = none.incl(KeyMod.Alt);
-			const e: KeyEvent = {
-				action: KeyAction.Press,
-				key: "BracketLeft",
-				mods: alt,
-				consumedMods: alt,
-				unshifted: 0x5B,
-				text: "{",
-			};
+			const e: KeyEvent = { ...press("BracketLeft", "{", 0x5B, alt), consumedMods: alt };
 			assert encoded(k, vt, e) == "{";
 			k.freeKeys();
 		}
@@ -2810,12 +2795,8 @@ test "ctrl with printable text encodes as fixterms csi u" {
 			const none = 0 as BitSet<KeyMod>;
 			const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt);
 			const e: KeyEvent = {
-				action: KeyAction.Press,
-				key: "BracketLeft",
-				mods: ctrlAlt,
+				...press("BracketLeft", "{", 0x5B, ctrlAlt),
 				consumedMods: ctrlAlt,
-				unshifted: 0x5B,
-				text: "{",
 			};
 			assert encoded(k, vt, e) == "\x1b[123;7u";
 			k.freeKeys();

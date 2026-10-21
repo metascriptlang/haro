@@ -318,6 +318,7 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"workingDirectory":"projects"}`) ==
 		`workingDirectory "projects" must be home, inherit, an absolute path or a path under ~/`;
 	assert refusal(`{"background":"#12345"}`) == `background: "#12345" is not a #rrggbb colour`;
+	assert refusal(`{"background":"#0aFg10"}`) == `background: "#0aFg10" is not a #rrggbb colour`;
 	assert refusal(`{"palette":["#000000","red"]}`) == `palette[1]: "red" is not a #rrggbb colour`;
 	assert refusal(`{"keybinds":[{"keys":"shift+entre","text":"x"}]}`) ==
 		`keybinds[0]: "shift+entre": "entre" is not a key or modifier name`;

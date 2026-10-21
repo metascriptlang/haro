@@ -813,10 +813,10 @@ export function setPullScrollback(this vt: Vt, pull: boolean): Result<void, VtEr
 	return Result.ok(null);
 }
 
-export function takeClipboard(this vt: Vt): Result<string | null, VtError> {
+export function takeClipboard(this vt: Vt): string | null {
 	const text = vt.effects.clipboard;
 	vt.effects.clipboard = null;
-	return Result.ok(text);
+	return text;
 }
 
 export function clipboardAsked(this vt: Vt): boolean {
@@ -2353,24 +2353,14 @@ test "an OSC 52 write reaches the host once, and only for the standard clipboard
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
-		const none = vt.takeClipboard();
-		assert none.ok;
-		if (none.ok) { assert none.value === null; }
+		assert vt.takeClipboard() === null;
 		vt.writeText("\x1b]52;p;cHJpbWFyeQ==\x07");
-		const primary = vt.takeClipboard();
-		assert primary.ok;
-		if (primary.ok) { assert primary.value === null; }
+		assert vt.takeClipboard() === null;
 		vt.writeText("\x1b]52;c;aGVsbG8gd29ybGQ=\x07");
-		const first = vt.takeClipboard();
-		assert first.ok;
-		if (first.ok) { assert first.value == "hello world"; }
-		const second = vt.takeClipboard();
-		assert second.ok;
-		if (second.ok) { assert second.value === null; }
+		assert vt.takeClipboard() == "hello world";
+		assert vt.takeClipboard() === null;
 		vt.writeText("\x1b]52;c;\x07");
-		const cleared = vt.takeClipboard();
-		assert cleared.ok;
-		if (cleared.ok) { assert cleared.value == ""; }
+		assert vt.takeClipboard() == "";
 		vt.free();
 	}
 }

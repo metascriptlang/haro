@@ -43,7 +43,6 @@ export enum TermError {
 	PasteEncodeFailed,
 	FrameLookFailed,
 	EventsFailed,
-	ClipboardFailed,
 	FocusFailed,
 	MouseFailed,
 	VtFailed,
@@ -179,7 +178,6 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	const vt = s.vt;
 	const events = vt.takeEvents();
 	const copied = vt.takeClipboard();
-	if (!copied.ok) { return Result.err(TermError.ClipboardFailed); }
 	let title: string | null = null;
 	if (events.titleChanged) {
 		const named = vt.title();
@@ -191,7 +189,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		return Result.ok({
 			...idleFrame(more, ended),
 			held: true,
-			copied: copied.value,
+			copied: copied,
 			asked: asked,
 			bells: events.bells,
 			title: title,
@@ -208,7 +206,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		more: more,
 		ended: ended,
 		held: false,
-		copied: copied.value,
+		copied: copied,
 		asked: asked,
 		bells: events.bells,
 		title: title,

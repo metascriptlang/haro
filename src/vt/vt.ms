@@ -2350,10 +2350,9 @@ test "an OSC 52 write reaches the host once, and only for the standard clipboard
 	}
 }
 
-function linkText(vt: Vt, x: int32, y: int32): string {
-	const link = vt.linkAt(x, y);
-	if (!link.ok) { return "<failed>"; }
-	const got = link.value;
+function shown(r: Result<string | null, VtError>): string {
+	if (!r.ok) { return "<failed>"; }
+	const got = r.value;
 	if (got !== null) { return got; }
 	return "<none>";
 }
@@ -2364,11 +2363,11 @@ test "an OSC 8 link answers for each of its cells and for no others" {
 	if (created.ok) {
 		const vt = created.value;
 		vt.writeText("\x1b]8;;https://example.com/a?b=1\x1b\\link\x1b]8;;\x1b\\ plain");
-		assert linkText(vt, 0, 0) == "https://example.com/a?b=1";
-		assert linkText(vt, 3, 0) == "https://example.com/a?b=1";
-		assert linkText(vt, 4, 0) == "<none>";
-		assert linkText(vt, 0, 1) == "<none>";
-		assert linkText(vt, 0, 40) == "<failed>";
+		assert shown(vt.linkAt(0, 0)) == "https://example.com/a?b=1";
+		assert shown(vt.linkAt(3, 0)) == "https://example.com/a?b=1";
+		assert shown(vt.linkAt(4, 0)) == "<none>";
+		assert shown(vt.linkAt(0, 1)) == "<none>";
+		assert shown(vt.linkAt(0, 40)) == "<failed>";
 		vt.free();
 	}
 }
@@ -2881,14 +2880,6 @@ function marked(r0: int32, c0: int32, r1: int32, c1: int32): Marked {
 	return { range: { start: at(r0, c0), end: at(r1, c1) }, block: false };
 }
 
-function copied(vt: Vt): string {
-	const text = vt.selectedText();
-	if (!text.ok) { return "<failed>"; }
-	const got = text.value;
-	if (got !== null) { return got; }
-	return "<none>";
-}
-
 test "the viewport scrolls by lines, pages, to the top and back to the bottom" {
 	const created = Vt.create(10, 4);
 	assert created.ok;
@@ -2954,9 +2945,9 @@ test "a selection across two wrapped rows copies one logical line" {
 		vt.writeText("abcdefghijklmnop\r\nnext");
 		assert vt.update().ok;
 		assert vt.selectionSet(marked(0, 2, 1, 4)).ok;
-		assert copied(vt) == "cdefghijklmno";
+		assert shown(vt.selectedText()) == "cdefghijklmno";
 		assert vt.selectionSet(marked(0, 0, 2, 3)).ok;
-		assert copied(vt) == "abcdefghijklmnop\nnext";
+		assert shown(vt.selectedText()) == "abcdefghijklmnop\nnext";
 		vt.free();
 	}
 }
@@ -2969,7 +2960,7 @@ test "trailing spaces are trimmed on each copied line" {
 		vt.writeText("hi   \r\nthere");
 		assert vt.update().ok;
 		assert vt.selectionSet(marked(0, 0, 1, 9)).ok;
-		assert copied(vt) == "hi\nthere";
+		assert shown(vt.selectedText()) == "hi\nthere";
 		vt.free();
 	}
 }
@@ -2987,14 +2978,14 @@ test "a double click picks the word under the pointer and a triple click the log
 			assert word.value.start == at(0, 4);
 			const sel = Selection.press(Unit.Word, word.value, false);
 			assert vt.selectionSet(sel.marked()).ok;
-			assert copied(vt) == "bar-baz";
+			assert shown(vt.selectedText()) == "bar-baz";
 		}
 		const line = vt.unitAt(Unit.Line, at(1, 3));
 		assert line.ok;
 		if (line.ok) {
 			assert line.value.start == at(0, 0);
 			assert vt.selectionSet({ range: line.value, block: false }).ok;
-			assert copied(vt) == "foo bar-baz qux again";
+			assert shown(vt.selectedText()) == "foo bar-baz qux again";
 		}
 		vt.free();
 	}
@@ -3012,13 +3003,13 @@ test "a click on the second half of a wide character picks that character" {
 		if (first.ok) {
 			assert first.value.start == at(0, 0);
 			assert vt.selectionSet({ range: first.value, block: false }).ok;
-			assert copied(vt) == "中";
+			assert shown(vt.selectedText()) == "中";
 		}
 		const second = vt.unitAt(Unit.Word, at(0, 3));
 		assert second.ok;
 		if (second.ok) {
 			assert vt.selectionSet({ range: second.value, block: false }).ok;
-			assert copied(vt) == "文";
+			assert shown(vt.selectedText()) == "文";
 		}
 		vt.free();
 	}
@@ -3032,7 +3023,7 @@ test "a selection survives five lines of new output" {
 		vt.writeText(numberedLines(4));
 		assert vt.update().ok;
 		assert vt.selectionSet(marked(1, 0, 2, 1)).ok;
-		assert copied(vt) == "r1\nr2";
+		assert shown(vt.selectedText()) == "r1\nr2";
 		vt.writeText("\r\nn0\r\nn1\r\nn2\r\nn3\r\nn4");
 		assert vt.update().ok;
 		const kept = vt.selection();
@@ -3045,7 +3036,7 @@ test "a selection survives five lines of new output" {
 				assert m.range.end == at(2, 1);
 			}
 		}
-		assert copied(vt) == "r1\nr2";
+		assert shown(vt.selectedText()) == "r1\nr2";
 		vt.free();
 	}
 }
@@ -3060,7 +3051,7 @@ test "a selection follows its text when scrollback is pruned" {
 		assert vt.update().ok;
 		const row = (try vt.scrollOffset() catch 0) + 3;
 		assert vt.selectionSet(marked(row, 0, row, 5)).ok;
-		assert copied(vt) == "r5999";
+		assert shown(vt.selectedText()) == "r5999";
 		vt.writeText(linefeedLines(400));
 		assert vt.update().ok;
 		const kept = vt.selection();
@@ -3070,7 +3061,7 @@ test "a selection follows its text when scrollback is pruned" {
 			assert m !== null;
 			if (m !== null) { assert m.range.start.row < row; }
 		}
-		assert copied(vt) == "r5999";
+		assert shown(vt.selectedText()) == "r5999";
 		vt.free();
 	}
 }
@@ -3087,9 +3078,7 @@ test "an erased selection is gone from the terminal" {
 		const none = vt.selection();
 		assert none.ok;
 		if (none.ok) { assert none.value === null; }
-		const text = vt.selectedText();
-		assert text.ok;
-		if (text.ok) { assert text.value === null; }
+		assert shown(vt.selectedText()) == "<none>";
 		vt.free();
 	}
 }

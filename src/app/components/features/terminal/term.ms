@@ -40,7 +40,6 @@ export enum TermError {
 	ClipboardFailed,
 	FocusFailed,
 	MouseFailed,
-	RepliesFailed,
 }
 
 export type OpenPty = (cols: int32, rows: int32) => Result<Pty, PtyError>;
@@ -171,11 +170,10 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	t.ended = false;
 	const vt = s.vt;
 	const events = vt.takeEvents();
-	if (!events.ok) { return Result.err(TermError.EventsFailed); }
 	const copied = vt.takeClipboard();
 	if (!copied.ok) { return Result.err(TermError.ClipboardFailed); }
 	let title: string | null = null;
-	if (events.value.titleChanged) {
+	if (events.titleChanged) {
 		const named = vt.title();
 		if (!named.ok) { return Result.err(TermError.EventsFailed); }
 		title = named.value;
@@ -187,7 +185,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 			held: true,
 			copied: copied.value,
 			asked: asked,
-			bells: events.value.bells,
+			bells: events.bells,
 			title: title,
 		});
 	}
@@ -207,7 +205,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		held: false,
 		copied: copied.value,
 		asked: asked,
-		bells: events.value.bells,
+		bells: events.bells,
 		title: title,
 	});
 }
@@ -292,10 +290,9 @@ export function sendReplies(this t: Term): Result<int32, TermError> {
 	let total = 0;
 	while (true) {
 		const n = s.vt.replies(t.buf);
-		if (!n.ok) { return Result.err(TermError.RepliesFailed); }
-		if (n.value == 0) { return Result.ok(total); }
-		if (!s.send(t.buf[0..n.value]).ok) { return Result.err(TermError.WriteFailed); }
-		total += n.value;
+		if (n == 0) { return Result.ok(total); }
+		if (!s.send(t.buf[0..n]).ok) { return Result.err(TermError.WriteFailed); }
+		total += n;
 	}
 }
 

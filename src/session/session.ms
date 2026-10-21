@@ -50,9 +50,8 @@ export function pump(this s: Session, buf: Span<uint8>): Result<boolean, Session
 function sendReplies(this s: Session, buf: Span<uint8>): Result<void, SessionError> {
 	while (true) {
 		const n = s.vt.replies(buf);
-		if (!n.ok) { return Result.err(SessionError.VtReadFailed); }
-		if (n.value == 0) { return Result.ok(null); }
-		const _sent = try s.send(buf[0..n.value]);
+		if (n == 0) { return Result.ok(null); }
+		const _sent = try s.send(buf[0..n]);
 	}
 }
 

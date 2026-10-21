@@ -705,14 +705,14 @@ export function writeText(this vt: Vt, text: string): void {
 	vtWriteBytes(vt.terminal, text.asBytes());
 }
 
-export function replies(this vt: Vt, buf: Span<uint8>): Result<int32, VtError> {
+export function replies(this vt: Vt, buf: Span<uint8>): int32 {
 	const e = vt.effects;
 	const n = Math.min(e.replies.length, buf.length);
 	for (let i = 0; i < n; i++) { buf[i] = e.replies[i]; }
 	let rest: Vec<uint8> = [];
 	for (let i = n; i < e.replies.length; i++) { rest.push(e.replies[i]); }
 	e.replies = rest;
-	return Result.ok(n);
+	return n;
 }
 
 export struct VtEvents {
@@ -721,7 +721,7 @@ export struct VtEvents {
 	pwdChanged: boolean;
 }
 
-export function takeEvents(this vt: Vt): Result<VtEvents, VtError> {
+export function takeEvents(this vt: Vt): VtEvents {
 	const e = vt.effects;
 	const events: VtEvents = {
 		bells: e.bells,
@@ -731,7 +731,7 @@ export function takeEvents(this vt: Vt): Result<VtEvents, VtError> {
 	e.bells = 0;
 	e.titleChanged = false;
 	e.pwdChanged = false;
-	return Result.ok(events);
+	return events;
 }
 
 function terminalString(
@@ -1873,8 +1873,7 @@ test "a cursor position query is answered with the cursor's place" {
 		vt.writeText("ab\x1b[6n");
 		let buf: Vec<uint8> = new Array(64);
 		const n = vt.replies(buf);
-		assert n.ok;
-		if (n.ok) { assert ascii(buf[0..n.value]) == "\x1b[1;3R"; }
+		assert ascii(buf[0..n]) == "\x1b[1;3R";
 		vt.free();
 	}
 }
@@ -1886,12 +1885,9 @@ test "bells, a title and a pwd reach the host as events once each" {
 		const vt = created.value;
 		vt.writeText("\x07a\x07\x1b]2;build: ok\x07\x1b]7;file:///C:/Users/me\x07");
 		const first = vt.takeEvents();
-		assert first.ok;
-		if (first.ok) {
-			assert first.value.bells == 2;
-			assert first.value.titleChanged;
-			assert first.value.pwdChanged;
-		}
+		assert first.bells == 2;
+		assert first.titleChanged;
+		assert first.pwdChanged;
 		const title = vt.title();
 		assert title.ok;
 		if (title.ok) { assert title.value == "build: ok"; }
@@ -1899,12 +1895,9 @@ test "bells, a title and a pwd reach the host as events once each" {
 		assert pwd.ok;
 		if (pwd.ok) { assert pwd.value == "file:///C:/Users/me"; }
 		const second = vt.takeEvents();
-		assert second.ok;
-		if (second.ok) {
-			assert second.value.bells == 0;
-			assert !second.value.titleChanged;
-			assert !second.value.pwdChanged;
-		}
+		assert second.bells == 0;
+		assert !second.titleChanged;
+		assert !second.pwdChanged;
 		vt.free();
 	}
 }
@@ -2198,8 +2191,7 @@ test "a theme the host sets is what a colour query reports" {
 		vt.writeText("\x1b]11;?\x1b\\");
 		let buf: Vec<uint8> = new Array(64);
 		const n = vt.replies(buf);
-		assert n.ok;
-		if (n.ok) { assert ascii(buf[0..n.value]) == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\"; }
+		assert ascii(buf[0..n]) == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\";
 		vt.free();
 	}
 }
@@ -2334,9 +2326,7 @@ test "text without a query leaves nothing to reply" {
 		const vt = created.value;
 		vt.writeText("hello");
 		let buf: Vec<uint8> = new Array(64);
-		const n = vt.replies(buf);
-		assert n.ok;
-		if (n.ok) { assert n.value == 0; }
+		assert vt.replies(buf) == 0;
 		vt.free();
 	}
 }
@@ -3069,8 +3059,7 @@ test "a bracketed paste is framed and only its end marker is unsafe" {
 function pending(vt: Vt): string {
 	let buf: Vec<uint8> = new Array(128);
 	const n = vt.replies(buf);
-	if (!n.ok) { return "read failed"; }
-	return ascii(buf[0..n.value]);
+	return ascii(buf[0..n]);
 }
 
 test "an OSC 52 read waits for the host and is answered in the frame the program used" {

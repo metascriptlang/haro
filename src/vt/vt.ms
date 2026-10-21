@@ -510,9 +510,9 @@ function effectsAt(p: Ptr<void>): Effects {
 }
 
 @exportName("haroVtWritePty")
-function writePty(effects: Ptr<void>, bytes: Ptr<uint8>, n: uint64): void {
+function writePty(effects: Ptr<void>, bytes: Readonly<Span<uint8>>): void {
 	const e = effectsAt(effects);
-	for (let i = 0; i < (n as int32); i++) { e.replies.push(bytes[i]); }
+	for (const b of bytes) { e.replies.push(b); }
 }
 
 @exportName("haroVtBell")
@@ -542,10 +542,8 @@ function renderHold(terminal: GhosttyTerminal, effects: Ptr<void>, held: boolean
 }
 
 @exportName("haroVtClipboardWritten")
-function clipboardWritten(effects: Ptr<void>, text: Ptr<uint8>, n: uint64): void {
-	let bytes: Vec<uint8> = [];
-	for (let i = 0; i < (n as int32); i++) { bytes.push(text[i]); }
-	effectsAt(effects).clipboard = bytes[0..bytes.length].asString();
+function clipboardWritten(effects: Ptr<void>, text: Readonly<Span<uint8>>): void {
+	effectsAt(effects).clipboard = text.asString();
 }
 
 const XTVERSION_NAME: cstring = "haro";

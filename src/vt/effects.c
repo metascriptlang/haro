@@ -46,12 +46,12 @@ const GhosttyAllocator* vtAllocator(void) {
 #endif
 
 /* The callbacks' state lives in vt.ms, which defines these. */
-void haroVtWritePty(void* effects, uint8_t* bytes, uint64_t n);
+void haroVtWritePty(void* effects, uint8_t* bytes, int64_t n);
 void haroVtBell(GhosttyTerminal terminal, void* effects);
 void haroVtTitleChanged(GhosttyTerminal terminal, void* effects);
 void haroVtPwdChanged(GhosttyTerminal terminal, void* effects);
 void haroVtRenderHold(GhosttyTerminal terminal, void* effects, bool held);
-void haroVtClipboardWritten(void* effects, uint8_t* text, uint64_t n);
+void haroVtClipboardWritten(void* effects, uint8_t* text, int64_t n);
 int64_t haroVtRepliesLength(void* effects);
 void haroVtClipboardRead(void* effects, int64_t mark);
 GhosttyString haroVtXtversion(GhosttyTerminal terminal, void* effects);
@@ -60,7 +60,7 @@ GhosttyString haroVtXtversion(GhosttyTerminal terminal, void* effects);
    parameter. */
 static void writePty(GhosttyTerminal terminal, void* userdata, const uint8_t* bytes, size_t n) {
 	(void)terminal;
-	haroVtWritePty(userdata, (uint8_t*)bytes, (uint64_t)n);
+	haroVtWritePty(userdata, (uint8_t*)bytes, (int64_t)n);
 }
 
 /* msc cannot fill the fixed features array:
@@ -89,7 +89,7 @@ static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const Gho
 		for (size_t i = 0; i < write->contents_len; i++) {
 			const GhosttyClipboardContent* c = &write->contents[i];
 			if (c->mime.len != 10 || memcmp(c->mime.ptr, "text/plain", 10) != 0) continue;
-			haroVtClipboardWritten(userdata, (uint8_t*)c->data.ptr, (uint64_t)c->data.len);
+			haroVtClipboardWritten(userdata, (uint8_t*)c->data.ptr, (int64_t)c->data.len);
 			reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
 			break;
 		}

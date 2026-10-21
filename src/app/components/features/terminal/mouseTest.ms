@@ -1,11 +1,11 @@
 import { selected } from "../../../../input/pointer";
 import { bounds } from "../../../../select/select";
-import { shutdown } from "./term";
+import { releaseHeldKey, sendKey, shutdown } from "./term";
 import { Sink, termOf } from "./termTest";
 import { Controls, Hit } from "./controls";
 import { keyDown } from "./keyboard";
 import { autoscrollTick, focusLost, pointerDown, pointerMove, pointerUp, roll, shades } from "./mouse";
-import { CLIPBOARD_MODS } from "../../../../input/bindings";
+import { CLIPBOARD_MODS, CTRL } from "../../../../input/bindings";
 import {
 	at,
 	boardOf,
@@ -35,6 +35,38 @@ test "while a paste is held the wheel, the buttons and the pointer do nothing" {
 		assert !handled(c.pointerDown(t, clip, 2, hitAt(0, 0), 0));
 		assert clip.write !== null;
 		t.shutdown();
+	}
+}
+
+test "wheel arrows on the alternate screen tap each key and leave the held key to be released" {
+	const ctrlSink: Sink = { sent: "" };
+	const ctrl = termOf("\x1b[?1049h\x1b[>11u", 20, 5, ctrlSink);
+	assert ctrl !== null;
+	if (ctrl !== null) {
+		const c = Controls.open();
+		assert ctrl.sendKey(key("ControlLeft", CTRL)).ok;
+		ctrlSink.sent = "";
+		assert c.roll(ctrl, 1, hitAt(0, 0)).ok;
+		assert ctrlSink.sent == "\x1b[1;1:1A\x1b[1;1:3A\x1b[1;1:1A\x1b[1;1:3A\x1b[1;1:1A\x1b[1;1:3A";
+		ctrlSink.sent = "";
+		assert ctrl.releaseHeldKey().ok;
+		assert ctrlSink.sent == "\x1b[57442;5:3u\x1b[57448;1:3u";
+		ctrl.shutdown();
+	}
+	const letterSink: Sink = { sent: "" };
+	const letter = termOf("\x1b[?1049h\x1b[>3u", 20, 5, letterSink);
+	assert letter !== null;
+	if (letter !== null) {
+		const c = Controls.open();
+		const a = key("KeyA", 0);
+		a.text = "a";
+		a.unshifted = 0x61;
+		assert letter.sendKey(a).ok;
+		assert c.roll(letter, -1, hitAt(0, 0)).ok;
+		letterSink.sent = "";
+		assert letter.releaseHeldKey().ok;
+		assert letterSink.sent == "\x1b[97;1:3u";
+		letter.shutdown();
 	}
 }
 

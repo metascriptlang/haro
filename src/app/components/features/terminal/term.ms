@@ -260,6 +260,22 @@ export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
 	return t.sendKeyEvent(s, key);
 }
 
+export function tapKey(this t: Term, code: string): Result<int32, TermError> {
+	const s = t.session;
+	if (s === null) { return Result.ok(0); }
+	const press: KeyEvent = {
+		action: KeyAction.Press,
+		key: code,
+		mods: 0 as BitSet<KeyMod>,
+		consumedMods: 0 as BitSet<KeyMod>,
+		unshifted: 0,
+		text: "",
+	};
+	const pressed = try t.sendKeyEvent(s, press);
+	const released = try t.sendKeyEvent(s, { ...press, action: KeyAction.Release });
+	return Result.ok(pressed + released);
+}
+
 export function releaseHeldKey(this t: Term): Result<int32, TermError> {
 	const s = t.session;
 	const held = t.held;

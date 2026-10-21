@@ -1,11 +1,10 @@
-import { neonEvent } from "../../../../../../neon/src/render/event";
 import { KeyMod } from "../../../../keys/keys";
 import { Block } from "../../../../select/select";
 import { autoscrollOf, claimsMouse } from "../../../../input/pointer";
 import { WheelRoute, reportButton, route } from "../../../../input/wheel";
 import { openable } from "../../../../term/link";
 import { MouseAction, MouseInput } from "../../../../vt/vt";
-import { Term, TermError } from "./term";
+import { Term, TermError, tapKey } from "./term";
 import { Bridge, Controls, Hit, holding, vtOf } from "./controls";
 import { copySelection, pasteFrom } from "./clipboard";
 
@@ -173,10 +172,9 @@ export function roll(
 		WheelRoute.Arrows => {
 			const shown = c.pointer.selected();
 			c.pointer.clear(vt);
-			const key = neonEvent("keydown");
-			key.code = rows < 0 ? "ArrowUp" : "ArrowDown";
+			const code = rows < 0 ? "ArrowUp" : "ArrowDown";
 			for (let i = 0; i < presses; i++) {
-				const _sent = try t.sendKey(key);
+				const _sent = try t.tapKey(code);
 			}
 			return Result.ok(shown);
 		},

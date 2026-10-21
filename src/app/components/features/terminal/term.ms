@@ -57,6 +57,7 @@ export interface Term {
 	rows: int32;
 	alive: boolean;
 	ended: boolean;
+	spawnedAt: number;
 }
 
 export struct Frame {
@@ -104,6 +105,7 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 		rows: 0,
 		alive: true,
 		ended: false,
+		spawnedAt: -1,
 	});
 }
 
@@ -120,6 +122,7 @@ export function fit(this t: Term, cols: int32, rows: int32): Result<boolean, Ter
 		const pty = t.open(cols, rows);
 		if (!pty.ok) { return Result.err(TermError.PtyOpenFailed); }
 		stats.mark("spawned", Date.now());
+		t.spawnedAt = performance.now();
 		const started = Session.start(pty.value, cols, rows);
 		if (!started.ok) { return Result.err(TermError.SessionStartFailed); }
 		t.session = started.value;
@@ -306,6 +309,12 @@ export function shutdown(this t: Term): void {
 	t.keys.freeKeys();
 }
 
+export const ABNORMAL_EXIT_MS: number = 250;
+
+export function exitedAbnormally(this t: Term): boolean {
+	return t.shellExitCode() != 0 && performance.now() - t.spawnedAt <= ABNORMAL_EXIT_MS;
+}
+
 export function shellExitCode(this t: Term): int32 {
 	const s = t.session;
 	if (s === null) { return 0; }
@@ -375,5 +384,27 @@ test "a replayed recording fills the grid in one frame and ends the stream once"
 		assert !t.alive;
 		assert t.shellExitCode() == 0;
 		t.shutdown();
+	}
+}
+
+function exitingWith(code: int32): Pty {
+	const base = Replay.ofText("boom").toPty();
+	return { ...base, exitCode: (): int32 | null => { return code; } };
+}
+
+test "a shell that fails as it starts ended abnormally; a clean or a late exit did not" {
+	for (const code of [1, 0]) {
+		const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+			return Result.ok(exitingWith(code));
+		});
+		assert opened.ok;
+		if (opened.ok) {
+			const t = opened.value;
+			assert t.fit(20, 3).ok;
+			assert t.exitedAbnormally() == (code != 0);
+			t.spawnedAt -= ABNORMAL_EXIT_MS + 1;
+			assert !t.exitedAbnormally();
+			t.shutdown();
+		}
 	}
 }

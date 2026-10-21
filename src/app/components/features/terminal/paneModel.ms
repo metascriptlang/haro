@@ -25,7 +25,7 @@ import { Bridge, Controls, refit } from "./controls";
 import { clipboardAsked } from "./clipboard";
 import { closeKey } from "./keyboard";
 import { shades } from "./mouse";
-import { Term, TermError, fit, pumpFrame, shellExitCode } from "./term";
+import { Term, TermError, exitedAbnormally, fit, pumpFrame, shellExitCode } from "./term";
 
 const PROBE = "MMMMMMMMMM";
 const HOLD_RECHECK_MS = 100;
@@ -201,7 +201,16 @@ export function refresh(this m: PaneModel): void {
 		stats.more += 1;
 		m.scheduleRefresh();
 	}
-	if (f.ended) { m.host.exited(m.term.shellExitCode()); }
+	if (f.ended) { m.shellEnded(); }
+}
+
+function shellEnded(this m: PaneModel): void {
+	const code = m.term.shellExitCode();
+	if (m.term.exitedAbnormally()) {
+		m.notify(`the shell exited with code ${code} as it started: check command in config.ms, or --shell`);
+		return;
+	}
+	m.host.exited(code);
 }
 
 function notify(this m: PaneModel, text: string): void {

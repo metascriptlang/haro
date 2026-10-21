@@ -1,20 +1,14 @@
 import { NeonNode } from "../../../../../neon/src/render/node";
 import { View } from "../../../../../neon/src/components/primitives";
+import { StyleSheet } from "../../../../../neon/src/api/styleSheet";
 import { SCRIM, SCRIM_OPACITY } from "../../theme";
 
 export function ModalLayer(props: { children: NeonNode }): NeonNode {
-	return <View style={{ position: "absolute", left: 0, top: 0, right: 0, bottom: 0 }}>
+	return <View style={StyleSheet.absoluteFill}>
 		<View
-			style={{
-				position: "absolute", left: 0, top: 0, right: 0, bottom: 0,
-				backgroundColor: SCRIM, opacity: SCRIM_OPACITY,
-			}}
+			style={[StyleSheet.absoluteFill, { backgroundColor: SCRIM, opacity: SCRIM_OPACITY }]}
 		/>
-		<View
-			style={{
-				position: "absolute", left: 0, top: 0, right: 0, bottom: 0,
-				alignItems: "center", justifyContent: "center",
-			}}>
+		<View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>
 			{props.children}
 		</View>
 	</View>;

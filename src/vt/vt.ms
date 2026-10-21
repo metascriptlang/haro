@@ -576,7 +576,7 @@ function clipboardRead(effects: Ptr<void>, mark: int64): void {
 		if (e.replies[from + i] != prefix[i]) { return; }
 	}
 	let frame: Vec<uint8> = [];
-	for (let i = from; i < e.replies.length; i++) { frame.push(e.replies[i]); }
+	pushAll(frame, e.replies[from..e.replies.length]);
 	e.replies.shrink(from);
 	e.readFrame = frame;
 	e.readAsked = true;
@@ -585,6 +585,10 @@ function clipboardRead(effects: Ptr<void>, mark: int64): void {
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".asBytes();
 const PAD: uint8 = 0x3d;
 const SEMICOLON: uint8 = 0x3b;
+
+function pushAll<T>(ref out: Vec<T>, from: Readonly<Span<T>>): void {
+	for (const x of from) { out.push(x); }
+}
 
 function pushBase64(ref out: Vec<uint8>, bytes: Readonly<Span<uint8>>): void {
 	for (let i = 0; i < bytes.length; i += 3) {
@@ -607,9 +611,9 @@ function answerRead(this e: Effects, text: string, allow: boolean): boolean {
 		if (frame[head] == SEMICOLON) { semicolons++; }
 		head++;
 	}
-	for (let i = 0; i < head; i++) { e.replies.push(frame[i]); }
+	pushAll(e.replies, frame[0..head]);
 	if (allow) { pushBase64(e.replies, text.asBytes()); }
-	for (let i = head; i < frame.length; i++) { e.replies.push(frame[i]); }
+	pushAll(e.replies, frame[head..frame.length]);
 	e.readFrame = null;
 	return true;
 }

@@ -131,6 +131,11 @@ export function pointerUp(
 	return c.reportMouse(t, MouseAction.Release, button, h, false);
 }
 
+export function focusLost(this c: Controls): void {
+	c.pointer.release();
+	c.autoscroll = 0;
+}
+
 export function autoscrollTick(this c: Controls, t: Term): Result<boolean, ControlError> {
 	const vt = vtOf(t);
 	if (vt === null || !c.pointer.dragging || c.autoscroll == 0) {

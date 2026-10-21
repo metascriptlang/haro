@@ -7,7 +7,7 @@ import { focusCursor } from "../../content/cursor";
 import { Hit, holding, typed } from "./controls";
 import { cancel, confirm } from "./clipboard";
 import { keyDown } from "./keyboard";
-import { autoscrollTick, pointerDown, pointerMove, pointerUp, roll } from "./mouse";
+import { autoscrollTick, focusLost, pointerDown, pointerMove, pointerUp, roll } from "./mouse";
 import {
 	PaneModel,
 	bridge,
@@ -22,6 +22,7 @@ const AUTOSCROLL_MS = 15;
 
 export function focusChanged(this m: PaneModel, gained: boolean): void {
 	m.cursor.focusCursor(gained);
+	if (!gained) { m.controls.focusLost(); }
 	const sent = m.term.sendFocus(gained);
 	if (!sent.ok) { m.failed("focus", sent.error.toString()); }
 }

@@ -4,7 +4,7 @@ import { shutdown } from "./term";
 import { Sink, termOf } from "./termTest";
 import { Controls, Hit } from "./controls";
 import { keyDown } from "./keyboard";
-import { autoscrollTick, pointerDown, pointerMove, pointerUp, roll, shades } from "./mouse";
+import { autoscrollTick, focusLost, pointerDown, pointerMove, pointerUp, roll, shades } from "./mouse";
 import { CLIPBOARD_MODS } from "../../../../input/bindings";
 import {
 	at,
@@ -255,6 +255,26 @@ test "a drag held past the top edge scrolls back a row per tick, and the release
 		assert c.pointerUp(t, 1, above).ok;
 		assert !handled(c.autoscrollTick(t));
 		assert offsetOf(t) == bottom - 2;
+		t.shutdown();
+	}
+}
+
+test "losing focus mid-drag ends the drag and its scrolling, and keeps the selection" {
+	const sink: Sink = { sent: "" };
+	const t = termOf(lines(30), 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf(""));
+		const bottom = offsetOf(t);
+		assert c.pointerDown(t, clip, 1, hitAt(3, 2), 0).ok;
+		const above: Hit = { ...hitAt(3, 0), y: -12 };
+		assert c.pointerMove(t, above, true).ok;
+		c.focusLost();
+		assert !handled(c.autoscrollTick(t));
+		assert offsetOf(t) == bottom;
+		assert !c.pointer.dragging;
+		assert c.pointer.selected();
 		t.shutdown();
 	}
 }

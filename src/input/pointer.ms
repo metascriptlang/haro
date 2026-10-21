@@ -142,8 +142,8 @@ export function blocks(
 	const top = try vt.scrollOffset();
 	let shaded: Vec<RowSpan> = [];
 	for (const s of sel.marked().spans(top, rows, cols)) {
-		const first = try vt.cellWidthAt({ row: top + s.row, col: s.from });
-		const last = try vt.cellWidthAt({ row: top + s.row, col: s.to });
+		const first = try vt.cellWidthInView({ row: s.row, col: s.from });
+		const last = try vt.cellWidthInView({ row: s.row, col: s.to });
 		shaded.push(s.covering(first, last));
 	}
 	return Result.ok(merged(shaded));
@@ -455,6 +455,17 @@ test "a wide character is shaded whole and copied whichever of its cells the sel
 	if (vt !== null) {
 		assert shadedAndCopied(Pointer.open(), vt, 0, 2) == "0+4 中文";
 		assert shadedAndCopied(Pointer.open(), vt, 1, 4) == "0+5 中文";
+		vt.free();
+	}
+}
+
+test "a wide character in a row scrolled into view is shaded whole" {
+	const vt = viewOf(10, 1, "a\r\n中文 x\r\nab");
+	assert vt !== null;
+	if (vt !== null) {
+		vt.scrollLines(-1);
+		assert vt.update().ok;
+		assert shadedAndCopied(Pointer.open(), vt, 1, 2) == "0+4 中文";
 		vt.free();
 	}
 }

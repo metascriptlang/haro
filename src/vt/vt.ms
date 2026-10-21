@@ -1751,10 +1751,14 @@ export function selection(this vt: Vt): Result<Marked | null, VtError> {
 	return markedFound(vt.terminal, r, selection);
 }
 
-export function cellWidthAt(this vt: Vt, at: Point): Result<CellWidth, VtError> {
-	let ref = try screenRef(vt.terminal, at);
+export function cellWidthInView(this vt: Vt, at: Point): Result<CellWidth, VtError> {
+	let ref: GhosttyGridRef;
 	let cell: GhosttyCell = 0;
-	if (!ok(gridRefCell(ref, cell))) { return Result.err(VtError.ReadFailed); }
+	const viewport = GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT;
+	if (!ok(vtGridRef(vt.terminal, viewport, at.col, at.row, ref))
+		|| !ok(gridRefCell(ref, cell))) {
+		return Result.err(VtError.ReadFailed);
+	}
 	return widthOf(cell);
 }
 

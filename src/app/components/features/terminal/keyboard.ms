@@ -3,6 +3,7 @@ import { KeyMod, modsMask } from "../../../../keys/keys";
 import { Action, BindAction, Keybind, bindFor, resolve } from "../../../../input/bindings";
 import { ROWS_PER_NOTCH } from "../../../../input/wheel";
 import {
+	PromptJump,
 	alternateScreen,
 	jumpToPrompt,
 	scrollBottom,
@@ -85,8 +86,8 @@ function controlKey(
 			if (!vt.scrollPages(pages).ok) { return Result.err(ControlError.VtFailed); }
 		},
 		Action.PromptUp | Action.PromptDown => {
-			const prompts: int32 = action == Action.PromptUp ? -1 : 1;
-			if (!vt.jumpToPrompt(prompts).ok) { return Result.err(ControlError.VtFailed); }
+			const toward = action == Action.PromptUp ? PromptJump.Previous : PromptJump.Next;
+			if (!vt.jumpToPrompt(toward).ok) { return Result.err(ControlError.VtFailed); }
 		},
 		Action.LineUp => { vt.scrollLines(-KEYBOARD_ROWS); },
 		Action.LineDown => { vt.scrollLines(KEYBOARD_ROWS); },

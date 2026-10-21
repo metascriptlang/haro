@@ -1652,10 +1652,14 @@ export function scrollPages(this vt: Vt, pages: int32): Result<void, VtError> {
 	return Result.ok(null);
 }
 
-export function jumpToPrompt(this vt: Vt, delta: int32): Result<boolean, VtError> {
-	if (delta == 0) { return Result.err(VtError.ReadFailed); }
+export enum PromptJump {
+	Previous,
+	Next,
+}
+
+export function jumpToPrompt(this vt: Vt, toward: PromptJump): Result<boolean, VtError> {
 	const bar = try vt.scrollbar();
-	const step: int64 = delta < 0 ? -1 : 1;
+	const step: int64 = toward == PromptJump.Previous ? -1 : 1;
 	for (let y = (bar.offset as int64) + step; y >= 0 && y < (bar.total as int64); y += step) {
 		let at: GhosttyGridRef;
 		let row: GhosttyRow = 0;
@@ -2396,8 +2400,8 @@ test "an OSC 8 link answers for each of its cells and for no others" {
 	}
 }
 
-function topAfterJump(vt: Vt, delta: int32): string {
-	const jumped = vt.jumpToPrompt(delta);
+function topAfterJump(vt: Vt, toward: PromptJump): string {
+	const jumped = vt.jumpToPrompt(toward);
 	if (!jumped.ok) { return "<failed>"; }
 	if (!jumped.value) { return "<none>"; }
 	vt.update();
@@ -2415,9 +2419,9 @@ test "the viewport jumps between OSC 133 prompts" {
 		vt.writeText(`${prompt}p1\r\nout1\r\nout2\r\n${prompt}p2\r\nout3\r\n${prompt}p3`);
 		vt.update();
 		assert vt.lines().ok;
-		assert topAfterJump(vt, -1) == "p1";
-		assert topAfterJump(vt, -1) == "<none>";
-		assert topAfterJump(vt, 1) == "p2";
+		assert topAfterJump(vt, PromptJump.Previous) == "p1";
+		assert topAfterJump(vt, PromptJump.Previous) == "<none>";
+		assert topAfterJump(vt, PromptJump.Next) == "p2";
 		vt.free();
 	}
 }
@@ -2428,8 +2432,8 @@ test "a screen without prompt marks has nothing to jump to" {
 	if (created.ok) {
 		const vt = created.value;
 		vt.writeText("a\r\nb\r\nc\r\nd\r\ne");
-		assert topAfterJump(vt, -1) == "<none>";
-		assert topAfterJump(vt, 1) == "<none>";
+		assert topAfterJump(vt, PromptJump.Previous) == "<none>";
+		assert topAfterJump(vt, PromptJump.Next) == "<none>";
 		vt.free();
 	}
 }

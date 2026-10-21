@@ -39,7 +39,6 @@ export enum TermError {
 	FramePaletteFailed,
 	FrameLineFailed,
 	EncodeFailed,
-	TextTooLong,
 	WriteFailed,
 	PasteUnsafe,
 	PasteEncodeFailed,
@@ -269,12 +268,11 @@ export function releaseHeldKey(this t: Term): Result<int32, TermError> {
 export function sendText(this t: Term, text: string): Result<int32, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(0); }
-	const n = text.byteLength as int32;
-	if (n > BUFFER_BYTES) { return Result.err(TermError.TextTooLong); }
+	const bytes = text.asBytes();
+	const n = bytes.length as int32;
 	if (n == 0) { return Result.ok(0); }
-	const bytes: Readonly<Span<char>> = text;
-	for (let i = 0; i < n; i++) { t.buf[i] = bytes[i] as uint8; }
-	return t.sendBuffered(s, n);
+	if (!s.send(bytes).ok) { return Result.err(TermError.WriteFailed); }
+	return Result.ok(n);
 }
 
 export function sendPaste(

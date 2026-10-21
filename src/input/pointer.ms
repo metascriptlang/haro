@@ -114,7 +114,7 @@ export function sync(this p: Pointer, vt: Vt): Result<boolean, VtError> {
 	const sel = p.shown();
 	if (sel === null) { return Result.ok(false); }
 	const now = try vt.selection();
-	p.sel = sel.rebased(sel.bounds(), now);
+	p.sel = sel.rebased(now);
 	if (p.shown() === null) {
 		p.clear(vt);
 		return Result.ok(false);

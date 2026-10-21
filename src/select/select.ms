@@ -128,8 +128,9 @@ function shiftedBy(this r: Range, rows: int32): Range {
 	};
 }
 
-export function rebased(this sel: Selection, was: Range, now: Marked | null): Selection | null {
+export function rebased(this sel: Selection, now: Marked | null): Selection | null {
 	if (now === null) { return null; }
+	const was = sel.bounds();
 	const shift = now.range.end.row - was.end.row;
 	if (now.range == was.shiftedBy(shift)) {
 		if (shift == 0) { return sel; }
@@ -229,13 +230,13 @@ test "a rebase follows the terminal's shift and drops a selection the terminal l
 	const sel = Selection.press(Unit.Cell, pointRange(at(10, 2)), false)
 		.drag(pointRange(at(12, 4)));
 	const was = sel.bounds();
-	const kept = sel.rebased(was, { range: range(10, 2, 12, 4), block: false });
+	const kept = sel.rebased({ range: range(10, 2, 12, 4), block: false });
 	assert kept !== null;
 	if (kept !== null) { assert kept.bounds() == was; }
-	const moved = sel.rebased(was, { range: range(7, 2, 9, 4), block: false });
+	const moved = sel.rebased({ range: range(7, 2, 9, 4), block: false });
 	assert moved !== null;
 	if (moved !== null) { assert moved.bounds() == range(7, 2, 9, 4); }
-	assert sel.rebased(was, null) === null;
+	assert sel.rebased(null) === null;
 }
 
 test "a linear selection draws as at most three rectangles: head, full middle rows, tail" {

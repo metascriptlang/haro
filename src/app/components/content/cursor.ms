@@ -57,10 +57,10 @@ export function createCursor(metrics: CellMetrics): CursorModel {
 export function paintCursor(this c: CursorModel): void {
 	let next: Vec<Box> = [];
 	const at = c.at;
-	if (at !== null && drawn(c.look, c.focused, c.blinkOn)) {
+	if (at !== null && c.look.drawn(c.focused, c.blinkOn)) {
 		const cellWidth = c.metrics.cellWidth();
 		const width = at.wide ? 2 * cellWidth : cellWidth;
-		const shape = shapeOf(c.look, c.focused);
+		const shape = c.look.shapeOf(c.focused);
 		next = boxes(shape, at.x, at.y, width, c.metrics.rowHeight(), 1 / PixelRatio.get());
 	}
 	for (let i = 0; i < BOX_SLOTS; i++) {
@@ -82,12 +82,12 @@ function armBlink(this c: CursorModel): void {
 		c.blinkTimer = -1;
 		c.blinkOn = !c.blinkOn;
 		c.paintCursor();
-		if (blinks(c.look, c.focused)) { c.armBlink(); }
+		if (c.look.blinks(c.focused)) { c.armBlink(); }
 	}, BLINK_MS);
 }
 
 function syncBlink(this c: CursorModel): void {
-	if (!blinks(c.look, c.focused)) {
+	if (!c.look.blinks(c.focused)) {
 		c.stopBlink();
 	} else if (c.blinkTimer < 0) {
 		c.armBlink();

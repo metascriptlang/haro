@@ -13,17 +13,17 @@ export const BOX_SLOTS: int32 = 4;
 export const BLINK_MS: int32 = 600;
 const BLINK_RESET_MS: float64 = 500;
 
-export function drawn(look: CursorLook, focused: boolean, blinkOn: boolean): boolean {
+export function drawn(this look: CursorLook, focused: boolean, blinkOn: boolean): boolean {
 	if (!look.visible) { return false; }
 	if (!focused) { return true; }
 	return !look.blinking || blinkOn;
 }
 
-export function shapeOf(look: CursorLook, focused: boolean): CursorShape {
+export function shapeOf(this look: CursorLook, focused: boolean): CursorShape {
 	return focused ? look.shape : CursorShape.BlockHollow;
 }
 
-export function blinks(look: CursorLook, focused: boolean): boolean {
+export function blinks(this look: CursorLook, focused: boolean): boolean {
 	return look.visible && look.blinking && focused;
 }
 
@@ -67,22 +67,22 @@ function look(visible: boolean, shape: CursorShape, blinking: boolean): CursorLo
 }
 
 test "a hidden cursor is not drawn, a steady one always is, a blinking one only while blink is on" {
-	assert !drawn(look(false, CursorShape.Block, false), true, true);
-	assert !drawn(look(false, CursorShape.Block, false), false, true);
-	assert drawn(look(true, CursorShape.Bar, false), true, false);
-	assert drawn(look(true, CursorShape.Bar, true), true, true);
-	assert !drawn(look(true, CursorShape.Bar, true), true, false);
+	assert !look(false, CursorShape.Block, false).drawn(true, true);
+	assert !look(false, CursorShape.Block, false).drawn(false, true);
+	assert look(true, CursorShape.Bar, false).drawn(true, false);
+	assert look(true, CursorShape.Bar, true).drawn(true, true);
+	assert !look(true, CursorShape.Bar, true).drawn(true, false);
 }
 
 test "an unfocused window shows a hollow block that does not blink" {
 	const blinking = look(true, CursorShape.Bar, true);
-	assert drawn(blinking, false, false);
-	assert shapeOf(blinking, false) == CursorShape.BlockHollow;
-	assert shapeOf(blinking, true) == CursorShape.Bar;
-	assert !blinks(blinking, false);
-	assert blinks(blinking, true);
-	assert !blinks(look(true, CursorShape.Bar, false), true);
-	assert !blinks(look(false, CursorShape.Bar, true), true);
+	assert blinking.drawn(false, false);
+	assert blinking.shapeOf(false) == CursorShape.BlockHollow;
+	assert blinking.shapeOf(true) == CursorShape.Bar;
+	assert !blinking.blinks(false);
+	assert blinking.blinks(true);
+	assert !look(true, CursorShape.Bar, false).blinks(true);
+	assert !look(false, CursorShape.Bar, true).blinks(true);
 }
 
 test "a block cursor is one translucent box over its cell" {

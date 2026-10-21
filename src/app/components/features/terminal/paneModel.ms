@@ -6,6 +6,8 @@ import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { PixelRatio } from "../../../../../../neon/src/api/pixelRatio";
 import { Clipboard } from "../../../../../../neon/src/api/clipboard";
 import { ViewHandle } from "../../../../../../neon/src/components/primitives";
+import { familyFont } from "../../../../../../neon/src/platform/void/host";
+import { spriteCellFor } from "../../../../../../void/src/void2d/font";
 import { gridSize } from "../../../../grid/size";
 import { MouseGeometry } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
@@ -29,7 +31,6 @@ import { closeKey } from "./keyboard";
 import { shades } from "./mouse";
 import { Term, TermError, exitCodeText, exitedAbnormally, pumpFrame, shellExitCode } from "./term";
 
-const PROBE = "MMMMMMMMMM";
 const HOLD_RECHECK_MS = 100;
 const RESTART_NOTICE = "config.ms: command and workingDirectory apply when Haro restarts";
 
@@ -313,25 +314,20 @@ export function laidOut(this m: PaneModel, e: NeonEvent): void {
 }
 
 function fitLayout(this m: PaneModel): void {
-	const handle = m.grid;
-	if (handle === null) {
-		m.host.fail("the grid laid out before its handle arrived");
+	const font = familyFont(m.metrics.fontFamily(), 400, false);
+	if (!font.ok) {
+		m.host.fail(`font family "${m.metrics.fontFamily()}" has no face: ${font.error.toString()}`);
 		return;
 	}
-	const probe = handle.measureText(PROBE, {
-		fontSize: m.metrics.fontSize(),
-		fontFamily: m.metrics.fontFamily(),
-	});
-	const advance = probe.width / PROBE.length;
-	const lineHeight = probe.height;
 	const ratio = PixelRatio.get();
-	const cellPx = Math.ceil(advance * ratio) as int32;
-	const rowPx = Math.ceil(lineHeight * ratio) as int32;
+	const cell = spriteCellFor(font.value, (m.metrics.fontSize() * ratio) as float32);
+	const cellPx = cell.width;
+	const rowPx = cell.height;
 	const widthPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutWidth) as int32;
 	const heightPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutHeight) as int32;
 	const size = gridSize(widthPx, heightPx, cellPx, rowPx);
 	if (!size.ok) {
-		m.host.fail(`cell ${advance}x${lineHeight} is not a grid size`);
+		m.host.fail(`cell ${cellPx}x${rowPx} px is not a grid size`);
 		return;
 	}
 	const cols = size.value[0];
@@ -356,7 +352,7 @@ function fitLayout(this m: PaneModel): void {
 	m.cursor.paintCursor();
 	console.log(
 		`haro: layout ${m.layoutWidth}x${m.layoutHeight} ratio ${ratio} ` +
-			`cell ${advance}x${lineHeight} grid ${cols}x${rows}`
+			`cell ${cellPx}x${rowPx} px grid ${cols}x${rows}`
 	);
 	const fitted = m.controls.refit(m.term, cols, rows);
 	if (!fitted.ok) {

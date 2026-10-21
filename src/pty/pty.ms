@@ -53,8 +53,11 @@ export function wait(this p: NativePty, timeoutMs: int32): Result<boolean, PtyEr
 
 export function write(this p: NativePty, data: Span<uint8>): Result<int32, PtyError> {
 	const n = ptyWrite(p.id, data);
-	if (n < 0) { return Result.err(PtyError.Closed); }
-	return Result.ok(n as int32);
+	return match (n) {
+		-2 => Result.err(PtyError.OutOfMemory),
+		_ when n < 0 => Result.err(PtyError.Closed),
+		_ => Result.ok(n as int32),
+	};
 }
 
 export function resize(this p: NativePty, cols: int32, rows: int32): Result<NativePty, PtyError> {

@@ -1,6 +1,7 @@
 import { Config, defaults } from "../config/config";
 import { Loaded, load, stampOf } from "../config/source";
 
+// Polled until card 2026-09-26-await-on-fs-watch-never-resumes.md lets a watch resume in an Ion window
 const CONFIG_POLL_MS = 1000;
 
 export interface ConfigWatch {

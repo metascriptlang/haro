@@ -1789,7 +1789,8 @@ export function selectedText(this vt: Vt): Result<string | null, VtError> {
 		buf = new Array(written as int32);
 		r = selectionFormat(vt.terminal, options, buf, written);
 	}
-	if (!ok(r)) { return Result.ok(null); }
+	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
+	if (!ok(r)) { return Result.err(VtError.ReadFailed); }
 	const text: string | null = buf[0..(written as int32)].asString();
 	return Result.ok(text);
 }

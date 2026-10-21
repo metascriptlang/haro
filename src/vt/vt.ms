@@ -700,7 +700,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 	return Result.err(VtError.CreateFailed);
 }
 
-export function write(this vt: Vt, bytes: Span<uint8>): void {
+export function write(this vt: Vt, bytes: Readonly<Span<uint8>>): void {
 	vtWriteBytes(vt.terminal, bytes);
 }
 

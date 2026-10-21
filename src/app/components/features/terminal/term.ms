@@ -220,10 +220,14 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	});
 }
 
+function sendBytes(s: Session, bytes: Span<uint8>): Result<int32, TermError> {
+	if (bytes.length == 0) { return Result.ok(0); }
+	if (!s.send(bytes).ok) { return Result.err(TermError.WriteFailed); }
+	return Result.ok(bytes.length as int32);
+}
+
 function sendBuffered(this t: Term, s: Session, n: int32): Result<int32, TermError> {
-	if (n == 0) { return Result.ok(0); }
-	if (!s.send(t.buf[0..n]).ok) { return Result.err(TermError.WriteFailed); }
-	return Result.ok(n);
+	return sendBytes(s, t.buf[0..n]);
 }
 
 export function keyEventOf(e: NeonEvent): KeyEvent {
@@ -290,10 +294,7 @@ export function sendPaste(
 			PasteError.EncodeFailed => TermError.PasteEncodeFailed,
 		});
 	}
-	const n = bytes.value.length as int32;
-	if (n == 0) { return Result.ok(0); }
-	if (!s.send(bytes.value[0..n]).ok) { return Result.err(TermError.WriteFailed); }
-	return Result.ok(n);
+	return sendBytes(s, bytes.value);
 }
 
 export function sendFocus(this t: Term, gained: boolean): Result<int32, TermError> {

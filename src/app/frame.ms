@@ -15,6 +15,15 @@ export function blank(this typeof RowSlot): RowSlot {
 	return { line: { text: "", runs: [], cursorCell: -1 }, spans: [] };
 }
 
+export struct Styles {
+	looks: Map<number, Style>;
+	tinted: Map<string, Style>;
+}
+
+export function empty(this typeof Styles): Styles {
+	return { looks: new Map<number, Style>(), tinted: new Map<string, Style>() };
+}
+
 export enum FrameError {
 	PlanFailed,
 	CursorFailed,
@@ -44,18 +53,34 @@ function decorationOf(run: LineRun): Decoration {
 	return "none";
 }
 
-function styleOf(styles: Map<string, Style>, run: LineRun, background: Rgb): Style {
+const RGB_VALUES: number = 16777216;
+const LOOKS: number = 24;
+
+function rgbValue(c: Rgb): number {
+	return (c.r as number) * 65536 + (c.g as number) * 256 + (c.b as number);
+}
+
+function lookOf(run: LineRun): number {
+	const under = run.underline == Underline.None ? 0 : run.underline == Underline.Curly ? 2 : 1;
+	return ((under * 2 + (run.strikethrough ? 1 : 0)) * 2 + (run.bold ? 1 : 0)) * 2 + (run.italic ? 1 : 0);
+}
+
+function styleOf(styles: Styles, run: LineRun, background: Rgb): Style {
+	const plain = run.bg == background;
+	const bgValue = plain ? RGB_VALUES : rgbValue(run.bg);
+	const tint = run.underlineColor;
+	const tinted = tint !== null && run.underline != Underline.None;
+	const look = (bgValue * RGB_VALUES + rgbValue(run.fg)) * LOOKS + lookOf(run);
+	const key = tinted ? `${look}${hexOf(tint!)}` : "";
+	const known = tinted ? styles.tinted.get(key) : styles.looks.get(look);
+	if (known !== undefined) { return known; }
 	const fg = hexOf(run.fg);
-	const bg = run.bg == background ? "" : hexOf(run.bg);
+	const bg = plain ? "" : hexOf(run.bg);
 	const decoration = decorationOf(run);
 	const weight: "bold" | "normal" = run.bold ? "bold" : "normal";
 	const slant: "italic" | "normal" = run.italic ? "italic" : "normal";
 	const line: "wavy" | "solid" = run.underline == Underline.Curly ? "wavy" : "solid";
-	const tint = run.underlineColor;
-	const lineColor = tint !== null && run.underline != Underline.None ? hexOf(tint) : "";
-	const key = fg + bg + decoration + weight + slant + line + lineColor;
-	const known = styles.get(key);
-	if (known !== undefined) { return known; }
+	const lineColor = tinted ? hexOf(tint!) : "";
 	const style: Style = {
 		color: fg,
 		textDecorationLine: decoration,
@@ -65,12 +90,17 @@ function styleOf(styles: Map<string, Style>, run: LineRun, background: Rgb): Sty
 	};
 	if (bg != "") { style.backgroundColor = bg; }
 	if (lineColor != "") { style.textDecorationColor = lineColor; }
-	if (styles.size >= STYLE_CACHE_LIMIT) { styles.clear(); }
-	styles.set(key, style);
+	if (tinted) {
+		if (styles.tinted.size >= STYLE_CACHE_LIMIT) { styles.tinted.clear(); }
+		styles.tinted.set(key, style);
+	} else {
+		if (styles.looks.size >= STYLE_CACHE_LIMIT) { styles.looks.clear(); }
+		styles.looks.set(look, style);
+	}
 	return style;
 }
 
-export function spansOf(styles: Map<string, Style>, l: GridLine, background: Rgb): TextSpan[] {
+export function spansOf(styles: Styles, l: GridLine, background: Rgb): TextSpan[] {
 	let spans: TextSpan[] = [];
 	let at = 0;
 	for (const run of l.runs) {
@@ -86,7 +116,7 @@ function cursorCellOf(cursor: Cursor | null, y: int32): int32 {
 }
 
 function slotOf(
-	styles: Map<string, Style>,
+	styles: Styles,
 	row: Row,
 	cursor: Cursor | null,
 	background: Rgb,
@@ -98,7 +128,7 @@ function slotOf(
 
 export function applyFrame(
 	grid: List<RowSlot>,
-	styles: Map<string, Style>,
+	styles: Styles,
 	vt: Vt,
 ): Result<Cursor | null, FrameError> {
 	const planned = vt.plan();
@@ -138,7 +168,7 @@ function run(units: int32, fg: Rgb, bg: Rgb, underline: Underline): LineRun {
 }
 
 test "each run becomes a span over its own text, sharing one style per look" {
-	const styles = new Map<string, Style>();
+	const styles = Styles.empty();
 	const l: GridLine = {
 		text: "ab cd",
 		runs: [
@@ -152,11 +182,11 @@ test "each run becomes a span over its own text, sharing one style per look" {
 	assert spans.length == 3;
 	assert spans[0].text == "ab" && spans[1].text == " " && spans[2].text == "cd";
 	assert spans[0].style === spans[2].style;
-	assert styles.size == 2;
+	assert styles.looks.size == 2;
 }
 
 test "truecolour output that never repeats a look keeps the style cache bounded" {
-	const styles = new Map<string, Style>();
+	const styles = Styles.empty();
 	for (let i = 0; i < STYLE_CACHE_LIMIT * 3; i++) {
 		const fg: Rgb = { r: (i & 255) as uint8, g: ((i >> 8) & 255) as uint8, b: 7 };
 		const l: GridLine = {
@@ -167,11 +197,17 @@ test "truecolour output that never repeats a look keeps the style cache bounded"
 		const spans = spansOf(styles, l, BLACK);
 		assert spans[0].style!.color == hexOf(fg);
 	}
-	assert styles.size <= STYLE_CACHE_LIMIT;
+	assert styles.looks.size <= STYLE_CACHE_LIMIT;
+}
+
+test "the largest look key is still an exact integer, so no two looks share one" {
+	const largest = (RGB_VALUES * RGB_VALUES + RGB_VALUES - 1) * LOOKS + LOOKS - 1;
+	assert largest < 9007199254740992;
+	assert largest - 1 != largest;
 }
 
 test "a background differs from the terminal's only where a run says so" {
-	const styles = new Map<string, Style>();
+	const styles = Styles.empty();
 	const l: GridLine = {
 		text: "xy",
 		runs: [run(1, WHITE, BLACK, Underline.Curly), run(1, WHITE, RED, Underline.None)],
@@ -185,14 +221,17 @@ test "a background differs from the terminal's only where a run says so" {
 }
 
 test "an underline colour tints the line, and only while the run is underlined" {
-	const styles = new Map<string, Style>();
+	const styles = Styles.empty();
 	const curly: LineRun = { ...run(1, WHITE, BLACK, Underline.Curly), underlineColor: RED };
 	const plain: LineRun = { ...run(1, WHITE, BLACK, Underline.None), underlineColor: RED };
-	const l: GridLine = { text: "xy", runs: [curly, plain], cursorCell: -1 };
+	const white: LineRun = { ...curly, underlineColor: WHITE };
+	const l: GridLine = { text: "xyzw", runs: [curly, plain, white, curly], cursorCell: -1 };
 	const spans = spansOf(styles, l, BLACK);
 	assert spans[0].style!.textDecorationColor == "#ff0000";
 	assert spans[0].style!.color == "#ffffff";
 	assert spans[1].style!.textDecorationColor === undefined;
+	assert spans[2].style!.textDecorationColor == "#ffffff";
+	assert spans[0].style === spans[3].style;
 }
 
 test "a cursor that moves along its row rebuilds that row, so a ligature under it splits" {
@@ -201,7 +240,7 @@ test "a cursor that moves along its row rebuilds that row, so a ligature under i
 	if (created.ok) {
 		const vt = created.value;
 		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank()]);
-		const styles = new Map<string, Style>();
+		const styles = Styles.empty();
 		vt.writeText("a->b");
 		assert applyFrame(grid, styles, vt).ok;
 		assert grid.at(0).spans[0].text == "a->b";

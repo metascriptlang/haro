@@ -1,6 +1,5 @@
 import { createList, List } from "../../../../../../neon/src/core/list";
 import { NeonEvent } from "../../../../../../neon/src/render/event";
-import { Style } from "../../../../../../neon/src/render/style";
 import { KeyAction, KeyEvent, KeyMod, withoutAltGr } from "../../../../keys/keys";
 import { Pty, PtyError } from "../../../../pty/transport";
 import { Replay } from "../../../../pty/replay";
@@ -15,7 +14,7 @@ import {
 	PasteError,
 	Palette,
 } from "../../../../vt/vt";
-import { FrameError, RowSlot, applyFrame, blank } from "../../../frame";
+import { FrameError, RowSlot, Styles, applyFrame, blank, empty } from "../../../frame";
 import { stats, mark } from "../../../stats";
 
 const BUFFER_BYTES = 65536;
@@ -51,7 +50,7 @@ export interface Term {
 	session: Session | null;
 	keys: Keys;
 	grid: List<RowSlot>;
-	styles: Map<string, Style>;
+	styles: Styles;
 	buf: Vec<uint8>;
 	cols: int32;
 	rows: int32;
@@ -99,7 +98,7 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 		session: null,
 		keys: keys.value,
 		grid: createList<RowSlot>([]),
-		styles: new Map<string, Style>(),
+		styles: Styles.empty(),
 		buf: buf,
 		cols: 0,
 		rows: 0,

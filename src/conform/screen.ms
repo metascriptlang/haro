@@ -1,14 +1,13 @@
 import { createList, List } from "../../../neon/src/core/list";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
-import { Style } from "../../../neon/src/render/style";
-import { RowSlot, applyFrame } from "../app/frame";
+import { RowSlot, Styles, applyFrame, empty } from "../app/frame";
 import { LineRun, line } from "../grid/lines";
 import { Cursor, Vt } from "../vt/vt";
 
 export interface Screen {
 	vt: Vt;
 	grid: List<RowSlot>;
-	styles: Map<string, Style>;
+	styles: Styles;
 	cols: int32;
 	rows: int32;
 	cursor: Cursor | null;
@@ -29,7 +28,7 @@ export function open(this typeof Screen, cols: int32, rows: int32): Result<Scree
 	return Result.ok({
 		vt: created.value,
 		grid: createList<RowSlot>(slots),
-		styles: new Map<string, Style>(),
+		styles: Styles.empty(),
 		cols: cols,
 		rows: rows,
 		cursor: null,

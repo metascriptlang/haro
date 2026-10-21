@@ -1,7 +1,6 @@
 import { argv } from "std/process";
 import { createList } from "../../neon/src/core/list";
-import { Style } from "../../neon/src/render/style";
-import { RowSlot, applyFrame, spansOf } from "../src/app/frame";
+import { RowSlot, Styles, applyFrame, empty, spansOf } from "../src/app/frame";
 import { GridLine, line } from "../src/grid/lines";
 import { plan } from "../src/screen/plan";
 import { Cursor, Vt, palette } from "../src/vt/vt";
@@ -83,7 +82,7 @@ function blankSlots(rows: int32): RowSlot[] {
 }
 
 function framePass(
-	vt: Vt, stage: Stage, styles: Map<string, Style>, ref totals: Totals,
+	vt: Vt, stage: Stage, styles: Styles, ref totals: Totals,
 ): Result<void, BenchError> {
 	const planStart: float64 = performance.now();
 	const planned = vt.plan();
@@ -122,7 +121,7 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 	let payload = w.payload;
 	vt.write(setup);
 	if (stage != Stage.Write && !vt.plan().ok) { return Result.err(BenchError.Plan); }
-	const styles = new Map<string, Style>();
+	const styles = Styles.empty();
 	const grid = createList<RowSlot>(blankSlots(w.rows));
 	let totals = Totals.zero();
 	const size = payload.length as int32;

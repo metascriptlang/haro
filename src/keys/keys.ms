@@ -37,6 +37,30 @@ export function withoutAltGr(this e: KeyEvent): KeyEvent {
 	};
 }
 
+function navigationOf(numpadKey: string): string {
+	return match (numpadKey) {
+		"Numpad0" => "NumpadInsert",
+		"Numpad1" => "NumpadEnd",
+		"Numpad2" => "NumpadDown",
+		"Numpad3" => "NumpadPageDown",
+		"Numpad4" => "NumpadLeft",
+		"Numpad5" => "NumpadBegin",
+		"Numpad6" => "NumpadRight",
+		"Numpad7" => "NumpadHome",
+		"Numpad8" => "NumpadUp",
+		"Numpad9" => "NumpadPageUp",
+		"NumpadDecimal" => "NumpadDelete",
+		_ => numpadKey,
+	};
+}
+
+export function withNumLockApplied(this e: KeyEvent): KeyEvent {
+	if (e.mods.has(KeyMod.NumLock)) { return e; }
+	const key = navigationOf(e.key);
+	if (key == e.key) { return e; }
+	return { ...e, key: key, unshifted: 0, text: "" };
+}
+
 export function modsMask(mods: BitSet<KeyMod>): uint16 {
 	return (mods as uint32) as uint16;
 }
@@ -93,6 +117,27 @@ test "Ctrl+Alt the layout consumed for AltGr text is dropped, and a plain Ctrl+A
 	assert typed.consumedMods == none;
 	const chord: KeyEvent = { ...altGr, consumedMods: none, text: "" };
 	assert chord.withoutAltGr().mods == chord.mods;
+}
+
+test "a keypad digit with NumLock off is the navigation key printed under it" {
+	const none = 0 as BitSet<KeyMod>;
+	const eight: KeyEvent = {
+		action: KeyAction.Press,
+		key: "Numpad8",
+		mods: none,
+		consumedMods: none,
+		unshifted: 0x38,
+		text: "",
+	};
+	assert eight.withNumLockApplied().key == "NumpadUp";
+	assert eight.withNumLockApplied().unshifted == 0;
+	const decimal: KeyEvent = { ...eight, key: "NumpadDecimal" };
+	assert decimal.withNumLockApplied().key == "NumpadDelete";
+	const locked: KeyEvent = { ...eight, mods: none.incl(KeyMod.NumLock), text: "8" };
+	assert locked.withNumLockApplied().key == "Numpad8";
+	assert locked.withNumLockApplied().text == "8";
+	const plus: KeyEvent = { ...eight, key: "NumpadAdd", text: "+" };
+	assert plus.withNumLockApplied().text == "+";
 }
 
 test "the modifier mask keeps libghostty-vt's bit order" {

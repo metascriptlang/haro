@@ -1,10 +1,20 @@
 import { selected } from "../../../../input/pointer";
-import { shutdown } from "./term";
+import { sendKey, shutdown } from "./term";
 import { Sink, termOf } from "./termTest";
 import { Controls } from "./controls";
 import { closeKey, keyDown } from "./keyboard";
 import { Warning } from "../../../../input/paste";
-import { ALT, BindAction, CLIPBOARD_MODS, CTRL, Keybind, SHIFT, SUPER, Screen } from "../../../../input/bindings";
+import {
+	ALT,
+	BindAction,
+	CLIPBOARD_MODS,
+	CTRL,
+	Keybind,
+	NUM_LOCK,
+	SHIFT,
+	SUPER,
+	Screen,
+} from "../../../../input/bindings";
 import {
 	at,
 	atBottomOf,
@@ -233,6 +243,26 @@ test "a ctrl alt keybind leaves the character AltGr types on the same key to the
 		assert sink.sent == "";
 		assert handled(c.keyDown(t, key("KeyQ", CTRL | ALT), clip));
 		assert sink.sent == "x";
+		t.shutdown();
+	}
+}
+
+test "a keypad digit without NumLock is its navigation key on Windows, which alone reports NumLock" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("ready", 20, 5, sink);
+	assert t !== null;
+	if (t !== null) {
+		assert t.sendKey(key("Numpad8", 0)).ok;
+		when (windows) {
+			assert sink.sent == "\x1b[A";
+		} else {
+			assert sink.sent == "8";
+		}
+		sink.sent = "";
+		const locked = key("Numpad8", NUM_LOCK);
+		locked.text = "8";
+		assert t.sendKey(locked).ok;
+		assert sink.sent == "8";
 		t.shutdown();
 	}
 }

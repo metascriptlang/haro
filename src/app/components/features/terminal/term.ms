@@ -1,6 +1,6 @@
 import { createList, List } from "../../../../../../neon/src/core/list";
 import { NeonEvent } from "../../../../../../neon/src/render/event";
-import { KeyAction, KeyEvent, KeyMod, withoutAltGr } from "../../../../keys/keys";
+import { KeyAction, KeyEvent, KeyMod, withNumLockApplied, withoutAltGr } from "../../../../keys/keys";
 import { Pty, PtyError } from "../../../../pty/transport";
 import { Replay } from "../../../../pty/replay";
 import { Session } from "../../../../session/session";
@@ -225,7 +225,11 @@ export function keyEventOf(e: NeonEvent): KeyEvent {
 		unshifted: e.unshifted as uint32,
 		text: e.text,
 	};
-	return key.withoutAltGr();
+	when (windows) {
+		return key.withoutAltGr().withNumLockApplied();
+	} else {
+		return key.withoutAltGr();
+	}
 }
 
 export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {

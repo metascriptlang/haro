@@ -18,7 +18,7 @@ export const ALT: int32 = 4;
 export const SUPER: int32 = 8;
 const CHORD: int32 = SHIFT | CTRL | ALT | SUPER;
 const CAPS_LOCK: int32 = 16;
-const NUM_LOCK: int32 = 32;
+export const NUM_LOCK: int32 = 32;
 const SHIFT_RIGHT: int32 = 64;
 
 export function chordOf(mods: number): int32 {

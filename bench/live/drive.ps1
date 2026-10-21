@@ -75,12 +75,11 @@ public static class HaroLive {
 }
 '@
 
-function Press([IntPtr]$hwnd, [int]$vk, [int]$ch) {
+function Press([IntPtr]$hwnd, [int]$vk) {
 	$sc = [HaroLive]::MapVirtualKeyW($vk, 0)
 	[int64]$down = 1 -bor ($sc -shl 16)
 	[int64]$up = $down -bor (1 -shl 30) -bor ([int64]1 -shl 31)
 	[void][HaroLive]::PostMessageW($hwnd, 0x100, [IntPtr]$vk, [IntPtr]$down)
-	[void][HaroLive]::PostMessageW($hwnd, 0x102, [IntPtr]$ch, [IntPtr]$down)
 	[void][HaroLive]::PostMessageW($hwnd, 0x101, [IntPtr]$vk, [IntPtr]$up)
 }
 
@@ -194,9 +193,8 @@ try {
 			$wall = [double]$span[1] - [double]$span[0]
 		} else {
 			$vk = if ($Work -eq 'echo') { 0x41 } else { 0x4A }
-			$ch = if ($Work -eq 'echo') { 97 } else { 106 }
 			for ($k = 0; $k -lt $Keys; $k++) {
-				Press $hwnd $vk $ch
+				Press $hwnd $vk
 				Start-Sleep -Milliseconds $GapMs
 			}
 			Start-Sleep 1

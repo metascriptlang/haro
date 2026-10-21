@@ -114,19 +114,28 @@ test "bold, italic and strikethrough set and reset on their own codes" {
 	}
 }
 
+struct UnderlineCase { sgr: string; underline: Underline; }
+
 test "underline kinds follow SGR 4, 4:n, 21 and 24, and only curly is drawn wavy" {
-	const kinds: string[] = ["4", "4:0", "4:1", "4:2", "4:3", "4:4", "4:5", "21", "4;24", "4:3;24"];
-	const want: Underline[] = [
-		Underline.Single, Underline.None, Underline.Single, Underline.Double, Underline.Curly,
-		Underline.Dotted, Underline.Dashed, Underline.Double, Underline.None, Underline.None,
+	const cases: UnderlineCase[] = [
+		{ sgr: "4", underline: Underline.Single },
+		{ sgr: "4:0", underline: Underline.None },
+		{ sgr: "4:1", underline: Underline.Single },
+		{ sgr: "4:2", underline: Underline.Double },
+		{ sgr: "4:3", underline: Underline.Curly },
+		{ sgr: "4:4", underline: Underline.Dotted },
+		{ sgr: "4:5", underline: Underline.Dashed },
+		{ sgr: "21", underline: Underline.Double },
+		{ sgr: "4;24", underline: Underline.None },
+		{ sgr: "4:3;24", underline: Underline.None },
 	];
-	for (let i = 0; i < kinds.length; i++) {
-		const l = look(kinds[i]);
+	for (const c of cases) {
+		const l = look(c.sgr);
 		assert l !== null;
 		if (l !== null) {
-			assert l.run.underline == want[i];
-			assert (l.style.textDecorationLine == "underline") == (want[i] != Underline.None);
-			assert (l.style.textDecorationStyle == "wavy") == (want[i] == Underline.Curly);
+			assert l.run.underline == c.underline;
+			assert (l.style.textDecorationLine == "underline") == (c.underline != Underline.None);
+			assert (l.style.textDecorationStyle == "wavy") == (c.underline == Underline.Curly);
 		}
 	}
 }

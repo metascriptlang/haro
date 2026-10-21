@@ -20,6 +20,8 @@ const SCREEN_DPI: float64 = 96;
 const POINTS_PER_INCH: float64 = 72;
 const PALETTE_SIZE = 256;
 const MAX_SCROLLBACK: int64 = 100000;
+const MIN_FONT_SIZE: float64 = 1;
+const MAX_FONT_SIZE: float64 = 255;
 
 when (windows) {
 	const DEFAULT_COMMAND = "pwsh.exe -NoLogo";
@@ -177,8 +179,10 @@ export function parse(json: string): Result<Config, string> {
 			"fontFamily" => { c.fontFamily = try readFamilies(v, key); },
 			"fontSize" => {
 				c.fontSize = try readNumber(v, key);
-				if (c.fontSize <= 0) {
-					return Result.err(`fontSize ${c.fontSize} must be above 0`);
+				if (c.fontSize < MIN_FONT_SIZE || c.fontSize > MAX_FONT_SIZE) {
+					return Result.err(
+						`fontSize ${c.fontSize} must be from ${MIN_FONT_SIZE} to ${MAX_FONT_SIZE} points`,
+					);
 				}
 			},
 			"padding" => {
@@ -304,7 +308,9 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"fontFamily":["Operator Saigon",12]}`) == "fontFamily[1] must be a string";
 	assert refusal(`{"fontsize":10}`) == `unknown config field "fontsize"`;
 	assert refusal(`{"fontSize":"10"}`) == "fontSize must be a number";
-	assert refusal(`{"fontSize":0}`) == "fontSize 0 must be above 0";
+	assert refusal(`{"fontSize":0}`) == "fontSize 0 must be from 1 to 255 points";
+	assert refusal(`{"fontSize":0.5}`) == "fontSize 0.5 must be from 1 to 255 points";
+	assert refusal(`{"fontSize":256}`) == "fontSize 256 must be from 1 to 255 points";
 	assert refusal(`{"padding":"6"}`) == "padding must be a number";
 	assert refusal(`{"padding":-1}`) == "padding -1 must be 0 or more";
 	assert refusal(`{"workingDirectory":"projects"}`) ==

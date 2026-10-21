@@ -15,7 +15,7 @@ const BUILT_IN: Faces = {
 	boldItalic: FONT_BOLD_ITALIC,
 };
 
-interface SystemFace {
+struct SystemFace {
 	path: string;
 	family: string;
 }

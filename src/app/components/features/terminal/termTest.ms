@@ -118,19 +118,17 @@ test "a clipboard read waits in the frame and its answer goes out through the re
 
 test "focus reports go out only while the program asked for them" {
 	const off: Sink = { sent: "" };
-	const a = termFresh("ready", off);
+	const a = termOf("ready", 20, 5, off);
 	assert a !== null;
 	if (a !== null) {
-		assert a.pumpFrame().ok;
 		assert a.sendFocus(true).ok;
 		assert off.sent == "";
 		a.shutdown();
 	}
 	const on: Sink = { sent: "" };
-	const b = termFresh("\x1b[?1004h", on);
+	const b = termOf("\x1b[?1004h", 20, 5, on);
 	assert b !== null;
 	if (b !== null) {
-		assert b.pumpFrame().ok;
 		assert b.sendFocus(true).ok;
 		assert b.sendFocus(false).ok;
 		assert on.sent == "\x1b[I\x1b[O";
@@ -153,19 +151,17 @@ test "a mouse report is the program's encoding of the pointer, nothing while it 
 	const press: MouseInput = { action: MouseAction.Press, button: 1, mods: none, x: 17, y: 17 };
 	const release: MouseInput = { ...press, action: MouseAction.Release };
 	const quiet: Sink = { sent: "" };
-	const a = termFresh("ready", quiet);
+	const a = termOf("ready", 20, 5, quiet);
 	assert a !== null;
 	if (a !== null) {
-		assert a.pumpFrame().ok;
 		assert a.sendMouse(press, geometry, true).ok;
 		assert quiet.sent == "";
 		a.shutdown();
 	}
 	const sink: Sink = { sent: "" };
-	const t = termFresh("\x1b[?1000h\x1b[?1006h", sink);
+	const t = termOf("\x1b[?1000h\x1b[?1006h", 20, 5, sink);
 	assert t !== null;
 	if (t !== null) {
-		assert t.pumpFrame().ok;
 		assert t.sendMouse(press, geometry, true).ok;
 		assert t.sendMouse(release, geometry, false).ok;
 		assert sink.sent == "\x1b[<0;3;2M\x1b[<0;3;2m";

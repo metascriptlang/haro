@@ -8,6 +8,7 @@ when (linux) {
 	@passL("-lutil");
 }
 
+import { isDir } from "std/fs";
 import { Pty, PtyError } from "./transport";
 
 extern function ptyOpen(commandLine: cstring, cwd: cstring, cols: int32, rows: int32): int32;
@@ -28,7 +29,8 @@ export function open(
 	rows: int32,
 	cwd: string | null = null,
 ): Result<NativePty, PtyError> {
-	const id = ptyOpen(commandLine, cwd ?? "", cols, rows);
+	const dir = cwd !== null && isDir(cwd) ? cwd : "";
+	const id = ptyOpen(commandLine, dir, cols, rows);
 	if (id < 0) { return Result.err(PtyError.OpenFailed); }
 	return Result.ok({ id: id });
 }
@@ -173,7 +175,7 @@ when (testBuild) {
 	}
 
 	test "a resize of a live console succeeds and hands the pty back" {
-		const opened = NativePty.open(ECHO_HELLO, 80, 24);
+		const opened = NativePty.open(QUIET_FOR_3S, 80, 24);
 		assert opened.ok;
 		if (opened.ok) {
 			const resized = opened.value.resize(120, 40);
@@ -203,13 +205,25 @@ when (testBuild) {
 		}
 	}
 
-	when (!windows) {
-		test "a directory that does not exist is skipped and the command still runs" {
-			const spawned = NativePty.spawn(ECHO_HELLO, 80, 24, "/no/such/haro/directory");
-			assert spawned.ok;
-			if (spawned.ok) {
-				assert spawned.value.drainText(4096).includes("hello");
-				spawned.value.close();
+	test "a directory that does not exist is skipped and the command still runs" {
+		const spawned = NativePty.spawn(ECHO_HELLO, 80, 24, "/no/such/haro/directory");
+		assert spawned.ok;
+		if (spawned.ok) {
+			assert spawned.value.drainText(4096).includes("hello");
+			spawned.value.close();
+		}
+	}
+
+	when (windows) {
+		test "a resize after the child exited is refused, since its console is already closed" {
+			const opened = NativePty.open(ECHO_HELLO, 80, 24);
+			assert opened.ok;
+			if (opened.ok) {
+				const p = opened.value;
+				assert p.toPty().drainText(4096).includes("hello");
+				assert p.exitCode() === 0;
+				assert !p.resize(100, 30).ok;
+				p.close();
 			}
 		}
 	}

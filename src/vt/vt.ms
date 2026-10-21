@@ -714,14 +714,10 @@ export function writeText(this vt: Vt, text: string): void {
 	vt.mouse.stale = true;
 }
 
-export function replies(this vt: Vt, buf: Span<uint8>): int32 {
-	const e = vt.effects;
-	const n = Math.min(e.replies.length, buf.length);
-	for (let i = 0; i < n; i++) { buf[i] = e.replies[i]; }
-	let rest: Vec<uint8> = [];
-	for (let i = n; i < e.replies.length; i++) { rest.push(e.replies[i]); }
-	e.replies = rest;
-	return n;
+export function takeReplies(this vt: Vt): Vec<uint8> {
+	const taken = vt.effects.replies;
+	vt.effects.replies = [];
+	return taken;
 }
 
 export struct VtEvents {
@@ -1900,9 +1896,8 @@ test "a cursor position query is answered with the cursor's place" {
 	if (created.ok) {
 		const vt = created.value;
 		vt.writeText("ab\x1b[6n");
-		let buf: Vec<uint8> = new Array(64);
-		const n = vt.replies(buf);
-		assert ascii(buf[0..n]) == "\x1b[1;3R";
+		let replies = vt.takeReplies();
+		assert ascii(replies) == "\x1b[1;3R";
 		vt.free();
 	}
 }
@@ -2284,9 +2279,8 @@ test "a theme the host sets is what a colour query reports" {
 		const vt = created.value;
 		assert vt.setDefaultColors({ r: 0x28, g: 0x2c, b: 0x34 }, { r: 0xff, g: 0xff, b: 0xfe }).ok;
 		vt.writeText("\x1b]11;?\x1b\\");
-		let buf: Vec<uint8> = new Array(64);
-		const n = vt.replies(buf);
-		assert ascii(buf[0..n]) == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\";
+		let replies = vt.takeReplies();
+		assert ascii(replies) == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\";
 		vt.free();
 	}
 }
@@ -2444,8 +2438,7 @@ test "text without a query leaves nothing to reply" {
 	if (created.ok) {
 		const vt = created.value;
 		vt.writeText("hello");
-		let buf: Vec<uint8> = new Array(64);
-		assert vt.replies(buf) == 0;
+		assert vt.takeReplies().length == 0;
 		vt.free();
 	}
 }
@@ -3190,9 +3183,8 @@ test "a bracketed paste is framed and only its end marker is unsafe" {
 }
 
 function pending(vt: Vt): string {
-	let buf: Vec<uint8> = new Array(128);
-	const n = vt.replies(buf);
-	return ascii(buf[0..n]);
+	let replies = vt.takeReplies();
+	return ascii(replies);
 }
 
 test "an OSC 52 read waits for the host and is answered in the frame the program used" {

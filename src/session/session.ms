@@ -42,17 +42,16 @@ export function pump(this s: Session, buf: Span<uint8>): Result<boolean, Session
 	}
 	if (r.value > 0) {
 		s.vt.write(buf[0..r.value]);
-		const _replied = try s.sendReplies(buf);
+		const _replied = try s.sendReplies();
 	}
 	return Result.ok(true);
 }
 
-function sendReplies(this s: Session, buf: Span<uint8>): Result<void, SessionError> {
-	while (true) {
-		const n = s.vt.replies(buf);
-		if (n == 0) { return Result.ok(null); }
-		const _sent = try s.send(buf[0..n]);
-	}
+export function sendReplies(this s: Session): Result<void, SessionError> {
+	const replies = s.vt.takeReplies();
+	if (replies.length == 0) { return Result.ok(null); }
+	const _sent = try s.send(replies);
+	return Result.ok(null);
 }
 
 export function screen(this s: Session): Result<Vec<string>, SessionError> {

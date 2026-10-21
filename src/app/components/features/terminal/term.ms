@@ -316,16 +316,11 @@ export function sendMouse(
 	return t.sendBuffered(s, n.value);
 }
 
-export function sendReplies(this t: Term): Result<int32, TermError> {
+export function sendReplies(this t: Term): Result<void, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok(0); }
-	let total = 0;
-	while (true) {
-		const n = s.vt.replies(t.buf);
-		if (n == 0) { return Result.ok(total); }
-		if (!s.send(t.buf[0..n]).ok) { return Result.err(TermError.WriteFailed); }
-		total += n;
-	}
+	if (s === null) { return Result.ok(null); }
+	if (!s.sendReplies().ok) { return Result.err(TermError.WriteFailed); }
+	return Result.ok(null);
 }
 
 export function shutdown(this t: Term): void {

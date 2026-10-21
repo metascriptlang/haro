@@ -4,7 +4,7 @@ import { Pointer, Spot } from "../../../../input/pointer";
 import { Wheel } from "../../../../input/wheel";
 import { Held } from "../../../../input/paste";
 import { MouseGeometry, Vt } from "../../../../vt/vt";
-import { Term } from "./term";
+import { Term, TermError, fit } from "./term";
 
 export enum ControlError {
 	VtFailed,
@@ -61,6 +61,14 @@ export function vtOf(t: Term): Vt | null {
 
 export function holding(this c: Controls): boolean {
 	return c.held !== null || c.reading !== null;
+}
+
+export function refit(this c: Controls, t: Term, cols: int32, rows: int32): Result<boolean, TermError> {
+	const reflows = cols != t.cols;
+	const fitted = t.fit(cols, rows);
+	const vt = vtOf(t);
+	if (fitted.ok && reflows && vt !== null) { c.pointer.clear(vt); }
+	return fitted;
 }
 
 export function typed(this c: Controls, t: Term): Result<boolean, ControlError> {

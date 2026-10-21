@@ -21,7 +21,7 @@ import { ShadesModel, createShades, paintShades } from "../../content/shades";
 import { PreeditModel, createPreedit } from "../../content/preedit";
 import { NoticeModel, noticeCols, showNotice } from "../notice/notice";
 import { PasteDialogModel, showPending } from "../paste/pasteDialog";
-import { Bridge, Controls } from "./controls";
+import { Bridge, Controls, refit } from "./controls";
 import { clipboardAsked } from "./clipboard";
 import { closeKey } from "./keyboard";
 import { shades } from "./mouse";
@@ -302,7 +302,7 @@ export function laidOut(this m: PaneModel, e: NeonEvent): void {
 		`haro: layout ${e.width}x${e.height} ratio ${ratio} ` +
 			`cell ${advance}x${lineHeight} grid ${cols}x${rows}`
 	);
-	const fitted = m.term.fit(cols, rows);
+	const fitted = m.controls.refit(m.term, cols, rows);
 	if (!fitted.ok) {
 		if (fitted.error == TermError.PtyOpenFailed) {
 			m.notify("the shell did not start: check command in config.ms, or --shell");

@@ -4,7 +4,7 @@ import { Spot } from "../../../../input/pointer";
 import { atBottom, scrollOffset } from "../../../../vt/vt";
 import { Term, shutdown } from "./term";
 import { Sink, termOf } from "./termTest";
-import { Bridge, ControlError, Controls, Hit, holding, typed } from "./controls";
+import { Bridge, ControlError, Controls, Hit, holding, refit, typed } from "./controls";
 import { Pasted, cancel, clipboardAsked, confirm, normalized, paste } from "./clipboard";
 import { keyDown } from "./keyboard";
 import { pointerDown, pointerMove, pointerUp, roll } from "./mouse";
@@ -236,6 +236,22 @@ test "an empty clipboard is answered at once and a read does not ask while the p
 		const clip = clipOf(boardOf(""));
 		assert !handled(c.roll(t, 1, hitAt(0, 0)));
 		assert !handled(c.pointerDown(t, clip, 1, hitAt(0, 0), 0));
+		t.shutdown();
+	}
+}
+
+test "a width change drops the selection, a height change keeps it" {
+	const sink: Sink = { sent: "" };
+	const t = termOf("0123456789abcde", 10, 3, sink);
+	assert t !== null;
+	if (t !== null) {
+		const c = Controls.open();
+		const clip = clipOf(boardOf("x"));
+		assert drag(c, t, clip, at(0, 1), at(2, 1));
+		assert c.refit(t, 10, 4).ok;
+		assert c.pointer.selected();
+		assert c.refit(t, 20, 4).ok;
+		assert !c.pointer.selected();
 		t.shutdown();
 	}
 }

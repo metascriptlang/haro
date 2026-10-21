@@ -129,7 +129,8 @@ function slotOf(
 ): Result<RowSlot, FrameError> {
 	const built = row.line(cursorCellOf(cursor, row.y), background);
 	if (!built.ok) { return Result.err(FrameError.LineFailed); }
-	return Result.ok({ line: built.value, spans: spansOf(styles, built.value, background) });
+	const spans = spansOf(styles, built.value, background);
+	return Result.ok({ line: move built.value, spans: spans });
 }
 
 export function applyFrame(

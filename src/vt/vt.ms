@@ -2256,6 +2256,10 @@ test "an OSC 52 write reaches the host once, and only for the standard clipboard
 		const second = vt.takeClipboard();
 		assert second.ok;
 		if (second.ok) { assert second.value === null; }
+		vt.writeText("]52;c;");
+		const cleared = vt.takeClipboard();
+		assert cleared.ok;
+		if (cleared.ok) { assert cleared.value == ""; }
 		vt.free();
 	}
 }

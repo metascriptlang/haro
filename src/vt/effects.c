@@ -89,7 +89,10 @@ static GhosttyString onXtversion(GhosttyTerminal terminal, void* userdata) {
 static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const GhosttyClipboardWrite* write) {
 	(void)terminal;
 	GhosttyClipboardWriteReply reply = { sizeof reply, GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED, false };
-	if (write->location == GHOSTTY_CLIPBOARD_LOCATION_STANDARD) {
+	if (write->location == GHOSTTY_CLIPBOARD_LOCATION_STANDARD && write->contents_len == 0) {
+		haroVtClipboardWritten(userdata, (uint8_t*)"", 0);
+		reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+	} else if (write->location == GHOSTTY_CLIPBOARD_LOCATION_STANDARD) {
 		for (size_t i = 0; i < write->contents_len; i++) {
 			const GhosttyClipboardContent* c = &write->contents[i];
 			if (c->mime.len != 10 || memcmp(c->mime.ptr, "text/plain", 10) != 0) continue;

@@ -201,6 +201,18 @@ static wchar_t* widened(const char* text) {
 	return wide;
 }
 
+static wchar_t* expanded(wchar_t* text) {
+	if (!text) return NULL;
+	DWORD len = ExpandEnvironmentStringsW(text, NULL, 0);
+	wchar_t* out = len > 0 ? malloc(sizeof(wchar_t) * len) : NULL;
+	if (out && ExpandEnvironmentStringsW(text, out, len) != len) {
+		free(out);
+		out = NULL;
+	}
+	free(text);
+	return out;
+}
+
 int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows) {
 	int id = -1;
 	for (int i = 0; i < PTY_MAX; i++) {
@@ -237,7 +249,7 @@ int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows) {
 	si.StartupInfo.cb = sizeof si;
 	si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
 	si.lpAttributeList = attrs;
-	wchar_t* wide = widened(commandLine);
+	wchar_t* wide = expanded(widened(commandLine));
 	wchar_t* wideCwd = cwd[0] != '\0' ? widened(cwd) : NULL;
 	PROCESS_INFORMATION pi;
 	memset(&pi, 0, sizeof pi);

@@ -257,6 +257,15 @@ when (testBuild) {
 				p.close();
 			}
 		}
+
+		test "environment variables in the command line are expanded, as Windows shortcuts do" {
+			const opened = NativePty.open("%SystemRoot%\\System32\\cmd.exe /c echo hello", 80, 24);
+			assert opened.ok;
+			if (opened.ok) {
+				assert opened.value.toPty().drainText(4096).includes("hello");
+				opened.value.close();
+			}
+		}
 	}
 
 	test "a native pty spawned as a Pty reads its output and reports its exit through the interface" {

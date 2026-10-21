@@ -782,20 +782,19 @@ export function pwd(this vt: Vt): Result<string, VtError> {
 	return terminalString(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_PWD);
 }
 
-export function resize(this vt: Vt, cols: int32, rows: int32): Result<Vt, VtError> {
+export function resize(this vt: Vt, cols: int32, rows: int32): Result<void, VtError> {
 	const r = ghostty_terminal_resize(vt.terminal, cols as uint16, rows as uint16, 0, 0);
 	if (!ok(r)) { return Result.err(VtError.ResizeFailed); }
 	vt.painted.rows = [];
 	vt.painted.palette = null;
-	return Result.ok(vt);
+	return Result.ok(null);
 }
 
-export function setDefaultColors(this vt: Vt, fg: Rgb, bg: Rgb): Result<Vt, VtError> {
-	const _applied = try applyColors(vt.terminal, fg, bg);
-	return Result.ok(vt);
+export function setDefaultColors(this vt: Vt, fg: Rgb, bg: Rgb): Result<void, VtError> {
+	return applyColors(vt.terminal, fg, bg);
 }
 
-export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<Vt, VtError> {
+export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<void, VtError> {
 	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_PALETTE;
 	let palette: Colors256;
 	const defaultKey = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_COLOR_PALETTE_DEFAULT;
@@ -808,21 +807,20 @@ export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<Vt,
 	}
 	if (!ok(setColors(vt.terminal, option, palette))) { return Result.err(VtError.WriteFailed); }
 	vt.painted.rows = [];
-	return Result.ok(vt);
+	return Result.ok(null);
 }
 
-export function setScrollback(this vt: Vt, lines: int64): Result<Vt, VtError> {
-	const _applied = try applyScrollback(vt.terminal, lines);
-	return Result.ok(vt);
+export function setScrollback(this vt: Vt, lines: int64): Result<void, VtError> {
+	return applyScrollback(vt.terminal, lines);
 }
 
-export function setPullScrollback(this vt: Vt, pull: boolean): Result<Vt, VtError> {
+export function setPullScrollback(this vt: Vt, pull: boolean): Result<void, VtError> {
 	let on = pull;
 	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_RESIZE_PULL_SCROLLBACK;
 	if (!ok(setFlag(vt.terminal, option, on))) {
 		return Result.err(VtError.WriteFailed);
 	}
-	return Result.ok(vt);
+	return Result.ok(null);
 }
 
 export function takeClipboard(this vt: Vt): Result<string | null, VtError> {
@@ -837,9 +835,9 @@ export function clipboardAsked(this vt: Vt): boolean {
 	return asked;
 }
 
-export function answerClipboard(this vt: Vt, text: string, allow: boolean): Result<Vt, VtError> {
+export function answerClipboard(this vt: Vt, text: string, allow: boolean): Result<void, VtError> {
 	if (!vt.effects.answerRead(text, allow)) { return Result.err(VtError.ReadFailed); }
-	return Result.ok(vt);
+	return Result.ok(null);
 }
 
 // A hold older than the limit ends here: the terminal has no clock, and a program that never
@@ -858,12 +856,12 @@ export function holdLimit(this vt: Vt, ms: int64): void {
 	vt.effects.holdLimitMs = ms as float64;
 }
 
-export function update(this vt: Vt): Result<Vt, VtError> {
-	if (vt.holding()) { return Result.ok(vt); }
+export function update(this vt: Vt): Result<void, VtError> {
+	if (vt.holding()) { return Result.ok(null); }
 	if (!ok(ghostty_render_state_update(vt.state, vt.terminal))) {
 		return Result.err(VtError.UpdateFailed);
 	}
-	return Result.ok(vt);
+	return Result.ok(null);
 }
 
 export function size(this vt: Vt): Result<[int32, int32], VtError> {
@@ -1376,9 +1374,9 @@ export function anchoredRow(this vt: Vt): Result<int32 | null, VtError> {
 	return Result.ok(row);
 }
 
-export function anchorTop(this vt: Vt): Result<Vt, VtError> {
+export function anchorTop(this vt: Vt): Result<void, VtError> {
 	if (vtTopAnchor(vt.anchor, vt.terminal) != 0) { return Result.err(VtError.ReadFailed); }
-	return Result.ok(vt);
+	return Result.ok(null);
 }
 
 export function clean(this vt: Vt): void {
@@ -1646,11 +1644,11 @@ export function scrollLines(this vt: Vt, rows: int32): void {
 	vtScroll(vt.terminal, delta, rows as int64);
 }
 
-export function scrollPages(this vt: Vt, pages: int32): Result<Vt, VtError> {
+export function scrollPages(this vt: Vt, pages: int32): Result<void, VtError> {
 	const bar = try vt.scrollbar();
 	const delta = (pages as int64) * (bar.len as int64);
 	vtScroll(vt.terminal, GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_DELTA, delta);
-	return Result.ok(vt);
+	return Result.ok(null);
 }
 
 export function jumpToPrompt(this vt: Vt, delta: int32): Result<boolean, VtError> {
@@ -1728,7 +1726,7 @@ function rangeFound(
 	return Result.ok(found);
 }
 
-export function selectionSet(this vt: Vt, m: Marked): Result<Vt, VtError> {
+export function selectionSet(this vt: Vt, m: Marked): Result<void, VtError> {
 	let selection: GhosttySelection = {
 		size: sizeof GhosttySelection,
 		start: try screenRef(vt.terminal, m.range.start),
@@ -1739,7 +1737,7 @@ export function selectionSet(this vt: Vt, m: Marked): Result<Vt, VtError> {
 	if (!ok(setSelection(vt.terminal, option, selection))) {
 		return Result.err(VtError.SelectFailed);
 	}
-	return Result.ok(vt);
+	return Result.ok(null);
 }
 
 export function selectionClear(this vt: Vt): void {

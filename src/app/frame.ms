@@ -16,12 +16,12 @@ export function blank(this typeof RowSlot): RowSlot {
 }
 
 export struct Styles {
-	looks: Map<number, Style>;
+	looks: Map<uint64, Style>;
 	tinted: Map<string, Style>;
 }
 
 export function empty(this typeof Styles): Styles {
-	return { looks: new Map<number, Style>(), tinted: new Map<string, Style>() };
+	return { looks: new Map<uint64, Style>(), tinted: new Map<string, Style>() };
 }
 
 export enum FrameError {
@@ -53,24 +53,30 @@ function decorationOf(run: LineRun): Decoration {
 	return "none";
 }
 
-const RGB_VALUES: number = 16777216;
-const LOOKS: number = 24;
+const PLAIN_BG: uint64 = (1 as uint64) << 24;
 
-function rgbValue(c: Rgb): number {
-	return (c.r as number) * 65536 + (c.g as number) * 256 + (c.b as number);
+function rgbBits(c: Rgb): uint64 {
+	return ((c.r as uint64) << 16) | ((c.g as uint64) << 8) | (c.b as uint64);
 }
 
-function lookOf(run: LineRun): number {
-	const under = run.underline == Underline.None ? 0 : run.underline == Underline.Curly ? 2 : 1;
-	return ((under * 2 + (run.strikethrough ? 1 : 0)) * 2 + (run.bold ? 1 : 0)) * 2 + (run.italic ? 1 : 0);
+function lookBits(run: LineRun): uint64 {
+	const under: uint64 = match (run.underline) {
+		Underline.None => 0,
+		Underline.Curly => 2,
+		_ => 1,
+	};
+	const strike = (run.strikethrough ? 1 : 0) as uint64;
+	const bold = (run.bold ? 1 : 0) as uint64;
+	const italic = (run.italic ? 1 : 0) as uint64;
+	return (under << 3) | (strike << 2) | (bold << 1) | italic;
 }
 
 function styleOf(styles: Styles, run: LineRun, background: Rgb): Style {
 	const plain = run.bg == background;
-	const bgValue = plain ? RGB_VALUES : rgbValue(run.bg);
 	const tint = run.underlineColor;
 	const tinted = tint !== null && run.underline != Underline.None;
-	const look = (bgValue * RGB_VALUES + rgbValue(run.fg)) * LOOKS + lookOf(run);
+	const bgBits = plain ? PLAIN_BG : rgbBits(run.bg);
+	const look = (bgBits << 29) | (rgbBits(run.fg) << 5) | lookBits(run);
 	const key = tinted ? `${look}${hexOf(tint!)}` : "";
 	const known = tinted ? styles.tinted.get(key) : styles.looks.get(look);
 	if (known !== undefined) { return known; }
@@ -198,12 +204,6 @@ test "truecolour output that never repeats a look keeps the style cache bounded"
 		assert spans[0].style!.color == hexOf(fg);
 	}
 	assert styles.looks.size <= STYLE_CACHE_LIMIT;
-}
-
-test "the largest look key is still an exact integer, so no two looks share one" {
-	const largest = (RGB_VALUES * RGB_VALUES + RGB_VALUES - 1) * LOOKS + LOOKS - 1;
-	assert largest < 9007199254740992;
-	assert largest - 1 != largest;
 }
 
 test "a background differs from the terminal's only where a run says so" {

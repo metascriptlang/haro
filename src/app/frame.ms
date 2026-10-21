@@ -6,7 +6,7 @@ import { plan } from "../screen/plan";
 import { Cursor, Rgb, Row, Underline, Vt, palette } from "../vt/vt";
 import { stats, noteApplied } from "./stats";
 
-export struct RowSlot {
+export interface RowSlot {
 	line: GridLine;
 	spans: TextSpan[];
 }

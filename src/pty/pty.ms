@@ -106,6 +106,10 @@ when (testBuild) {
 	import { tmpDir } from "std/os";
 	import { drainText } from "./ptyTest";
 
+	@include("unistd.h");
+
+	extern function getpid(): int32;
+
 	when (windows) {
 		const ECHO_HELLO = "cmd.exe /c echo hello";
 		const QUIET_FOR_3S = "cmd.exe /c ping -n 4 127.0.0.1 > nul";
@@ -369,7 +373,7 @@ when (testBuild) {
 	}
 
 	test "output past the read buffer's limit arrives whole and in order while the app reads late" {
-		const path = `${tmpDir()}/haroPtyFlood.txt`;
+		const path = `${tmpDir()}/haroPtyFlood${getpid()}.txt`;
 		let text = "";
 		const count = 400000;
 		for (let i = 0; i < count; i++) { text += `line L${i}.\r\n`; }

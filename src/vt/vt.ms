@@ -384,7 +384,7 @@ export struct Vt {
 export interface Mouse {
 	encoder: GhosttyMouseEncoder | null;
 	event: GhosttyMouseEvent | null;
-	signature: int32;
+	stale: boolean;
 	geometry: MouseGeometry | null;
 }
 
@@ -689,7 +689,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 			iterator: iterator,
 			cells: cells,
 			effects: effects.value,
-			mouse: { encoder: null, event: null, signature: -1, geometry: null },
+			mouse: { encoder: null, event: null, stale: true, geometry: null },
 			anchor: anchor,
 			painted: { alternate: false, rows: [], palette: null },
 		});
@@ -702,10 +702,12 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 
 export function write(this vt: Vt, bytes: Readonly<Span<uint8>>): void {
 	vtWriteBytes(vt.terminal, bytes);
+	vt.mouse.stale = true;
 }
 
 export function writeText(this vt: Vt, text: string): void {
 	vtWriteBytes(vt.terminal, text.asBytes());
+	vt.mouse.stale = true;
 }
 
 export function replies(this vt: Vt, buf: Span<uint8>): int32 {
@@ -1011,19 +1013,6 @@ export struct MouseGeometry {
 	padBottom: int32;
 }
 
-const MOUSE_MODES: uint16[] = [9, 1000, 1002, 1003, 1005, 1006, 1015, 1016];
-
-// Which mouse modes are on, as bits: changes exactly when the encoder's options would.
-function mouseSignature(terminal: GhosttyTerminal): Result<int32, VtError> {
-	let signature = 0;
-	for (let i = 0; i < MOUSE_MODES.length; i++) {
-		const on = try modeOn(terminal, MOUSE_MODES[i]);
-		if (on) { signature |= 1 << i; }
-	}
-	const tracking = try mouseTracking(terminal);
-	return Result.ok(tracking ? signature | (1 << MOUSE_MODES.length) : signature);
-}
-
 function open(this m: Mouse): Result<void, VtError> {
 	if (m.encoder !== null && m.event !== null) { return Result.ok(null); }
 	let encoder: GhosttyMouseEncoder;
@@ -1052,14 +1041,13 @@ export function mouseReport(
 	buf: Span<uint8>,
 ): Result<int32, VtError> {
 	const m = vt.mouse;
-	const signature = try mouseSignature(vt.terminal);
 	const _opened = try m.open();
 	const encoder = m.encoder;
 	const event = m.event;
 	if (encoder === null || event === null) { return Result.err(VtError.ReadFailed); }
-	if (signature != m.signature) {
+	if (m.stale) {
 		ghostty_mouse_encoder_setopt_from_terminal(encoder, vt.terminal);
-		m.signature = signature;
+		m.stale = false;
 	}
 	const known = m.geometry;
 	if (known === null || known != geometry) {
@@ -2107,6 +2095,41 @@ test "the same cell is not reported twice for motion, and SGR-pixels reports pix
 		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "";
 		vt.writeText("\x1b[?1016h");
 		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "\x1b[<0;25;25M";
+		vt.free();
+	}
+}
+
+test "setting a mouse mode that is already on still switches the report format and event" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const none = 0 as BitSet<KeyMod>;
+		vt.writeText("\x1b[?1000h\x1b[?1006h");
+		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "\x1b[<0;3;2M";
+		vt.writeText("\x1b[?1015h");
+		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "\x1b[32;3;2M";
+		vt.writeText("\x1b[?1006h");
+		assert mouseBytes(vt, MouseAction.Press, 1, none, true) == "\x1b[<0;3;2M";
+		vt.writeText("\x1b[?1003h");
+		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
+		vt.writeText("\x1b[?1000h");
+		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "";
+		vt.free();
+	}
+}
+
+test "same-cell motion is reported again once after any write, because the encoder rereads its modes" {
+	const created = Vt.create(20, 4);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const none = 0 as BitSet<KeyMod>;
+		vt.writeText("\x1b[?1003h\x1b[?1006h");
+		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
+		vt.writeText("x");
+		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
+		assert mouseBytes(vt, MouseAction.Motion, 0, none, false) == "";
 		vt.free();
 	}
 }

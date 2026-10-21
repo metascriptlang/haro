@@ -128,7 +128,7 @@ test "motion is reported only in the modes that ask for it, and the held button 
 	}
 }
 
-test "shift hands the mouse back from an app that tracks it, to selection and the viewport" {
+test "shift hands the mouse back from an app that tracks it, and a wheel reported to the app drops the selection" {
 	const sink: Sink = { sent: "" };
 	const t = termOf(lines(30) + "\x1b[?1000h\x1b[?1006h", 20, 5, sink);
 	assert t !== null;
@@ -143,6 +143,10 @@ test "shift hands the mouse back from an app that tracks it, to selection and th
 		assert sink.sent == "";
 		assert handled(c.roll(t, 1, hitWith(0, 0, 1)));
 		assert offsetOf(t) == bottom - 3;
+		assert c.pointer.selected();
+		assert handled(c.roll(t, 1, hitAt(0, 0)));
+		assert !c.pointer.selected();
+		assert sink.sent == "[<64;1;1M[<64;1;1M[<64;1;1M";
 		t.shutdown();
 	}
 }

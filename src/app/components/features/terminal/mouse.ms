@@ -163,20 +163,23 @@ export function roll(
 	const presses = rows < 0 ? -rows : rows;
 	match (where) {
 		WheelRoute.Report => {
+			const shown = c.pointer.selected();
+			c.pointer.clear(vt);
 			const button = reportButton(rows < 0);
 			for (let i = 0; i < presses; i++) {
 				const _reported = try c.reportMouse(t, MouseAction.Press, button, h, false);
 			}
-			return Result.ok(false);
+			return Result.ok(shown);
 		},
 		WheelRoute.Arrows => {
+			const shown = c.pointer.selected();
 			c.pointer.clear(vt);
 			const key = neonEvent("keydown");
 			key.code = rows < 0 ? "ArrowUp" : "ArrowDown";
 			for (let i = 0; i < presses; i++) {
 				if (!t.sendKey(key).ok) { return Result.err(ControlError.KeyFailed); }
 			}
-			return Result.ok(false);
+			return Result.ok(shown);
 		},
 		WheelRoute.Viewport => {
 			vt.scrollLines(rows);

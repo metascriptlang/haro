@@ -29,14 +29,6 @@ when (windows) {
 			{ path: `${fonts}/msyh.ttc`, family: "Microsoft YaHei" },
 		];
 	}
-} else when (macos) {
-	function fallbackFaces(): SystemFace[] {
-		return [
-			{ path: "/System/Library/Fonts/Apple Color Emoji.ttc", family: "Apple Color Emoji" },
-			{ path: "/System/Library/Fonts/Apple Symbols.ttf", family: "Apple Symbols" },
-			{ path: "/System/Library/Fonts/Hiragino Sans GB.ttc", family: "Hiragino Sans GB" },
-		];
-	}
 } else {
 	function fallbackFaces(): SystemFace[] {
 		return [];

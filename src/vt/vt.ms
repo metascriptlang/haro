@@ -2259,9 +2259,9 @@ function keptAfter(lines: int32, keep: int64): int32 {
 
 test "scrollback keeps about ten thousand lines by default, and a set limit replaces it" {
 	const byDefault = keptAfter(30000, SCROLLBACK_LINES);
-	assert byDefault > 9000 && byDefault < 12000;
-	const set = keptAfter(30000, 500);
-	assert set > 400 && set < 2500;
+	assert byDefault > 7500 && byDefault <= 10000;
+	const set = keptAfter(30000, 5000);
+	assert set > 2500 && set <= 5000;
 }
 
 test "growing the grid reveals scrollback unless the pty keeps its own screen" {

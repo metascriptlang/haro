@@ -10,7 +10,7 @@ import { BLINK_MS, blinks, drawn, resets, shapeOf } from "../../../term/cursor";
 import { Trail, particleAlpha } from "../../../term/trail";
 import { CellMetrics } from "../ui/cellText";
 
-const BLOCK_ALPHA = 0.5;
+const BLOCK_ALPHA = 0.8;
 const PARTICLE_SIDE = 0.2;
 const OUTLINE_PER_EM = 1.0 / 8;
 

@@ -2570,10 +2570,14 @@ test "arrow up follows the cursor key mode the vt is in" {
 	});
 }
 
-test "alt prefixes the escape" {
+test "alt prefixes the escape, except macOS Option, whose text the system composes" {
 	assert withKeys((k: Keys, vt: Vt): void => {
 		const alt = (0 as BitSet<KeyMod>).incl(KeyMod.Alt);
-		assert encoded(k, vt, press("KeyX", "x", 0x78, alt)) == "\x1bx";
+		when (macos) {
+			assert encoded(k, vt, press("KeyX", "x", 0x78, alt)) == "x";
+		} else {
+			assert encoded(k, vt, press("KeyX", "x", 0x78, alt)) == "\x1bx";
+		}
 	});
 }
 

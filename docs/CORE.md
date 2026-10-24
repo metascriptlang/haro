@@ -79,9 +79,6 @@ a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree
   (`Terminal.zig`), under which 5000 lines prune the ref at 80 columns but not at 10; `Vt.create`
   now sets a line cap and a byte cap instead.
 
-`GhosttyPoint` is built in C (`probe/scrollRefShim.h`) because msc cannot import a C aggregate with
-a fixed array member (msc card `2026-10-15-c-import-fixed-array-member-sizedarray`).
-
 ## ConPTY, probed on Windows 11 10.0.26200
 
 - After a resize, pump before reading rows: ConPTY repaints and reflows, and the fresh content

@@ -1,7 +1,6 @@
 // Can a tracked grid ref on the previous top viewport row tell how many lines scrolled?
 @passC("-I../vendor/ghostty/include");
 @passC("-DGHOSTTY_STATIC");
-@include("./scrollRefShim.h");
 @link("../out/ghostty/ghostty-vt-static.lib");
 
 import {
@@ -23,6 +22,7 @@ import {
 	GhosttyRenderStateData,
 	GhosttyTrackedGridRef,
 	GhosttyPointCoordinate,
+	GhosttyPoint,
 	GhosttyPointTag,
 	GhosttyTerminalScrollbar,
 	GhosttyTerminalOption,
@@ -50,24 +50,24 @@ extern function getScrollbar(
 	key: GhosttyTerminalData,
 	out v: GhosttyTerminalScrollbar,
 ): int32 from "ghostty_terminal_get";
-extern function srTrack(
+extern function gridRefTrack(
 	t: GhosttyTerminal,
-	tag: int32,
-	x: uint32,
-	y: uint32,
+	point: GhosttyPoint,
 	out ref: GhosttyTrackedGridRef,
-): int32 from "sr_track";
-extern function srSet(
+): int32 from "ghostty_terminal_grid_ref_track";
+extern function trackedGridRefSet(
 	ref: GhosttyTrackedGridRef,
 	t: GhosttyTerminal,
-	tag: int32,
-	x: uint32,
-	y: uint32,
-): int32 from "sr_set";
+	point: GhosttyPoint,
+): int32 from "ghostty_tracked_grid_ref_set";
 
 const VIEWPORT = GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT;
 const SCREEN = GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN;
 const HISTORY = GhosttyPointTag.GHOSTTY_POINT_TAG_HISTORY;
+
+function viewportTop(): GhosttyPoint {
+	return { tag: VIEWPORT };
+}
 const ACTIVE = GhosttyPointTag.GHOSTTY_POINT_TAG_ACTIVE;
 
 function write(term: GhosttyTerminal, s: string): void {
@@ -111,7 +111,7 @@ function open(cap: int32): Rig {
 	ghostty_render_state_row_iterator_new(null, it);
 	write(term, "row 0" + lines(1, 23));
 	let ref: GhosttyTrackedGridRef;
-	srTrack(term, VIEWPORT as int32, 0, 0, ref);
+	gridRefTrack(term, viewportTop(), ref);
 	return { term: term, state: state, it: it, ref: ref };
 }
 
@@ -149,7 +149,7 @@ function frame(name: string, rig: Rig, expected: string): void {
 		`scrollbar total=${sb.total} offset=${sb.offset} len=${sb.len} | dirty=${dirty} {${list}}`,
 	);
 	ghostty_render_state_clean(rig.state);
-	srSet(rig.ref, rig.term, VIEWPORT as int32, 0, 0);
+	trackedGridRefSet(rig.ref, rig.term, viewportTop());
 }
 
 function scroll(name: string, k: int32, cap: int32): void {

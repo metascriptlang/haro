@@ -187,13 +187,14 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 	const path = `${dir}/config.ms`;
 	const api = `${cwd()}/assets/haro`;
 	const head = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = `;
-	const body = `{ fontSize: 13, keybinds: [{ keys: "super+w", text: "x", mode: "alt" }] };\n`;
+	const body = `{ fontSize: 13, keybinds: [{ keys: "super+w", text: "x", mode: "alt" }, ` +
+		`{ keys: "super+q", action: "close_window", mode: "~alt" }] };\n`;
 	assert writeFile(path, `${head}${body}`).ok;
 	const typed = evaluate(path, dir, api);
 	assert typed.ok;
 	if (typed.ok) {
 		const c = parse(typed.value);
-		assert c.ok && c.value.fontSize == 13 && c.value.keybinds.length == 1;
+		assert c.ok && c.value.fontSize == 13 && c.value.keybinds.length == 2;
 	}
 	assert exists(`${dir}/build.ms`);
 	assert writeFile(path, `${head}{ fontSiz: 13 };\n`).ok;
@@ -203,6 +204,10 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 		assert misspelt.error.includes("/config.ms:3:");
 		assert misspelt.error.includes("'fontSiz' does not exist in type 'HaroConfig'");
 	}
+	assert writeFile(path, `${head}{ keybinds: [{ keys: "a", text: "x", mode: "Alt" }] };\n`).ok;
+	const wrongMode = evaluate(path, dir, api);
+	assert !wrongMode.ok;
+	if (!wrongMode.ok) { assert wrongMode.error.includes("/config.ms:3:"), wrongMode.error; }
 }
 
 test "a config spreads saigonNight from the haro package and keeps its own fields over it" {

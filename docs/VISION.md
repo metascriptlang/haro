@@ -172,8 +172,6 @@ the std inside Haro.app is not done.
 
 Each of these is a compiler change, tracked in `~/metascript/.inbox/compiler/`:
 - structs and arrays crossing `callRoutine`;
-- `JSON.stringify` taking a string-literal union field. Until then `Keybind.mode` and `action`
-  are typed `string`.
 
 ## Platforms
 

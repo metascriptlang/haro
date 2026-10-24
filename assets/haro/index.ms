@@ -1,10 +1,8 @@
 export interface Keybind {
 	keys: string;
 	text?: string;
-	// "close_window" and "alt" | "~alt" once JSON.stringify takes a literal union field:
-	// ~/metascript/.inbox/compiler/2026-10-20-json-stringify-refuses-a-string-literal-union-field.md
-	action?: string;
-	mode?: string;
+	action?: "close_window";
+	mode?: "alt" | "~alt";
 }
 
 export interface HaroConfig {

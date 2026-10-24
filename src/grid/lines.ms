@@ -19,6 +19,7 @@ export struct LineRun {
 export struct GridLine {
 	text: string;
 	runs: Vec<LineRun>;
+	widths: uint8[];
 	cursorCell: int32;
 }
 
@@ -71,6 +72,15 @@ function pushUnits(ref runs: Vec<LineRun>, run: LineRun, units: int32, split: bo
 	runs.push({ ...run, units: units });
 }
 
+function utf8Bytes(cp: uint32): int32 {
+	return cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+}
+
+function pushCell(ref widths: uint8[], cells: uint8, bytes: int32): void {
+	widths.push(cells);
+	for (let b = 1; b < bytes; b++) { widths.push(0); }
+}
+
 function isUnligatedPair(a: uint32, b: uint32): boolean {
 	return (a == 0x66 && (b == 0x69 || b == 0x6C)) || (a == 0x73 && b == 0x74);
 }
@@ -100,6 +110,7 @@ export function line(
 ): Result<GridLine, GridError> {
 	let text = "";
 	let runs: Vec<LineRun> = [];
+	let widths: uint8[] = [];
 	let extraAt = 0;
 	let end = row.cells.length as int32;
 	while (end > 0 && row.cells[end - 1].isEmpty(background)) { end--; }
@@ -114,23 +125,27 @@ export function line(
 		if (cell.cp == 0) {
 			text += " ";
 			pushUnits(runs, run, 1, split);
+			pushCell(widths, 1, 1);
 			continue;
 		}
 		if (cell.flags.has(CellFlag.Invisible)) {
 			const blank = cell.flags.has(CellFlag.Wide) ? "  " : " ";
 			text += blank;
+			for (let b = 0; b < blank.length; b++) { pushCell(widths, 1, 1); }
 			const hidden: LineRun = { ...run, underline: Underline.None, strikethrough: false };
 			pushUnits(runs, hidden, blank.length as int32, split);
 			continue;
 		}
+		const cells: uint8 = cell.flags.has(CellFlag.Wide) ? 2 : 1;
 		for (let k = 0; k <= extra; k++) {
 			const cp = k == 0 ? cell.cp : row.extra[extraStart + k - 1];
 			if (!isUnicodeScalar(cp)) { return Result.err(GridError.CodepointInvalid); }
 			text += fromCodePoint(cp as number);
+			pushCell(widths, k == 0 ? cells : 0, utf8Bytes(cp));
 			pushUnits(runs, run, cp > 0xFFFF ? 2 : 1, split && k == 0);
 		}
 	}
-	return Result.ok({ text: text, runs: runs, cursorCell: cursorCell });
+	return Result.ok({ text: text, runs: runs, widths: widths, cursorCell: cursorCell });
 }
 
 function firstLine(text: string, cols: int32, cursorCell: int32): GridLine | null {
@@ -195,6 +210,20 @@ test "a wide cell carries no spacer text and holds its run" {
 		assert line.runs.length == 1;
 		assert line.runs[0].units == 2;
 	}
+}
+
+test "each cell gives its width at its first UTF-8 byte and 0 after, so a wide cell takes two" {
+	const line = firstLine("你好a😀 e\u0301", 20, -1);
+	assert line !== null;
+	if (line !== null) {
+		assert line.widths.join("") == "200200120001100", "widths: " + line.widths.join("");
+	}
+}
+
+test "a concealed wide cell is two blank cells of width 1" {
+	const line = firstLine("\x1b[8m\u4e2d", 10, -1);
+	assert line !== null;
+	if (line !== null) { assert line.widths.join("") == "11", "widths: " + line.widths.join(""); }
 }
 
 test "an erased line keeps its background as a run" {

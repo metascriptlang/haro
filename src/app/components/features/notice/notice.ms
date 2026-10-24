@@ -62,7 +62,7 @@ export function Notice(props: {
 	const n = props.model;
 	const m = props.metrics;
 	const row = (item: Accessor<string>): NeonNode =>
-		<CellText metrics={m} spans={[{ text: item(), style: NOTICE_STYLE }]} />;
+		<CellText metrics={m} spans={[{ text: item(), style: NOTICE_STYLE }]} widths={[]} />;
 	return <Show when={n.shown()}>
 		<View
 			style={{

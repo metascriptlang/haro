@@ -12,7 +12,7 @@ export interface RowSlot {
 }
 
 export function blank(this typeof RowSlot): RowSlot {
-	return { line: { text: "", runs: [], cursorCell: -1 }, spans: [] };
+	return { line: { text: "", runs: [], widths: [], cursorCell: -1 }, spans: [] };
 }
 
 export struct Styles {
@@ -177,6 +177,7 @@ test "each run becomes a span over its own text, sharing one style per look" {
 			run(1, WHITE, BLACK, Underline.None),
 			run(2, RED, BLACK, Underline.None),
 		],
+		widths: [],
 		cursorCell: -1,
 	};
 	const spans = spansOf(styles, l, BLACK);
@@ -193,6 +194,7 @@ test "truecolour output that never repeats a look keeps the style cache bounded"
 		const l: GridLine = {
 			text: "x",
 			runs: [run(1, fg, BLACK, Underline.None)],
+			widths: [],
 			cursorCell: -1,
 		};
 		const spans = spansOf(styles, l, BLACK);
@@ -206,6 +208,7 @@ test "a background differs from the terminal's only where a run says so" {
 	const l: GridLine = {
 		text: "xy",
 		runs: [run(1, WHITE, BLACK, Underline.Curly), run(1, WHITE, RED, Underline.None)],
+		widths: [],
 		cursorCell: -1,
 	};
 	const spans = spansOf(styles, l, BLACK);
@@ -220,7 +223,7 @@ test "an underline colour tints the line, and only while the run is underlined" 
 	const curly: LineRun = { ...run(1, WHITE, BLACK, Underline.Curly), underlineColor: RED };
 	const plain: LineRun = { ...run(1, WHITE, BLACK, Underline.None), underlineColor: RED };
 	const white: LineRun = { ...curly, underlineColor: WHITE };
-	const l: GridLine = { text: "xyzw", runs: [curly, plain, white, curly], cursorCell: -1 };
+	const l: GridLine = { text: "xyzw", runs: [curly, plain, white, curly], widths: [], cursorCell: -1 };
 	const spans = spansOf(styles, l, BLACK);
 	assert spans[0].style!.textDecorationColor == "#ff0000";
 	assert spans[0].style!.color == "#ffffff";

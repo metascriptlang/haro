@@ -25,6 +25,7 @@ export function TerminalPane(props: { model: PaneModel }): NeonNode {
 	const row = (item: Accessor<RowSlot>): NeonNode => <CellText
 		metrics={metrics}
 		spans={item().spans}
+		widths={item().line.widths}
 	/>;
 	return <View
 		style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: m.padding(), pointerEvents: "box-only" }}

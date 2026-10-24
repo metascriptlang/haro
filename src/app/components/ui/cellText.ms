@@ -10,7 +10,11 @@ export interface CellMetrics {
 	rowHeight: Accessor<number>;
 }
 
-export function CellText(props: { metrics: CellMetrics; spans: Accessor<TextSpan[]> }): NeonNode {
+export function CellText(props: {
+	metrics: CellMetrics;
+	spans: Accessor<TextSpan[]>;
+	widths: Accessor<uint8[]>;
+}): NeonNode {
 	return <Text
 		style={{
 			fontSize: props.metrics.fontSize(),
@@ -18,6 +22,7 @@ export function CellText(props: { metrics: CellMetrics; spans: Accessor<TextSpan
 			height: props.metrics.rowHeight(),
 		}}
 		cellWidth={props.metrics.cellWidth()}
+		cellWidths={props.widths()}
 		spans={props.spans()}
 	/>;
 }

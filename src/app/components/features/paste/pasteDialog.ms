@@ -143,7 +143,7 @@ export function PasteDialog(props: {
 }): NeonNode {
 	const d = props.model;
 	const m = props.metrics;
-	const row = (item: Accessor<Shown>): NeonNode => <CellText metrics={m} spans={item().spans} />;
+	const row = (item: Accessor<Shown>): NeonNode => <CellText metrics={m} spans={item().spans} widths={[]} />;
 	return <Show when={d.visible()}>
 		<ModalLayer>
 			<View

@@ -51,6 +51,7 @@ void haroVtBell(GhosttyTerminal terminal, void* effects);
 void haroVtTitleChanged(GhosttyTerminal terminal, void* effects);
 void haroVtPwdChanged(GhosttyTerminal terminal, void* effects);
 void haroVtRenderHold(GhosttyTerminal terminal, void* effects, bool held);
+bool haroVtDeviceAttributes(GhosttyTerminal terminal, void* effects, GhosttyDeviceAttributes* out);
 void haroVtClipboardWritten(void* effects, uint8_t* text, int64_t n);
 int64_t haroVtRepliesLength(void* effects);
 void haroVtClipboardRead(void* effects, int64_t mark);
@@ -61,20 +62,6 @@ GhosttyString haroVtXtversion(GhosttyTerminal terminal, void* effects);
 static void writePty(GhosttyTerminal terminal, void* userdata, const uint8_t* bytes, size_t n) {
 	(void)terminal;
 	haroVtWritePty(userdata, (uint8_t*)bytes, (int64_t)n);
-}
-
-/* msc cannot fill the fixed features array:
-   .inbox/compiler/2026-10-15-c-import-fixed-array-member-sizedarray.md */
-static bool onDeviceAttributes(GhosttyTerminal terminal, void* userdata, GhosttyDeviceAttributes* out) {
-	(void)terminal; (void)userdata;
-	memset(out, 0, sizeof *out);
-	out->primary.conformance_level = GHOSTTY_DA_CONFORMANCE_LEVEL_2;
-	out->primary.features[0] = GHOSTTY_DA_FEATURE_ANSI_COLOR;
-	out->primary.features[1] = GHOSTTY_DA_FEATURE_CLIPBOARD;
-	out->primary.num_features = 2;
-	out->secondary.device_type = GHOSTTY_DA_DEVICE_TYPE_VT220;
-	out->secondary.firmware_version = 10;
-	return true;
 }
 
 /* msc cannot call the reply function pointer:
@@ -113,7 +100,7 @@ int vtEffectsWire(GhosttyTerminal terminal, void* effects) {
 		{ GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void*)haroVtTitleChanged },
 		{ GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*)haroVtPwdChanged },
 		{ GHOSTTY_TERMINAL_OPT_RENDER_HOLD, (const void*)haroVtRenderHold },
-		{ GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, (const void*)onDeviceAttributes },
+		{ GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, (const void*)haroVtDeviceAttributes },
 		{ GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*)haroVtXtversion },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*)onClipboardWrite },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ, (const void*)onClipboardRead },

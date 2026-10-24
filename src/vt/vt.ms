@@ -9,8 +9,6 @@ when (emcc) {
 }
 @include("./effects.h");
 @compile("./effects.c");
-@include("./shim.h");
-@compile("./shim.c");
 
 import {
 	ghostty_terminal_new,
@@ -69,6 +67,9 @@ import {
 	GhosttyRowData,
 	GhosttyRowSemanticPrompt,
 	GhosttyPointCoordinate,
+	GhosttyPoint,
+	GhosttyTerminalScrollViewport,
+	GhosttyDeviceAttributes,
 	GhosttyPointTag,
 	GhosttyRenderState,
 	GhosttyRenderStateData,
@@ -129,14 +130,16 @@ extern function terminalText(
 	key: GhosttyTerminalData,
 	out text: GhosttyString,
 ): GhosttyResult from "ghostty_terminal_get";
-extern function vtTopTrack(
+extern function gridRefTrack(
 	terminal: GhosttyTerminal,
+	point: GhosttyPoint,
 	out ref: GhosttyTrackedGridRef,
-): GhosttyResult;
-extern function vtTopAnchor(
+): GhosttyResult from "ghostty_terminal_grid_ref_track";
+extern function trackedGridRefSet(
 	ref: GhosttyTrackedGridRef,
 	terminal: GhosttyTerminal,
-): GhosttyResult;
+	point: GhosttyPoint,
+): GhosttyResult from "ghostty_tracked_grid_ref_set";
 extern function terminalScrollbar(
 	terminal: GhosttyTerminal,
 	key: GhosttyTerminalData,
@@ -279,18 +282,53 @@ extern function cellWide(
 	out wide: GhosttyCellWide,
 ): GhosttyResult from "ghostty_cell_get";
 
-extern function vtGridRef(
+extern function terminalGridRef(
+	terminal: GhosttyTerminal,
+	point: GhosttyPoint,
+	ref gridRef: GhosttyGridRef,
+): GhosttyResult from "ghostty_terminal_grid_ref";
+extern function scrollViewport(
+	terminal: GhosttyTerminal,
+	behavior: GhosttyTerminalScrollViewport,
+): void from "ghostty_terminal_scroll_viewport";
+extern const GHOSTTY_DA_CONFORMANCE_LEVEL_2: uint16;
+extern const GHOSTTY_DA_FEATURE_ANSI_COLOR: uint16;
+extern const GHOSTTY_DA_FEATURE_CLIPBOARD: uint16;
+extern const GHOSTTY_DA_DEVICE_TYPE_VT220: uint16;
+
+function pointAt(tag: GhosttyPointTag, x: int32, y: int32): GhosttyPoint {
+	let p: GhosttyPoint = { tag: tag };
+	p.value.coordinate.x = x as uint16;
+	p.value.coordinate.y = y as uint32;
+	return p;
+}
+
+function vtGridRef(
 	terminal: GhosttyTerminal,
 	tag: GhosttyPointTag,
 	x: int32,
 	y: int32,
 	out gridRef: GhosttyGridRef,
-): GhosttyResult;
-extern function vtScroll(
-	terminal: GhosttyTerminal,
-	tag: GhosttyTerminalScrollViewportTag,
-	amount: int64,
-): void;
+): GhosttyResult {
+	gridRef = { size: sizeof GhosttyGridRef };
+	if (x < 0 || y < 0) { return GhosttyResult.GHOSTTY_INVALID_VALUE; }
+	return terminalGridRef(terminal, pointAt(tag, x, y), gridRef);
+}
+
+function vtScroll(terminal: GhosttyTerminal, tag: GhosttyTerminalScrollViewportTag, amount: int64): void {
+	let v: GhosttyTerminalScrollViewport = { tag: tag };
+	if (tag == GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_DELTA) { v.value.delta = amount; }
+	if (tag == GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_ROW) { v.value.row = amount as uint64; }
+	scrollViewport(terminal, v);
+}
+
+function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): GhosttyResult {
+	return gridRefTrack(terminal, pointAt(GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, 0, 0), ref);
+}
+
+function vtTopAnchor(ref: GhosttyTrackedGridRef, terminal: GhosttyTerminal): GhosttyResult {
+	return trackedGridRefSet(ref, terminal, pointAt(GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, 0, 0));
+}
 extern function gridRefLink(
 	ref gridRef: GhosttyGridRef,
 	buf: Span<uint8>,
@@ -536,6 +574,17 @@ function clipboardWritten(effects: Ptr<void>, text: Readonly<Span<uint8>>): void
 
 const XTVERSION_NAME: cstring = "haro";
 const XTVERSION_NAME_BYTES = 4;
+
+@exportName("haroVtDeviceAttributes")
+function deviceAttributes(terminal: GhosttyTerminal, effects: Ptr<void>, out da: GhosttyDeviceAttributes): boolean {
+	da = {
+		primary: { conformance_level: GHOSTTY_DA_CONFORMANCE_LEVEL_2, num_features: 2 },
+		secondary: { device_type: GHOSTTY_DA_DEVICE_TYPE_VT220, firmware_version: 10 },
+	};
+	da.primary.features[0] = GHOSTTY_DA_FEATURE_ANSI_COLOR;
+	da.primary.features[1] = GHOSTTY_DA_FEATURE_CLIPBOARD;
+	return true;
+}
 
 @exportName("haroVtXtversion")
 function xtversion(terminal: GhosttyTerminal, effects: Ptr<void>): GhosttyString {

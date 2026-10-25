@@ -56,6 +56,7 @@ void haroVtClipboardWritten(void* effects, uint8_t* text, int64_t n);
 int64_t haroVtRepliesLength(void* effects);
 void haroVtClipboardRead(void* effects, int64_t mark);
 GhosttyString haroVtXtversion(GhosttyTerminal terminal, void* effects);
+void haroVtDesktopNotification(GhosttyTerminal terminal, void* effects, const GhosttyTerminalDesktopNotification* notification);
 
 /* msc has no integer as wide as size_t on every target (32 bits on wasm32) for a callback's
    parameter. */
@@ -102,6 +103,7 @@ int vtEffectsWire(GhosttyTerminal terminal, void* effects) {
 		{ GHOSTTY_TERMINAL_OPT_RENDER_HOLD, (const void*)haroVtRenderHold },
 		{ GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, (const void*)haroVtDeviceAttributes },
 		{ GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*)haroVtXtversion },
+		{ GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, (const void*)haroVtDesktopNotification },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*)onClipboardWrite },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ, (const void*)onClipboardRead },
 	};

@@ -70,6 +70,7 @@ import {
 	GhosttyPoint,
 	GhosttyTerminalScrollViewport,
 	GhosttyDeviceAttributes,
+	GhosttyTerminalDesktopNotification,
 	GhosttyPointTag,
 	GhosttyRenderState,
 	GhosttyRenderStateData,
@@ -608,6 +609,66 @@ function xtversion(terminal: GhosttyTerminal, effects: Ptr<void>): GhosttyString
 	return name;
 }
 
+const NOTIFICATION_TITLE_BYTES = 256;
+const NOTIFICATION_BODY_BYTES = 1024;
+const REPLACEMENT_CHARACTER = "\u{fffd}";
+const LONGEST_UTF8_BYTES = 4;
+
+function byteAt(text: GhosttyString, at: int32): int32 {
+	return text.ptr[at] as int32;
+}
+
+function wellFormedLength(text: GhosttyString, at: int32, end: int32): int32 {
+	const lead = byteAt(text, at);
+	if (lead < 0x80) { return 1; }
+	let width = 0;
+	if (lead >= 0xc2 && lead <= 0xdf) { width = 2; }
+	if (lead >= 0xe0 && lead <= 0xef) { width = 3; }
+	if (lead >= 0xf0 && lead <= 0xf4) { width = 4; }
+	if (width == 0 || at + width > end) { return 0; }
+	const low = lead == 0xe0 ? 0xa0 : lead == 0xf0 ? 0x90 : 0x80;
+	const high = lead == 0xed ? 0x9f : lead == 0xf4 ? 0x8f : 0xbf;
+	const second = byteAt(text, at + 1);
+	if (second < low || second > high) { return 0; }
+	for (let i = 2; i < width; i++) {
+		const next = byteAt(text, at + i);
+		if (next < 0x80 || next > 0xbf) { return 0; }
+	}
+	return width;
+}
+
+function wellFormedPrefix(text: GhosttyString, maxBytes: int32): string {
+	const scan = maxBytes + LONGEST_UTF8_BYTES;
+	const end = text.len < (scan as uint64) ? text.len as int32 : scan;
+	const replacement = REPLACEMENT_CHARACTER.asBytes();
+	let out: Vec<uint8> = [];
+	let at = 0;
+	while (at < end) {
+		const width = wellFormedLength(text, at, end);
+		const size = width == 0 ? replacement.length as int32 : width;
+		if (out.length + size > maxBytes) { break; }
+		if (width == 0) {
+			pushAll(out, replacement);
+		} else {
+			for (let i = 0; i < width; i++) { out.push(text.ptr[at + i]); }
+		}
+		at += Math.max(width, 1);
+	}
+	return out[0..out.length].asString();
+}
+
+@exportName("haroVtDesktopNotification")
+function desktopNotification(
+	terminal: GhosttyTerminal,
+	effects: Ptr<void>,
+	notification: GhosttyTerminalDesktopNotification,
+): void {
+	effectsAt(effects).events.notification = {
+		title: wellFormedPrefix(notification.title, NOTIFICATION_TITLE_BYTES),
+		body: wellFormedPrefix(notification.body, NOTIFICATION_BODY_BYTES),
+	};
+}
+
 @exportName("haroVtRepliesLength")
 function repliesLength(effects: Ptr<void>): int64 {
 	return effectsAt(effects).replies.length;
@@ -785,13 +846,19 @@ export function takeReplies(this vt: Vt): Vec<uint8> {
 	return taken;
 }
 
+export struct DesktopNotification {
+	title: string;
+	body: string;
+}
+
 export struct VtEvents {
 	bells: int32;
 	titleChanged: boolean;
 	pwdChanged: boolean;
+	notification: DesktopNotification | null;
 }
 
-const NO_EVENTS: VtEvents = { bells: 0, titleChanged: false, pwdChanged: false };
+const NO_EVENTS: VtEvents = { bells: 0, titleChanged: false, pwdChanged: false, notification: null };
 
 export function takeEvents(this vt: Vt): VtEvents {
 	const e = vt.effects;
@@ -2018,6 +2085,45 @@ test "an untitled terminal has an empty title" {
 		const title = vt.title();
 		assert title.ok;
 		if (title.ok) { assert title.value == ""; }
+	});
+}
+
+test "a desktop notification reaches the host once, by OSC 9 with a body and OSC 777 with a title" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeText("\x1b]9;build done\x07");
+		const nine = vt.takeEvents().notification;
+		assert nine !== null;
+		if (nine !== null) {
+			assert nine.title == "";
+			assert nine.body == "build done";
+		}
+		vt.writeText("\x1b]777;notify;make;all green\x07");
+		const rxvt = vt.takeEvents().notification;
+		assert rxvt !== null;
+		if (rxvt !== null) {
+			assert rxvt.title == "make";
+			assert rxvt.body == "all green";
+		}
+		assert vt.takeEvents().notification === null;
+	});
+}
+
+test "a notification's text stops at its cap on a character, and bytes that are not UTF-8 read as U+FFFD" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeText(`\x1b]777;notify;${"t".repeat(300)};${"中".repeat(400)}\x07`);
+		const long = vt.takeEvents().notification;
+		assert long !== null;
+		if (long !== null) {
+			assert long.title == "t".repeat(NOTIFICATION_TITLE_BYTES);
+			assert long.body == "中".repeat(NOTIFICATION_BODY_BYTES / 3);
+		}
+		let bytes: Vec<uint8> = [];
+		pushAll(bytes, "\x1b]9;a".asBytes());
+		for (const b of [0xff, 0x62, 0xe4, 0xb8, 0x63, 0xed, 0xa0, 0x80, 0x07]) { bytes.push(b as uint8); }
+		vt.write(bytes);
+		const broken = vt.takeEvents().notification;
+		assert broken !== null;
+		if (broken !== null) { assert broken.body == "a\u{fffd}b\u{fffd}\u{fffd}c\u{fffd}\u{fffd}\u{fffd}"; }
 	});
 }
 

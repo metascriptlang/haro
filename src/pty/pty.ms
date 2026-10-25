@@ -309,6 +309,18 @@ when (testBuild) {
 			}
 		}
 
+		test "a shell that has exited is not busy, and reports its exit code" {
+			const opened = NativePty.open("sh -c 'exit 3'", 80, 24);
+			assert opened.ok;
+			if (opened.ok) {
+				const p = opened.value;
+				const _text = p.toPty().drainText(4096);
+				assert p.exitCode() === 3;
+				assert !p.busy();
+				p.close();
+			}
+		}
+
 		function becomesBusy(this p: NativePty, wanted: boolean, withinMs: float64): boolean {
 			const start: float64 = performance.now();
 			while (p.busy() != wanted) {

@@ -37,6 +37,26 @@ export function withoutAltGr(this e: KeyEvent): KeyEvent {
 	};
 }
 
+export enum OptionAsAlt {
+	Neither,
+	Left,
+	Right,
+	Both,
+}
+
+export function withOptionAsAlt(this e: KeyEvent, option: OptionAsAlt): KeyEvent {
+	if (!e.mods.has(KeyMod.Alt)) { return e; }
+	const right = e.mods.has(KeyMod.AltRight);
+	const isAlt = match (option) {
+		OptionAsAlt.Neither => false,
+		OptionAsAlt.Left => !right,
+		OptionAsAlt.Right => right,
+		OptionAsAlt.Both => true,
+	};
+	if (!isAlt || !e.consumedMods.has(KeyMod.Alt)) { return e; }
+	return { ...e, consumedMods: e.consumedMods.excl(KeyMod.Alt), text: "" };
+}
+
 function navigationOf(numpadKey: string): string {
 	return match (numpadKey) {
 		"Numpad0" => "NumpadInsert",
@@ -159,6 +179,28 @@ test "Ctrl+Alt the layout consumed for AltGr text is dropped, and a plain Ctrl+A
 	assert typed.consumedMods == none;
 	const chord: KeyEvent = { ...altGr, consumedMods: none, text: "" };
 	assert chord.withoutAltGr().mods == chord.mods;
+}
+
+test "Option acting as Alt on its side gives back the Alt it consumed and the text it composed" {
+	const none = 0 as BitSet<KeyMod>;
+	const left = none.incl(KeyMod.Alt);
+	const leftB: KeyEvent = {
+		action: KeyAction.Press,
+		key: "KeyB",
+		mods: left,
+		consumedMods: left,
+		unshifted: 0x62,
+		text: "∫",
+	};
+	const asAlt = leftB.withOptionAsAlt(OptionAsAlt.Left);
+	assert asAlt.consumedMods == none && asAlt.text == "" && asAlt.mods == left;
+	assert leftB.withOptionAsAlt(OptionAsAlt.Both).text == "";
+	assert leftB.withOptionAsAlt(OptionAsAlt.Right).text == "∫";
+	assert leftB.withOptionAsAlt(OptionAsAlt.Neither).text == "∫";
+	const right = left.incl(KeyMod.AltRight);
+	const rightB: KeyEvent = { ...leftB, mods: right, consumedMods: right };
+	assert rightB.withOptionAsAlt(OptionAsAlt.Right).consumedMods == right.excl(KeyMod.Alt);
+	assert rightB.withOptionAsAlt(OptionAsAlt.Left).text == "∫";
 }
 
 test "a keypad digit with NumLock off is the navigation key printed under it" {

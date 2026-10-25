@@ -85,6 +85,8 @@ import {
 	GhosttyCellData,
 	GhosttyCellWide,
 	GhosttyKeyEncoder,
+	GhosttyKeyEncoderOption,
+	GhosttyOptionAsAlt,
 	GhosttyMouseEncoder,
 	GhosttyMouseEncoderOption,
 	GhosttyMouseEncoderSize,
@@ -95,7 +97,16 @@ import {
 	GhosttyKey,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { fromCodePoint } from "std/core/string";
-import { KeyAction, KeyEvent, KeyMod, modsMask, textSafe, withoutAltGr } from "../keys/keys";
+import {
+	KeyAction,
+	KeyEvent,
+	KeyMod,
+	OptionAsAlt,
+	modsMask,
+	textSafe,
+	withOptionAsAlt,
+	withoutAltGr,
+} from "../keys/keys";
 import { CellWidth, Marked, Point, Range, Selection, Unit } from "../select/select";
 import { Handle } from "std/ffi";
 
@@ -204,6 +215,11 @@ extern function eventSetMods(event: GhosttyKeyEvent, mods: uint16): void
 	from "ghostty_key_event_set_mods";
 extern function eventSetConsumedMods(event: GhosttyKeyEvent, mods: uint16): void
 	from "ghostty_key_event_set_consumed_mods";
+extern function encoderSetOptionAsAlt(
+	encoder: GhosttyKeyEncoder,
+	option: GhosttyKeyEncoderOption,
+	ref value: GhosttyOptionAsAlt,
+): void from "ghostty_key_encoder_setopt";
 extern function encoderEncode(
 	encoder: GhosttyKeyEncoder,
 	event: GhosttyKeyEvent,
@@ -1451,6 +1467,16 @@ export enum KeysError {
 export struct Keys {
 	encoder: GhosttyKeyEncoder;
 	event: GhosttyKeyEvent;
+	optionAsAlt: OptionAsAlt;
+}
+
+function optionAsAltOf(option: OptionAsAlt): GhosttyOptionAsAlt {
+	return match (option) {
+		OptionAsAlt.Neither => GhosttyOptionAsAlt.GHOSTTY_OPTION_AS_ALT_FALSE,
+		OptionAsAlt.Left => GhosttyOptionAsAlt.GHOSTTY_OPTION_AS_ALT_LEFT,
+		OptionAsAlt.Right => GhosttyOptionAsAlt.GHOSTTY_OPTION_AS_ALT_RIGHT,
+		OptionAsAlt.Both => GhosttyOptionAsAlt.GHOSTTY_OPTION_AS_ALT_TRUE,
+	};
 }
 
 function actionOf(a: KeyAction): GhosttyKeyAction {
@@ -1653,16 +1679,21 @@ export function openKeys(this typeof Keys): Result<Keys, KeysError> {
 		ghostty_key_encoder_free(encoder);
 		return Result.err(KeysError.OpenFailed);
 	}
-	return Result.ok({ encoder: encoder, event: event });
+	return Result.ok({ encoder: encoder, event: event, optionAsAlt: OptionAsAlt.Neither });
 }
 
 export function encode(
 	this k: Keys,
 	vt: Vt,
-	e: KeyEvent,
+	given: KeyEvent,
 	buf: Span<uint8>,
 ): Result<int32, KeysError> {
 	ghostty_key_encoder_setopt_from_terminal(k.encoder, vt.terminal);
+	const optionAsAlt = GhosttyKeyEncoderOption.GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT;
+	let option = optionAsAltOf(k.optionAsAlt);
+	encoderSetOptionAsAlt(k.encoder, optionAsAlt, option);
+	let e = given;
+	when (macos) { e = given.withOptionAsAlt(k.optionAsAlt); }
 	ghostty_key_event_set_action(k.event, actionOf(e.action));
 	ghostty_key_event_set_key(k.event, keyOf(e.key));
 	eventSetMods(k.event, modsMask(e.mods));
@@ -2626,6 +2657,31 @@ test "alt prefixes the escape, except macOS Option, whose text the system compos
 			assert encoded(k, vt, press("KeyX", "x", 0x78, alt)) == "x";
 		} else {
 			assert encoded(k, vt, press("KeyX", "x", 0x78, alt)) == "\x1bx";
+		}
+	});
+}
+
+test "macOS Option sends the escape before its key on the sides set to act as Alt" {
+	assert withKeys((given: Keys, vt: Vt): void => {
+		let k = given;
+		const left = (0 as BitSet<KeyMod>).incl(KeyMod.Alt);
+		const right = left.incl(KeyMod.AltRight);
+		const leftB: KeyEvent = { ...press("KeyB", "∫", 0x62, left), consumedMods: left };
+		const rightB: KeyEvent = { ...leftB, mods: right, consumedMods: right };
+		const composed = "\u00e2\u0088\u00ab";
+		when (macos) {
+			assert encoded(k, vt, leftB) == composed;
+			k.optionAsAlt = OptionAsAlt.Left;
+			assert encoded(k, vt, leftB) == "\x1bb";
+			assert encoded(k, vt, rightB) == composed;
+			k.optionAsAlt = OptionAsAlt.Right;
+			assert encoded(k, vt, leftB) == composed;
+			assert encoded(k, vt, rightB) == "\x1bb";
+			k.optionAsAlt = OptionAsAlt.Both;
+			assert encoded(k, vt, leftB) == "\x1bb";
+			assert encoded(k, vt, rightB) == "\x1bb";
+			vt.writeText("\x1b[>1u");
+			assert encoded(k, vt, leftB) == "\x1b[98;3u";
 		}
 	});
 }

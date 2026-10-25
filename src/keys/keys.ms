@@ -105,6 +105,14 @@ const MODIFIER_KEYS: Vec<ModifierKeys> = [
 	{ mod: KeyMod.Super, side: KeyMod.SuperRight, right: "MetaRight", left: "MetaLeft" },
 ];
 
+export function modifierKey(code: string): boolean {
+	if (code == "CapsLock" || code == "Fn") { return true; }
+	for (const m of MODIFIER_KEYS) {
+		if (code == m.left || code == m.right) { return true; }
+	}
+	return false;
+}
+
 export function releasesOf(held: KeyEvent): Vec<KeyEvent> {
 	let release: KeyEvent = { ...held, action: KeyAction.Release };
 	let out: Vec<KeyEvent> = [];

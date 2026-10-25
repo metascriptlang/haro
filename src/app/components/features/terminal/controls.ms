@@ -32,6 +32,7 @@ export interface Controls {
 	keybinds: Vec<Keybind>;
 	consumedKey: string;
 	closing: boolean;
+	ended: boolean;
 }
 
 export function open(this typeof Controls): Controls {
@@ -45,6 +46,7 @@ export function open(this typeof Controls): Controls {
 		keybinds: [],
 		consumedKey: "",
 		closing: false,
+		ended: false,
 	};
 }
 
@@ -55,7 +57,7 @@ export function vtOf(t: Term): Vt | null {
 }
 
 export function holding(this c: Controls): boolean {
-	return c.held !== null || c.reading !== null || c.closing;
+	return c.held !== null || c.reading !== null || c.closing || c.ended;
 }
 
 export function refit(

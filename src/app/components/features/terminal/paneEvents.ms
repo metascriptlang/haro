@@ -2,7 +2,7 @@ import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { PixelRatio } from "../../../../../../neon/src/api/pixelRatio";
 import { Spot, spotAt } from "../../../../input/pointer";
 import { Reply } from "../../../../input/paste";
-import { modsOf } from "../../../../keys/keys";
+import { modifierKey, modsOf } from "../../../../keys/keys";
 import { noteKey, stats } from "../../../stats";
 import { focusCursor } from "../../content/cursor";
 import { Hit, holding, typed } from "./controls";
@@ -22,6 +22,7 @@ const AUTOSCROLL_MS = 15;
 
 export function focusChanged(this m: PaneModel, gained: boolean): void {
 	m.cursor.focusCursor(gained);
+	if (m.controls.ended) { return; }
 	if (!gained) {
 		m.controls.endDrag();
 		const released = m.term.releaseHeldKey();
@@ -42,6 +43,10 @@ function afterInput(this m: PaneModel): void {
 }
 
 export function keyed(this m: PaneModel, e: NeonEvent): void {
+	if (m.controls.ended) {
+		if (!modifierKey(e.code)) { m.host.exited(m.term.shellExitCode()); }
+		return;
+	}
 	const handled = m.controls.keyDown(m.term, e, m.bridge());
 	if (!handled.ok) {
 		m.failed("key", handled.error.toString());

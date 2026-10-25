@@ -8,8 +8,9 @@ import { createPasteDialog } from "../paste/pasteDialog";
 import { AppHost, PaneModel, bridge, createPane, failed, refresh } from "./paneModel";
 import { cancelDialog, confirmDialog } from "./paneEvents";
 import { closeKey } from "./keyboard";
-import { Term, openTerm, shutdown } from "./term";
-import { Sink, onFresh, onTerm } from "./terminalRig";
+import { Term, TermError, openTerm, shutdown } from "./term";
+import { holding } from "./controls";
+import { Sink, key, onFresh, onTerm } from "./terminalRig";
 
 interface Calls {
 	fatal: string;
@@ -17,17 +18,18 @@ interface Calls {
 	title: string;
 	notified: string;
 	closed: int32;
+	exits: string;
 }
 
 function noCalls(): Calls {
-	return { fatal: "", noted: "", title: "", notified: "", closed: 0 };
+	return { fatal: "", noted: "", title: "", notified: "", closed: 0, exits: "" };
 }
 
 function hostFor(calls: Calls): AppHost {
 	return {
 		onWake: (handler: () => void, failed: (what: string, error: string) => void): void => {},
 		schedule: (run: () => void): void => {},
-		exited: (code: int32): void => {},
+		exited: (code: int32): void => { calls.exits += `${code} `; },
 		fail: (message: string): void => { calls.fatal = message; },
 		note: (message: string): void => { calls.noted += `${message}\n`; },
 		setTitle: (title: string): void => { calls.title = title; },
@@ -127,5 +129,73 @@ test "closing while only the shell runs closes at once with no dialog" {
 		const m = paneOf(t, calls);
 		assert !m.closeAsked();
 		assert calls.closed == 1;
+	}).ok;
+}
+
+function afterExit(
+	code: int32,
+	lateMs: float64,
+	body: (m: PaneModel, calls: Calls) => void,
+): Result<void, TermError> {
+	const t = try openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+		const base = Replay.ofText("last output").toPty();
+		return Result.ok({ ...base, exitCode: (): int32 | null => { return code; } });
+	});
+	defer t.shutdown();
+	const _fit = try t.fit(20, 3);
+	t.spawnedAt -= lateMs;
+	const calls = noCalls();
+	const m = paneOf(t, calls);
+	m.refresh();
+	body(m, calls);
+	return Result.ok(null);
+}
+
+test "a shell that exits non-zero keeps the window and says so; a key closes it" {
+	assert afterExit(1, 1000, (m: PaneModel, calls: Calls): void => {
+		assert calls.exits == "";
+		assert m.notice.text == "process exited with code 1, press any key to close";
+		assert m.term.grid.at(0).line.text.trimEnd() == "last output";
+		m.keyed(key("ShiftLeft", 0));
+		m.keyed(key("MetaRight", 0));
+		assert calls.exits == "";
+		m.keyed(key("KeyA", 0));
+		assert calls.exits == "1 ";
+	}).ok;
+}
+
+test "a shell that exits with zero closes the window at once" {
+	assert afterExit(0, 1000, (m: PaneModel, calls: Calls): void => {
+		assert calls.exits == "0 ";
+		assert m.notice.text == "";
+	}).ok;
+}
+
+test "a shell that fails as it starts keeps its own notice and also closes on a key" {
+	assert afterExit(127, 0, (m: PaneModel, calls: Calls): void => {
+		assert m.notice.text.startsWith("the shell exited with code 127 as it started: check command in config.ms");
+		assert m.notice.text.endsWith("press any key to close");
+		assert calls.exits == "";
+		m.keyed(key("Enter", 0));
+		assert calls.exits == "127 ";
+	}).ok;
+}
+
+test "the close window command closes a dead shell at once, with no confirmation" {
+	assert afterExit(2, 1000, (m: PaneModel, calls: Calls): void => {
+		assert !m.closeAsked();
+		assert calls.closed == 1;
+	}).ok;
+}
+
+test "a dead shell takes no typed text, key release or focus change, and keeps its notice" {
+	assert afterExit(2, 1000, (m: PaneModel, calls: Calls): void => {
+		const text = m.notice.text;
+		m.focusChanged(false);
+		m.keyReleased(key("KeyA", 0));
+		assert m.notice.text == text;
+		assert m.controls.holding();
+		assert calls.fatal == "";
+		assert calls.noted == "";
 	}).ok;
 }

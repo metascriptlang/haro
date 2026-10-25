@@ -255,11 +255,16 @@ export function refresh(this m: PaneModel): void {
 
 function shellEnded(this m: PaneModel): void {
 	const code = m.term.shellExitCode();
-	if (m.term.exitedAbnormally()) {
-		m.notify(`the shell exited with code ${exitCodeText(code)} as it started: check command in config.ms, or --shell`);
+	if (code == 0) {
+		m.host.exited(code);
 		return;
 	}
-	m.host.exited(code);
+	m.controls.ended = true;
+	if (m.term.exitedAbnormally()) {
+		m.notify(`the shell exited with code ${exitCodeText(code)} as it started: check command in config.ms, or --shell; press any key to close`);
+		return;
+	}
+	m.notify(`process exited with code ${exitCodeText(code)}, press any key to close`);
 }
 
 function notify(this m: PaneModel, text: string): void {

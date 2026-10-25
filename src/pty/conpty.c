@@ -188,7 +188,10 @@ static wchar_t* expanded(wchar_t* text) {
 	return out;
 }
 
-int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows, int widthPx, int heightPx) {
+int ptyOpen(
+	const char* commandLine, const char* cwd, const char* langEntry,
+	int cols, int rows, int widthPx, int heightPx
+) {
 	int id = -1;
 	for (int i = 0; i < PTY_MAX; i++) {
 		if (!ptys[i].used) { id = i; break; }

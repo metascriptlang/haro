@@ -212,19 +212,21 @@ static const char* const REPLACED[] = {
 };
 static const char* const ADDED[] = { "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=Haro" };
 
-static int replaced(const char* entry, int newPwd) {
+static int replaced(const char* entry, int newPwd, int newLang) {
 	if (newPwd && strncmp(entry, "PWD=", 4) == 0) return 1;
+	if (newLang && strncmp(entry, "LANG=", 5) == 0) return 1;
 	for (size_t i = 0; i < COUNT(REPLACED); i++) {
 		if (strncmp(entry, REPLACED[i], strlen(REPLACED[i])) == 0) return 1;
 	}
 	return 0;
 }
 
-static char** childEnv(const char* cwd, char** pwd) {
+static char** childEnv(const char* cwd, const char* langEntry, char** pwd) {
 	int newPwd = cwd[0] != '\0';
+	int newLang = langEntry[0] != '\0';
 	size_t count = 0;
 	while (environ[count] != NULL) count++;
-	char** env = malloc((count + COUNT(ADDED) + 2) * sizeof *env);
+	char** env = malloc((count + COUNT(ADDED) + 3) * sizeof *env);
 	*pwd = newPwd ? malloc(strlen(cwd) + sizeof "PWD=") : NULL;
 	if (env == NULL || (newPwd && *pwd == NULL)) {
 		free(env);
@@ -233,9 +235,10 @@ static char** childEnv(const char* cwd, char** pwd) {
 	}
 	size_t n = 0;
 	for (size_t i = 0; i < count; i++) {
-		if (!replaced(environ[i], newPwd)) env[n++] = environ[i];
+		if (!replaced(environ[i], newPwd, newLang)) env[n++] = environ[i];
 	}
 	for (size_t i = 0; i < COUNT(ADDED); i++) env[n++] = (char*)ADDED[i];
+	if (newLang) env[n++] = (char*)langEntry;
 	if (newPwd) {
 		strcpy(*pwd, "PWD=");
 		strcat(*pwd, cwd);
@@ -270,7 +273,10 @@ static struct winsize winsizeOf(int cols, int rows, int widthPx, int heightPx) {
 	};
 }
 
-int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows, int widthPx, int heightPx) {
+int ptyOpen(
+	const char* commandLine, const char* cwd, const char* langEntry,
+	int cols, int rows, int widthPx, int heightPx
+) {
 	int id = -1;
 	for (int i = 0; i < PTY_MAX; i++) {
 		if (!ptys[i].used) { id = i; break; }
@@ -284,7 +290,7 @@ int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows, int wi
 		return -1;
 	}
 	char* pwd = NULL;
-	char** env = words.we_wordc == 0 ? NULL : childEnv(cwd, &pwd);
+	char** env = words.we_wordc == 0 ? NULL : childEnv(cwd, langEntry, &pwd);
 	int failed[2];
 	if (env == NULL || pipe(failed) != 0) {
 		free(env);

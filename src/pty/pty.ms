@@ -9,11 +9,13 @@ when (linux) {
 }
 
 import { isDir } from "std/fs";
+import { langEntry } from "./locale";
 import { Pty, PtyError } from "./transport";
 
 extern function ptyOpen(
 	commandLine: cstring,
 	cwd: cstring,
+	langEntry: cstring,
 	cols: int32,
 	rows: int32,
 	widthPx: int32,
@@ -45,7 +47,15 @@ export function open(
 	cellHeight: int32 = 0,
 ): Result<NativePty, PtyError> {
 	const dir = cwd !== null && isDir(cwd) ? cwd : "";
-	const id = ptyOpen(commandLine, dir, cols, rows, cols * cellWidth, rows * cellHeight);
+	const id = ptyOpen(
+		commandLine,
+		dir,
+		langEntry(),
+		cols,
+		rows,
+		cols * cellWidth,
+		rows * cellHeight,
+	);
 	if (id < 0) { return Result.err(PtyError.OpenFailed); }
 	return Result.ok({ id: id });
 }
@@ -290,6 +300,34 @@ when (testBuild) {
 				opened.value.close();
 			}
 			assert env.get("TERM_PROGRAM") == "OtherTerminal";
+		}
+
+		function childLang(): string {
+			const opened = NativePty.open("env", 80, 24);
+			if (!opened.ok) { return "open failed"; }
+			const out = opened.value.toPty().drainText(65536);
+			opened.value.close();
+			return out.split("\r\n").filter((line: string): boolean => line.startsWith("LANG=")).join("|");
+		}
+
+		test "the child keeps an inherited LANG" {
+			const inherited = env.get("LANG");
+			assert env.set("LANG", "fr_FR.UTF-8");
+			assert childLang() == "LANG=fr_FR.UTF-8";
+			assert env.set("LANG", inherited);
+		}
+
+		when (macos) {
+			import { preferredLang } from "./locale";
+
+			test "a child started without a LANG gets one from the macOS locale preference" {
+				const inherited = env.get("LANG");
+				assert env.delete("LANG");
+				assert childLang() == `LANG=${preferredLang()}`;
+				assert env.set("LANG", "");
+				assert childLang() == `LANG=${preferredLang()}`;
+				assert env.set("LANG", inherited);
+			}
 		}
 
 		test "a child reads its size in pixels from the cell size at open and after a resize" {

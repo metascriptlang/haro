@@ -104,9 +104,11 @@ Kitty graphics is a later decision.
 - Glyphs sit on an **integer cell grid**: monospace cells with whole-pixel origins. The font is
   JetBrains Mono NL (`assets/`, SIL OFL 1.1, picked by the person 2026-10-15): the NL cut has no
   ligatures, which a terminal must never apply across cells.
-- Cell backgrounds, underline (straight and wavy), strikethrough, selection and cursor are
-  instances of void2d's UI pipeline. The cursor and the selection are their own instances, so a
-  blink touches no text.
+- Cell backgrounds, underline (straight and wavy) and strikethrough are instances of void2d's UI
+  pipeline. A selected cell and the cell under a resting block cursor are drawn in their own
+  colours, so the character stays readable: a selection change rebuilds only the rows whose
+  selected span changed, and a blink rebuilds only the cursor's row. The other cursor shapes and
+  a block in motion are their own instances.
 - Box drawing, blocks, braille and powerline glyphs are drawn procedurally rather than taken from
   the font.
 - When nothing changed, a frame draws nothing.

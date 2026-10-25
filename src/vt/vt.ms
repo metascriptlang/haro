@@ -79,6 +79,7 @@ import {
 	GhosttyRenderStateRowData,
 	GhosttyRenderStateRowCells,
 	GhosttyRenderStateRowCellsData,
+	GhosttyRenderStateRowSelection,
 	GhosttyColorRgb,
 	GhosttyStyle,
 	GhosttyStyleColorTag,
@@ -109,7 +110,7 @@ import {
 	withOptionAsAlt,
 	withoutAltGr,
 } from "../keys/keys";
-import { CellWidth, Marked, Point, Range, Selection, Unit } from "../select/select";
+import { CellWidth, Marked, Point, Range, RowSpan, Selection, Unit } from "../select/select";
 import { Handle } from "std/ffi";
 
 struct Colors256 { c: GhosttyColorRgb[256]; }
@@ -248,6 +249,11 @@ extern function rowCells(
 	it: GhosttyRenderStateRowIterator,
 	key: GhosttyRenderStateRowData,
 	out cells: GhosttyRenderStateRowCells,
+): GhosttyResult from "ghostty_render_state_row_get";
+extern function rowSelection(
+	it: GhosttyRenderStateRowIterator,
+	key: GhosttyRenderStateRowData,
+	ref selection: GhosttyRenderStateRowSelection,
 ): GhosttyResult from "ghostty_render_state_row_get";
 extern function cellGraphemeCount(
 	cells: GhosttyRenderStateRowCells,
@@ -495,6 +501,7 @@ export struct Row {
 	y: int32;
 	cells: Vec<Cell>;
 	extra: Vec<uint32>;
+	selected: RowSpan | null;
 }
 
 export interface Painted {
@@ -1449,12 +1456,23 @@ function readRow(
 	let cells = vt.cells;
 	const cellsKey = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_CELLS;
 	if (!ok(rowCells(iterator, cellsKey, cells))) { return Result.err(VtError.ReadFailed); }
-	let row: Row = { y: y, cells: [], extra: [] };
+	let row: Row = { y: y, cells: [], extra: [], selected: try selectedIn(iterator) };
 	while (ghostty_render_state_row_cells_next(cells)) {
 		const cell = try readCell(vt.state, cells, colors, row.extra);
 		row.cells.push(cell);
 	}
 	return Result.ok(row);
+}
+
+function selectedIn(iterator: GhosttyRenderStateRowIterator): Result<RowSpan | null, VtError> {
+	let picked: GhosttyRenderStateRowSelection = { size: sizeof GhosttyRenderStateRowSelection };
+	const key = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION;
+	const r = rowSelection(iterator, key, picked);
+	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
+	if (!ok(r)) { return Result.err(VtError.ReadFailed); }
+	// Typed local until card 2026-10-21-result-ok-drops-null-from-declared-return.md
+	const span: RowSpan | null = { from: picked.start_x as int32, to: picked.end_x as int32 };
+	return Result.ok(span);
 }
 
 function rowIterator(this vt: Vt): Result<GhosttyRenderStateRowIterator, VtError> {
@@ -1939,17 +1957,6 @@ export function selection(this vt: Vt): Result<Marked | null, VtError> {
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SELECTION;
 	const r = terminalSelection(vt.terminal, key, selection);
 	return markedFound(vt.terminal, r, selection);
-}
-
-export function cellWidthInView(this vt: Vt, at: Point): Result<CellWidth, VtError> {
-	let ref: GhosttyGridRef;
-	let cell: GhosttyCell = 0;
-	const viewport = GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT;
-	if (!ok(vtGridRef(vt.terminal, viewport, at.col, at.row, ref))
-		|| !ok(gridRefCell(ref, cell))) {
-		return Result.err(VtError.ReadFailed);
-	}
-	return widthOf(cell);
 }
 
 function wordAt(this vt: Vt, at: Point): Result<Marked | null, VtError> {

@@ -6,7 +6,6 @@ import { View, ViewHandle } from "../../../../../../neon/src/components/primitiv
 import { RowSlot } from "../../../frame";
 import { CellText } from "../../ui/cellText";
 import { Preedit } from "../../content/preedit";
-import { Shades } from "../../content/shades";
 import { PaneModel, laidOut } from "./paneModel";
 import {
 	committed,
@@ -54,7 +53,6 @@ export function TerminalPane(props: { model: PaneModel }): NeonNode {
 			style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}
 			onLayout={(e: NeonEvent): void => { m.laidOut(e); }}>
 			<ForList each={m.term.grid}>{row}</ForList>
-			<Shades model={m.shades} metrics={metrics} color={m.foreground()} />
 			<Preedit
 				model={m.preedit}
 				metrics={metrics}

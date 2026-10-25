@@ -12,7 +12,6 @@ import {
 	PaneModel,
 	bridge,
 	failed,
-	paintSelection,
 	refresh,
 	scheduleRefresh,
 } from "./paneModel";
@@ -109,7 +108,7 @@ export function pressed(this m: PaneModel, e: NeonEvent): void {
 		m.failed("press", handled.error.toString());
 		return;
 	}
-	m.paintSelection();
+	m.scheduleRefresh();
 }
 
 function autoscroll(this m: PaneModel): void {
@@ -134,7 +133,7 @@ export function dragged(this m: PaneModel, e: NeonEvent): void {
 		m.failed("move", handled.error.toString());
 		return;
 	}
-	if (handled.value) { m.paintSelection(); }
+	if (handled.value) { m.scheduleRefresh(); }
 	m.autoscroll();
 }
 

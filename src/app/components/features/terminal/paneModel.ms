@@ -22,14 +22,13 @@ import {
 	showCursor,
 	wakeCursor,
 } from "../../content/cursor";
-import { ShadesModel, createShades, paintShades } from "../../content/shades";
 import { PreeditModel, createPreedit } from "../../content/preedit";
 import { NoticeModel, noticeCols, showNotice } from "../notice/notice";
 import { PasteDialogModel, showPending } from "../paste/pasteDialog";
 import { Bridge, Controls, refit } from "./controls";
 import { clipboardAsked } from "./clipboard";
 import { closeKey } from "./keyboard";
-import { shades } from "./mouse";
+import { syncSelection } from "./mouse";
 import {
 	Term,
 	TermError,
@@ -81,7 +80,6 @@ export interface PaneModel {
 	viewWidth: Accessor<number>;
 	setViewWidth: Setter<number>;
 	cursor: CursorModel;
-	shades: ShadesModel;
 	preedit: PreeditModel;
 	grid: ViewHandle | null;
 	holdTimer: number;
@@ -141,7 +139,6 @@ export function createPane(
 			const relit = t.inkCursor(ink);
 			if (!relit.ok) { host.fail(`cursor: ${relit.error.toString()}`); }
 		}),
-		shades: createShades(),
 		preedit: createPreedit(),
 		grid: null,
 		holdTimer: -1,
@@ -171,15 +168,6 @@ export function failed(this m: PaneModel, what: string, error: string): void {
 	if (m.notice.text == text) { return; }
 	m.host.note(message);
 	m.notify(text);
-}
-
-export function paintSelection(this m: PaneModel): void {
-	const drawn = m.controls.shades(m.term);
-	if (!drawn.ok) {
-		m.failed("selection", drawn.error.toString());
-		return;
-	}
-	m.shades.paintShades(drawn.value);
 }
 
 function copyToClipboard(text: string): void {
@@ -244,7 +232,12 @@ export function refresh(this m: PaneModel): void {
 			m.cursor.tint = colors.cursor ?? colors.fg;
 		}
 		m.cursor.showCursor(f.cursor, f.look);
-		m.paintSelection();
+		const dropped = m.controls.syncSelection(m.term);
+		if (!dropped.ok) {
+			m.failed("selection", dropped.error.toString());
+		} else if (dropped.value) {
+			m.scheduleRefresh();
+		}
 	}
 	m.dialog.showPending(
 		m.controls.held,

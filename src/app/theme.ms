@@ -1,7 +1,8 @@
 import { Style } from "../../../neon/src/render/style";
+import { CellInk } from "../grid/lines";
 import { Rgb } from "../vt/vt";
 
-export const SHADE_OPACITY: number = 0.35;
+export const SELECTION: CellInk = { fg: null, bg: null };
 export const CURSOR_TEXT: Rgb | null = null;
 
 export const NOTICE_BACKGROUND = "#5c1f24";

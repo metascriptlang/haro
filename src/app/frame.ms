@@ -3,8 +3,10 @@ import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style } from "../../../neon/src/render/style";
 import { CellInk, GridLine, LineRun, cellOnRow, line } from "../grid/lines";
 import { plan } from "../screen/plan";
+import { Marked } from "../select/select";
 import { Cursor, Rgb, Row, Underline, Vt } from "../vt/vt";
 import { stats, noteApplied } from "./stats";
+import { SELECTION } from "./theme";
 
 export interface RowSlot {
 	line: GridLine;
@@ -128,7 +130,7 @@ function slotOf(
 	background: Rgb,
 ): Result<RowSlot, FrameError> {
 	const cell = cursor.cellOnRow(row.y);
-	const built = row.line(cell, ink.inkOn(cell), background);
+	const built = row.line(cell, ink.inkOn(cell), SELECTION, background);
 	if (!built.ok) { return Result.err(FrameError.LineFailed); }
 	const spans = spansOf(styles, built.value, background);
 	return Result.ok({ line: move built.value, spans: spans });
@@ -344,6 +346,34 @@ test "relighting the cursor rebuilds only its row, so a blink turns its cell off
 		assert relightCursor(grid, styles, vt, lit).ok;
 		assert backgroundOf(grid.at(0), 0) == "#ff0000";
 		assert grid.at(1) === other;
+		vt.free();
+	}
+}
+
+test "selected cells, a wide one included, draw with their colours swapped" {
+	const created = Vt.create(12, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank()]);
+		const styles = Styles.empty();
+		vt.writeText("ab\u4e2dc");
+		const marked: Marked = {
+			range: { start: { row: 0, col: 1 }, end: { row: 0, col: 2 } },
+			block: false,
+		};
+		assert vt.selectionSet(marked).ok;
+		assert applyFrame(grid, styles, vt, null).ok;
+		const colors = vt.palette();
+		assert colors.ok;
+		if (colors.ok) {
+			const spans = grid.at(0).spans;
+			assert spans.length == 3;
+			assert spans[1].text == "b\u4e2d";
+			assert spans[1].style!.color == hexOf(colors.value.bg);
+			assert spans[1].style!.backgroundColor == hexOf(colors.value.fg);
+			assert spans[2].style!.backgroundColor === undefined;
+		}
 		vt.free();
 	}
 }

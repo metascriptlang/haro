@@ -1,3 +1,4 @@
+import { Marked } from "../select/select";
 import { Palette, Row, Vt, VtError } from "../vt/vt";
 
 export enum PlanKind {
@@ -15,7 +16,7 @@ export struct Plan {
 }
 
 function sameContent(this a: Row, b: Row): boolean {
-	return a.cells == b.cells && a.extra == b.extra;
+	return a.cells == b.cells && a.extra == b.extra && a.selected == b.selected;
 }
 
 function scrolledRows(this vt: Vt): Result<int32 | null, VtError> {
@@ -62,6 +63,7 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 		if (dirty.length == 0) { kind = PlanKind.Idle; }
 		while (dirty.length > 0) {
 			const row = dirty.pop();
+			if (row.sameContent(painted.rows[row.y])) { continue; }
 			ys.push(row.y);
 			painted.rows[row.y] = row;
 		}
@@ -133,7 +135,7 @@ test "the first frame repaints every row, the next one is idle" {
 	}
 }
 
-test "overwriting a row gives that row and the one the cursor left" {
+test "overwriting a row gives that row, not the unchanged one the cursor left" {
 	const opening = filledScreen(10);
 	assert opening.ok;
 	if (opening.ok) {
@@ -144,7 +146,7 @@ test "overwriting a row gives that row and the one the cursor left" {
 		if (p.ok) {
 			assert p.value.kind == PlanKind.Rows;
 			assert p.value.scrolled == 0;
-			assert rowNumbers(p.value.ys) == "5,23";
+			assert rowNumbers(p.value.ys) == "5";
 			assert textOf(vt.painted.rows[p.value.ys[0]]) == "overwrite";
 		}
 		vt.free();
@@ -450,6 +452,62 @@ test "a new default colour or reverse video repaints every row once" {
 		assert kindAfter(vt, "\x1b[?5h") == PlanKind.Repaint;
 		assert kindAfter(vt, "\x1b[?5l") == PlanKind.Repaint;
 		assert kindAfter(vt, "x") == PlanKind.Rows;
+		vt.free();
+	}
+}
+
+function marked(fromRow: int32, fromCol: int32, toRow: int32, toCol: int32): Marked {
+	return {
+		range: { start: { row: fromRow, col: fromCol }, end: { row: toRow, col: toCol } },
+		block: false,
+	};
+}
+
+function selectedOf(row: Row): string {
+	const s = row.selected;
+	return s === null ? "none" : `${s.from}-${s.to}`;
+}
+
+test "a selection change plans only the rows it enters, leaves or reshapes" {
+	const opening = filledScreen(10);
+	assert opening.ok;
+	if (opening.ok) {
+		const vt = opening.value;
+		assert vt.selectionSet(marked(3, 2, 4, 5)).ok;
+		const set = vt.plan();
+		assert set.ok;
+		if (set.ok) { assert rowNumbers(set.value.ys) == "3,4"; }
+		assert selectedOf(vt.painted.rows[3]) == "2-9";
+		assert selectedOf(vt.painted.rows[4]) == "0-5";
+		assert vt.selectionSet(marked(3, 2, 5, 1)).ok;
+		const grown = vt.plan();
+		assert grown.ok;
+		if (grown.ok) { assert rowNumbers(grown.value.ys) == "4,5"; }
+		vt.selectionClear();
+		const cleared = vt.plan();
+		assert cleared.ok;
+		if (cleared.ok) { assert rowNumbers(cleared.value.ys) == "3,4,5"; }
+		assert selectedOf(vt.painted.rows[4]) == "none";
+		vt.free();
+	}
+}
+
+test "a selection stays on its text as the viewport scrolls back" {
+	const opening = filledScreen(10);
+	assert opening.ok;
+	if (opening.ok) {
+		const vt = opening.value;
+		vt.writeText(newLines(24, 76));
+		assert vt.selectionSet(marked(90, 0, 90, 3)).ok;
+		const bottom = vt.plan();
+		assert bottom.ok;
+		assert textOf(vt.painted.rows[14]) == "row 90";
+		assert selectedOf(vt.painted.rows[14]) == "0-3";
+		vt.scrollLines(-3);
+		const up = vt.plan();
+		assert up.ok;
+		assert selectedOf(vt.painted.rows[14]) == "none";
+		assert selectedOf(vt.painted.rows[17]) == "0-3";
 		vt.free();
 	}
 }

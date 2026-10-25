@@ -1,5 +1,4 @@
 import { KeyMod } from "../../../../keys/keys";
-import { Block } from "../../../../select/select";
 import { autoscrollOf, claimsMouse } from "../../../../input/pointer";
 import { WheelRoute, reportButton, route } from "../../../../input/wheel";
 import { openable } from "../../../../term/link";
@@ -187,11 +186,11 @@ export function roll(
 	}
 }
 
-export function shades(this c: Controls, t: Term): Result<Vec<Block>, TermError> {
+export function syncSelection(this c: Controls, t: Term): Result<boolean, TermError> {
 	const vt = vtOf(t);
-	if (vt === null) { return Result.ok([]); }
-	if (!c.pointer.sync(vt).ok) { return Result.err(TermError.VtFailed); }
-	const drawn = c.pointer.blocks(vt, t.rows, t.cols);
-	if (!drawn.ok) { return Result.err(TermError.VtFailed); }
-	return Result.ok(drawn.value);
+	if (vt === null) { return Result.ok(false); }
+	const shown = c.pointer.selected();
+	const kept = c.pointer.sync(vt);
+	if (!kept.ok) { return Result.err(TermError.VtFailed); }
+	return Result.ok(shown && !kept.value);
 }

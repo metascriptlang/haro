@@ -1,4 +1,5 @@
 import { fromCodePoint } from "std/core/string";
+import { Marked, RowSpan } from "../select/select";
 import { Cell, CellFlag, Cursor, Row, Rgb, Underline, Vt, isUnicodeScalar } from "../vt/vt";
 
 export enum GridError {
@@ -69,6 +70,10 @@ function inked(this run: LineRun, ink: CellInk): LineRun {
 	return { ...run, fg: ink.fg ?? run.bg, bg: ink.bg ?? run.fg };
 }
 
+function covers(this selected: RowSpan | null, from: int32, to: int32): boolean {
+	return selected !== null && selected.from <= to && from <= selected.to;
+}
+
 function isWideSpacer(this row: Row, i: int32): boolean {
 	return row.cells[i].cp == 0 && i > 0 && row.cells[i - 1].flags.has(CellFlag.Wide);
 }
@@ -117,6 +122,7 @@ export function line(
 	this row: Row,
 	cursorCell: int32,
 	cursorInk: CellInk | null,
+	selection: CellInk,
 	background: Rgb,
 ): Result<GridLine, GridError> {
 	let text = "";
@@ -127,17 +133,24 @@ export function line(
 	const cursorAt = cursorCell > 0 && cursorCell < count && row.isWideSpacer(cursorCell)
 		? cursorCell - 1
 		: cursorCell;
+	const selected = row.selected;
 	let end = count;
 	while (end > 0 && row.cells[end - 1].isEmpty(background)) { end--; }
 	if (cursorInk !== null) { end = Math.max(end, Math.min(cursorAt + 1, count)); }
+	if (selected !== null) { end = Math.max(end, Math.min(selected.to + 1, count)); }
 	for (let i = 0; i < end; i++) {
 		const cell = row.cells[i];
 		const extra = cell.extra as int32;
 		const extraStart = extraAt;
 		extraAt += extra;
 		if (row.isWideSpacer(i)) { continue; }
+		const last = cell.flags.has(CellFlag.Wide) ? i + 1 : i;
 		let run = cell.lineRun();
-		if (i == cursorAt && cursorInk !== null) { run = run.inked(cursorInk); }
+		if (i == cursorAt && cursorInk !== null) {
+			run = run.inked(cursorInk);
+		} else if (selected.covers(i, last)) {
+			run = run.inked(selection);
+		}
 		const split = row.breaksShapingBefore(i, cursorAt);
 		if (cell.cp == 0) {
 			text += " ";
@@ -171,6 +184,7 @@ export function line(
 	});
 }
 
+const SWAP: CellInk = { fg: null, bg: null };
 const RED: Rgb = { r: 255, g: 0, b: 0 };
 
 function inkedLine(
@@ -178,17 +192,19 @@ function inkedLine(
 	cols: int32,
 	cursorCell: int32,
 	cursorInk: CellInk | null,
+	selected: Marked | null,
 ): GridLine | null {
 	const created = Vt.create(cols, 2);
 	if (!created.ok) { return null; }
 	const vt = created.value;
 	vt.writeText(text);
+	const marked = selected === null || vt.selectionSet(selected).ok;
 	const updated = vt.update();
 	const colors = vt.palette();
 	const rows = vt.rows();
 	let found: GridLine | null = null;
-	if (updated.ok && colors.ok && rows.ok) {
-		const line = rows.value[0].line(cursorCell, cursorInk, colors.value.bg);
+	if (marked && updated.ok && colors.ok && rows.ok) {
+		const line = rows.value[0].line(cursorCell, cursorInk, SWAP, colors.value.bg);
 		if (line.ok) { found = line.value; }
 	}
 	vt.free();
@@ -196,7 +212,11 @@ function inkedLine(
 }
 
 function firstLine(text: string, cols: int32, cursorCell: int32): GridLine | null {
-	return inkedLine(text, cols, cursorCell, null);
+	return inkedLine(text, cols, cursorCell, null, null);
+}
+
+function columns(from: int32, to: int32): Marked {
+	return { range: { start: { row: 0, col: from }, end: { row: 0, col: to } }, block: false };
 }
 
 test "a plain row is one run over its text, without the blank cells after it" {
@@ -317,7 +337,7 @@ test "an inverse cell swaps its run's colours" {
 		const rows = vt.rows();
 		assert colors.ok && rows.ok;
 		if (colors.ok && rows.ok) {
-			const line = rows.value[0].line(-1, null, colors.value.bg);
+			const line = rows.value[0].line(-1, null, SWAP, colors.value.bg);
 			assert line.ok;
 			if (line.ok) {
 				assert line.value.runs[0].fg == colors.value.bg;
@@ -352,7 +372,7 @@ test "a trailing blank that shows a background, an underline or a strikethrough 
 		if (colors.ok && rows.ok) {
 			let texts: Vec<string> = [];
 			for (const row of rows.value) {
-				const line = row.line(-1, null, colors.value.bg);
+				const line = row.line(-1, null, SWAP, colors.value.bg);
 				assert line.ok;
 				if (line.ok) { texts.push(line.value.text); }
 			}
@@ -383,7 +403,7 @@ test "fi, fl and st never share a run, so they stay unligated" {
 }
 
 test "a lit block cursor draws its cell in the cursor colour, its text in the cell's background" {
-	const line = inkedLine("abc", 10, 1, { fg: null, bg: RED });
+	const line = inkedLine("abc", 10, 1, { fg: null, bg: RED }, null);
 	assert line !== null;
 	if (line !== null) {
 		assert line.runs.length == 3;
@@ -396,7 +416,7 @@ test "a lit block cursor draws its cell in the cursor colour, its text in the ce
 }
 
 test "a lit cursor past the end of the text still draws its cell, and an unlit one adds nothing" {
-	const lit = inkedLine("ab", 10, 4, { fg: null, bg: RED });
+	const lit = inkedLine("ab", 10, 4, { fg: null, bg: RED }, null);
 	assert lit !== null;
 	if (lit !== null) {
 		assert lit.text == "ab   ";
@@ -410,7 +430,7 @@ test "a lit cursor past the end of the text still draws its cell, and an unlit o
 
 test "a lit cursor on either cell of a wide character inks the whole character" {
 	for (let at = 0; at < 2; at++) {
-		const line = inkedLine("中a", 10, at, { fg: null, bg: RED });
+		const line = inkedLine("中a", 10, at, { fg: null, bg: RED }, null);
 		assert line !== null;
 		if (line !== null) {
 			assert line.runs[0].units == 1;
@@ -418,5 +438,51 @@ test "a lit cursor on either cell of a wide character inks the whole character" 
 			assert line.runs[1].bg != RED;
 			assert line.widths.join("") == "2001";
 		}
+	}
+}
+
+test "selected cells swap their colours, so an inverse cell selects back to plain" {
+	const line = inkedLine("ab\x1b[7mc\x1b[0md", 10, -1, null, columns(1, 2));
+	assert line !== null;
+	if (line !== null) {
+		assert line.runs.length == 3;
+		assert line.runs[1].units == 1;
+		assert line.runs[1].fg == line.runs[0].bg;
+		assert line.runs[1].bg == line.runs[0].fg;
+		assert line.runs[2].units == 2;
+		assert line.runs[2].bg == line.runs[0].bg;
+	}
+}
+
+test "a selection reaching either cell of a wide character colours it whole" {
+	for (let from = 0; from < 2; from++) {
+		const line = inkedLine("中文 x", 10, -1, null, columns(from, 2));
+		assert line !== null;
+		if (line !== null) {
+			assert line.runs.length == 2;
+			assert line.runs[0].units == 2;
+			assert line.runs[0].bg == line.runs[1].fg;
+		}
+	}
+}
+
+test "selected blanks past the text are drawn, up to the last column" {
+	const line = inkedLine("x", 6, -1, null, columns(3, 5));
+	assert line !== null;
+	if (line !== null) {
+		assert line.text == "x     ";
+		assert line.runs.length == 2;
+		assert line.runs[1].units == 3;
+		assert line.runs[1].bg == line.runs[0].fg;
+	}
+}
+
+test "the cursor's ink wins over the selection on its cell" {
+	const line = inkedLine("abc", 10, 1, { fg: null, bg: RED }, columns(0, 2));
+	assert line !== null;
+	if (line !== null) {
+		assert line.runs.length == 3;
+		assert line.runs[1].bg == RED;
+		assert line.runs[0].bg == line.runs[2].bg && line.runs[0].bg != RED;
 	}
 }

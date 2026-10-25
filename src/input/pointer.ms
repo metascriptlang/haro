@@ -1,4 +1,4 @@
-import { Block, Point, RowSpan, Selection, Unit, merged } from "../select/select";
+import { Point, Selection, Unit } from "../select/select";
 import { Vt, VtError } from "../vt/vt";
 import { Clicks, unitOf } from "./clicks";
 
@@ -131,24 +131,6 @@ export function copyText(this p: Pointer, vt: Vt): Result<string | null, VtError
 	return Result.ok(found);
 }
 
-export function blocks(
-	this p: Pointer,
-	vt: Vt,
-	rows: int32,
-	cols: int32,
-): Result<Vec<Block>, VtError> {
-	const sel = p.shown();
-	if (sel === null) { return Result.ok([]); }
-	const top = try vt.scrollOffset();
-	let shaded: Vec<RowSpan> = [];
-	for (const s of sel.marked().spans(top, rows, cols)) {
-		const first = try vt.cellWidthInView({ row: s.row, col: s.from });
-		const last = try vt.cellWidthInView({ row: s.row, col: s.to });
-		shaded.push(s.covering(first, last));
-	}
-	return Result.ok(merged(shaded));
-}
-
 const CELL_WIDTH: float64 = 8;
 const ROW_HEIGHT: float64 = 16;
 const REACH: float64 = CELL_WIDTH;
@@ -164,10 +146,6 @@ function viewOf(cols: int32, rows: int32, text: string): Vt | null {
 
 function spot(col: int32, row: int32): Spot {
 	return { col: col, row: row };
-}
-
-function shaded(row: int32, col: int32, rows: int32, cols: int32): Block {
-	return { row: row, col: col, rows: rows, cols: cols };
 }
 
 function click(p: Pointer, vt: Vt, col: int32, row: int32, time: float64): boolean {
@@ -296,34 +274,6 @@ test "a move with no press in progress selects nothing" {
 	}
 }
 
-test "the highlight follows the selection into scrolled rows and out of view" {
-	const vt = viewOf(10, 3, "a\r\nb\r\nc\r\nd\r\ne\r\nf");
-	assert vt !== null;
-	if (vt !== null) {
-		const p = Pointer.open();
-		assert click(p, vt, 0, 0, 0);
-		assert p.drag(vt, spot(3, 1)).ok;
-		const shown = p.blocks(vt, 3, 10);
-		assert shown.ok;
-		if (shown.ok) {
-			assert shown.value.length == 2;
-			assert shown.value[0] == shaded(0, 0, 1, 10);
-			assert shown.value[1] == shaded(1, 0, 1, 4);
-		}
-		vt.scrollLines(-1);
-		assert vt.update().ok;
-		const above = p.blocks(vt, 3, 10);
-		assert above.ok;
-		if (above.ok) { assert above.value[0].row == 1; }
-		vt.scrollTop();
-		assert vt.update().ok;
-		const out = p.blocks(vt, 3, 10);
-		assert out.ok;
-		if (out.ok) { assert out.value.length == 0; }
-		vt.free();
-	}
-}
-
 function prunedLines(from: int32, count: int32): string {
 	let text = "";
 	for (let i = 0; i < count; i++) { text += `\nr${from + i}`; }
@@ -440,31 +390,28 @@ test "a drag within a pixel of the top or the bottom scrolls that way" {
 	assert autoscrollOf(420, 300) == 1;
 }
 
-function shadedAndCopied(p: Pointer, vt: Vt, from: int32, to: int32): string {
+function selectedAndCopied(p: Pointer, vt: Vt, from: int32, to: int32): string {
 	if (!click(p, vt, from, 0, 0) || !p.drag(vt, spot(to, 0)).ok) { return "select failed"; }
-	const shown = p.blocks(vt, 1, 10);
-	if (!shown.ok) { return "read failed"; }
-	const cells = shown.value.map((b: Block): string => `${b.col}+${b.cols}`).join(",");
-	return `${cells} ${copied(p, vt)}`;
+	return copied(p, vt);
 }
 
-test "a wide character is shaded whole and copied whichever of its cells the selection reaches" {
+test "a wide character is copied whole whichever of its cells the selection reaches" {
 	const vt = viewOf(10, 1, "中文 x");
 	assert vt !== null;
 	if (vt !== null) {
-		assert shadedAndCopied(Pointer.open(), vt, 0, 2) == "0+4 中文";
-		assert shadedAndCopied(Pointer.open(), vt, 1, 4) == "0+5 中文";
+		assert selectedAndCopied(Pointer.open(), vt, 0, 2) == "中文";
+		assert selectedAndCopied(Pointer.open(), vt, 1, 4) == "中文";
 		vt.free();
 	}
 }
 
-test "a wide character in a row scrolled into view is shaded whole" {
+test "a wide character in a row scrolled into view is copied whole" {
 	const vt = viewOf(10, 1, "a\r\n中文 x\r\nab");
 	assert vt !== null;
 	if (vt !== null) {
 		vt.scrollLines(-1);
 		assert vt.update().ok;
-		assert shadedAndCopied(Pointer.open(), vt, 1, 2) == "0+4 中文";
+		assert selectedAndCopied(Pointer.open(), vt, 1, 2) == "中文";
 		vt.free();
 	}
 }

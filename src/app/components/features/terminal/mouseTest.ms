@@ -1,9 +1,17 @@
 import { selected } from "../../../../input/pointer";
 import { bounds } from "../../../../select/select";
-import { Term, releaseHeldKey, sendKey } from "./term";
+import { Term, pumpFrame, releaseHeldKey, sendKey } from "./term";
 import { Controls, Hit } from "./controls";
 import { keyDown } from "./keyboard";
-import { autoscrollTick, endDrag, pointerDown, pointerMove, pointerUp, roll, shades } from "./mouse";
+import {
+	autoscrollTick,
+	endDrag,
+	pointerDown,
+	pointerMove,
+	pointerUp,
+	roll,
+	syncSelection,
+} from "./mouse";
 import { CLIPBOARD_MODS, CTRL, SHIFT } from "../../../../input/bindings";
 import {
 	Sink,
@@ -193,21 +201,22 @@ test "a move that finds the button released ends the drag, and a wheel while dra
 	}).ok;
 }
 
-test "the shades are the highlight rectangles of the viewport" {
+test "a drag selects cells that the next frame draws with their colours swapped" {
 	assert onTerm("alpha beta\r\ngamma", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
-		const none = c.shades(t);
-		assert none.ok;
-		if (none.ok) { assert none.value.length == 0; }
 		assert drag(c, t, clip, at(2, 0), at(3, 1));
-		const drawn = c.shades(t);
-		assert drawn.ok;
-		if (drawn.ok) {
-			assert drawn.value.length == 2;
-			assert drawn.value[0].row == 0 && drawn.value[0].col == 2 && drawn.value[0].cols == 18;
-			assert drawn.value[1].row == 1 && drawn.value[1].col == 0 && drawn.value[1].cols == 4;
-		}
+		assert t.pumpFrame().ok;
+		const top = t.grid.at(0).line;
+		assert top.runs.length == 2;
+		assert top.runs[1].units == 18;
+		assert top.runs[1].bg == top.runs[0].fg;
+		const bottom = t.grid.at(1).line;
+		assert bottom.runs[0].units == 4;
+		assert bottom.runs[0].bg == bottom.runs[1].fg;
+		const dropped = c.syncSelection(t);
+		assert dropped.ok;
+		if (dropped.ok) { assert !dropped.value; }
 	}).ok;
 }
 

@@ -1,6 +1,7 @@
 import { createList, List } from "../../../neon/src/core/list";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { RowSlot, Styles, applyFrame, empty } from "../app/frame";
+import { SELECTION } from "../app/theme";
 import { LineRun, cellOnRow, line } from "../grid/lines";
 import { Cursor, Vt } from "../vt/vt";
 
@@ -168,7 +169,7 @@ export function mismatch(this s: Screen): string {
 	if (!at.ok) { return "the cursor read failed"; }
 	const vtCursor = at.value;
 	for (let y = 0; y < s.rows; y++) {
-		const vtLine = vtRows[y].line(vtCursor.cellOnRow(y), null, colors.value.bg);
+		const vtLine = vtRows[y].line(vtCursor.cellOnRow(y), null, SELECTION, colors.value.bg);
 		if (!vtLine.ok) { return `row ${y}: no line`; }
 		if (vtLine.value.text != s.untrimmedText(y)) {
 			return `row ${y}: text [${s.untrimmedText(y)}] but the vt has [${vtLine.value.text}]`;

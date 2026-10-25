@@ -35,10 +35,11 @@ const HOLD_RECHECK_MS = 100;
 const RESTART_NOTICE = "config.ms: command and workingDirectory apply when Haro restarts";
 
 export interface AppHost {
-	onWake: (handler: () => void) => void;
+	onWake: (handler: () => void, failed: (what: string, error: string) => void) => void;
 	schedule: (run: () => void) => void;
 	exited: (code: int32) => void;
 	fail: (message: string) => void;
+	note: (message: string) => void;
 	setTitle: (title: string) => void;
 	notify: (title: string, body: string) => void;
 	openLink: (uri: string) => void;
@@ -148,7 +149,15 @@ export function createPane(
 }
 
 export function failed(this m: PaneModel, what: string, error: string): void {
-	m.host.fail(`${what}: ${error}`);
+	const message = `${what}: ${error}`;
+	if (m.term.session === null) {
+		m.host.fail(message);
+		return;
+	}
+	const text = `Haro hit an internal error and kept the shell running. ${message}`;
+	if (m.notice.text == text) { return; }
+	m.host.note(message);
+	m.notify(text);
 }
 
 export function paintSelection(this m: PaneModel): void {
@@ -198,7 +207,7 @@ export function refresh(this m: PaneModel): void {
 	stats.tally.refreshes += 1;
 	const frame = m.term.pumpFrame();
 	if (!frame.ok) {
-		m.failed("frame", frame.error.toString());
+		m.failed("output", frame.error.toString());
 		return;
 	}
 	const f = frame.value;
@@ -264,7 +273,7 @@ function applySettings(this m: PaneModel): boolean {
 	if (!vt.setDefaultColors(settings.foreground, settings.background).ok ||
 		!vt.setPalette(settings.palette).ok ||
 		!vt.setScrollback(settings.scrollback).ok) {
-		m.host.fail("the terminal refused the configured colours or scrollback");
+		m.failed("settings", "the terminal refused the configured colours or scrollback");
 		return false;
 	}
 	return true;
@@ -307,7 +316,9 @@ export function connectHost(this m: PaneModel): void {
 		m.reconfigure(c, family, error);
 	});
 	m.host.onCloseKey((): void => { m.closeKeyPressed(); });
-	m.host.onWake((): void => { m.woke(); });
+	m.host.onWake((): void => { m.woke(); }, (what: string, error: string): void => {
+		m.failed(what, error);
+	});
 	createEffect((): number => PixelRatio.get(), (ratio: number, was: number | null): Cleanup | null => {
 		if (was !== null && m.layoutWidth > 0) { m.fitLayout(); }
 		return null;
@@ -324,7 +335,7 @@ export function laidOut(this m: PaneModel, e: NeonEvent): void {
 function fitLayout(this m: PaneModel): void {
 	const font = familyFont(m.metrics.fontFamily(), 400, false);
 	if (!font.ok) {
-		m.host.fail(`font family "${m.metrics.fontFamily()}" has no face: ${font.error.toString()}`);
+		m.failed("font", `family "${m.metrics.fontFamily()}" has no face: ${font.error.toString()}`);
 		return;
 	}
 	const ratio = PixelRatio.get();
@@ -335,7 +346,7 @@ function fitLayout(this m: PaneModel): void {
 	const heightPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutHeight) as int32;
 	const size = gridSize(widthPx, heightPx, cellPx, rowPx);
 	if (!size.ok) {
-		m.host.fail(`cell ${cellPx}x${rowPx} px is not a grid size`);
+		m.failed("fit", `cell ${cellPx}x${rowPx} px is not a grid size`);
 		return;
 	}
 	const cols = size.value[0];

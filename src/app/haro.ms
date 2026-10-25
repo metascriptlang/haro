@@ -139,20 +139,18 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 	registerFallbacks();
 	const families = familyList(config.loaded.faces);
 	const host: AppHost = {
-		onWake: (handler: () => void): void => {
+		onWake: (handler: () => void, failed: (what: string, error: string) => void): void => {
 			onWake((): void => {
 				stats.noteWake(performance.now());
 				const drained = t.drain();
-				if (!drained.ok) {
-					fail(`drain: ${drained.error.toString()}`);
-					return;
-				}
+				if (!drained.ok) { failed("output", drained.error.toString()); }
 				inFrame(handler);
 			});
 		},
 		schedule: inFrame,
 		exited: exited,
 		fail: fail,
+		note: note,
 		setTitle: setWindowTitle,
 		notify: (title: string, body: string): void => {
 			if (notificationsReachable()) { notify(titleOr(title), body, NOTIFICATION_ID); }

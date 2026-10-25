@@ -39,6 +39,7 @@ export interface AppHost {
 	schedule: (run: () => void) => void;
 	exited: (code: int32) => void;
 	fail: (message: string) => void;
+	setTitle: (title: string) => void;
 	openLink: (uri: string) => void;
 	close: () => void;
 	onCloseKey: (handler: () => void) => void;
@@ -202,6 +203,8 @@ export function refresh(this m: PaneModel): void {
 	const f = frame.value;
 	const copied = f.copied;
 	if (copied !== null) { copyToClipboard(copied); }
+	const title = f.title;
+	if (title !== null) { m.host.setTitle(title); }
 	if (f.asked) { m.controls.clipboardAsked(m.term, m.bridge()); }
 	if (f.held) {
 		stats.tally.held += 1;

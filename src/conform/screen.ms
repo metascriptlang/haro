@@ -36,7 +36,7 @@ export function open(this typeof Screen, cols: int32, rows: int32): Result<Scree
 }
 
 export function paint(this s: Screen): Result<void, ScreenError> {
-	const applied = applyFrame(s.grid, s.styles, s.vt);
+	const applied = applyFrame(s.grid, s.styles, s.vt, null);
 	if (!applied.ok) { return Result.err(ScreenError.FrameFailed); }
 	s.cursor = applied.value;
 	return Result.ok(null);
@@ -168,7 +168,7 @@ export function mismatch(this s: Screen): string {
 	if (!at.ok) { return "the cursor read failed"; }
 	const vtCursor = at.value;
 	for (let y = 0; y < s.rows; y++) {
-		const vtLine = vtRows[y].line(vtCursor.cellOnRow(y), colors.value.bg);
+		const vtLine = vtRows[y].line(vtCursor.cellOnRow(y), null, colors.value.bg);
 		if (!vtLine.ok) { return `row ${y}: no line`; }
 		if (vtLine.value.text != s.untrimmedText(y)) {
 			return `row ${y}: text [${s.untrimmedText(y)}] but the vt has [${vtLine.value.text}]`;

@@ -267,6 +267,13 @@ export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float
 	return animating;
 }
 
+export function resting(this t: Trail): boolean {
+	for (const c of t.corners) {
+		if (c.x.position != 0 || c.y.position != 0) { return false; }
+	}
+	return true;
+}
+
 export function cornerAt(this t: Trail, i: int32): Point {
 	const fx = t.destination.x - Math.trunc(t.destination.x);
 	const fy = t.destination.y - Math.trunc(t.destination.y);
@@ -386,4 +393,19 @@ test "an immediate move snaps every corner and sprays nothing" {
 	assert !t.animate(FRAME, CursorShape.Block, 10, 20, true);
 	assert t.particles.length == 0;
 	assert t.cornerAt(0) == point(130, 240);
+}
+
+test "the corners rest on their cell before the particles of the move have faded" {
+	const t = placed(30, 40);
+	assert t.resting();
+	t.moveTo(30, 240);
+	assert t.animate(FRAME, CursorShape.Block, 10, 20, false);
+	assert !t.resting();
+	let frames = 0;
+	while (!t.resting()) {
+		assert t.animate(FRAME, CursorShape.Block, 10, 20, false);
+		frames += 1;
+	}
+	assert frames < 60;
+	assert t.particles.length > 0;
 }

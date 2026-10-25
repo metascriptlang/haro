@@ -9,6 +9,7 @@ import { ViewHandle } from "../../../../../../neon/src/components/primitives";
 import { familyFont } from "../../../../../../neon/src/platform/void/host";
 import { spriteCellFor } from "../../../../../../void/src/void2d/font";
 import { gridSize } from "../../../../grid/size";
+import { CellInk } from "../../../../grid/lines";
 import { MouseGeometry } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
 import { hexOf } from "../../../frame";
@@ -29,7 +30,15 @@ import { Bridge, Controls, refit } from "./controls";
 import { clipboardAsked } from "./clipboard";
 import { closeKey } from "./keyboard";
 import { shades } from "./mouse";
-import { Term, TermError, exitCodeText, exitedAbnormally, pumpFrame, shellExitCode } from "./term";
+import {
+	Term,
+	TermError,
+	exitCodeText,
+	exitedAbnormally,
+	inkCursor,
+	pumpFrame,
+	shellExitCode,
+} from "./term";
 
 const HOLD_RECHECK_MS = 100;
 const RESTART_NOTICE = "config.ms: command and workingDirectory apply when Haro restarts";
@@ -128,7 +137,10 @@ export function createPane(
 		setPadding: setPadding,
 		viewWidth: viewWidth,
 		setViewWidth: setViewWidth,
-		cursor: createCursor(metrics, padding, started.foreground),
+		cursor: createCursor(metrics, padding, started.foreground, (ink: CellInk | null): void => {
+			const relit = t.inkCursor(ink);
+			if (!relit.ok) { host.fail(`cursor: ${relit.error.toString()}`); }
+		}),
 		shades: createShades(),
 		preedit: createPreedit(),
 		grid: null,

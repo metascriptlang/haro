@@ -1,7 +1,7 @@
 import { List, createList } from "../../../neon/src/core/list";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style } from "../../../neon/src/render/style";
-import { GridLine, LineRun, cellOnRow, line } from "../grid/lines";
+import { CellInk, GridLine, LineRun, cellOnRow, line } from "../grid/lines";
 import { plan } from "../screen/plan";
 import { Cursor, Rgb, Row, Underline, Vt } from "../vt/vt";
 import { stats, noteApplied } from "./stats";
@@ -12,7 +12,7 @@ export interface RowSlot {
 }
 
 export function blank(this typeof RowSlot): RowSlot {
-	return { line: { text: "", runs: [], widths: [], cursorCell: -1 }, spans: [] };
+	return { line: { text: "", runs: [], widths: [], cursorCell: -1, cursorInk: null }, spans: [] };
 }
 
 export struct Styles {
@@ -116,22 +116,61 @@ export function spansOf(styles: Styles, l: GridLine, background: Rgb): TextSpan[
 	return spans;
 }
 
+function inkOn(this ink: CellInk | null, cell: int32): CellInk | null {
+	return cell >= 0 ? ink : null;
+}
+
 function slotOf(
 	styles: Styles,
 	row: Row,
 	cursor: Cursor | null,
+	ink: CellInk | null,
 	background: Rgb,
 ): Result<RowSlot, FrameError> {
-	const built = row.line(cursor.cellOnRow(row.y), background);
+	const cell = cursor.cellOnRow(row.y);
+	const built = row.line(cell, ink.inkOn(cell), background);
 	if (!built.ok) { return Result.err(FrameError.LineFailed); }
 	const spans = spansOf(styles, built.value, background);
 	return Result.ok({ line: move built.value, spans: spans });
+}
+
+function relight(
+	grid: List<RowSlot>,
+	styles: Styles,
+	vt: Vt,
+	cursor: Cursor | null,
+	ink: CellInk | null,
+	background: Rgb,
+): Result<void, FrameError> {
+	for (let i = 0; i < vt.painted.rows.length; i++) {
+		const y = vt.painted.rows[i].y;
+		const cell = cursor.cellOnRow(y);
+		const shown = grid.at(y).line;
+		if (shown.cursorCell != cell || shown.cursorInk != ink.inkOn(cell)) {
+			grid.set(y, try slotOf(styles, vt.painted.rows[i], cursor, ink, background));
+		}
+	}
+	return Result.ok(null);
+}
+
+export function relightCursor(
+	grid: List<RowSlot>,
+	styles: Styles,
+	vt: Vt,
+	ink: CellInk | null,
+): Result<void, FrameError> {
+	const colors = vt.painted.palette;
+	if (colors === null || grid.length() != vt.painted.rows.length) { return Result.ok(null); }
+	const at = vt.cursor();
+	if (!at.ok) { return Result.err(FrameError.CursorFailed); }
+	return relight(grid, styles, vt, at.value, ink, colors.bg);
 }
 
 export function applyFrame(
 	grid: List<RowSlot>,
 	styles: Styles,
 	vt: Vt,
+	ink: CellInk | null,
 ): Result<Cursor | null, FrameError> {
 	const planned = vt.plan();
 	if (!planned.ok) { return Result.err(FrameError.PlanFailed); }
@@ -143,16 +182,11 @@ export function applyFrame(
 	const last = grid.length() - 1;
 	for (let i = 0; i < p.scrolled; i++) { grid.move(0, last); }
 	for (const y of p.ys) {
-		const slot = try slotOf(styles, vt.painted.rows[y], cursor, p.colors.bg);
+		const slot = try slotOf(styles, vt.painted.rows[y], cursor, ink, p.colors.bg);
 		chars += slot.line.text.length as int32;
 		grid.set(y, slot);
 	}
-	for (let i = 0; i < vt.painted.rows.length; i++) {
-		const y = vt.painted.rows[i].y;
-		if (grid.at(y).line.cursorCell != cursor.cellOnRow(y)) {
-			grid.set(y, try slotOf(styles, vt.painted.rows[i], cursor, p.colors.bg));
-		}
-	}
+	const _relit = try relight(grid, styles, vt, cursor, ink, p.colors.bg);
 	stats.noteApplied(p.ys.length as int32, p.scrolled, chars, performance.now());
 	return Result.ok(cursor);
 }
@@ -179,6 +213,7 @@ test "each run becomes a span over its own text, sharing one style per look" {
 		],
 		widths: [],
 		cursorCell: -1,
+		cursorInk: null,
 	};
 	const spans = spansOf(styles, l, BLACK);
 	assert spans.length == 3;
@@ -196,6 +231,7 @@ test "truecolour output that never repeats a look keeps the style cache bounded"
 			runs: [run(1, fg, BLACK, Underline.None)],
 			widths: [],
 			cursorCell: -1,
+			cursorInk: null,
 		};
 		const spans = spansOf(styles, l, BLACK);
 		assert spans[0].style!.color == hexOf(fg);
@@ -210,6 +246,7 @@ test "a background differs from the terminal's only where a run says so" {
 		runs: [run(1, WHITE, BLACK, Underline.Curly), run(1, WHITE, RED, Underline.None)],
 		widths: [],
 		cursorCell: -1,
+		cursorInk: null,
 	};
 	const spans = spansOf(styles, l, BLACK);
 	assert spans[0].style!.backgroundColor === undefined;
@@ -223,7 +260,13 @@ test "an underline colour tints the line, and only while the run is underlined" 
 	const curly: LineRun = { ...run(1, WHITE, BLACK, Underline.Curly), underlineColor: RED };
 	const plain: LineRun = { ...run(1, WHITE, BLACK, Underline.None), underlineColor: RED };
 	const white: LineRun = { ...curly, underlineColor: WHITE };
-	const l: GridLine = { text: "xyzw", runs: [curly, plain, white, curly], widths: [], cursorCell: -1 };
+	const l: GridLine = {
+		text: "xyzw",
+		runs: [curly, plain, white, curly],
+		widths: [],
+		cursorCell: -1,
+		cursorInk: null,
+	};
 	const spans = spansOf(styles, l, BLACK);
 	assert spans[0].style!.textDecorationColor == "#ff0000";
 	assert spans[0].style!.color == "#ffffff";
@@ -240,17 +283,67 @@ test "a cursor that moves along its row rebuilds that row, so a ligature under i
 		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank()]);
 		const styles = Styles.empty();
 		vt.writeText("a->b");
-		assert applyFrame(grid, styles, vt).ok;
+		assert applyFrame(grid, styles, vt, null).ok;
 		assert grid.at(0).spans[0].text == "a->b";
 		vt.writeText("\x1b[1;3H");
-		assert applyFrame(grid, styles, vt).ok;
+		assert applyFrame(grid, styles, vt, null).ok;
 		assert grid.at(0).line.cursorCell == 2;
 		assert grid.at(0).spans.length == 3;
 		assert grid.at(0).spans[1].text == ">";
 		vt.writeText("\x1b[2;1H");
-		assert applyFrame(grid, styles, vt).ok;
+		assert applyFrame(grid, styles, vt, null).ok;
 		assert grid.at(0).line.cursorCell == -1;
 		assert grid.at(0).spans.length == 1;
+		vt.free();
+	}
+}
+
+function backgroundOf(slot: RowSlot, i: int32): string {
+	return slot.spans[i].style!.backgroundColor ?? "none";
+}
+
+test "a lit cursor colours its cell and moves with it, rebuilding only the rows it changes" {
+	const created = Vt.create(12, 3);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank(), RowSlot.blank()]);
+		const styles = Styles.empty();
+		const lit: CellInk = { fg: null, bg: RED };
+		vt.writeText("ab\r\ncd\r\nef\x1b[2;3H");
+		assert applyFrame(grid, styles, vt, lit).ok;
+		assert grid.at(1).spans.length == 2;
+		assert grid.at(1).spans[1].text == " ";
+		assert backgroundOf(grid.at(1), 1) == "#ff0000";
+		assert grid.at(0).spans.length == 1;
+		const untouched = grid.at(2);
+		vt.writeText("\x1b[1;2H");
+		assert applyFrame(grid, styles, vt, lit).ok;
+		assert grid.at(0).spans[1].text == "b";
+		assert backgroundOf(grid.at(0), 1) == "#ff0000";
+		assert grid.at(1).spans.length == 1;
+		assert grid.at(2) === untouched;
+		vt.free();
+	}
+}
+
+test "relighting the cursor rebuilds only its row, so a blink turns its cell off and on" {
+	const created = Vt.create(12, 2);
+	assert created.ok;
+	if (created.ok) {
+		const vt = created.value;
+		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank()]);
+		const styles = Styles.empty();
+		const lit: CellInk = { fg: null, bg: RED };
+		vt.writeText("ab\r\ncd\x1b[1;1H");
+		assert applyFrame(grid, styles, vt, lit).ok;
+		assert backgroundOf(grid.at(0), 0) == "#ff0000";
+		const other = grid.at(1);
+		assert relightCursor(grid, styles, vt, null).ok;
+		assert backgroundOf(grid.at(0), 0) == "none";
+		assert relightCursor(grid, styles, vt, lit).ok;
+		assert backgroundOf(grid.at(0), 0) == "#ff0000";
+		assert grid.at(1) === other;
 		vt.free();
 	}
 }

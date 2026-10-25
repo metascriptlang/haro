@@ -5,9 +5,11 @@ import { Graphics, Scene2D, TileGroup } from "../../../../../neon/src/components
 import { GraphicsOp } from "../../../../../neon/src/render/graphics";
 import { Color, Vec2, rgba, vec2, whiteTile } from "../../../../../void/src/void2d/types";
 import { TileCell } from "../../../../../void/src/void2d/node";
+import { CellInk } from "../../../grid/lines";
 import { Cursor, CursorLook, CursorShape, Rgb } from "../../../vt/vt";
 import { BLINK_MS, blinks, drawn, resets, shapeOf } from "../../../term/cursor";
 import { Trail, particleAlpha } from "../../../term/trail";
+import { CURSOR_TEXT } from "../../theme";
 import { CellMetrics } from "../ui/cellText";
 
 const BLOCK_ALPHA = 0.8;
@@ -27,6 +29,8 @@ export interface CursorModel {
 	setDust: Setter<TileCell[]>;
 	trail: Trail;
 	tint: Rgb;
+	ink: CellInk | null;
+	inked: (ink: CellInk | null) => void;
 	frame: int32;
 	last: number;
 	at: Cursor | null;
@@ -37,7 +41,12 @@ export interface CursorModel {
 	lastReset: float64;
 }
 
-export function createCursor(metrics: CellMetrics, padding: Accessor<number>, tint: Rgb): CursorModel {
+export function createCursor(
+	metrics: CellMetrics,
+	padding: Accessor<number>,
+	tint: Rgb,
+	inked: (ink: CellInk | null) => void,
+): CursorModel {
 	const [col, setCol] = createSignal<number>(0);
 	const [row, setRow] = createSignal<number>(0);
 	const [drawing, setDrawing] = createSignal<GraphicsOp[]>([]);
@@ -55,6 +64,8 @@ export function createCursor(metrics: CellMetrics, padding: Accessor<number>, ti
 		setDust: setDust,
 		trail: Trail.start(),
 		tint: tint,
+		ink: null,
+		inked: inked,
 		frame: 0,
 		last: 0,
 		at: null,
@@ -94,7 +105,7 @@ function operations(this c: CursorModel): GraphicsOp[] {
 			const width = (c.metrics.fontSize() * OUTLINE_PER_EM) as float32;
 			const color = colorOf(c.tint, 1);
 			ops.push({ kind: "strokePoly", points: points, width: width, closed: true, color: color });
-		} else {
+		} else if (shape != CursorShape.Block || !c.trail.resting()) {
 			const alpha = shape == CursorShape.Block ? BLOCK_ALPHA : 1;
 			ops.push({ kind: "fillConvex", points: points, color: colorOf(c.tint, alpha) });
 		}
@@ -130,7 +141,18 @@ function step(this c: CursorModel, now: number): void {
 	c.frame = moving ? requestFrame((next: number): void => { c.step(next); }) : 0;
 }
 
+function blockInk(this c: CursorModel): CellInk | null {
+	const lit = c.at !== null && c.look.drawn(c.focused, c.blinkOn) &&
+		c.look.shapeOf(c.focused) == CursorShape.Block;
+	return lit ? { fg: CURSOR_TEXT, bg: c.tint } : null;
+}
+
 export function paintCursor(this c: CursorModel): void {
+	const ink = c.blockInk();
+	if (ink != c.ink) {
+		c.ink = ink;
+		c.inked(ink);
+	}
 	const at = c.at;
 	if (at !== null && c.look.visible) {
 		const pad = c.padding();
@@ -199,6 +221,13 @@ export function CursorTrail(props: { model: CursorModel }): NeonNode {
 	</Scene2D>;
 }
 
+const RED: Rgb = { r: 255, g: 0, b: 0 };
+
+interface InksSeen {
+	count: int32;
+	last: CellInk | null;
+}
+
 function cursorFor(look: CursorLook): CursorModel {
 	const [fontSize, _setFontSize] = createSignal<number>(16);
 	const [fontFamily, _setFontFamily] = createSignal<string>("");
@@ -211,26 +240,60 @@ function cursorFor(look: CursorLook): CursorModel {
 		cellWidth: cellWidth,
 		rowHeight: rowHeight,
 	};
-	const c = createCursor(metrics, padding, { r: 255, g: 0, b: 0 });
+	const c = createCursor(metrics, padding, RED, (ink: CellInk | null): void => {});
 	c.at = { x: 3, y: 2, wide: false };
 	c.look = look;
 	return c;
 }
 
-test "a focused block is a translucent quad over its cell, offset by the padding" {
+test "a focused block is a translucent quad only while it moves; at rest its cell is lit" {
 	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: false });
 	c.trail.moveTo(34, 44);
 	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
+	assert c.operations().length == 0;
+	c.trail.moveTo(54, 44);
+	assert c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false);
 	const ops = c.operations();
 	assert ops.length == 1;
 	const quad = ops[0];
 	if (quad.kind == "fillConvex") {
-		assert quad.points[0] == vec2(34, 44);
-		assert quad.points[2] == vec2(44, 64);
+		assert quad.points[0].x > 34 && quad.points[0].x < 54;
 		assert quad.color.a == (BLOCK_ALPHA as float32);
 	} else {
 		assert false;
 	}
+	c.look = { visible: true, shape: CursorShape.Bar, blinking: false };
+	assert c.operations().length == 1;
+}
+
+test "the cursor hands over its cell's ink while a focused block is drawn, and none otherwise" {
+	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: true });
+	const seen: InksSeen = { count: 0, last: null };
+	c.inked = (ink: CellInk | null): void => {
+		seen.count += 1;
+		seen.last = ink;
+	};
+	c.paintCursor();
+	c.paintCursor();
+	assert seen.count == 1;
+	const lit: CellInk = { fg: CURSOR_TEXT, bg: RED };
+	assert seen.last == lit;
+	c.blinkOn = false;
+	c.paintCursor();
+	assert seen.count == 2 && seen.last === null;
+	c.blinkOn = true;
+	c.focused = false;
+	c.paintCursor();
+	assert seen.count == 2;
+	c.focused = true;
+	c.tint = { r: 0, g: 0, b: 255 };
+	c.paintCursor();
+	assert seen.count == 3;
+	const last = seen.last;
+	assert last !== null && last.bg == c.tint;
+	c.look = { visible: true, shape: CursorShape.Underline, blinking: false };
+	c.paintCursor();
+	assert seen.count == 4 && seen.last === null;
 }
 
 test "an unfocused cursor is an outline an eighth of an em wide, and a hidden one draws nothing" {

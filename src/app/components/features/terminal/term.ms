@@ -13,6 +13,7 @@ import {
 import { Pty, PtyError } from "../../../../pty/transport";
 import { Replay } from "../../../../pty/replay";
 import { Session } from "../../../../session/session";
+import { CellInk } from "../../../../grid/lines";
 import {
 	Cursor,
 	CursorLook,
@@ -24,7 +25,15 @@ import {
 	PasteError,
 	Palette,
 } from "../../../../vt/vt";
-import { FrameError, RowSlot, Styles, applyFrame, blank, empty } from "../../../frame";
+import {
+	FrameError,
+	RowSlot,
+	Styles,
+	applyFrame,
+	blank,
+	empty,
+	relightCursor,
+} from "../../../frame";
 import { stats, mark } from "../../../stats";
 
 const BUFFER_BYTES = 65536;
@@ -64,6 +73,7 @@ export interface Term {
 	held: KeyEvent | null;
 	grid: List<RowSlot>;
 	styles: Styles;
+	cursorInk: CellInk | null;
 	buf: Vec<uint8>;
 	cols: int32;
 	rows: int32;
@@ -117,6 +127,7 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 		held: null,
 		grid: createList<RowSlot>([]),
 		styles: Styles.empty(),
+		cursorInk: null,
 		buf: buf,
 		cols: 0,
 		rows: 0,
@@ -220,7 +231,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 			notification: events.notification,
 		});
 	}
-	const applied = applyFrame(t.grid, t.styles, vt);
+	const applied = applyFrame(t.grid, t.styles, vt, t.cursorInk);
 	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
 	const look = vt.cursorLook();
 	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
@@ -238,6 +249,15 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		title: title,
 		notification: events.notification,
 	});
+}
+
+export function inkCursor(this t: Term, ink: CellInk | null): Result<void, TermError> {
+	t.cursorInk = ink;
+	const s = t.session;
+	if (s === null) { return Result.ok(null); }
+	const relit = relightCursor(t.grid, t.styles, s.vt, ink);
+	if (!relit.ok) { return Result.err(frameFailure(relit.error)); }
+	return Result.ok(null);
 }
 
 function sendBytes(s: Session, bytes: Span<uint8>): Result<int32, TermError> {

@@ -152,7 +152,7 @@ test "shift hands the mouse back from an app that tracks it, and a wheel reporte
 	}).ok;
 }
 
-test "a ctrl click on an http link opens it, on any other link or text it does not" {
+test "a ctrl click on an http link opens it, on a link to a program or on text it does not" {
 	const text = "\x1b]8;;https://example.com/a\x07link\x1b]8;;\x07 " +
 		"\x1b]8;;file:///c:/x.exe\x07bad\x1b]8;;\x07 plain";
 	assert onTerm(text, (t: Term, sink: Sink): void => {

@@ -1,7 +1,7 @@
 import { KeyMod } from "../../../../keys/keys";
 import { autoscrollOf, claimsMouse } from "../../../../input/pointer";
 import { WheelRoute, reportButton, route } from "../../../../input/wheel";
-import { openable } from "../../../../term/link";
+import { openable, refusalText } from "../../../../term/link";
 import { MouseAction, MouseInput } from "../../../../vt/vt";
 import { Term, TermError, tapKey } from "./term";
 import { Bridge, Controls, Hit, holding, vtOf } from "./controls";
@@ -30,10 +30,11 @@ function reportMouse(
 }
 
 function openLink(host: Bridge, uri: string): void {
-	if (openable(uri)) {
+	const verdict = openable(uri);
+	if (verdict.ok) {
 		host.open(uri);
 	} else {
-		console.log(`haro: link refused, only http and https open: ${uri}`);
+		console.log(`haro: link refused, ${refusalText(verdict.error)}: ${uri}`);
 	}
 }
 

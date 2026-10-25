@@ -18,7 +18,6 @@ export interface Config {
 	optionAsAlt: OptionAsAlt;
 }
 
-const SCREEN_DPI: float64 = 96;
 const POINTS_PER_INCH: float64 = 72;
 const PALETTE_SIZE = 256;
 const MAX_SCROLLBACK: int64 = 100000;
@@ -33,10 +32,18 @@ when (windows) {
 	const DEFAULT_COMMAND = "${SHELL:-/bin/sh}";
 }
 
+when (macos) {
+	const SCREEN_DPI: float64 = 72;
+	const DEFAULT_FONT_SIZE: float64 = 14;
+} else {
+	const SCREEN_DPI: float64 = 96;
+	const DEFAULT_FONT_SIZE: float64 = 10.5;
+}
+
 export function defaults(): Config {
 	return {
 		fontFamily: [],
-		fontSize: 10.5,
+		fontSize: DEFAULT_FONT_SIZE,
 		padding: 0,
 		command: DEFAULT_COMMAND,
 		workingDirectory: null,
@@ -264,7 +271,7 @@ test "an empty config keeps every default" {
 	const c = parse("{}");
 	assert c.ok;
 	assert c.value.fontFamily.length == 0;
-	assert c.value.fontSize == 10.5;
+	assert c.value.fontSize == DEFAULT_FONT_SIZE;
 	assert c.value.fontPx() == 14;
 	assert c.value.padding == 0;
 	assert c.value.command == DEFAULT_COMMAND;
@@ -318,7 +325,7 @@ test "a keybind runs an action or keeps to one screen when its config says so" {
 test "a field msc prints as null is a field the config left out" {
 	const c = parse(`{"fontSize":null,"keybinds":[{"keys":"super+w","text":"x","action":null,"mode":null}]}`);
 	assert c.ok;
-	assert c.value.fontSize == 10.5;
+	assert c.value.fontSize == DEFAULT_FONT_SIZE;
 	assert c.value.keybinds[0].action == BindAction.SendText;
 	assert c.value.keybinds[0].screen == Screen.Any;
 }

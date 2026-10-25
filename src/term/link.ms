@@ -74,7 +74,7 @@ when (windows) {
 	function executeBits(path: string): int32 {
 		let st: Stat = {};
 		if (cStat(path as cstring, st) != 0) { return -1; }
-		return (st.st_mode & 0x49) as int32;
+		return (st.st_mode & 0o111) as int32;
 	}
 }
 
@@ -190,17 +190,27 @@ test "a missing path is refused" {
 	removeAll(dir);
 }
 
-test "a file with an execute bit is refused, whichever class of user holds it" {
-	const dir = scratch();
-	const path = `${dir}/tool`;
-	assert writeFile(path, "#!/bin/sh").ok;
-	assert chmod(path, 0x1ED).ok;
-	assert refusedFor(`file://${path}`) == LinkRefusal.ExecutePermission;
-	assert chmod(path, 0x181).ok;
-	assert refusedFor(`file://${path}`) == LinkRefusal.ExecutePermission;
-	assert chmod(path, 0x1A4).ok;
-	assert opens(`file://${path}`);
-	removeAll(dir);
+when (!windows) {
+	test "a file with an execute bit is refused, whichever class of user holds it" {
+		const dir = scratch();
+		const path = `${dir}/tool`;
+		assert writeFile(path, "#!/bin/sh").ok;
+		assert chmod(path, 0o755).ok;
+		assert refusedFor(`file://${path}`) == LinkRefusal.ExecutePermission;
+		assert chmod(path, 0o601).ok;
+		assert refusedFor(`file://${path}`) == LinkRefusal.ExecutePermission;
+		assert chmod(path, 0o644).ok;
+		assert opens(`file://${path}`);
+		removeAll(dir);
+	}
+
+	test "a link to a program is refused by what the link resolves to" {
+		const dir = scratch();
+		assert writeFile(`${dir}/run.command`, "echo").ok;
+		assert symlink(`${dir}/run.command`, `${dir}/harmless`).ok;
+		assert refusedFor(`file://${dir}/harmless`) == LinkRefusal.RunsAsProgram;
+		removeAll(dir);
+	}
 }
 
 test "a file type that launches as a program is refused by name, case aside, even when absent" {
@@ -220,13 +230,6 @@ test "a file type that launches as a program is refused by name, case aside, eve
 	removeAll(dir);
 }
 
-test "a link to a program is refused by what the link resolves to" {
-	const dir = scratch();
-	assert writeFile(`${dir}/run.command`, "echo").ok;
-	assert symlink(`${dir}/run.command`, `${dir}/harmless`).ok;
-	assert refusedFor(`file://${dir}/harmless`) == LinkRefusal.RunsAsProgram;
-	removeAll(dir);
-}
 
 test "a file link needs a path" {
 	assert refusedFor("file://") == LinkRefusal.BadFileUri;

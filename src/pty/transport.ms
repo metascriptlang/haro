@@ -13,5 +13,6 @@ export interface Pty {
 	resize: (cols: int32, rows: int32, cellWidth: int32, cellHeight: int32) => Result<void, PtyError>;
 	exitCode: () => int32 | null;
 	close: () => void;
+	busy: () => boolean;
 	ownsScreen: boolean;
 }

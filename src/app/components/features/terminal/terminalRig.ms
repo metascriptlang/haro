@@ -10,6 +10,7 @@ import { pointerDown, pointerMove, pointerUp } from "./mouse";
 
 export interface Sink {
 	sent: string;
+	busy: boolean;
 }
 
 function recorder(text: string, sink: Sink): Pty {
@@ -24,6 +25,7 @@ function recorder(text: string, sink: Sink): Pty {
 		resize: base.resize,
 		exitCode: base.exitCode,
 		close: base.close,
+		busy: (): boolean => { return sink.busy; },
 	};
 }
 
@@ -34,7 +36,7 @@ function onFitted(
 	rows: int32,
 	body: (t: Term, sink: Sink) => void,
 ): Result<void, TermError> {
-	const sink: Sink = { sent: "" };
+	const sink: Sink = { sent: "", busy: false };
 	const t = try openTerm((c: int32, r: int32): Result<Pty, PtyError> => {
 		return Result.ok(recorder(text, sink));
 	});

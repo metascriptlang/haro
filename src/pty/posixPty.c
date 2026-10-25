@@ -416,6 +416,16 @@ int ptyExited(int id) {
 	return exited;
 }
 
+int ptyMaster(int id) {
+	Pty* p = slot(id);
+	return p ? p->master : -1;
+}
+
+int ptyChildPid(int id) {
+	Pty* p = slot(id);
+	return p ? (int)p->pid : -1;
+}
+
 int ptyExitCode(int id) {
 	Pty* p = slot(id);
 	if (!p) return -1;

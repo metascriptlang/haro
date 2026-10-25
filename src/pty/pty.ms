@@ -35,6 +35,14 @@ extern function ptyExited(id: int32): int32;
 extern function ptyExitCode(id: int32): int32;
 extern function ptyClose(id: int32): void;
 
+when (!windows) {
+	@include("unistd.h");
+
+	extern function ptyMaster(id: int32): int32;
+	extern function ptyChildPid(id: int32): int32;
+	extern function tcgetpgrp(fd: int32): int32;
+}
+
 export struct NativePty { id: int32; }
 
 export function open(
@@ -109,6 +117,16 @@ export function close(this p: NativePty): void {
 	ptyClose(p.id);
 }
 
+export function busy(this p: NativePty): boolean {
+	when (windows) {
+		return false;
+	} else {
+		if (ptyExited(p.id) != 0) { return false; }
+		const group = tcgetpgrp(ptyMaster(p.id));
+		return group > 0 && group != ptyChildPid(p.id);
+	}
+}
+
 export function toPty(this p: NativePty): Pty {
 	return {
 		wait: (timeoutMs: int32): Result<boolean, PtyError> => { return p.wait(timeoutMs); },
@@ -124,6 +142,7 @@ export function toPty(this p: NativePty): Pty {
 		},
 		exitCode: (): int32 | null => { return p.exitCode(); },
 		close: (): void => { p.close(); },
+		busy: (): boolean => { return p.busy(); },
 		ownsScreen: true,
 	};
 }
@@ -287,6 +306,36 @@ when (testBuild) {
 				const closed: float64 = performance.now();
 				while (kill(job, 0) == 0 && performance.now() - closed < 3000) {}
 				assert kill(job, 0) != 0;
+			}
+		}
+
+		function becomesBusy(this p: NativePty, wanted: boolean, withinMs: float64): boolean {
+			const start: float64 = performance.now();
+			while (p.busy() != wanted) {
+				if (performance.now() - start > withinMs) { return false; }
+			}
+			return true;
+		}
+
+		test "a shell is busy while a job it runs holds the terminal, and idle back at its own read" {
+			const opened = NativePty.open("sh -c 'set -m; sleep 2; read line'", 80, 24);
+			assert opened.ok;
+			if (opened.ok) {
+				const p = opened.value;
+				assert p.becomesBusy(true, 5000);
+				assert p.becomesBusy(false, 5000);
+				p.close();
+			}
+		}
+
+		test "a program a shell without job control runs stays in the shell's group and is not busy" {
+			const opened = NativePty.open("sh -c 'echo go; sleep 2; read line'", 80, 24);
+			assert opened.ok;
+			if (opened.ok) {
+				const p = opened.value;
+				assert p.readLine().includes("go");
+				assert !p.becomesBusy(true, 1000);
+				p.close();
 			}
 		}
 

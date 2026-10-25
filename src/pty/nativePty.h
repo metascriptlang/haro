@@ -15,5 +15,9 @@ int ptyResize(int id, int cols, int rows, int widthPx, int heightPx);
 int ptyExited(int id);
 int ptyExitCode(int id);
 void ptyClose(int id);
+#ifndef _WIN32
+int ptyMaster(int id);
+int ptyChildPid(int id);
+#endif
 
 #endif

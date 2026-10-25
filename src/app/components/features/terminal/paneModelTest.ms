@@ -134,12 +134,17 @@ test "closing while only the shell runs closes at once with no dialog" {
 
 function afterExit(
 	code: int32,
+	signal: int32,
 	lateMs: float64,
 	body: (m: PaneModel, calls: Calls) => void,
 ): Result<void, TermError> {
 	const t = try openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
 		const base = Replay.ofText("last output").toPty();
-		return Result.ok({ ...base, exitCode: (): int32 | null => { return code; } });
+		return Result.ok({
+			...base,
+			exitCode: (): int32 | null => { return code; },
+			exitSignal: (): int32 => { return signal; },
+		});
 	});
 	defer t.shutdown();
 	const _fit = try t.fit(20, 3);
@@ -151,28 +156,38 @@ function afterExit(
 	return Result.ok(null);
 }
 
-test "a shell that exits non-zero keeps the window and says so; a key closes it" {
-	assert afterExit(1, 1000, (m: PaneModel, calls: Calls): void => {
+test "a shell killed by a signal keeps the window and names the signal; a key closes it" {
+	assert afterExit(137, 9, 1000, (m: PaneModel, calls: Calls): void => {
 		assert calls.exits == "";
-		assert m.notice.text == "process exited with code 1, press any key to close";
+		assert m.notice.text == "the shell was killed by signal 9, press any key to close";
 		assert m.term.grid.at(0).line.text.trimEnd() == "last output";
 		m.keyed(key("ShiftLeft", 0));
 		m.keyed(key("MetaRight", 0));
 		assert calls.exits == "";
 		m.keyed(key("KeyA", 0));
+		assert calls.exits == "137 ";
+	}).ok;
+}
+
+test "a shell that exits with a status, a failed last command's or a signal-like one, closes at once" {
+	assert afterExit(1, 0, 1000, (m: PaneModel, calls: Calls): void => {
 		assert calls.exits == "1 ";
+		assert m.notice.text == "";
+	}).ok;
+	assert afterExit(130, 0, 1000, (m: PaneModel, calls: Calls): void => {
+		assert calls.exits == "130 ";
 	}).ok;
 }
 
 test "a shell that exits with zero closes the window at once" {
-	assert afterExit(0, 1000, (m: PaneModel, calls: Calls): void => {
+	assert afterExit(0, 0, 1000, (m: PaneModel, calls: Calls): void => {
 		assert calls.exits == "0 ";
 		assert m.notice.text == "";
 	}).ok;
 }
 
 test "a shell that fails as it starts keeps its own notice and also closes on a key" {
-	assert afterExit(127, 0, (m: PaneModel, calls: Calls): void => {
+	assert afterExit(127, 0, 0, (m: PaneModel, calls: Calls): void => {
 		assert m.notice.text.startsWith("the shell exited with code 127 as it started: check command in config.ms");
 		assert m.notice.text.endsWith("press any key to close");
 		assert calls.exits == "";
@@ -182,14 +197,14 @@ test "a shell that fails as it starts keeps its own notice and also closes on a 
 }
 
 test "the close window command closes a dead shell at once, with no confirmation" {
-	assert afterExit(2, 1000, (m: PaneModel, calls: Calls): void => {
+	assert afterExit(137, 9, 1000, (m: PaneModel, calls: Calls): void => {
 		assert !m.closeAsked();
 		assert calls.closed == 1;
 	}).ok;
 }
 
 test "a dead shell takes no typed text, key release or focus change, and keeps its notice" {
-	assert afterExit(2, 1000, (m: PaneModel, calls: Calls): void => {
+	assert afterExit(137, 9, 1000, (m: PaneModel, calls: Calls): void => {
 		const text = m.notice.text;
 		m.focusChanged(false);
 		m.keyReleased(key("KeyA", 0));

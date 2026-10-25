@@ -412,6 +412,12 @@ export function shellExitCode(this t: Term): int32 {
 
 const BYTE_MAX: int32 = 255;
 
+export function shellExitSignal(this t: Term): int32 {
+	const s = t.session;
+	if (s === null) { return 0; }
+	return s.pty.exitSignal();
+}
+
 export function exitCodeText(code: int32): string {
 	if (code >= 0 && code <= BYTE_MAX) { return `${code}`; }
 	const status = code as uint32;

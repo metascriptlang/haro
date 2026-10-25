@@ -34,6 +34,7 @@ import {
 	TermError,
 	exitCodeText,
 	exitedAbnormally,
+	shellExitSignal,
 	inkCursor,
 	pumpFrame,
 	shellExitCode,
@@ -255,16 +256,18 @@ export function refresh(this m: PaneModel): void {
 
 function shellEnded(this m: PaneModel): void {
 	const code = m.term.shellExitCode();
-	if (code == 0) {
-		m.host.exited(code);
-		return;
-	}
-	m.controls.ended = true;
+	const signal = m.term.shellExitSignal();
 	if (m.term.exitedAbnormally()) {
+		m.controls.ended = true;
 		m.notify(`the shell exited with code ${exitCodeText(code)} as it started: check command in config.ms, or --shell; press any key to close`);
 		return;
 	}
-	m.notify(`process exited with code ${exitCodeText(code)}, press any key to close`);
+	if (signal != 0) {
+		m.controls.ended = true;
+		m.notify(`the shell was killed by signal ${signal}, press any key to close`);
+		return;
+	}
+	m.host.exited(code);
 }
 
 function notify(this m: PaneModel, text: string): void {

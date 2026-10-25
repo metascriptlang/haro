@@ -4,7 +4,7 @@
 import { NeonNode } from "../../../neon/src/render/node";
 import { requestFrame } from "../../../neon/src/animation/frame";
 import { runWindow, DesktopOptions, desktopOptions } from "../../../neon/src/platform/ion/window";
-import { getWindow, listen, onWake, openExternal, setTitle } from "../../../ion/src/index";
+import { getWindow, listen, notify, onWake, openExternal, setTitle } from "../../../ion/src/index";
 import { argv, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
 import { homeDir } from "std/os";
@@ -28,13 +28,14 @@ extern function appWireWake(): void;
 const CLOSE_WINDOW = "close_window";
 const APP_TITLE = "Haro";
 const NEON_WINDOW = "main";
+const NOTIFICATION_ID = "haro";
 
 when (!windows) {
 	import { env } from "std/process";
 }
 
 when (macos) {
-	import { MenuItem, MenuRole, ModCmd, Submenu, setAppMenu } from "../../../ion/src/index";
+	import { MenuItem, MenuRole, ModCmd, Submenu, resourcePath, setAppMenu } from "../../../ion/src/index";
 
 	@include("unistd.h");
 
@@ -60,6 +61,16 @@ when (macos) {
 				items: [MenuItem.standard(MenuRole.Minimize), MenuItem.standard(MenuRole.Zoom)],
 			},
 		];
+	}
+
+	// macOS aborts a process outside an app bundle that asks for its notification centre, and Ion's
+	// notify does not check: .inbox/ion/2026-10-25-notify-aborts-a-process-outside-an-app-bundle.md
+	function notificationsReachable(): boolean {
+		return resourcePath() != "";
+	}
+} else {
+	function notificationsReachable(): boolean {
+		return true;
 	}
 }
 
@@ -143,6 +154,9 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 		exited: exited,
 		fail: fail,
 		setTitle: setWindowTitle,
+		notify: (title: string, body: string): void => {
+			if (notificationsReachable()) { notify(titleOr(title), body, NOTIFICATION_ID); }
+		},
 		openLink: (uri: string): void => { openExternal(uri); },
 		close: (): void => {
 			note("Close Window or a keybind closed the window");

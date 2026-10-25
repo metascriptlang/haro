@@ -40,6 +40,7 @@ export interface AppHost {
 	exited: (code: int32) => void;
 	fail: (message: string) => void;
 	setTitle: (title: string) => void;
+	notify: (title: string, body: string) => void;
 	openLink: (uri: string) => void;
 	close: () => void;
 	onCloseKey: (handler: () => void) => void;
@@ -205,6 +206,10 @@ export function refresh(this m: PaneModel): void {
 	if (copied !== null) { copyToClipboard(copied); }
 	const title = f.title;
 	if (title !== null) { m.host.setTitle(title); }
+	const notification = f.notification;
+	if (notification !== null && !m.cursor.focused) {
+		m.host.notify(notification.title, notification.body);
+	}
 	if (f.asked) { m.controls.clipboardAsked(m.term, m.bridge()); }
 	if (f.held) {
 		stats.tally.held += 1;

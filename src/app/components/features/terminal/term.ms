@@ -17,6 +17,7 @@ import {
 	Cursor,
 	CursorLook,
 	CursorShape,
+	DesktopNotification,
 	Keys,
 	MouseGeometry,
 	MouseInput,
@@ -84,6 +85,7 @@ export struct Frame {
 	asked: boolean;
 	bells: int32;
 	title: string | null;
+	notification: DesktopNotification | null;
 }
 
 const HIDDEN: CursorLook = { visible: false, shape: CursorShape.Block, blinking: false };
@@ -100,6 +102,7 @@ function idleFrame(more: boolean, ended: boolean): Frame {
 		asked: false,
 		bells: 0,
 		title: null,
+		notification: null,
 	};
 }
 
@@ -214,6 +217,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 			asked: asked,
 			bells: events.bells,
 			title: title,
+			notification: events.notification,
 		});
 	}
 	const applied = applyFrame(t.grid, t.styles, vt);
@@ -232,6 +236,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		asked: asked,
 		bells: events.bells,
 		title: title,
+		notification: events.notification,
 	});
 }
 

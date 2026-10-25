@@ -390,6 +390,12 @@ export function shutdown(this t: Term): void {
 	t.keys.freeKeys();
 }
 
+export function busy(this t: Term): boolean {
+	const s = t.session;
+	if (s === null) { return false; }
+	return s.pty.busy();
+}
+
 export const ABNORMAL_EXIT_MS: number = 250;
 
 export function exitedAbnormally(this t: Term): boolean {

@@ -38,6 +38,8 @@ export interface Held {
 const LARGE_UNITS: int32 = 5 * 1024;
 const END_MARKER = "\x1b[201~";
 const TAB = "    ";
+const CLOSE_TITLE = "A program is still running";
+const CLOSE_BODY = "Close the window and end it?";
 const ASK_BODY = "A program is attempting to read from the clipboard. " +
 	"The current clipboard contents are shown below.";
 
@@ -49,14 +51,18 @@ export function warningFor(text: string, bracketed: boolean): Warning {
 	return Warning.None;
 }
 
-export function replyTo(code: string, mods: number): Reply {
+export function replyToClose(code: string, mods: number): Reply {
 	const held = chordOf(mods);
 	return match (code) {
 		"Escape" when held == 0 => Reply.Cancel,
 		"Enter" | "NumpadEnter" when held == 0 => Reply.Confirm,
-		_ when resolve(code, mods, false) == Action.Paste => Reply.Confirm,
 		_ => Reply.Ignore,
 	};
+}
+
+export function replyTo(code: string, mods: number): Reply {
+	if (resolve(code, mods, false) == Action.Paste) { return Reply.Confirm; }
+	return replyToClose(code, mods);
 }
 
 export function replyToRead(code: string, mods: number): Reply {
@@ -175,6 +181,12 @@ export function askDialogOf(text: string, cols: int32, maxCode: int32): Dialog {
 	return dialogWith("Authorize clipboard access", ASK_BODY, text, cols, maxCode);
 }
 
+export function closeDialogOf(cols: int32): Dialog {
+	let top: Vec<Line> = [{ text: CLOSE_TITLE, tone: Tone.Title }];
+	for (const row of wrap(CLOSE_BODY, cols)) { top.push({ text: row, tone: Tone.Body }); }
+	return { top: top, code: [] };
+}
+
 function line(text: string, tone: Tone): Line {
 	return { text: text, tone: tone };
 }
@@ -277,6 +289,23 @@ test "a clipboard read is denied by escape or enter and allowed only by ctrl ent
 	assert replyToRead("Enter", CTRL | SHIFT) == Reply.Ignore;
 	assert replyToRead("KeyV", CLIPBOARD_MODS) == Reply.Ignore;
 	assert replyToRead("KeyY", 0) == Reply.Ignore;
+}
+
+test "a close is confirmed by enter alone and cancelled by escape alone" {
+	assert replyToClose("Enter", 0) == Reply.Confirm;
+	assert replyToClose("NumpadEnter", 0) == Reply.Confirm;
+	assert replyToClose("Escape", 0) == Reply.Cancel;
+	assert replyToClose("KeyV", CLIPBOARD_MODS) == Reply.Ignore;
+	assert replyToClose("Enter", SHIFT) == Reply.Ignore;
+	assert replyToClose("KeyW", 0) == Reply.Ignore;
+}
+
+test "the close dialog says a program runs and asks to end it, with nothing to preview" {
+	const d = closeDialogOf(40);
+	assert d.top.length == 2;
+	assert d.top[0] == line("A program is still running", Tone.Title);
+	assert d.top[1] == line("Close the window and end it?", Tone.Body);
+	assert d.code.length == 0;
 }
 
 test "the read dialog names the access, says how big the clipboard is and previews it" {

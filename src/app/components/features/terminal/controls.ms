@@ -31,6 +31,7 @@ export interface Controls {
 	autoscroll: int32;
 	keybinds: Vec<Keybind>;
 	consumedKey: string;
+	closing: boolean;
 }
 
 export function open(this typeof Controls): Controls {
@@ -43,6 +44,7 @@ export function open(this typeof Controls): Controls {
 		autoscroll: 0,
 		keybinds: [],
 		consumedKey: "",
+		closing: false,
 	};
 }
 
@@ -53,7 +55,7 @@ export function vtOf(t: Term): Vt | null {
 }
 
 export function holding(this c: Controls): boolean {
-	return c.held !== null || c.reading !== null;
+	return c.held !== null || c.reading !== null || c.closing;
 }
 
 export function refit(

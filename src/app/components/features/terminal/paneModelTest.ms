@@ -1,10 +1,13 @@
+import { flush } from "../../../../../../neon/src/core/runtime";
 import { Config, defaults } from "../../../../config/config";
 import { Pty, PtyError } from "../../../../pty/transport";
 import { Replay } from "../../../../pty/replay";
 import { writeText } from "../../../../vt/vt";
 import { createNotice } from "../notice/notice";
 import { createPasteDialog } from "../paste/pasteDialog";
-import { AppHost, PaneModel, createPane, failed, refresh } from "./paneModel";
+import { AppHost, PaneModel, bridge, createPane, failed, refresh } from "./paneModel";
+import { cancelDialog, confirmDialog } from "./paneEvents";
+import { closeKey } from "./keyboard";
 import { Term, openTerm, shutdown } from "./term";
 import { Sink, onFresh, onTerm } from "./terminalRig";
 
@@ -13,10 +16,11 @@ interface Calls {
 	noted: string;
 	title: string;
 	notified: string;
+	closed: int32;
 }
 
 function noCalls(): Calls {
-	return { fatal: "", noted: "", title: "", notified: "" };
+	return { fatal: "", noted: "", title: "", notified: "", closed: 0 };
 }
 
 function hostFor(calls: Calls): AppHost {
@@ -29,7 +33,7 @@ function hostFor(calls: Calls): AppHost {
 		setTitle: (title: string): void => { calls.title = title; },
 		notify: (title: string, body: string): void => { calls.notified += `${title}|${body}\n`; },
 		openLink: (uri: string): void => {},
-		close: (): void => {},
+		close: (): void => { calls.closed += 1; },
 		onCloseKey: (handler: () => void): void => {},
 		onConfig: (handler: (c: Config | null, fontFamily: string, error: string) => void): void => {},
 		fontFamily: "",
@@ -90,4 +94,38 @@ test "an internal failure before the shell started is fatal" {
 		assert calls.noted == "";
 		opened.value.shutdown();
 	}
+}
+
+function closeAsked(this m: PaneModel): boolean {
+	if (!m.controls.closeKey(m.term, m.bridge()).ok) { return false; }
+	m.refresh();
+	flush();
+	return m.dialog.visible();
+}
+
+test "closing while a program runs shows the dialog: cancel keeps the window, confirm closes it" {
+	assert onTerm("$ ", (t: Term, sink: Sink): void => {
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		sink.busy = true;
+		assert m.closeAsked();
+		assert m.dialog.confirmLabel() == "Close (Enter)";
+		assert calls.closed == 0;
+		m.cancelDialog();
+		flush();
+		assert !m.dialog.visible();
+		assert calls.closed == 0;
+		assert m.closeAsked();
+		m.confirmDialog();
+		assert calls.closed == 1;
+	}).ok;
+}
+
+test "closing while only the shell runs closes at once with no dialog" {
+	assert onTerm("$ ", (t: Term, sink: Sink): void => {
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		assert !m.closeAsked();
+		assert calls.closed == 1;
+	}).ok;
 }

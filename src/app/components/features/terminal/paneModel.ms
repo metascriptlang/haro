@@ -242,6 +242,7 @@ export function refresh(this m: PaneModel): void {
 	m.dialog.showPending(
 		m.controls.held,
 		m.controls.reading,
+		m.controls.closing,
 		m.metrics.cellWidth(),
 		m.viewWidth(),
 	);
@@ -364,6 +365,7 @@ function fitLayout(this m: PaneModel): void {
 	flush();
 	m.notify(m.notice.text);
 	m.dialog.shownFor = null;
+	m.dialog.shownClose = false;
 	const padPx = PixelRatio.getPixelSizeForLayoutSize(m.padding()) as int32;
 	m.mouseGeometry = {
 		cellWidth: cellPx,

@@ -2,6 +2,7 @@ import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { KeyMod, modsMask } from "../../../../keys/keys";
 import { Action, BindAction, Keybind, bindFor, resolve } from "../../../../input/bindings";
 import { ROWS_PER_NOTCH } from "../../../../input/wheel";
+import { Reply, replyToClose } from "../../../../input/paste";
 import {
 	PromptJump,
 	alternateScreen,
@@ -11,7 +12,7 @@ import {
 	scrollPages,
 	scrollTop,
 } from "../../../../vt/vt";
-import { Term, TermError, keyEventOf } from "./term";
+import { Term, TermError, busy, keyEventOf } from "./term";
 import { Bridge, Controls, holding, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";
 
@@ -26,7 +27,7 @@ function runKeybind(
 ): Result<boolean, TermError> {
 	if (bind === null) { return Result.ok(false); }
 	if (bind.action == BindAction.CloseWindow) {
-		host.close();
+		c.closeWindow(t, host);
 		return Result.ok(true);
 	}
 	const _sent = try t.sendText(bind.text);
@@ -42,8 +43,27 @@ export function closeKey(this c: Controls, t: Term, host: Bridge): Result<boolea
 		const bind = bindFor(c.keybinds, "KeyW", SUPER_ONLY as uint16, alt.value);
 		if (try c.runKeybind(t, bind, host)) { return Result.ok(true); }
 	}
-	host.close();
+	c.closeWindow(t, host);
 	return Result.ok(true);
+}
+
+function closeWindow(this c: Controls, t: Term, host: Bridge): void {
+	if (t.busy()) {
+		c.closing = true;
+		return;
+	}
+	host.close();
+}
+
+export function answerClose(this c: Controls, reply: Reply, host: Bridge): void {
+	match (reply) {
+		Reply.Confirm => {
+			c.closing = false;
+			host.close();
+		},
+		Reply.Cancel => { c.closing = false; },
+		Reply.Ignore => {},
+	}
 }
 
 export function keyDown(
@@ -67,6 +87,10 @@ function controlKey(
 	e: NeonEvent,
 	host: Bridge,
 ): Result<boolean, TermError> {
+	if (c.closing) {
+		c.answerClose(replyToClose(e.code, e.mods), host);
+		return Result.ok(true);
+	}
 	if (c.holding()) { return c.answerHeld(t, e); }
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }

@@ -1,7 +1,7 @@
 import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { selected } from "../../../../input/pointer";
 import { Term, releaseHeldKey, sendKey } from "./term";
-import { Controls } from "./controls";
+import { Controls, holding } from "./controls";
 import { closeKey, keyDown, keyUp } from "./keyboard";
 import { Warning } from "../../../../input/paste";
 import {
@@ -311,6 +311,56 @@ test "a keybind with a mode sends to a full-screen program and closes the window
 			assert atShell.sent == "";
 			assert board.closed == 1;
 		}).ok;
+	}).ok;
+}
+
+test "closing while a program runs asks first: escape keeps the window and enter closes it" {
+	assert onTerm("$ ", (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const board = boardOf("");
+		const clip = clipOf(board);
+		sink.busy = true;
+		assert handled(c.closeKey(t, clip));
+		assert c.closing;
+		assert c.holding();
+		assert board.closed == 0;
+		assert handled(c.keyDown(t, key("KeyX", 0), clip));
+		assert handled(c.keyDown(t, key("Escape", 0), clip));
+		assert !c.closing;
+		assert board.closed == 0;
+		assert sink.sent == "";
+		assert handled(c.closeKey(t, clip));
+		assert handled(c.keyDown(t, key("Enter", 0), clip));
+		assert !c.closing;
+		assert board.closed == 1;
+		sink.busy = false;
+		assert handled(c.closeKey(t, clip));
+		assert !c.closing;
+		assert board.closed == 2;
+	}).ok;
+}
+
+test "a close_window keybind asks first while a program runs, like the menu" {
+	const binds: Vec<Keybind> = [
+		{
+			code: "KeyW",
+			mods: SUPER,
+			text: "",
+			action: BindAction.CloseWindow,
+			screen: Screen.Any,
+		},
+	];
+	assert onTerm("$ ", (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		c.keybinds = binds;
+		const board = boardOf("");
+		const clip = clipOf(board);
+		sink.busy = true;
+		assert handled(c.keyDown(t, key("KeyW", SUPER), clip));
+		assert c.closing;
+		assert board.closed == 0;
+		assert handled(c.keyDown(t, key("Enter", 0), clip));
+		assert board.closed == 1;
 	}).ok;
 }
 

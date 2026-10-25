@@ -1,12 +1,13 @@
 import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { PixelRatio } from "../../../../../../neon/src/api/pixelRatio";
 import { Spot, spotAt } from "../../../../input/pointer";
+import { Reply } from "../../../../input/paste";
 import { modsOf } from "../../../../keys/keys";
 import { noteKey, stats } from "../../../stats";
 import { focusCursor } from "../../content/cursor";
 import { Hit, holding, typed } from "./controls";
 import { cancel, confirm } from "./clipboard";
-import { keyDown } from "./keyboard";
+import { answerClose, keyDown } from "./keyboard";
 import { autoscrollTick, endDrag, pointerDown, pointerMove, pointerUp, roll } from "./mouse";
 import {
 	PaneModel,
@@ -152,14 +153,22 @@ export function wheeled(this m: PaneModel, e: NeonEvent): void {
 	if (handled.value) { m.scheduleRefresh(); }
 }
 
-export function confirmPaste(this m: PaneModel): void {
-	const sent = m.controls.confirm(m.term);
-	if (!sent.ok) { m.failed("paste", sent.error.toString()); }
+export function confirmDialog(this m: PaneModel): void {
+	if (m.controls.closing) {
+		m.controls.answerClose(Reply.Confirm, m.bridge());
+	} else {
+		const sent = m.controls.confirm(m.term);
+		if (!sent.ok) { m.failed("paste", sent.error.toString()); }
+	}
 	m.refresh();
 }
 
-export function cancelPaste(this m: PaneModel): void {
-	const dropped = m.controls.cancel(m.term);
-	if (!dropped.ok) { m.failed("clipboard", dropped.error.toString()); }
+export function cancelDialog(this m: PaneModel): void {
+	if (m.controls.closing) {
+		m.controls.answerClose(Reply.Cancel, m.bridge());
+	} else {
+		const dropped = m.controls.cancel(m.term);
+		if (!dropped.ok) { m.failed("clipboard", dropped.error.toString()); }
+	}
 	m.refresh();
 }

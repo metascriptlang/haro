@@ -286,21 +286,25 @@ function prunable(): Vt | null {
 	const vt = viewOf(80, 4, "r0");
 	if (vt === null || !vt.setScrollback(1000).ok) { return null; }
 	vt.writeText(prunedLines(1, 6000));
-	let next = 6001;
-	while (((try vt.scrollOffset() catch 0)) < PAGE_SPAN) {
-		vt.writeText(prunedLines(next, 20));
-		next += 20;
+	for (let next = 6001; next < 8001; next += 20) {
 		if (!vt.update().ok) { return null; }
+		const offset = vt.scrollOffset();
+		if (!offset.ok) { return null; }
+		if (offset.value >= PAGE_SPAN) { return vt; }
+		vt.writeText(prunedLines(next, 20));
 	}
-	return vt;
+	return null;
 }
 
 function pruneOnePage(vt: Vt): boolean {
-	const before = try vt.scrollOffset() catch 0;
+	const before = vt.scrollOffset();
+	if (!before.ok) { return false; }
 	for (let i = 0; i < 100; i++) {
 		vt.writeText(prunedLines(100000 + i * 20, 20));
 		if (!vt.update().ok) { return false; }
-		if ((try vt.scrollOffset() catch 0) < before) { return true; }
+		const after = vt.scrollOffset();
+		if (!after.ok) { return false; }
+		if (after.value < before.value) { return true; }
 	}
 	return false;
 }

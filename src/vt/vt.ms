@@ -837,8 +837,20 @@ export function pwd(this vt: Vt): Result<string, VtError> {
 	return terminalString(vt.terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_PWD);
 }
 
-export function resize(this vt: Vt, cols: int32, rows: int32): Result<void, VtError> {
-	const r = ghostty_terminal_resize(vt.terminal, cols as uint16, rows as uint16, 0, 0);
+export function resize(
+	this vt: Vt,
+	cols: int32,
+	rows: int32,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
+): Result<void, VtError> {
+	const r = ghostty_terminal_resize(
+		vt.terminal,
+		cols as uint16,
+		rows as uint16,
+		cellWidth as uint32,
+		cellHeight as uint32,
+	);
 	if (!ok(r)) { return Result.err(VtError.ResizeFailed); }
 	vt.painted.rows = [];
 	vt.painted.palette = null;

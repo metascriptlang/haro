@@ -27,7 +27,12 @@ export function toPty(this r: Replay): Pty {
 			if (closed) { return Result.err(PtyError.Closed); }
 			return Result.ok(data.length as int32);
 		},
-		resize: (cols: int32, rows: int32): Result<void, PtyError> => {
+		resize: (
+			cols: int32,
+			rows: int32,
+			cellWidth: int32,
+			cellHeight: int32,
+		): Result<void, PtyError> => {
 			if (closed) { return Result.err(PtyError.Closed); }
 			return Result.ok(null);
 		},
@@ -80,7 +85,7 @@ when (testBuild) {
 		const wrote = pty.write(buf[0..1]);
 		assert wrote.ok;
 		if (wrote.ok) { assert wrote.value == 1; }
-		assert pty.resize(100, 30).ok;
+		assert pty.resize(100, 30, 8, 16).ok;
 		assert pty.drainText(8) == "xyz";
 	}
 
@@ -91,7 +96,7 @@ when (testBuild) {
 		assert !pty.wait(0).ok;
 		assert !pty.read(buf).ok;
 		assert !pty.write(buf[0..1]).ok;
-		assert !pty.resize(100, 30).ok;
+		assert !pty.resize(100, 30, 8, 16).ok;
 	}
 
 	test "a replay can be played again from its start" {

@@ -188,7 +188,7 @@ static wchar_t* expanded(wchar_t* text) {
 	return out;
 }
 
-int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows) {
+int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows, int widthPx, int heightPx) {
 	int id = -1;
 	for (int i = 0; i < PTY_MAX; i++) {
 		if (!ptys[i].used) { id = i; break; }
@@ -314,7 +314,7 @@ int64_t ptyWrite(int id, const uint8_t* data, int64_t len) {
 	return len;
 }
 
-int ptyResize(int id, int cols, int rows) {
+int ptyResize(int id, int cols, int rows, int widthPx, int heightPx) {
 	Pty* p = slot(id);
 	if (!p) return -1;
 	COORD size = { (SHORT)cols, (SHORT)rows };

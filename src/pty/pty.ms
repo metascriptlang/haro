@@ -11,11 +11,24 @@ when (linux) {
 import { isDir } from "std/fs";
 import { Pty, PtyError } from "./transport";
 
-extern function ptyOpen(commandLine: cstring, cwd: cstring, cols: int32, rows: int32): int32;
+extern function ptyOpen(
+	commandLine: cstring,
+	cwd: cstring,
+	cols: int32,
+	rows: int32,
+	widthPx: int32,
+	heightPx: int32,
+): int32;
 extern function ptyRead(id: int32, buf: Span<uint8>): int64;
 extern function ptyWait(id: int32, timeoutMs: int32): int32;
 extern function ptyWrite(id: int32, data: Readonly<Span<uint8>>): int64;
-extern function ptyResize(id: int32, cols: int32, rows: int32): int32;
+extern function ptyResize(
+	id: int32,
+	cols: int32,
+	rows: int32,
+	widthPx: int32,
+	heightPx: int32,
+): int32;
 extern function ptyExited(id: int32): int32;
 extern function ptyExitCode(id: int32): int32;
 extern function ptyClose(id: int32): void;
@@ -28,9 +41,11 @@ export function open(
 	cols: int32,
 	rows: int32,
 	cwd: string | null = null,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
 ): Result<NativePty, PtyError> {
 	const dir = cwd !== null && isDir(cwd) ? cwd : "";
-	const id = ptyOpen(commandLine, dir, cols, rows);
+	const id = ptyOpen(commandLine, dir, cols, rows, cols * cellWidth, rows * cellHeight);
 	if (id < 0) { return Result.err(PtyError.OpenFailed); }
 	return Result.ok({ id: id });
 }
@@ -62,8 +77,16 @@ export function write(this p: NativePty, data: Readonly<Span<uint8>>): Result<in
 	return transferred(ptyWrite(p.id, data));
 }
 
-export function resize(this p: NativePty, cols: int32, rows: int32): Result<void, PtyError> {
-	if (ptyResize(p.id, cols, rows) != 0) { return Result.err(PtyError.ResizeFailed); }
+export function resize(
+	this p: NativePty,
+	cols: int32,
+	rows: int32,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
+): Result<void, PtyError> {
+	if (ptyResize(p.id, cols, rows, cols * cellWidth, rows * cellHeight) != 0) {
+		return Result.err(PtyError.ResizeFailed);
+	}
 	return Result.ok(null);
 }
 
@@ -81,8 +104,13 @@ export function toPty(this p: NativePty): Pty {
 		wait: (timeoutMs: int32): Result<boolean, PtyError> => { return p.wait(timeoutMs); },
 		read: (buf: Span<uint8>): Result<int32, PtyError> => { return p.read(buf); },
 		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => { return p.write(data); },
-		resize: (cols: int32, rows: int32): Result<void, PtyError> => {
-			return p.resize(cols, rows);
+		resize: (
+			cols: int32,
+			rows: int32,
+			cellWidth: int32,
+			cellHeight: int32,
+		): Result<void, PtyError> => {
+			return p.resize(cols, rows, cellWidth, cellHeight);
 		},
 		exitCode: (): int32 | null => { return p.exitCode(); },
 		close: (): void => { p.close(); },
@@ -96,8 +124,10 @@ export function spawn(
 	cols: int32,
 	rows: int32,
 	cwd: string | null = null,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
 ): Result<Pty, PtyError> {
-	const opened = try NativePty.open(commandLine, cols, rows, cwd);
+	const opened = try NativePty.open(commandLine, cols, rows, cwd, cellWidth, cellHeight);
 	return Result.ok(opened.toPty());
 }
 
@@ -230,6 +260,23 @@ when (testBuild) {
 			assert env.get("TERM_PROGRAM") == "OtherTerminal";
 		}
 
+		test "a child reads its size in pixels from the cell size at open and after a resize" {
+			const printSizes = "python3 -c 'import fcntl, termios, struct, time; " +
+				"size = lambda: struct.unpack(\"4H\", fcntl.ioctl(0, termios.TIOCGWINSZ, bytes(8))); " +
+				"print(size()); time.sleep(0.9); print(size())'";
+			const opened = NativePty.open(printSizes, 80, 24, null, 8, 16);
+			assert opened.ok;
+			if (opened.ok) {
+				const p = opened.value;
+				assert p.wait(5000).ok;
+				assert p.resize(100, 30, 9, 18).ok;
+				const out = p.toPty().drainText(4096);
+				assert out.includes("(24, 80, 640, 384)");
+				assert out.includes("(30, 100, 900, 540)");
+				p.close();
+			}
+		}
+
 		test "a shell that exits ends the stream, though a job in its own session still writes" {
 			let ticks = "";
 			for (let i = 0; i < 300; i++) { ticks += " x"; }
@@ -285,7 +332,7 @@ when (testBuild) {
 		assert spawned.ok;
 		if (spawned.ok) {
 			const pty = spawned.value;
-			assert pty.resize(100, 30).ok;
+			assert pty.resize(100, 30, 8, 16).ok;
 			pty.close();
 		}
 	}

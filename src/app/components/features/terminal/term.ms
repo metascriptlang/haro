@@ -49,7 +49,12 @@ export enum TermError {
 	VtFailed,
 }
 
-export type OpenPty = (cols: int32, rows: int32) => Result<Pty, PtyError>;
+export type OpenPty = (
+	cols: int32,
+	rows: int32,
+	cellWidth: int32,
+	cellHeight: int32,
+) => Result<Pty, PtyError>;
 
 export interface Term {
 	open: OpenPty;
@@ -61,6 +66,8 @@ export interface Term {
 	buf: Vec<uint8>;
 	cols: int32;
 	rows: int32;
+	cellWidth: int32;
+	cellHeight: int32;
 	alive: boolean;
 	ended: boolean;
 	spawnedAt: number;
@@ -110,6 +117,8 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 		buf: buf,
 		cols: 0,
 		rows: 0,
+		cellWidth: 0,
+		cellHeight: 0,
 		alive: true,
 		ended: false,
 		spawnedAt: -1,
@@ -122,23 +131,34 @@ function resizeGrid(this t: Term, rows: int32): void {
 	for (let i = have; i > rows; i--) { t.grid.remove(i - 1); }
 }
 
-export function fit(this t: Term, cols: int32, rows: int32): Result<boolean, TermError> {
+export function fit(
+	this t: Term,
+	cols: int32,
+	rows: int32,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
+): Result<boolean, TermError> {
 	const s = t.session;
 	if (s === null) {
 		stats.mark("layout", Date.now());
-		const pty = t.open(cols, rows);
+		const pty = t.open(cols, rows, cellWidth, cellHeight);
 		if (!pty.ok) { return Result.err(TermError.PtyOpenFailed); }
 		stats.mark("spawned", Date.now());
 		t.spawnedAt = performance.now();
-		const started = Session.start(pty.value, cols, rows);
+		const started = Session.start(pty.value, cols, rows, cellWidth, cellHeight);
 		if (!started.ok) { return Result.err(TermError.SessionStartFailed); }
 		t.session = started.value;
 	} else {
-		if (cols == t.cols && rows == t.rows) { return Result.ok(false); }
-		if (!s.resize(cols, rows).ok) { return Result.err(TermError.ResizeFailed); }
+		const sameCell = cellWidth == t.cellWidth && cellHeight == t.cellHeight;
+		if (cols == t.cols && rows == t.rows && sameCell) { return Result.ok(false); }
+		if (!s.resize(cols, rows, cellWidth, cellHeight).ok) {
+			return Result.err(TermError.ResizeFailed);
+		}
 	}
 	t.cols = cols;
 	t.rows = rows;
+	t.cellWidth = cellWidth;
+	t.cellHeight = cellHeight;
 	t.resizeGrid(rows);
 	return Result.ok(true);
 }

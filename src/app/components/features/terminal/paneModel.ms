@@ -354,7 +354,7 @@ function fitLayout(this m: PaneModel): void {
 		`haro: layout ${m.layoutWidth}x${m.layoutHeight} ratio ${ratio} ` +
 			`cell ${cellPx}x${rowPx} px grid ${cols}x${rows}`
 	);
-	const fitted = m.controls.refit(m.term, cols, rows);
+	const fitted = m.controls.refit(m.term, cols, rows, cellPx, rowPx);
 	if (!fitted.ok) {
 		if (fitted.error == TermError.PtyOpenFailed) {
 			m.notify("the shell did not start: check command in config.ms, or --shell");

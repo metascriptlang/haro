@@ -20,13 +20,16 @@ export function start(
 	pty: Pty,
 	cols: int32,
 	rows: int32,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
 ): Result<Session, SessionError> {
 	const vt = Vt.create(cols, rows);
 	if (!vt.ok) {
 		pty.close();
 		return Result.err(SessionError.VtCreateFailed);
 	}
-	if (pty.ownsScreen && !vt.value.setPullScrollback(false).ok) {
+	const pullFailed = pty.ownsScreen && !vt.value.setPullScrollback(false).ok;
+	if (pullFailed || !vt.value.resize(cols, rows, cellWidth, cellHeight).ok) {
 		vt.value.free();
 		pty.close();
 		return Result.err(SessionError.VtCreateFailed);
@@ -68,10 +71,16 @@ export function send(this s: Session, data: Readonly<Span<uint8>>): Result<int32
 	return Result.err(SessionError.PtyWriteFailed);
 }
 
-export function resize(this s: Session, cols: int32, rows: int32): Result<void, SessionError> {
-	const resizedVt = s.vt.resize(cols, rows);
+export function resize(
+	this s: Session,
+	cols: int32,
+	rows: int32,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
+): Result<void, SessionError> {
+	const resizedVt = s.vt.resize(cols, rows, cellWidth, cellHeight);
 	if (!resizedVt.ok) { return Result.err(SessionError.ResizeFailed); }
-	const resizedPty = s.pty.resize(cols, rows);
+	const resizedPty = s.pty.resize(cols, rows, cellWidth, cellHeight);
 	if (!resizedPty.ok && s.pty.exitCode() === null) {
 		return Result.err(SessionError.ResizeFailed);
 	}
@@ -277,7 +286,12 @@ function sentAfterExit(running: boolean): string {
 		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => {
 			return Result.err(PtyError.Closed);
 		},
-		resize: (cols: int32, rows: int32): Result<void, PtyError> => {
+		resize: (
+			cols: int32,
+			rows: int32,
+			cellWidth: int32,
+			cellHeight: int32,
+		): Result<void, PtyError> => {
 			return Result.err(PtyError.Closed);
 		},
 		exitCode: (): int32 | null => { return running ? null : 0; },

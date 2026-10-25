@@ -56,9 +56,16 @@ export function holding(this c: Controls): boolean {
 	return c.held !== null || c.reading !== null;
 }
 
-export function refit(this c: Controls, t: Term, cols: int32, rows: int32): Result<boolean, TermError> {
+export function refit(
+	this c: Controls,
+	t: Term,
+	cols: int32,
+	rows: int32,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
+): Result<boolean, TermError> {
 	const reflows = cols != t.cols;
-	const fitted = t.fit(cols, rows);
+	const fitted = t.fit(cols, rows, cellWidth, cellHeight);
 	const vt = vtOf(t);
 	if (fitted.ok && reflows && vt !== null) { c.pointer.clear(vt); }
 	return fitted;

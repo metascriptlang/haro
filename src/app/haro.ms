@@ -166,8 +166,13 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 
 function runShell(shell: string): int32 {
 	const cwd = config.loaded.config.startDirectory(probableCli(), homeDir());
-	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
-		return NativePty.spawn(shell, cols, rows, cwd);
+	const opened = openTerm((
+		cols: int32,
+		rows: int32,
+		cellWidth: int32,
+		cellHeight: int32,
+	): Result<Pty, PtyError> => {
+		return NativePty.spawn(shell, cols, rows, cwd, cellWidth, cellHeight);
 	});
 	if (!opened.ok) {
 		fail(`open: ${opened.error.toString()}`);

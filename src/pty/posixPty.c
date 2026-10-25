@@ -264,7 +264,13 @@ static void execChild(char** argv, char** env, const char* cwd, int failed) {
 	_exit(127);
 }
 
-int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows) {
+static struct winsize winsizeOf(int cols, int rows, int widthPx, int heightPx) {
+	return (struct winsize){
+		(unsigned short)rows, (unsigned short)cols, (unsigned short)widthPx, (unsigned short)heightPx,
+	};
+}
+
+int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows, int widthPx, int heightPx) {
 	int id = -1;
 	for (int i = 0; i < PTY_MAX; i++) {
 		if (!ptys[i].used) { id = i; break; }
@@ -289,7 +295,7 @@ int ptyOpen(const char* commandLine, const char* cwd, int cols, int rows) {
 	closeOnExec(failed[0]);
 	closeOnExec(failed[1]);
 
-	struct winsize size = { (unsigned short)rows, (unsigned short)cols, 0, 0 };
+	struct winsize size = winsizeOf(cols, rows, widthPx, heightPx);
 	int master = -1;
 	pid_t pid = forkpty(&master, NULL, NULL, &size);
 	if (pid == 0) execChild(words.we_wordv, env, cwd, failed[1]);
@@ -388,10 +394,10 @@ int64_t ptyWrite(int id, const uint8_t* data, int64_t len) {
 	return len;
 }
 
-int ptyResize(int id, int cols, int rows) {
+int ptyResize(int id, int cols, int rows, int widthPx, int heightPx) {
 	Pty* p = slot(id);
 	if (!p) return -1;
-	struct winsize size = { (unsigned short)rows, (unsigned short)cols, 0, 0 };
+	struct winsize size = winsizeOf(cols, rows, widthPx, heightPx);
 	return ioctl(p->master, TIOCSWINSZ, &size) == 0 ? 0 : -1;
 }
 

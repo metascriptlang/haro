@@ -427,7 +427,7 @@ void ptyClose(int id) {
 	pthread_cond_broadcast(&p->space);
 	pthread_cond_broadcast(&p->pending);
 	pthread_mutex_unlock(&p->lock);
-	kill(p->pid, SIGHUP);
+	kill(-p->pid, SIGHUP);
 	if (p->threads > 0) {
 		struct timespec deadline = deadlineAfter(CLOSE_GRACE_MS);
 		pthread_mutex_lock(&p->lock);
@@ -435,7 +435,7 @@ void ptyClose(int id) {
 		while (!p->exited && r == 0) r = pthread_cond_timedwait(&p->changed, &p->lock, &deadline);
 		pthread_mutex_unlock(&p->lock);
 	}
-	if (!ptyExited(id)) kill(p->pid, SIGKILL);
+	if (!ptyExited(id)) kill(-p->pid, SIGKILL);
 	if (p->threads > 0) pthread_join(p->waiter, NULL);
 	waitpid(p->pid, NULL, 0);
 	if (p->threads > 2) pthread_join(p->writer, NULL);

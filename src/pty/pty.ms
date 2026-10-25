@@ -248,6 +248,38 @@ when (testBuild) {
 	when (!windows) {
 		import { env } from "std/process";
 
+		@include("signal.h");
+
+		extern function kill(pid: int32, signal: int32): int32;
+
+		function readLine(this p: NativePty): string {
+			let buf: Vec<uint8> = new Array(256);
+			let text = "";
+			while (!text.includes("\n")) {
+				const ready = p.wait(5000);
+				if (!ready.ok || !ready.value) { return text; }
+				const r = p.read(buf);
+				if (!r.ok) { return text; }
+				text += buf[0..r.value].asString();
+			}
+			return text;
+		}
+
+		test "closing a pty ends the child's whole process group, a job that ignores hangup too" {
+			const opened = NativePty.open("sh -c 'trap \"\" HUP; sleep 30 & echo $!; wait'", 80, 24);
+			assert opened.ok;
+			if (opened.ok) {
+				const p = opened.value;
+				const job = p.readLine().trim().parseInt() as int32;
+				assert job > 0;
+				assert kill(job, 0) == 0;
+				p.close();
+				const closed: float64 = performance.now();
+				while (kill(job, 0) == 0 && performance.now() - closed < 3000) {}
+				assert kill(job, 0) != 0;
+			}
+		}
+
 		test "the child is told the terminal is Haro, not the one Haro was started from" {
 			assert env.set("TERM_PROGRAM", "OtherTerminal");
 			assert env.set("TERM_SESSION_ID", "w0t0");

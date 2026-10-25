@@ -280,12 +280,29 @@ function prunedLines(from: int32, count: int32): string {
 	return text;
 }
 
+const PAGE_SPAN: int32 = 700;
+
 function prunable(): Vt | null {
 	const vt = viewOf(80, 4, "r0");
 	if (vt === null || !vt.setScrollback(1000).ok) { return null; }
 	vt.writeText(prunedLines(1, 6000));
-	if (!vt.update().ok) { return null; }
+	let next = 6001;
+	while (((try vt.scrollOffset() catch 0)) < PAGE_SPAN) {
+		vt.writeText(prunedLines(next, 20));
+		next += 20;
+		if (!vt.update().ok) { return null; }
+	}
 	return vt;
+}
+
+function pruneOnePage(vt: Vt): boolean {
+	const before = try vt.scrollOffset() catch 0;
+	for (let i = 0; i < 100; i++) {
+		vt.writeText(prunedLines(100000 + i * 20, 20));
+		if (!vt.update().ok) { return false; }
+		if ((try vt.scrollOffset() catch 0) < before) { return true; }
+	}
+	return false;
 }
 
 test "a selection whose start is pruned from scrollback shows what the terminal still holds" {
@@ -298,8 +315,7 @@ test "a selection whose start is pruned from scrollback shows what the terminal 
 			.drag({ start: { row: bottom, col: 2 }, end: { row: bottom, col: 2 } });
 		p.sel = sel;
 		assert vt.selectionSet(sel.marked()).ok;
-		vt.writeText(prunedLines(6001, 400));
-		assert vt.update().ok;
+		assert pruneOnePage(vt);
 		const kept = p.sync(vt);
 		assert kept.ok;
 		if (kept.ok) { assert kept.value; }
@@ -327,8 +343,7 @@ test "a selection pruned whole from scrollback is gone" {
 			.drag({ start: { row: 1, col: 1 }, end: { row: 1, col: 1 } });
 		p.sel = sel;
 		assert vt.selectionSet(sel.marked()).ok;
-		vt.writeText(prunedLines(6001, 400));
-		assert vt.update().ok;
+		assert pruneOnePage(vt);
 		const kept = p.sync(vt);
 		assert kept.ok;
 		if (kept.ok) { assert !kept.value; }

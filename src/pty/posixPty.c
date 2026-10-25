@@ -47,6 +47,7 @@ typedef struct {
 	int outOfMemory;
 	int exited;
 	int exitCode;
+	int exitSignal;
 } Pty;
 
 static Pty ptys[PTY_MAX];
@@ -177,6 +178,7 @@ static void* waitLoop(void* arg) {
 	while (waitid(P_PID, (id_t)p->pid, &info, WEXITED | WNOWAIT) < 0 && errno == EINTR) {}
 	pthread_mutex_lock(&p->lock);
 	p->exitCode = info.si_code == CLD_EXITED ? info.si_status : 128 + info.si_status;
+	p->exitSignal = info.si_code == CLD_EXITED ? 0 : info.si_status;
 	p->exited = 1;
 	pthread_cond_broadcast(&p->changed);
 	pthread_mutex_unlock(&p->lock);
@@ -337,6 +339,7 @@ int ptyOpen(
 	p->stop[0] = stop[0];
 	p->stop[1] = stop[1];
 	p->exitCode = -1;
+	p->exitSignal = 0;
 	pthread_mutex_init(&p->lock, NULL);
 	pthread_cond_init(&p->changed, NULL);
 	pthread_cond_init(&p->space, NULL);
@@ -419,6 +422,15 @@ int ptyExited(int id) {
 int ptyMaster(int id) {
 	Pty* p = slot(id);
 	return p ? p->master : -1;
+}
+
+int ptyExitSignal(int id) {
+	Pty* p = slot(id);
+	if (!p) return 0;
+	pthread_mutex_lock(&p->lock);
+	int signal = p->exitSignal;
+	pthread_mutex_unlock(&p->lock);
+	return signal;
 }
 
 int ptyChildPid(int id) {

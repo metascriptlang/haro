@@ -18,6 +18,7 @@ void ptyClose(int id);
 #ifndef _WIN32
 int ptyMaster(int id);
 int ptyChildPid(int id);
+int ptyExitSignal(int id);
 #endif
 
 #endif

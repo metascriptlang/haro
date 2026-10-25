@@ -40,6 +40,7 @@ when (!windows) {
 
 	extern function ptyMaster(id: int32): int32;
 	extern function ptyChildPid(id: int32): int32;
+	extern function ptyExitSignal(id: int32): int32;
 	extern function tcgetpgrp(fd: int32): int32;
 }
 
@@ -113,6 +114,15 @@ export function exitCode(this p: NativePty): int32 | null {
 	return ptyExitCode(p.id);
 }
 
+export function exitSignal(this p: NativePty): int32 {
+	when (windows) {
+		return 0;
+	} else {
+		if (ptyExited(p.id) == 0) { return 0; }
+		return ptyExitSignal(p.id);
+	}
+}
+
 export function close(this p: NativePty): void {
 	ptyClose(p.id);
 }
@@ -141,6 +151,7 @@ export function toPty(this p: NativePty): Pty {
 			return p.resize(cols, rows, cellWidth, cellHeight);
 		},
 		exitCode: (): int32 | null => { return p.exitCode(); },
+		exitSignal: (): int32 => { return p.exitSignal(); },
 		close: (): void => { p.close(); },
 		busy: (): boolean => { return p.busy(); },
 		ownsScreen: true,
@@ -319,6 +330,22 @@ when (testBuild) {
 				assert !p.busy();
 				p.close();
 			}
+		}
+
+		function endOf(command: string): string {
+			const opened = NativePty.open(command, 80, 24);
+			if (!opened.ok) { return "not opened"; }
+			const p = opened.value;
+			const _text = p.toPty().drainText(4096);
+			const ended = `${p.exitCode() ?? -1} ${p.exitSignal()}`;
+			p.close();
+			return ended;
+		}
+
+		test "a shell killed by a signal reports the signal apart from a status that only looks like one" {
+			assert endOf("sh -c 'kill -KILL $$'") == "137 9";
+			assert endOf("sh -c 'exit 137'") == "137 0";
+			assert endOf("sh -c 'exit 0'") == "0 0";
 		}
 
 		function becomesBusy(this p: NativePty, wanted: boolean, withinMs: float64): boolean {

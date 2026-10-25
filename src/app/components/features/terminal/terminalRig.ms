@@ -24,6 +24,7 @@ function recorder(text: string, sink: Sink): Pty {
 		},
 		resize: base.resize,
 		exitCode: base.exitCode,
+		exitSignal: base.exitSignal,
 		close: base.close,
 		busy: (): boolean => { return sink.busy; },
 	};

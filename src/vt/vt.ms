@@ -71,6 +71,7 @@ import {
 	GhosttyTerminalScrollViewport,
 	GhosttyDeviceAttributes,
 	GhosttyTerminalDesktopNotification,
+	GhosttySizeReportSize,
 	GhosttyPointTag,
 	GhosttyRenderState,
 	GhosttyRenderStateData,
@@ -166,6 +167,16 @@ extern function terminalFlag(
 	terminal: GhosttyTerminal,
 	key: GhosttyTerminalData,
 	out value: boolean,
+): GhosttyResult from "ghostty_terminal_get";
+extern function terminalU16(
+	terminal: GhosttyTerminal,
+	key: GhosttyTerminalData,
+	out value: uint16,
+): GhosttyResult from "ghostty_terminal_get";
+extern function terminalU32(
+	terminal: GhosttyTerminal,
+	key: GhosttyTerminalData,
+	out value: uint32,
 ): GhosttyResult from "ghostty_terminal_get";
 extern function terminalMode(
 	terminal: GhosttyTerminal,
@@ -601,6 +612,26 @@ function deviceAttributes(terminal: GhosttyTerminal, effects: Ptr<void>, out da:
 	da.primary.features[0] = GHOSTTY_DA_FEATURE_ANSI_COLOR;
 	da.primary.features[1] = GHOSTTY_DA_FEATURE_CLIPBOARD;
 	return true;
+}
+
+@exportName("haroVtSize")
+function sizeReport(terminal: GhosttyTerminal, effects: Ptr<void>, out size: GhosttySizeReportSize): boolean {
+	let cols: uint16 = 0;
+	let rows: uint16 = 0;
+	let width: uint32 = 0;
+	let height: uint32 = 0;
+	const read = ok(terminalU16(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_COLS, cols)) &&
+		ok(terminalU16(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_ROWS, rows)) &&
+		ok(terminalU32(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_WIDTH_PX, width)) &&
+		ok(terminalU32(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_HEIGHT_PX, height)) &&
+		cols > 0 && rows > 0;
+	size = {
+		rows: rows,
+		columns: cols,
+		cell_width: read ? width / (cols as uint32) : 0,
+		cell_height: read ? height / (rows as uint32) : 0,
+	};
+	return read;
 }
 
 @exportName("haroVtXtversion")
@@ -3109,6 +3140,17 @@ test "a bracketed paste is framed and only its end marker is unsafe" {
 function pending(vt: Vt): string {
 	let replies = vt.takeReplies();
 	return ascii(replies);
+}
+
+test "a size query is answered with the terminal's own cells and pixels, as is the report mode 2048 starts with" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeText("\x1b[18t");
+		assert pending(vt) == "\x1b[8;4;20t";
+		vt.writeText("\x1b[14t\x1b[16t");
+		assert pending(vt) == "\x1b[4;0;0t\x1b[6;0;0t";
+		vt.writeText("\x1b[?2048h");
+		assert pending(vt) == "\x1b[48;4;20;0;0t";
+	});
 }
 
 test "an OSC 52 read waits for the host and is answered in the frame the program used" {

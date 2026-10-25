@@ -52,6 +52,7 @@ void haroVtTitleChanged(GhosttyTerminal terminal, void* effects);
 void haroVtPwdChanged(GhosttyTerminal terminal, void* effects);
 void haroVtRenderHold(GhosttyTerminal terminal, void* effects, bool held);
 bool haroVtDeviceAttributes(GhosttyTerminal terminal, void* effects, GhosttyDeviceAttributes* out);
+bool haroVtSize(GhosttyTerminal terminal, void* effects, GhosttySizeReportSize* out);
 void haroVtClipboardWritten(void* effects, uint8_t* text, int64_t n);
 int64_t haroVtRepliesLength(void* effects);
 void haroVtClipboardRead(void* effects, int64_t mark);
@@ -102,6 +103,7 @@ int vtEffectsWire(GhosttyTerminal terminal, void* effects) {
 		{ GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*)haroVtPwdChanged },
 		{ GHOSTTY_TERMINAL_OPT_RENDER_HOLD, (const void*)haroVtRenderHold },
 		{ GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, (const void*)haroVtDeviceAttributes },
+		{ GHOSTTY_TERMINAL_OPT_SIZE, (const void*)haroVtSize },
 		{ GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*)haroVtXtversion },
 		{ GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, (const void*)haroVtDesktopNotification },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*)onClipboardWrite },

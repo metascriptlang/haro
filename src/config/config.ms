@@ -2,6 +2,7 @@ import { JSON, JsonKind, JsonValue } from "std/core/json";
 import { isAbsolute } from "std/fs/path";
 import { Rgb, SCROLLBACK_LINES } from "../vt/vt";
 import { BindAction, Keybind, Screen, keybind } from "../input/bindings";
+import { OptionAsAlt } from "../keys/keys";
 
 export interface Config {
 	fontFamily: Vec<string>;
@@ -14,6 +15,7 @@ export interface Config {
 	background: Rgb;
 	palette: Vec<Rgb>;
 	keybinds: Vec<Keybind>;
+	optionAsAlt: OptionAsAlt;
 }
 
 const SCREEN_DPI: float64 = 96;
@@ -43,6 +45,7 @@ export function defaults(): Config {
 		background: { r: 12, g: 12, b: 12 },
 		palette: [],
 		keybinds: [],
+		optionAsAlt: OptionAsAlt.Neither,
 	};
 }
 
@@ -130,6 +133,16 @@ function screenOf(name: string, key: string): Result<Screen, string> {
 		"alt" => Result.ok(Screen.Alternate),
 		"~alt" => Result.ok(Screen.Primary),
 		_ => Result.err(`${key}.mode: "${name}" must be alt or ~alt`),
+	};
+}
+
+function optionAsAltOf(name: string): Result<OptionAsAlt, string> {
+	return match (name) {
+		"neither" => Result.ok(OptionAsAlt.Neither),
+		"left" => Result.ok(OptionAsAlt.Left),
+		"right" => Result.ok(OptionAsAlt.Right),
+		"both" => Result.ok(OptionAsAlt.Both),
+		_ => Result.err(`optionAsAlt: "${name}" must be neither, left, right or both`),
 	};
 }
 
@@ -234,6 +247,7 @@ export function parse(json: string): Result<Config, string> {
 			"keybinds" => {
 				c.keybinds = try readEach(try readArray(v, key), key, readKeybind);
 			},
+			"optionAsAlt" => { c.optionAsAlt = try optionAsAltOf(try readString(v, key)); },
 			_ => { return Result.err(`unknown config field "${key}"`); },
 		}
 	}
@@ -257,6 +271,7 @@ test "an empty config keeps every default" {
 	assert c.value.scrollback == SCROLLBACK_LINES;
 	assert c.value.palette.length == 0;
 	assert c.value.keybinds.length == 0;
+	assert c.value.optionAsAlt == OptionAsAlt.Neither;
 }
 
 test "the fields a config gives replace the defaults" {
@@ -308,6 +323,17 @@ test "a field msc prints as null is a field the config left out" {
 	assert c.value.keybinds[0].screen == Screen.Any;
 }
 
+test "Option acts as Alt on the sides the config names" {
+	const sides = (name: string): OptionAsAlt | null => {
+		const c = parse(`{"optionAsAlt":"${name}"}`);
+		return c.ok ? c.value.optionAsAlt : null;
+	};
+	assert sides("neither") == OptionAsAlt.Neither;
+	assert sides("left") == OptionAsAlt.Left;
+	assert sides("right") == OptionAsAlt.Right;
+	assert sides("both") == OptionAsAlt.Both;
+}
+
 test "a list of font families keeps its order, the first one primary and the rest its fallbacks" {
 	const c = parse(`{"fontFamily":["Operator Saigon","OperatorMono Nerd Font Mono"]}`);
 	assert c.ok;
@@ -347,6 +373,9 @@ test "a field the config cannot use is refused by name" {
 		"scrollback must be a whole number of lines from 0 to 100000";
 	assert refusal(`{"scrollback":1.5}`) ==
 		"scrollback must be a whole number of lines from 0 to 100000";
+	assert refusal(`{"optionAsAlt":"true"}`) ==
+		`optionAsAlt: "true" must be neither, left, right or both`;
+	assert refusal(`{"optionAsAlt":true}`) == "optionAsAlt must be a string";
 	assert refusal("[]") == "config must be an object";
 }
 

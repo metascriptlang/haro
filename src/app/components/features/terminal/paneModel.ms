@@ -105,6 +105,7 @@ export function createPane(
 	};
 	const controls = Controls.open();
 	controls.keybinds = started.keybinds;
+	t.keys.optionAsAlt = started.optionAsAlt;
 	return {
 		term: t,
 		host: host,
@@ -286,6 +287,7 @@ function reconfigure(this m: PaneModel, c: Config | null, family: string, error:
 	}
 	m.settings = c;
 	m.controls.keybinds = c.keybinds;
+	m.term.keys.optionAsAlt = c.optionAsAlt;
 	const resized = c.fontPx() != m.metrics.fontSize() || family != m.metrics.fontFamily();
 	m.setPadding(c.padding);
 	m.setFontSize(c.fontPx());

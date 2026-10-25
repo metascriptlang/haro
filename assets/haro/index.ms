@@ -16,6 +16,7 @@ export interface HaroConfig {
 	background?: string;
 	palette?: string[];
 	keybinds?: Keybind[];
+	optionAsAlt?: "neither" | "left" | "right" | "both";
 }
 
 export const saigonNight = {

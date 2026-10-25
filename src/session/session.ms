@@ -84,7 +84,7 @@ export function resize(
 	if (!resizedPty.ok && s.pty.exitCode() === null) {
 		return Result.err(SessionError.ResizeFailed);
 	}
-	return Result.ok(null);
+	return s.sendReplies();
 }
 
 export function close(this s: Session): void {
@@ -329,4 +329,24 @@ function rowsAfterGrowing(ownsScreen: boolean): string {
 test "a session keeps scrollback out of a grown grid when its pty owns the screen" {
 	assert rowsAfterGrowing(false) == "l1|l2|l3|l4|l5";
 	assert rowsAfterGrowing(true) == "l3|l4|l5||";
+}
+
+test "a resize sends a mode 2048 subscriber its new size in cells and pixels at once" {
+	let sent = "";
+	const pty: Pty = {
+		...Replay.ofText("\x1b[?2048h").toPty(),
+		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => {
+			sent += data.asString();
+			return Result.ok(data.length as int32);
+		},
+	};
+	const s = startedOrNull(pty, 20, 4);
+	assert s !== null;
+	if (s !== null) {
+		assert s.ranToExit(1000);
+		sent = "";
+		assert s.resize(30, 6, 8, 16).ok;
+		assert sent == "\x1b[48;6;30;96;240t";
+		s.close();
+	}
 }

@@ -27,6 +27,8 @@ extern function appWireWake(): void;
 
 const CLOSE_WINDOW = "close_window";
 const APP_TITLE = "Haro";
+// Neon gives the app no handle to the window runWindow made:
+// .inbox/neon/2026-10-25-an-app-titles-the-window-runwindow-made.md
 const NEON_WINDOW = "main";
 const NOTIFICATION_ID = "haro";
 

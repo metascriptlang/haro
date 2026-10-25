@@ -40,10 +40,17 @@ struct Binding {
 
 when (macos) {
 	export const CLIPBOARD_MODS: int32 = SUPER;
-	const INSERT_CHORDS: Vec<Binding> = [];
+	const OS_CHORDS: Vec<Binding> = [];
+} else when (windows) {
+	export const CLIPBOARD_MODS: int32 = CTRL | SHIFT;
+	const OS_CHORDS: Vec<Binding> = [
+		{ code: "Insert", mods: CTRL, action: Action.Copy, screen: Screen.Any },
+		{ code: "Insert", mods: SHIFT, action: Action.Paste, screen: Screen.Any },
+		{ code: "Enter", mods: 0, action: Action.Copy, screen: Screen.Any },
+	];
 } else {
 	export const CLIPBOARD_MODS: int32 = CTRL | SHIFT;
-	const INSERT_CHORDS: Vec<Binding> = [
+	const OS_CHORDS: Vec<Binding> = [
 		{ code: "Insert", mods: CTRL, action: Action.Copy, screen: Screen.Any },
 		{ code: "Insert", mods: SHIFT, action: Action.Paste, screen: Screen.Any },
 	];
@@ -51,7 +58,6 @@ when (macos) {
 
 const BINDINGS: Vec<Binding> = [
 	{ code: "KeyC", mods: CLIPBOARD_MODS, action: Action.Copy, screen: Screen.Any },
-	{ code: "Enter", mods: 0, action: Action.Copy, screen: Screen.Any },
 	{ code: "KeyV", mods: CLIPBOARD_MODS, action: Action.Paste, screen: Screen.Any },
 	{ code: "ArrowUp", mods: CTRL | SHIFT, action: Action.LineUp, screen: Screen.Any },
 	{ code: "ArrowDown", mods: CTRL | SHIFT, action: Action.LineDown, screen: Screen.Any },
@@ -176,13 +182,12 @@ function lookup(
 export function resolve(code: string, mods: number, altScreen: boolean): Action {
 	const held = chordOf(mods);
 	const found = lookup(BINDINGS, code, held, altScreen);
-	return found != Action.None ? found : lookup(INSERT_CHORDS, code, held, altScreen);
+	return found != Action.None ? found : lookup(OS_CHORDS, code, held, altScreen);
 }
 
 test "copy and paste take cmd on macos, and ctrl shift or the insert pair elsewhere" {
 	assert resolve("KeyC", CLIPBOARD_MODS, false) == Action.Copy;
 	assert resolve("KeyV", CLIPBOARD_MODS, false) == Action.Paste;
-	assert resolve("Enter", 0, false) == Action.Copy;
 	when (macos) {
 		assert resolve("KeyV", CTRL | SHIFT, false) == Action.None;
 		assert resolve("KeyC", CTRL | SHIFT, false) == Action.None;
@@ -218,7 +223,16 @@ test "lock and side bits do not change the chord" {
 	assert resolve("ArrowUp", CTRL | SHIFT | NUM_LOCK, false) == Action.LineUp;
 	assert resolve("ArrowUp", CTRL | SHIFT | SHIFT_RIGHT, false) == Action.LineUp;
 	assert resolve("KeyV", CLIPBOARD_MODS | NUM_LOCK, false) == Action.Paste;
-	assert resolve("Enter", CAPS_LOCK, false) == Action.Copy;
+	assert resolve("KeyC", CLIPBOARD_MODS | CAPS_LOCK, false) == Action.Copy;
+}
+
+test "enter copies a selection on windows only" {
+	when (windows) {
+		assert resolve("Enter", 0, false) == Action.Copy;
+		assert resolve("Enter", CAPS_LOCK, false) == Action.Copy;
+	} else {
+		assert resolve("Enter", 0, false) == Action.None;
+	}
 }
 
 test "shift page keys scroll the primary screen and reach a full-screen app on the alternate" {

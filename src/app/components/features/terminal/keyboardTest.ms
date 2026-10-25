@@ -54,13 +54,12 @@ test "ctrl shift page, arrow, home and end keys move the viewport and say they d
 	}).ok;
 }
 
-test "the copy chord and enter alike copy the selection to the clipboard and dismiss it" {
+test "the copy chord, and enter on windows, copy the selection to the clipboard and dismiss it" {
 	assert onTerm("alpha beta\r\ngamma", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const board = boardOf("");
 		const clip = clipOf(board);
 		assert !handled(c.keyDown(t, key("KeyC", CLIPBOARD_MODS), clip));
-		assert !handled(c.keyDown(t, key("Enter", 0), clip));
 		assert board.copied == "";
 		assert drag(c, t, clip, at(0, 0), at(4, 0));
 		assert c.pointer.selected();
@@ -68,9 +67,12 @@ test "the copy chord and enter alike copy the selection to the clipboard and dis
 		assert board.copied == "alpha";
 		assert !c.pointer.selected();
 		assert !handled(c.keyDown(t, key("KeyC", CLIPBOARD_MODS), clip));
-		assert drag(c, t, clip, at(6, 0), at(9, 0));
-		assert handled(c.keyDown(t, key("Enter", 0), clip));
-		assert board.copied == "beta";
+		when (windows) {
+			assert !handled(c.keyDown(t, key("Enter", 0), clip));
+			assert drag(c, t, clip, at(6, 0), at(9, 0));
+			assert handled(c.keyDown(t, key("Enter", 0), clip));
+			assert board.copied == "beta";
+		}
 		when (!macos) {
 			assert drag(c, t, clip, at(0, 1), at(4, 1));
 			assert handled(c.keyDown(t, key("Insert", CTRL), clip));

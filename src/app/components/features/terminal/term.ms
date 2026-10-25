@@ -195,7 +195,6 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	if (s === null) { return Result.ok(idleFrame(false, false)); }
 	const more = try t.drain();
 	const ended = t.ended;
-	t.ended = false;
 	const vt = s.vt;
 	const events = vt.takeEvents();
 	const copied = vt.takeClipboard();
@@ -207,6 +206,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	}
 	const asked = vt.clipboardAsked();
 	if (vt.holding()) {
+		t.ended = false;
 		return Result.ok({
 			...idleFrame(more, ended),
 			held: true,
@@ -220,6 +220,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
 	const look = vt.cursorLook();
 	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
+	t.ended = false;
 	return Result.ok({
 		cursor: applied.value,
 		look: look.value,

@@ -1,7 +1,8 @@
-import { NeonEvent } from "../../../../../../neon/src/render/event";
+import { DOM_DELTA_PIXEL, NeonEvent } from "../../../../../../neon/src/render/event";
 import { PixelRatio } from "../../../../../../neon/src/api/pixelRatio";
 import { Spot, spotAt } from "../../../../input/pointer";
 import { Reply } from "../../../../input/paste";
+import { notchesOf } from "../../../../input/wheel";
 import { modifierKey, modsOf } from "../../../../keys/keys";
 import { noteKey, stats } from "../../../stats";
 import { focusCursor } from "../../content/cursor";
@@ -150,7 +151,10 @@ export function released(this m: PaneModel, e: NeonEvent): void {
 }
 
 export function wheeled(this m: PaneModel, e: NeonEvent): void {
-	const handled = m.controls.roll(m.term, e.deltaY, m.hit(e));
+	const rowHeight = m.metrics.rowHeight();
+	if (rowHeight <= 0) { return; }
+	const notches = notchesOf(e.deltaY, e.deltaMode == DOM_DELTA_PIXEL, rowHeight);
+	const handled = m.controls.roll(m.term, notches, m.hit(e));
 	if (!handled.ok) {
 		m.failed("wheel", handled.error.toString());
 		return;

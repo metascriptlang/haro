@@ -20,6 +20,10 @@ export function route(altScreen: boolean, tracking: boolean, altScroll: boolean)
 	return WheelRoute.Viewport;
 }
 
+export function notchesOf(delta: float64, pixels: boolean, rowHeight: float64): float64 {
+	return pixels ? delta / (rowHeight * ROWS_PER_NOTCH) : delta;
+}
+
 export function rows(this w: Wheel, notches: float64): int32 {
 	const total = w.pending - notches * ROWS_PER_NOTCH;
 	const whole = total < 0 ? Math.ceil(total) : Math.floor(total);
@@ -61,6 +65,14 @@ test "fractional notches accumulate until they make a whole row" {
 	assert w.rows(0.25) == -1;
 	assert w.rows(0.25) == -1;
 	assert w.pending == 0;
+}
+
+test "a trackpad scrolls one row for each row height of travel" {
+	const w = Wheel.open();
+	assert w.rows(notchesOf(-40, true, 20)) == 2;
+	assert w.rows(notchesOf(10, true, 20)) == 0;
+	assert w.rows(notchesOf(10, true, 20)) == -1;
+	assert notchesOf(1, false, 20) == 1;
 }
 
 test "scrolling the other way spends what is pending before moving" {

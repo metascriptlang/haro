@@ -3,8 +3,10 @@
 
 import { NeonNode } from "../../../neon/src/render/node";
 import { requestFrame } from "../../../neon/src/animation/frame";
-import { runWindow, DesktopOptions, desktopOptions } from "../../../neon/src/platform/ion/window";
-import { getWindow, listen, notify, onWake, openExternal, setTitle } from "../../../ion/src/index";
+import {
+	runWindow, DesktopOptions, desktopOptions, setOptionAsAlt, setWindowTitle, OptionAsAlt as OptionSides,
+} from "../../../neon/src/platform/ion/window";
+import { listen, notify, onWake, openExternal } from "../../../ion/src/index";
 import { argv, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
 import { homeDir } from "std/os";
@@ -17,6 +19,7 @@ import { stats, mark, noteWake } from "./stats";
 import { logStatsEverySecond } from "./statsLog";
 import { familyList, registerFallbacks } from "./fonts";
 import { Config } from "../config/config";
+import { OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
 import { ConfigWatch, forFile, readConfig, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
@@ -27,9 +30,6 @@ extern function appWireWake(): void;
 
 const CLOSE_WINDOW = "close_window";
 const APP_TITLE = "Haro";
-// Neon gives the app no handle to the window runWindow made:
-// .inbox/neon/2026-10-25-an-app-titles-the-window-runwindow-made.md
-const NEON_WINDOW = "main";
 const NOTIFICATION_ID = "haro";
 
 when (!windows) {
@@ -95,13 +95,12 @@ function titleOr(title: string): string {
 	return title == "" ? APP_TITLE : title;
 }
 
-function setWindowTitle(title: string): void {
-	const win = getWindow(NEON_WINDOW);
-	if (win === null) {
-		note(`no window labelled ${NEON_WINDOW} to title`);
-		return;
-	}
-	setTitle(win, titleOr(title));
+// A match here widens its arms to string: .inbox/compiler/2026-10-08-match-arms-of-string-literals-widen-to-string.md
+function sidesOf(option: OptionAsAlt): OptionSides {
+	if (option == OptionAsAlt.Left) { return "left"; }
+	if (option == OptionAsAlt.Right) { return "right"; }
+	if (option == OptionAsAlt.Both) { return "both"; }
+	return "neither";
 }
 
 function flagValue(flag: string): string | null {
@@ -153,7 +152,7 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 		exited: exited,
 		fail: fail,
 		note: note,
-		setTitle: setWindowTitle,
+		setTitle: (title: string): void => { setWindowTitle(titleOr(title)); },
 		notify: (title: string, body: string): void => {
 			if (notificationsReachable()) { notify(titleOr(title), body, NOTIFICATION_ID); }
 		},
@@ -173,6 +172,7 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 		): void => {
 			if (config.error != "") { handler(null, "", config.error); }
 			config.watchConfig((c: Config | null, error: string): void => {
+				if (c !== null) { setOptionAsAlt(sidesOf(c.optionAsAlt)); }
 				handler(c, c === null ? "" : familyList(config.loaded.faces).join(", "), error);
 			});
 		},
@@ -183,6 +183,7 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 		const bar = setAppMenu(menuBar());
 		if (!bar.ok) { fail(bar.error); }
 	}
+	setOptionAsAlt(sidesOf(config.loaded.config.optionAsAlt));
 	const opts: DesktopOptions = {
 		...desktopOptions(APP_TITLE, 960, 600),
 		font: families[0],

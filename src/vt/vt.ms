@@ -107,7 +107,6 @@ import {
 	OptionAsAlt,
 	modsMask,
 	textSafe,
-	withOptionAsAlt,
 	withoutAltGr,
 } from "../keys/keys";
 import { CellWidth, Marked, Point, Range, RowSpan, Selection, Unit } from "../select/select";
@@ -1813,15 +1812,13 @@ export function openKeys(this typeof Keys): Result<Keys, KeysError> {
 export function encode(
 	this k: Keys,
 	vt: Vt,
-	given: KeyEvent,
+	e: KeyEvent,
 	buf: Span<uint8>,
 ): Result<int32, KeysError> {
 	ghostty_key_encoder_setopt_from_terminal(k.encoder, vt.terminal);
 	const optionAsAlt = GhosttyKeyEncoderOption.GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT;
 	let option = optionAsAltOf(k.optionAsAlt);
 	encoderSetOptionAsAlt(k.encoder, optionAsAlt, option);
-	let e = given;
-	when (macos) { e = given.withOptionAsAlt(k.optionAsAlt); }
 	ghostty_key_event_set_action(k.event, actionOf(e.action));
 	ghostty_key_event_set_key(k.event, keyOf(e.key));
 	eventSetMods(k.event, modsMask(e.mods));
@@ -2817,27 +2814,18 @@ test "alt prefixes the escape, except macOS Option, whose text the system compos
 	});
 }
 
-test "macOS Option sends the escape before its key on the sides set to act as Alt" {
+test "macOS Option sends the escape before the key text the window kept when it acts as Alt" {
 	assert withKeys((given: Keys, vt: Vt): void => {
 		let k = given;
-		const left = (0 as BitSet<KeyMod>).incl(KeyMod.Alt);
-		const right = left.incl(KeyMod.AltRight);
-		const leftB: KeyEvent = { ...press("KeyB", "∫", 0x62, left), consumedMods: left };
-		const rightB: KeyEvent = { ...leftB, mods: right, consumedMods: right };
-		const composed = "\u00e2\u0088\u00ab";
+		const shift = (0 as BitSet<KeyMod>).incl(KeyMod.Shift);
+		const left = shift.incl(KeyMod.Alt);
+		const asAlt: KeyEvent = { ...press("KeyB", "B", 0x62, left), consumedMods: shift };
+		const composed: KeyEvent = { ...press("KeyB", "ı", 0x62, left), consumedMods: left };
 		when (macos) {
-			assert encoded(k, vt, leftB) == composed;
 			k.optionAsAlt = OptionAsAlt.Left;
-			assert encoded(k, vt, leftB) == "\x1bb";
-			assert encoded(k, vt, rightB) == composed;
-			k.optionAsAlt = OptionAsAlt.Right;
-			assert encoded(k, vt, leftB) == composed;
-			assert encoded(k, vt, rightB) == "\x1bb";
-			k.optionAsAlt = OptionAsAlt.Both;
-			assert encoded(k, vt, leftB) == "\x1bb";
-			assert encoded(k, vt, rightB) == "\x1bb";
-			vt.writeText("\x1b[>1u");
-			assert encoded(k, vt, leftB) == "\x1b[98;3u";
+			assert encoded(k, vt, asAlt) == "\x1bB";
+			k.optionAsAlt = OptionAsAlt.Neither;
+			assert encoded(k, vt, composed) == "\u00c4\u00b1";
 		}
 	});
 }

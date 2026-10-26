@@ -778,6 +778,7 @@ const MODE_FOCUS_EVENT: uint16 = 1004;
 const MODE_ALT_SCROLL: uint16 = 1007;
 const MODE_BRACKETED_PASTE: uint16 = 2004;
 const MODE_SYNC_OUTPUT: uint16 = 2026;
+const MODE_GRAPHEME_CLUSTER: uint16 = 2027;
 const MODE_WIN32_INPUT: uint16 = 9001;
 
 function applyColors(terminal: GhosttyTerminal, fg: Rgb, bg: Rgb): Result<void, VtError> {
@@ -798,6 +799,14 @@ function applyBlinkDefault(terminal: GhosttyTerminal, on: boolean): Result<void,
 	const blinkOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK;
 	if (!ok(setMode(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode))
 		|| !ok(setFlag(terminal, blinkOption, blink))) {
+		return Result.err(VtError.WriteFailed);
+	}
+	return Result.ok(null);
+}
+
+function applyGraphemeWidth(terminal: GhosttyTerminal): Result<void, VtError> {
+	let mode: GhosttyTerminalModeConfig = { mode: MODE_GRAPHEME_CLUSTER, value: true };
+	if (!ok(setMode(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE_DEFAULT, mode))) {
 		return Result.err(VtError.WriteFailed);
 	}
 	return Result.ok(null);
@@ -849,7 +858,8 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 	let anchor: GhosttyTrackedGridRef;
 	if (effects.ok && ok(vtTopTrack(terminal, anchor))
 		&& applyColors(terminal, { r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 }).ok
-		&& applyBlinkDefault(terminal, true).ok && applyScrollback(terminal, SCROLLBACK_LINES).ok) {
+		&& applyBlinkDefault(terminal, true).ok && applyGraphemeWidth(terminal).ok
+		&& applyScrollback(terminal, SCROLLBACK_LINES).ok) {
 		return Result.ok({
 			terminal: terminal,
 			state: state,
@@ -2694,6 +2704,24 @@ test "a combining mark joins its base cell" {
 			assert row.extra.length == 1;
 			assert row.extra[0] == 0x301;
 			assert row.cells[1].cp == 0x78;
+		}
+	});
+}
+
+test "a skin-tone emoji is one wide cell, also after a full reset" {
+	assert withVt(10, 2, (vt: Vt): void => {
+		for (const prefix of ["", "\x1bc"]) {
+			vt.writeText(`${prefix}\u{1F44D}\u{1F3FD}x`);
+			assert vt.update().ok;
+			const rows = vt.rows();
+			assert rows.ok;
+			if (rows.ok) {
+				const row = rows.value[0];
+				assert row.cells[0].cp == 0x1F44D;
+				assert row.cells[0].flags.has(CellFlag.Wide);
+				assert row.cells[0].extra == 1 && row.extra[0] == 0x1F3FD;
+				assert row.cells[2].cp == 0x78;
+			}
 		}
 	});
 }

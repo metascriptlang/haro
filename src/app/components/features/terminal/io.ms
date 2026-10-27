@@ -4,7 +4,7 @@ import { Held, Reply } from "../../../../input/paste";
 import { KeyEvent, OptionAsAlt } from "../../../../keys/keys";
 import { CellInk } from "../../../../grid/lines";
 import { Config } from "../../../../config/config";
-import { FrameRows } from "../../../frame";
+import { FrameRows, none } from "../../../frame";
 import { Mark } from "../../../stats";
 import { Asks, Controls, Hit, holding, refit, takeAsks, typed } from "./controls";
 import { cancel, clipboardAsked, clipboardText, confirm } from "./clipboard";
@@ -84,6 +84,27 @@ export interface Io {
 	settings: Settings | null;
 	failures: Vec<Failure>;
 	keyAt: float64;
+}
+
+export interface IoPort {
+	configure: (settings: Settings) => void;
+	fit: (cols: int32, rows: int32, cellWidth: int32, cellHeight: int32) => void;
+	drain: () => void;
+	key: (k: KeyEvent, time: float64) => void;
+	keyReleased: (k: KeyEvent) => void;
+	text: (typed: string, time: float64) => void;
+	focus: (gained: boolean) => void;
+	press: (button: int32, h: Hit, time: float64) => void;
+	move: (h: Hit, pressed: boolean) => void;
+	release: (button: int32, h: Hit) => void;
+	wheel: (notches: float64, h: Hit) => void;
+	autoscroll: () => void;
+	closeKey: () => void;
+	confirmDialog: () => void;
+	cancelDialog: () => void;
+	pasted: (clipboard: string) => void;
+	frame: (done: (got: IoFrame) => void) => void;
+	relight: (ink: CellInk | null, done: (rows: FrameRows) => void) => void;
 }
 
 export function open(this typeof Io, t: Term): Io {
@@ -227,8 +248,13 @@ export function shutdown(this io: Io): void {
 	io.term.shutdown();
 }
 
-export function relight(this io: Io, ink: CellInk | null): Result<FrameRows, TermError> {
-	return io.term.inkCursor(ink);
+export function relight(this io: Io, ink: CellInk | null): FrameRows {
+	const relit = io.term.inkCursor(ink);
+	if (!relit.ok) {
+		io.fail("cursor", relit.error);
+		return FrameRows.none();
+	}
+	return relit.value;
 }
 
 function exitOf(this io: Io): Exit {
@@ -281,5 +307,30 @@ export function frame(this io: Io): IoFrame {
 		failures: failures,
 		keyAt: keyAt,
 		marks: marks,
+	};
+}
+
+export function port(this io: Io): IoPort {
+	return {
+		configure: (settings: Settings): void => { io.configure(settings); },
+		fit: (cols: int32, rows: int32, cellWidth: int32, cellHeight: int32): void => {
+			io.fit(cols, rows, cellWidth, cellHeight);
+		},
+		drain: (): void => { io.drain(); },
+		key: (k: KeyEvent, time: float64): void => { io.key(k, time); },
+		keyReleased: (k: KeyEvent): void => { io.keyReleased(k); },
+		text: (typed: string, time: float64): void => { io.text(typed, time); },
+		focus: (gained: boolean): void => { io.focus(gained); },
+		press: (button: int32, h: Hit, time: float64): void => { io.press(button, h, time); },
+		move: (h: Hit, pressed: boolean): void => { io.move(h, pressed); },
+		release: (button: int32, h: Hit): void => { io.release(button, h); },
+		wheel: (notches: float64, h: Hit): void => { io.wheel(notches, h); },
+		autoscroll: (): void => { io.autoscroll(); },
+		closeKey: (): void => { io.closeKey(); },
+		confirmDialog: (): void => { io.confirmDialog(); },
+		cancelDialog: (): void => { io.cancelDialog(); },
+		pasted: (clipboard: string): void => { io.pasted(clipboard); },
+		frame: (done: (got: IoFrame) => void): void => { done(io.frame()); },
+		relight: (ink: CellInk | null, done: (rows: FrameRows) => void): void => { done(io.relight(ink)); },
 	};
 }

@@ -8,7 +8,7 @@ import { createNotice } from "../notice/notice";
 import { createPasteDialog } from "../paste/pasteDialog";
 import { AppHost, PaneModel, createPane, failed, refresh } from "./paneModel";
 import { cancelDialog, confirmDialog } from "./paneEvents";
-import { Io, closeKey, open } from "./io";
+import { Io, open, port } from "./io";
 import { Term, TermError, openTerm, shutdown } from "./term";
 import { View, fitRows, open, text } from "../../../frame";
 import { holding } from "./controls";
@@ -44,10 +44,14 @@ function hostFor(calls: Calls): AppHost {
 	};
 }
 
-function paneOf(t: Term, calls: Calls): PaneModel {
+function paneWith(io: Io, calls: Calls): PaneModel {
 	const view = View.open();
-	view.fitRows(t.shown.length as int32);
-	return createPane(Io.open(t), view, hostFor(calls), defaults(), createNotice(), createPasteDialog());
+	view.fitRows(io.term.shown.length as int32);
+	return createPane(io.port(), view, hostFor(calls), defaults(), createNotice(), createPasteDialog());
+}
+
+function paneOf(t: Term, calls: Calls): PaneModel {
+	return paneWith(Io.open(t), calls);
 }
 
 function pressed(code: string): NeonEvent {
@@ -90,6 +94,7 @@ test "an internal failure while the shell runs is a notice logged once, and the 
 	assert onTerm("ready", (t: Term, sink: Sink): void => {
 		const calls = noCalls();
 		const m = paneOf(t, calls);
+		m.refresh();
 		m.failed("key", "EncodeFailed");
 		m.failed("key", "EncodeFailed");
 		assert calls.fatal == "";
@@ -152,7 +157,7 @@ function afterExit(
 	code: int32,
 	signal: int32,
 	lateMs: float64,
-	body: (m: PaneModel, calls: Calls) => void,
+	body: (m: PaneModel, calls: Calls, io: Io) => void,
 ): Result<void, TermError> {
 	const t = try openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
 		const base = Replay.ofText("last output").toPty();
@@ -166,9 +171,10 @@ function afterExit(
 	const _fit = try t.fit(20, 3);
 	t.spawnedAt -= lateMs;
 	const calls = noCalls();
-	const m = paneOf(t, calls);
+	const io = Io.open(t);
+	const m = paneWith(io, calls);
 	m.refresh();
-	body(m, calls);
+	body(m, calls, io);
 	return Result.ok(null);
 }
 
@@ -220,12 +226,12 @@ test "the close window command closes a dead shell at once, with no confirmation
 }
 
 test "a dead shell takes no typed text, key release or focus change, and keeps its notice" {
-	assert afterExit(137, 9, 1000, (m: PaneModel, calls: Calls): void => {
+	assert afterExit(137, 9, 1000, (m: PaneModel, calls: Calls, io: Io): void => {
 		const text = m.notice.text;
 		m.focusChanged(false);
 		m.keyReleased(lifted("KeyA"));
 		assert m.notice.text == text;
-		assert m.io.controls.holding();
+		assert io.controls.holding();
 		assert calls.fatal == "";
 		assert calls.noted == "";
 	}).ok;

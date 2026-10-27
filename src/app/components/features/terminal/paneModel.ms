@@ -12,7 +12,7 @@ import { gridSize } from "../../../../grid/size";
 import { CellInk } from "../../../../grid/lines";
 import { MouseGeometry } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
-import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
+import { FrameRows, View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
 import { mark, noteKey, stats } from "../../../stats";
 import { CellMetrics } from "../../ui/cellText";
 import {
@@ -26,20 +26,7 @@ import { PreeditModel, createPreedit } from "../../content/preedit";
 import { NoticeModel, noticeCols, showNotice } from "../notice/notice";
 import { PasteDialogModel, showPending } from "../paste/pasteDialog";
 import { Asks } from "./controls";
-import {
-	Exit,
-	Failure,
-	Io,
-	autoscroll,
-	closeKey,
-	configure,
-	fit,
-	frame,
-	pasted,
-	relight,
-	settingsOf,
-	started,
-} from "./io";
+import { Exit, Failure, IoFrame, IoPort, settingsOf } from "./io";
 import { TermError, exitCodeText } from "./term";
 
 const HOLD_RECHECK_MS = 100;
@@ -62,7 +49,7 @@ export interface AppHost {
 }
 
 export interface PaneModel {
-	io: Io;
+	io: IoPort;
 	view: View;
 	host: AppHost;
 	started: Config;
@@ -97,7 +84,7 @@ export interface PaneModel {
 }
 
 export function createPane(
-	io: Io,
+	io: IoPort,
 	view: View,
 	host: AppHost,
 	started: Config,
@@ -124,7 +111,7 @@ export function createPane(
 		view: view,
 		host: host,
 		started: started,
-		shellStarted: io.started(),
+		shellStarted: false,
 		ended: null,
 		autoscrolling: false,
 		cols: 0,
@@ -145,12 +132,7 @@ export function createPane(
 		viewWidth: viewWidth,
 		setViewWidth: setViewWidth,
 		cursor: createCursor(metrics, padding, started.foreground, (ink: CellInk | null): void => {
-			const relit = io.relight(ink);
-			if (!relit.ok) {
-				host.fail(`cursor: ${relit.error.toString()}`);
-				return;
-			}
-			view.repaintCursor(relit.value);
+			io.relight(ink, (rows: FrameRows): void => { view.repaintCursor(rows); });
 		}),
 		preedit: createPreedit(),
 		grid: null,
@@ -246,7 +228,10 @@ export function scheduleRefresh(this m: PaneModel): void {
 
 export function refresh(this m: PaneModel): void {
 	stats.tally.refreshes += 1;
-	const got = m.io.frame();
+	m.io.frame((got: IoFrame): void => { m.applied(got); });
+}
+
+function applied(this m: PaneModel, got: IoFrame): void {
 	m.shellStarted = got.started;
 	for (const failure of got.failures) { m.reported(failure); }
 	for (const launch of got.marks) { stats.mark(launch.name, launch.at); }

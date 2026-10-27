@@ -5,18 +5,6 @@ import { notchesOf } from "../../../../input/wheel";
 import { KeyAction, KeyEvent, modifierKey, modsOf } from "../../../../keys/keys";
 import { focusCursor } from "../../content/cursor";
 import { Hit } from "./controls";
-import {
-	cancelDialog as cancelled,
-	confirmDialog as confirmed,
-	focus,
-	key,
-	keyReleased as keyLifted,
-	move,
-	press,
-	release,
-	text,
-	wheel,
-} from "./io";
 import { PaneModel, refresh, scheduleRefresh } from "./paneModel";
 
 export function keyOf(e: NeonEvent): KeyEvent {
@@ -47,7 +35,7 @@ export function keyed(this m: PaneModel, e: NeonEvent): void {
 }
 
 export function keyReleased(this m: PaneModel, e: NeonEvent): void {
-	m.io.keyLifted(keyOf(e));
+	m.io.keyReleased(keyOf(e));
 	m.scheduleRefresh();
 }
 
@@ -108,11 +96,11 @@ export function wheeled(this m: PaneModel, e: NeonEvent): void {
 }
 
 export function confirmDialog(this m: PaneModel): void {
-	m.io.confirmed();
+	m.io.confirmDialog();
 	m.refresh();
 }
 
 export function cancelDialog(this m: PaneModel): void {
-	m.io.cancelled();
+	m.io.cancelDialog();
 	m.refresh();
 }

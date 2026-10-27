@@ -2,7 +2,7 @@ import { KeyEvent, modsMask } from "../../../../keys/keys";
 import { Reply, replyTo, replyToRead, warningFor, Warning } from "../../../../input/paste";
 import { clear, copyText } from "../../../../input/pointer";
 import { answerClipboard, modes } from "../../../../vt/vt";
-import { Term, TermError } from "./term";
+import { PasteCheck, Term, TermError } from "./term";
 import { ClipRead, Controls, askRead, typed, vtOf } from "./controls";
 
 export enum Pasted {
@@ -20,9 +20,9 @@ function send(
 	this c: Controls,
 	t: Term,
 	text: string,
-	allowUnsafe: boolean,
+	check: PasteCheck,
 ): Result<boolean, TermError> {
-	const _sent = try t.sendPaste(text, allowUnsafe);
+	const _sent = try t.sendPaste(text, check);
 	return c.typed(t);
 }
 
@@ -39,7 +39,7 @@ export function paste(this c: Controls, t: Term, text: string): Result<Pasted, T
 		c.held = { text: clean, warning: warning };
 		return Result.ok(Pasted.Held);
 	}
-	const _sent = try c.send(t, clean, false);
+	const _sent = try c.send(t, clean, PasteCheck.Checked);
 	return Result.ok(Pasted.Sent);
 }
 
@@ -79,7 +79,7 @@ export function confirm(this c: Controls, t: Term): Result<boolean, TermError> {
 	const held = c.held;
 	if (held !== null) {
 		c.held = null;
-		const _sent = try c.send(t, held.text, true);
+		const _sent = try c.send(t, held.text, PasteCheck.Confirmed);
 		return Result.ok(true);
 	}
 	const reading = c.reading;

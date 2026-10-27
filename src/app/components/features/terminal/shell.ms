@@ -1,3 +1,4 @@
+import { MouseButton } from "../../../mouseButton";
 import { KeyAction, KeyEvent, modsMask, modsOf } from "../../../../keys/keys";
 import { Spot } from "../../../../input/pointer";
 import { MouseGeometry } from "../../../../vt/vt";
@@ -115,9 +116,9 @@ export actor Shell {
 	keyReleased(k: SentKey): void { this.io?.keyReleased(keyOf(k)); }
 	text(typed: string, time: float64): void { this.io?.text(typed, time); }
 	focus(gained: boolean): void { this.io?.focus(gained); }
-	press(button: int32, h: SentHit, time: float64): void { this.io?.press(button, hitOf(h), time); }
+	press(button: MouseButton, h: SentHit, time: float64): void { this.io?.press(button, hitOf(h), time); }
 	move(h: SentHit, pressed: boolean): void { this.io?.move(hitOf(h), pressed); }
-	release(button: int32, h: SentHit): void { this.io?.release(button, hitOf(h)); }
+	release(button: MouseButton, h: SentHit): void { this.io?.release(button, hitOf(h)); }
 	wheel(notches: float64, h: SentHit): void { this.io?.wheel(notches, hitOf(h)); }
 	autoscroll(): void { this.io?.autoscroll(); }
 	closeKey(): void { this.io?.closeKey(); }
@@ -181,9 +182,9 @@ export function portOf(shell: Shell): IoPort {
 		keyReleased: (k: KeyEvent): void => { shell.keyReleased(sent(k)); },
 		text: (typed: string, time: float64): void => { shell.text(typed, time); },
 		focus: (gained: boolean): void => { shell.focus(gained); },
-		press: (button: int32, h: Hit, time: float64): void => { shell.press(button, sentHit(h), time); },
+		press: (button: MouseButton, h: Hit, time: float64): void => { shell.press(button, sentHit(h), time); },
 		move: (h: Hit, pressed: boolean): void => { shell.move(sentHit(h), pressed); },
-		release: (button: int32, h: Hit): void => { shell.release(button, sentHit(h)); },
+		release: (button: MouseButton, h: Hit): void => { shell.release(button, sentHit(h)); },
 		wheel: (notches: float64, h: Hit): void => { shell.wheel(notches, sentHit(h)); },
 		autoscroll: (): void => { shell.autoscroll(); },
 		closeKey: (): void => { shell.closeKey(); },

@@ -1,31 +1,28 @@
 import { KeyMod } from "../../../../keys/keys";
 import { autoscrollOf, claimsMouse } from "../../../../input/pointer";
-import { WheelRoute, reportButton, route } from "../../../../input/wheel";
+import { WheelRoute, route } from "../../../../input/wheel";
 import { openable, refusalText } from "../../../../term/link";
 import { MouseAction, MouseInput, Vt } from "../../../../vt/vt";
+import { MouseButton } from "../../../mouseButton";
 import { Term, TermError, tapKey } from "./term";
 import { Controls, Hit, holding, vtOf } from "./controls";
 import { copySelection, pasteFrom } from "./clipboard";
-
-const LEFT: int32 = 1;
-const RIGHT: int32 = 2;
 
 function reportMouse(
 	this c: Controls,
 	t: Term,
 	action: MouseAction,
-	button: int32,
+	button: MouseButton,
 	h: Hit,
-	anyPressed: boolean,
 ): Result<boolean, TermError> {
 	const input: MouseInput = {
 		action: action,
-		button: button,
+		button: button as int32,
 		mods: h.mods,
 		x: (h.x * h.scale + h.cell.padLeft) as float32,
 		y: (h.y * h.scale + h.cell.padTop) as float32,
 	};
-	const sent = try t.sendMouse(input, h.cell, anyPressed);
+	const sent = try t.sendMouse(input, h.cell);
 	return Result.ok(sent > 0);
 }
 
@@ -47,22 +44,22 @@ export enum PressPlan {
 }
 
 export function planPress(
-	button: int32,
+	button: MouseButton,
 	mods: BitSet<KeyMod>,
 	tracking: boolean,
 	overLink: boolean,
 ): PressPlan {
-	if (button == LEFT && mods.has(KeyMod.Ctrl) && overLink) { return PressPlan.Link; }
+	if (button == MouseButton.Left && mods.has(KeyMod.Ctrl) && overLink) { return PressPlan.Link; }
 	if (claimsMouse(tracking, mods.has(KeyMod.Shift))) { return PressPlan.Report; }
-	if (button == LEFT) { return PressPlan.Select; }
-	if (button == RIGHT) { return PressPlan.CopyOrPaste; }
+	if (button == MouseButton.Left) { return PressPlan.Select; }
+	if (button == MouseButton.Right) { return PressPlan.CopyOrPaste; }
 	return PressPlan.Ignore;
 }
 
 export function pointerDown(
 	this c: Controls,
 	t: Term,
-	button: int32,
+	button: MouseButton,
 	h: Hit,
 	time: float64,
 ): Result<boolean, TermError> {
@@ -72,7 +69,7 @@ export function pointerDown(
 	const modes = vt.modes();
 	if (!modes.ok) { return Result.err(TermError.VtFailed); }
 	let uri: string | null = null;
-	if (button == LEFT && h.mods.has(KeyMod.Ctrl)) {
+	if (button == MouseButton.Left && h.mods.has(KeyMod.Ctrl)) {
 		const link = vt.linkAt(h.at.col, h.at.row);
 		if (!link.ok) { return Result.err(TermError.VtFailed); }
 		uri = link.value;
@@ -85,7 +82,7 @@ export function pointerDown(
 		PressPlan.Report => {
 			c.pointer.clear(vt);
 			c.button = button;
-			return c.reportMouse(t, MouseAction.Press, button, h, true);
+			return c.reportMouse(t, MouseAction.Press, button, h);
 		},
 		PressPlan.Select => {
 			const reach = (h.cell.cellWidth as float64) / h.scale;
@@ -116,8 +113,8 @@ export function pointerMove(
 	const modes = vt.modes();
 	if (!modes.ok) { return Result.err(TermError.VtFailed); }
 	if (claimsMouse(modes.value.mouseTracking, h.mods.has(KeyMod.Shift))) {
-		if (!pressed) { c.button = 0; }
-		const _reported = try c.reportMouse(t, MouseAction.Motion, c.button, h, c.button != 0);
+		if (!pressed) { c.button = MouseButton.None; }
+		const _reported = try c.reportMouse(t, MouseAction.Motion, c.button, h);
 		return Result.ok(false);
 	}
 	if (!c.pointer.dragging) {
@@ -137,14 +134,14 @@ export function pointerMove(
 export function pointerUp(
 	this c: Controls,
 	t: Term,
-	button: int32,
+	button: MouseButton,
 	h: Hit,
 ): Result<boolean, TermError> {
-	const reported = c.button != 0;
+	const reported = c.button != MouseButton.None;
 	c.endDrag();
 	if (!reported || c.holding()) { return Result.ok(false); }
-	c.button = 0;
-	return c.reportMouse(t, MouseAction.Release, button, h, false);
+	c.button = MouseButton.None;
+	return c.reportMouse(t, MouseAction.Release, button, h);
 }
 
 export function endDrag(this c: Controls): void {
@@ -186,9 +183,9 @@ export function roll(
 		WheelRoute.Report => {
 			const shown = c.pointer.selected();
 			c.pointer.clear(vt);
-			const button = reportButton(rows < 0);
+			const button = rows < 0 ? MouseButton.WheelUp : MouseButton.WheelDown;
 			for (let i = 0; i < presses; i++) {
-				const _reported = try c.reportMouse(t, MouseAction.Press, button, h, false);
+				const _reported = try c.reportMouse(t, MouseAction.Press, button, h);
 			}
 			return Result.ok(shown);
 		},

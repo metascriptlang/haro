@@ -31,6 +31,7 @@ import {
 	SECONDARY_BUTTON,
 	TITLE_STYLE,
 } from "../../../theme";
+import { Pending, PendingKind, pendingOf, samePending } from "../../../pending";
 import { Button } from "../../ui/button";
 import { CellMetrics, CellText } from "../../ui/cellText";
 import { ModalLayer } from "../../layout/modalLayer";
@@ -50,9 +51,7 @@ export interface PasteDialogModel {
 	setCancelLabel: Setter<string>;
 	top: List<Shown>;
 	code: List<Shown>;
-	shownFor: Held | null;
-	shownRead: string | null;
-	shownClose: boolean;
+	shown: Pending;
 }
 
 const MARGIN: number = 24;
@@ -100,48 +99,32 @@ export function createPasteDialog(): PasteDialogModel {
 		visible: visible, cols: cols, setVisible: setVisible, setCols: setCols,
 		confirmLabel: confirmLabel, cancelLabel: cancelLabel,
 		setConfirmLabel: setConfirmLabel, setCancelLabel: setCancelLabel,
-		top: createList<Shown>([]), code: createList<Shown>([]), shownFor: null, shownRead: null,
-		shownClose: false,
+		top: createList<Shown>([]), code: createList<Shown>([]),
+		shown: { kind: PendingKind.None },
 	};
 }
 
-export function showPending(
-	this d: PasteDialogModel,
-	held: Held | null,
-	reading: string | null,
-	closing: boolean,
-	cellWidth: number,
-	viewWidth: number,
-): void {
+export function showPending(this d: PasteDialogModel, pending: Pending, cellWidth: number, viewWidth: number): void {
 	const cols = dialogCols(viewWidth, cellWidth);
-	if (closing) {
-		if (d.shownClose) { return; }
-		d.present(closeDialogOf(cols), cols, CLOSE_CONFIRM, CLOSE_CANCEL);
-		d.shownClose = true;
-		d.shownFor = null;
-		d.shownRead = null;
-		return;
-	}
-	d.shownClose = false;
-	if (held !== null) {
-		const shown = d.shownFor;
-		if (shown !== null && shown.text == held.text && shown.warning == held.warning) { return; }
-		const dialog = dialogOf(held.warning, held.text, cols, PREVIEW_ROWS);
-		d.present(dialog, cols, PASTE_CONFIRM, PASTE_CANCEL);
-		d.shownFor = held;
-		d.shownRead = null;
-		return;
-	}
-	if (reading === null) {
-		d.shownFor = null;
-		d.shownRead = null;
+	if (pending.kind === PendingKind.None) {
+		d.shown = pending;
 		d.setVisible(false);
 		return;
 	}
-	if (d.shownRead === reading) { return; }
-	d.present(askDialogOf(reading, cols, PREVIEW_ROWS), cols, READ_CONFIRM, READ_CANCEL);
-	d.shownRead = reading;
-	d.shownFor = null;
+	if (samePending(d.shown, pending)) { return; }
+	d.shown = pending;
+	if (pending.kind === PendingKind.Close) {
+		d.present(closeDialogOf(cols), cols, CLOSE_CONFIRM, CLOSE_CANCEL);
+	} else if (pending.kind === PendingKind.Paste) {
+		const held = pending.held;
+		d.present(dialogOf(held.warning, held.text, cols, PREVIEW_ROWS), cols, PASTE_CONFIRM, PASTE_CANCEL);
+	} else {
+		d.present(askDialogOf(pending.text, cols, PREVIEW_ROWS), cols, READ_CONFIRM, READ_CANCEL);
+	}
+}
+
+export function invalidate(this d: PasteDialogModel): void {
+	d.shown = { kind: PendingKind.None };
 }
 
 function present(
@@ -220,7 +203,7 @@ test "a held paste opens the view with its lines and cancelling closes it" {
 	const v = createPasteDialog();
 	assert !v.visible();
 	const held: Held = { text: "ls\ncd ..\nrm x", warning: Warning.MultiLine };
-	v.showPending(held, null, false, 8.4, 960);
+	v.showPending(pendingOf(held, null, false), 8.4, 960);
 	flush();
 	assert v.visible();
 	assert v.cols() == 88;
@@ -228,15 +211,15 @@ test "a held paste opens the view with its lines and cancelling closes it" {
 	assert v.top.length() >= 3;
 	assert v.top.at(0).spans[0].text == "Warning: potentially unsafe paste";
 	assert v.code.at(1).spans[0].text == "cd ..";
-	v.showPending(held, null, false, 8.4, 960);
+	v.showPending(pendingOf(held, null, false), 8.4, 960);
 	flush();
 	assert v.code.length() == 3;
 	const next: Held = { text: "a\nb", warning: Warning.MultiLine };
-	v.showPending(next, null, false, 8.4, 400);
+	v.showPending(pendingOf(next, null, false), 8.4, 400);
 	flush();
 	assert v.code.length() == 2;
 	assert v.cols() == 37;
-	v.showPending(null, null, false, 8.4, 960);
+	v.showPending(pendingOf(null, null, false), 8.4, 960);
 	flush();
 	assert !v.visible();
 }
@@ -244,29 +227,29 @@ test "a held paste opens the view with its lines and cancelling closes it" {
 test "a close asked over a held paste shows first, and the paste shows again once it is answered" {
 	const v = createPasteDialog();
 	const held: Held = { text: "a\nb", warning: Warning.MultiLine };
-	v.showPending(held, null, true, 8.4, 960);
+	v.showPending(pendingOf(held, null, true), 8.4, 960);
 	flush();
 	assert v.visible();
 	assert v.top.at(0).spans[0].text == "A program is still running";
 	assert v.code.length() == 0;
 	assert v.confirmLabel() == "Close (Enter)";
 	assert v.cancelLabel() == "Cancel (Esc)";
-	v.showPending(held, null, false, 8.4, 960);
+	v.showPending(pendingOf(held, null, false), 8.4, 960);
 	flush();
 	assert v.visible();
 	assert v.code.length() == 2;
 	assert v.confirmLabel() == "Paste anyway (Enter)";
-	v.showPending(null, null, true, 8.4, 960);
+	v.showPending(pendingOf(null, null, true), 8.4, 960);
 	flush();
 	assert v.confirmLabel() == "Close (Enter)";
-	v.showPending(null, null, false, 8.4, 960);
+	v.showPending(pendingOf(null, null, false), 8.4, 960);
 	flush();
 	assert !v.visible();
 }
 
 test "a clipboard read opens the view with its own labels and closes it again" {
 	const v = createPasteDialog();
-	v.showPending(null, "secret\ntoken", false, 8.4, 960);
+	v.showPending(pendingOf(null, "secret\ntoken", false), 8.4, 960);
 	flush();
 	assert v.visible();
 	assert v.top.at(0).spans[0].text == "Authorize clipboard access";
@@ -274,10 +257,10 @@ test "a clipboard read opens the view with its own labels and closes it again" {
 	assert v.confirmLabel() == "Allow (Ctrl+Enter)";
 	assert v.cancelLabel() == "Deny (Esc)";
 	const held: Held = { text: "a\nb", warning: Warning.MultiLine };
-	v.showPending(held, "secret", false, 8.4, 960);
+	v.showPending(pendingOf(held, "secret", false), 8.4, 960);
 	flush();
 	assert v.confirmLabel() == "Paste anyway (Enter)";
-	v.showPending(null, null, false, 8.4, 960);
+	v.showPending(pendingOf(null, null, false), 8.4, 960);
 	flush();
 	assert !v.visible();
 }

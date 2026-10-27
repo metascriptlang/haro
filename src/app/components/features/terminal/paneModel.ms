@@ -25,7 +25,7 @@ import {
 } from "../../content/cursor";
 import { PreeditModel, createPreedit } from "../../content/preedit";
 import { NoticeModel, noticeCols, showNotice } from "../notice/notice";
-import { PasteDialogModel, showPending } from "../paste/pasteDialog";
+import { PasteDialogModel, invalidate, showPending } from "../paste/pasteDialog";
 import { Asks } from "./controls";
 import { Exit, Failure, IoFrame, IoPort, settingsOf } from "./io";
 import { TermError, exitCodeText } from "./term";
@@ -298,14 +298,7 @@ function applied(this m: PaneModel, got: IoFrame): void {
 			m.cursor.showCursor(f.cursor, f.look);
 		}
 	}
-	const pending = got.pending;
-	m.dialog.showPending(
-		pending.held,
-		pending.reading,
-		pending.closing,
-		m.metrics.cellWidth(),
-		m.viewWidth(),
-	);
+	m.dialog.showPending(got.pending, m.metrics.cellWidth(), m.viewWidth());
 	m.answerAsks(got.asks);
 	m.autoscrolling = got.autoscroll;
 	m.autoscrollSoon();
@@ -421,8 +414,7 @@ function fitLayout(this m: PaneModel): void {
 	m.setRowHeight(rowPx / ratio);
 	flush();
 	m.notify(m.notice.text);
-	m.dialog.shownFor = null;
-	m.dialog.shownClose = false;
+	m.dialog.invalidate();
 	const padPx = PixelRatio.getPixelSizeForLayoutSize(m.padding()) as int32;
 	m.mouseGeometry = {
 		cellWidth: cellPx,

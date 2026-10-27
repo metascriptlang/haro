@@ -1,3 +1,4 @@
+import { MouseButton } from "../../../mouseButton";
 import { selected } from "../../../../input/pointer";
 import { Term } from "./term";
 import { Controls, holding, refit, typed } from "./controls";
@@ -138,7 +139,7 @@ test "an empty clipboard is answered at once and a read does not ask while the p
 		c.reading = "x";
 		const clip = boardOf("");
 		assert !handled(c.roll(t, 1, hitAt(0, 0)));
-		assert !handled(settled(clip, c, t, c.pointerDown(t, 1, hitAt(0, 0), 0)));
+		assert !handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(0, 0), 0)));
 	}).ok;
 }
 

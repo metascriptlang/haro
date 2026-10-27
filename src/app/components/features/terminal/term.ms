@@ -17,16 +17,23 @@ import {
 	DesktopNotification,
 	Keys,
 	MouseGeometry,
+	MouseAction,
 	MouseInput,
 	PasteError,
 	Palette,
 } from "../../../../vt/vt";
 import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "../../../rows";
 import { Mark } from "../../../mark";
+import { holdsButton } from "../../../mouseButton";
 
 const BUFFER_BYTES = 65536;
 const DRAIN_LIMIT = 16;
 const DRAIN_BUDGET_MS: float64 = 8;
+
+export enum PasteCheck {
+	Checked,
+	Confirmed,
+}
 
 export enum TermError {
 	KeysOpenFailed,
@@ -334,11 +341,11 @@ export function sendText(this t: Term, text: string): Result<int32, TermError> {
 export function sendPaste(
 	this t: Term,
 	text: string,
-	allowUnsafe: boolean,
+	check: PasteCheck,
 ): Result<int32, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(0); }
-	const bytes = s.vt.pasteBytes(text, allowUnsafe);
+	const bytes = s.vt.pasteBytes(text, check == PasteCheck.Confirmed);
 	if (!bytes.ok) {
 		return Result.err(match (bytes.error) {
 			PasteError.Unsafe => TermError.PasteUnsafe,
@@ -360,11 +367,10 @@ export function sendMouse(
 	this t: Term,
 	e: MouseInput,
 	g: MouseGeometry,
-	anyPressed: boolean,
 ): Result<int32, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(0); }
-	const n = s.vt.mouseReport(e, g, anyPressed, t.buf);
+	const n = s.vt.mouseReport(e, g, e.action != MouseAction.Release && holdsButton(e.button), t.buf);
 	if (!n.ok) { return Result.err(TermError.MouseFailed); }
 	return t.sendBuffered(s, n.value);
 }

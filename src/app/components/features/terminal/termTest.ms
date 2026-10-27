@@ -109,12 +109,12 @@ test "a mouse report is the program's encoding of the pointer, nothing while it 
 	const press: MouseInput = { action: MouseAction.Press, button: 1, mods: none, x: 17, y: 17 };
 	const release: MouseInput = { ...press, action: MouseAction.Release };
 	assert onTerm("ready", (a: Term, quiet: Sink): void => {
-		assert a.sendMouse(press, geometry, true).ok;
+		assert a.sendMouse(press, geometry).ok;
 		assert quiet.sent == "";
 	}).ok;
 	assert onTerm("\x1b[?1000h\x1b[?1006h", (t: Term, sink: Sink): void => {
-		assert t.sendMouse(press, geometry, true).ok;
-		assert t.sendMouse(release, geometry, false).ok;
+		assert t.sendMouse(press, geometry).ok;
+		assert t.sendMouse(release, geometry).ok;
 		assert sink.sent == "\x1b[<0;3;2M\x1b[<0;3;2m";
 	}).ok;
 }

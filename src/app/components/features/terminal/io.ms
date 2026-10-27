@@ -1,6 +1,8 @@
+import { MouseButton } from "../../../mouseButton";
 import { Rgb, setDefaultColors, setPalette, setScrollback } from "../../../../vt/vt";
 import { Keybind } from "../../../../input/bindings";
-import { Held, Reply } from "../../../../input/paste";
+import { Reply } from "../../../../input/paste";
+import { Pending, pendingOf } from "../../../pending";
 import { KeyEvent, OptionAsAlt } from "../../../../keys/keys";
 import { CellInk } from "../../../../grid/lines";
 import { Config } from "../../../../config/config";
@@ -59,12 +61,6 @@ export struct Exit {
 	abnormal: boolean;
 }
 
-export struct Pending {
-	held: Held | null;
-	reading: string | null;
-	closing: boolean;
-}
-
 export struct IoFrame {
 	frame: Frame | null;
 	asks: Asks;
@@ -94,9 +90,9 @@ export interface IoPort {
 	keyReleased: (k: KeyEvent) => void;
 	text: (typed: string, time: float64) => void;
 	focus: (gained: boolean) => void;
-	press: (button: int32, h: Hit, time: float64) => void;
+	press: (button: MouseButton, h: Hit, time: float64) => void;
 	move: (h: Hit, pressed: boolean) => void;
-	release: (button: int32, h: Hit) => void;
+	release: (button: MouseButton, h: Hit) => void;
 	wheel: (notches: float64, h: Hit) => void;
 	autoscroll: () => void;
 	closeKey: () => void;
@@ -195,7 +191,7 @@ export function focus(this io: Io, gained: boolean): void {
 	if (!sent.ok) { io.fail("focus", sent.error); }
 }
 
-export function press(this io: Io, button: int32, h: Hit, time: float64): void {
+export function press(this io: Io, button: MouseButton, h: Hit, time: float64): void {
 	io.check("press", io.controls.pointerDown(io.term, button, h, time));
 }
 
@@ -203,7 +199,7 @@ export function move(this io: Io, h: Hit, pressed: boolean): void {
 	io.check("move", io.controls.pointerMove(io.term, h, pressed));
 }
 
-export function release(this io: Io, button: int32, h: Hit): void {
+export function release(this io: Io, button: MouseButton, h: Hit): void {
 	io.check("release", io.controls.pointerUp(io.term, button, h));
 }
 
@@ -302,7 +298,7 @@ export function frame(this io: Io): IoFrame {
 	return {
 		frame: frame,
 		asks: c.takeAsks(),
-		pending: { held: c.held, reading: c.reading, closing: c.closing },
+		pending: pendingOf(c.held, c.reading, c.closing),
 		exit: exit,
 		autoscroll: c.autoscroll != 0,
 		again: again,
@@ -324,9 +320,9 @@ export function port(this io: Io): IoPort {
 		keyReleased: (k: KeyEvent): void => { io.keyReleased(k); },
 		text: (typed: string, time: float64): void => { io.text(typed, time); },
 		focus: (gained: boolean): void => { io.focus(gained); },
-		press: (button: int32, h: Hit, time: float64): void => { io.press(button, h, time); },
+		press: (button: MouseButton, h: Hit, time: float64): void => { io.press(button, h, time); },
 		move: (h: Hit, pressed: boolean): void => { io.move(h, pressed); },
-		release: (button: int32, h: Hit): void => { io.release(button, h); },
+		release: (button: MouseButton, h: Hit): void => { io.release(button, h); },
 		wheel: (notches: float64, h: Hit): void => { io.wheel(notches, h); },
 		autoscroll: (): void => { io.autoscroll(); },
 		closeKey: (): void => { io.closeKey(); },

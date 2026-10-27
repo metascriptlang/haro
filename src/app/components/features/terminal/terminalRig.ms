@@ -1,3 +1,4 @@
+import { MouseButton } from "../../../mouseButton";
 import { KeyAction, KeyEvent, modsOf } from "../../../../keys/keys";
 import { Spot } from "../../../../input/pointer";
 import { Pty, PtyError } from "../../../../pty/transport";
@@ -161,8 +162,8 @@ export function hitWith(col: int32, row: int32, mods: int32): Hit {
 }
 
 export function drag(c: Controls, t: Term, clip: Board, from: Spot, to: Spot): boolean {
-	const pressed = settled(clip, c, t, c.pointerDown(t, 1, hitAt(from.col, from.row), 0)).ok;
+	const pressed = settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(from.col, from.row), 0)).ok;
 	const moved = c.pointerMove(t, hitAt(to.col, to.row), true).ok;
-	const _released = c.pointerUp(t, 1, hitAt(to.col, to.row));
+	const _released = c.pointerUp(t, MouseButton.Left, hitAt(to.col, to.row));
 	return pressed && moved;
 }

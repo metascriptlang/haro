@@ -1,3 +1,4 @@
+import { MouseButton } from "../../../mouseButton";
 import { KeyEvent, KeyMod } from "../../../../keys/keys";
 import { selected } from "../../../../input/pointer";
 import { View, fitRows, open, paint } from "../../../frame";
@@ -40,9 +41,9 @@ test "while a paste is held the wheel, the buttons and the pointer do nothing" {
 		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyV", CLIPBOARD_MODS))));
 		assert !handled(c.roll(t, 1, hitAt(0, 0)));
 		assert offsetOf(t) == bottom;
-		assert !handled(settled(clip, c, t, c.pointerDown(t, 1, hitAt(0, 0), 0)));
+		assert !handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(0, 0), 0)));
 		assert !c.pointer.dragging;
-		assert !handled(settled(clip, c, t, c.pointerDown(t, 2, hitAt(0, 0), 0)));
+		assert !handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Right, hitAt(0, 0), 0)));
 		assert clip.reads == 1 && clip.copied == "";
 	}).ok;
 }
@@ -111,15 +112,15 @@ test "an app that tracks the mouse gets presses, releases and wheel notches as i
 		const c = Controls.open();
 		const clip = boardOf("x");
 		const bottom = offsetOf(t);
-		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitAt(2, 1), 0)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(2, 1), 0)));
 		assert !c.pointer.dragging;
 		assert sink.sent == "\x1b[<0;3;2M";
-		assert handled(c.pointerUp(t, 1, hitAt(2, 1)));
+		assert handled(c.pointerUp(t, MouseButton.Left, hitAt(2, 1)));
 		assert sink.sent == "\x1b[<0;3;2M\x1b[<0;3;2m";
 		assert !handled(c.roll(t, 1, hitAt(0, 0)));
 		assert offsetOf(t) == bottom;
 		assert sink.sent == "\x1b[<0;3;2M\x1b[<0;3;2m\x1b[<64;1;1M\x1b[<64;1;1M\x1b[<64;1;1M";
-		assert !handled(c.pointerUp(t, 1, hitAt(0, 0)));
+		assert !handled(c.pointerUp(t, MouseButton.Left, hitAt(0, 0)));
 	}).ok;
 }
 
@@ -129,7 +130,7 @@ test "motion is reported only in the modes that ask for it, and the held button 
 		const clip = boardOf("x");
 		assert !handled(c.pointerMove(t, hitAt(1, 1), false));
 		assert sink.sent == "";
-		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitAt(1, 1), 0)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(1, 1), 0)));
 		assert !handled(c.pointerMove(t, hitAt(4, 1), true));
 		assert sink.sent == "\x1b[<0;2;2M\x1b[<32;5;2M";
 	}).ok;
@@ -140,7 +141,7 @@ test "shift hands the mouse back from an app that tracks it, and a wheel reporte
 		const c = Controls.open();
 		const clip = boardOf("x");
 		const bottom = offsetOf(t);
-		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitWith(0, 1, SHIFT), 0)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(0, 1, SHIFT), 0)));
 		assert c.pointer.dragging;
 		assert handled(c.pointerMove(t, hitWith(5, 1, SHIFT), true));
 		assert c.pointer.selected();
@@ -161,14 +162,14 @@ test "a ctrl click on an http link opens it, on a link to a program or on text i
 		const c = Controls.open();
 		const board = boardOf("");
 		const clip = board;
-		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitWith(1, 0, CTRL), 0)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(1, 0, CTRL), 0)));
 		assert board.opened == "https://example.com/a";
 		board.opened = "";
-		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitWith(6, 0, CTRL), 0)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(6, 0, CTRL), 0)));
 		assert board.opened == "";
-		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitWith(12, 0, CTRL), 10000)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(12, 0, CTRL), 10000)));
 		assert board.opened == "";
-		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitWith(1, 0, 0), 20000)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(1, 0, 0), 20000)));
 		assert board.opened == "";
 	}, 30, 5).ok;
 }
@@ -178,10 +179,10 @@ test "a right click copies a selection and otherwise pastes" {
 		const c = Controls.open();
 		const board = boardOf("pasted");
 		const clip = board;
-		assert !handled(settled(clip, c, t, c.pointerDown(t, 2, hitAt(0, 0), 0)));
+		assert !handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Right, hitAt(0, 0), 0)));
 		assert sink.sent == "pasted";
 		assert drag(c, t, clip, at(0, 0), at(4, 0));
-		assert handled(settled(clip, c, t, c.pointerDown(t, 2, hitAt(0, 0), 1000)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Right, hitAt(0, 0), 1000)));
 		assert board.copied == "alpha";
 		assert sink.sent == "pasted";
 		assert !c.pointer.selected();
@@ -192,7 +193,7 @@ test "a move that finds the button released ends the drag, and a wheel while dra
 	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = boardOf("");
-		assert settled(clip, c, t, c.pointerDown(t, 1, hitAt(0, 4), 0)).ok;
+		assert settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(0, 4), 0)).ok;
 		assert handled(c.pointerMove(t, hitAt(3, 4), true));
 		assert handled(c.roll(t, 1, hitAt(0, 0)));
 		const kept = c.pointer.sel;
@@ -234,7 +235,7 @@ test "a drag held past the top edge scrolls back a row per tick, and the release
 		const c = Controls.open();
 		const clip = boardOf("");
 		const bottom = offsetOf(t);
-		assert settled(clip, c, t, c.pointerDown(t, 1, hitAt(3, 2), 0)).ok;
+		assert settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(3, 2), 0)).ok;
 		const above: Hit = { ...hitAt(3, 0), y: -12 };
 		assert c.pointerMove(t, above, true).ok;
 		assert c.autoscroll == -1;
@@ -244,7 +245,7 @@ test "a drag held past the top edge scrolls back a row per tick, and the release
 		const kept = c.pointer.sel;
 		assert kept !== null;
 		if (kept !== null) { assert kept.bounds().start.row == bottom - 2; }
-		assert c.pointerUp(t, 1, above).ok;
+		assert c.pointerUp(t, MouseButton.Left, above).ok;
 		assert !handled(c.autoscrollTick(t));
 		assert offsetOf(t) == bottom - 2;
 	}).ok;
@@ -255,7 +256,7 @@ test "losing focus mid-drag ends the drag and its scrolling, and keeps the selec
 		const c = Controls.open();
 		const clip = boardOf("");
 		const bottom = offsetOf(t);
-		assert settled(clip, c, t, c.pointerDown(t, 1, hitAt(3, 2), 0)).ok;
+		assert settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(3, 2), 0)).ok;
 		const above: Hit = { ...hitAt(3, 0), y: -12 };
 		assert c.pointerMove(t, above, true).ok;
 		c.endDrag();
@@ -277,7 +278,7 @@ test "a press in the padding reaches a tracking app as the nearest cell" {
 			y: -6,
 			cell: { ...base.cell, width: 180, height: 100, padLeft: 10, padTop: 10, padRight: 10, padBottom: 10 },
 		};
-		assert handled(settled(clip, c, t, c.pointerDown(t, 1, padded, 0)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, padded, 0)));
 		assert sink.sent == "\x1b[<0;1;1M";
 	}).ok;
 }
@@ -286,12 +287,12 @@ test "a press picks one plan from the button, the modifiers, mouse tracking and 
 	const none = 0 as BitSet<KeyMod>;
 	const ctrl = none.incl(KeyMod.Ctrl);
 	const shift = none.incl(KeyMod.Shift);
-	assert planPress(1, ctrl, true, true) == PressPlan.Link;
-	assert planPress(1, ctrl, false, false) == PressPlan.Select;
-	assert planPress(2, ctrl, false, true) == PressPlan.CopyOrPaste;
-	assert planPress(1, none, true, true) == PressPlan.Report;
-	assert planPress(1, shift, true, false) == PressPlan.Select;
-	assert planPress(2, none, true, false) == PressPlan.Report;
-	assert planPress(2, shift, true, false) == PressPlan.CopyOrPaste;
-	assert planPress(3, none, false, false) == PressPlan.Ignore;
+	assert planPress(MouseButton.Left, ctrl, true, true) == PressPlan.Link;
+	assert planPress(MouseButton.Left, ctrl, false, false) == PressPlan.Select;
+	assert planPress(MouseButton.Right, ctrl, false, true) == PressPlan.CopyOrPaste;
+	assert planPress(MouseButton.Left, none, true, true) == PressPlan.Report;
+	assert planPress(MouseButton.Left, shift, true, false) == PressPlan.Select;
+	assert planPress(MouseButton.Right, none, true, false) == PressPlan.Report;
+	assert planPress(MouseButton.Right, shift, true, false) == PressPlan.CopyOrPaste;
+	assert planPress(MouseButton.Middle, none, false, false) == PressPlan.Ignore;
 }

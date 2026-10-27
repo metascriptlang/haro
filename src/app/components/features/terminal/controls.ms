@@ -4,6 +4,7 @@ import { Pointer, Spot } from "../../../../input/pointer";
 import { Wheel } from "../../../../input/wheel";
 import { Held } from "../../../../input/paste";
 import { MouseGeometry, Vt } from "../../../../vt/vt";
+import { MouseButton } from "../../../mouseButton";
 import { Term, TermError, fit } from "./term";
 
 export enum ClipRead {
@@ -36,7 +37,7 @@ export interface Controls {
 	wheel: Wheel;
 	held: Held | null;
 	reading: string | null;
-	button: int32;
+	button: MouseButton;
 	autoscroll: int32;
 	keybinds: Vec<Keybind>;
 	consumedKey: string;
@@ -52,7 +53,7 @@ export function open(this typeof Controls): Controls {
 		wheel: Wheel.open(),
 		held: null,
 		reading: null,
-		button: 0,
+		button: MouseButton.None,
 		autoscroll: 0,
 		keybinds: [],
 		consumedKey: "",

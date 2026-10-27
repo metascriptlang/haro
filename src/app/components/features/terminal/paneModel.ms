@@ -250,8 +250,7 @@ function applied(this m: PaneModel, got: IoFrame): void {
 			stats.tally.held += 1;
 			m.watchHold();
 		} else {
-			const rows = f.rows;
-			if (rows !== null) { m.view.paint(rows); }
+			if (f.rows !== null) { m.view.paint(f.rows!); }
 			const colors = f.colors;
 			if (colors !== null) {
 				m.setBackground(hexOf(colors.bg));

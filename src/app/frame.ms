@@ -173,7 +173,8 @@ function relight(
 		const y = vt.painted.rows[i].y;
 		const cell = cursor.cellOnRow(y);
 		if (shown[y].cell != cell || shown[y].ink != ink.inkOn(cell)) {
-			out.push(try rowOf(shown, vt.painted.rows[i], cursor, ink, background));
+			const built = try rowOf(shown, vt.painted.rows[i], cursor, ink, background);
+			out.push(move built);
 		}
 	}
 	return Result.ok(null);
@@ -204,7 +205,8 @@ export function planRows(ref shown: Vec<Shown>, vt: Vt, ink: CellInk | null): Re
 	for (let i = 0; i < p.scrolled; i++) { shown.push(shown.shift()); }
 	let rows: Vec<RowUpdate> = [];
 	for (const y of p.ys) {
-		rows.push(try rowOf(shown, vt.painted.rows[y], cursor, ink, p.colors.bg));
+		const built = try rowOf(shown, vt.painted.rows[y], cursor, ink, p.colors.bg);
+		rows.push(move built);
 	}
 	const _relit = try relight(rows, shown, vt, cursor, ink, p.colors.bg);
 	return Result.ok({ cursor: cursor, rows: { scrolled: p.scrolled, rows: rows, background: p.colors.bg } });
@@ -214,9 +216,9 @@ export function applyRows(grid: List<RowSlot>, styles: Styles, f: FrameRows): in
 	let chars: int32 = 0;
 	const last = grid.length() - 1;
 	for (let i = 0; i < f.scrolled; i++) { grid.move(0, last); }
-	for (const r of f.rows) {
-		chars += r.line.text.length as int32;
-		grid.set(r.y, { line: r.line, spans: spansOf(styles, r.line, f.background) });
+	for (let i = 0; i < f.rows.length; i++) {
+		chars += f.rows[i].line.text.length as int32;
+		grid.set(f.rows[i].y, { line: f.rows[i].line, spans: spansOf(styles, f.rows[i].line, f.background) });
 	}
 	return chars;
 }

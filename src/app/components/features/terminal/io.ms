@@ -276,10 +276,12 @@ export function frame(this io: Io): IoFrame {
 	if (!pumped.ok) {
 		io.fail("output", pumped.error);
 	} else {
-		const f = pumped.value;
-		frame = f;
-		if (f.asked) { io.controls.clipboardAsked(); }
-		if (!f.held) {
+		const asked = pumped.value.asked;
+		const held = pumped.value.held;
+		const ended = pumped.value.ended;
+		frame = move pumped.value;
+		if (asked) { io.controls.clipboardAsked(); }
+		if (!held) {
 			const dropped = io.controls.syncSelection(io.term);
 			if (!dropped.ok) {
 				io.fail("selection", dropped.error);
@@ -287,7 +289,7 @@ export function frame(this io: Io): IoFrame {
 				again = dropped.value;
 			}
 		}
-		if (f.ended) { exit = io.exitOf(); }
+		if (ended) { exit = io.exitOf(); }
 	}
 	const c = io.controls;
 	const failures = io.failures;

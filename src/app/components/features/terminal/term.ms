@@ -240,7 +240,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
 	t.ended = false;
 	return Result.ok({
-		rows: planned.value.rows,
+		rows: move planned.value.rows,
 		cursor: planned.value.cursor,
 		look: look.value,
 		colors: vt.painted.palette,

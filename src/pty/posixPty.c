@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -26,6 +27,7 @@
 #define EXIT_QUIET_MS 50
 #define EXIT_DRAIN_MS 1000
 #define CHILD_FD_SCAN_MAX 65536
+#define WRITE_POLL_MS 100
 
 typedef struct {
 	int used;
@@ -126,7 +128,7 @@ static void* readLoop(void* arg) {
 			continue;
 		}
 		ssize_t got = read(p->master, chunk, sizeof chunk);
-		if (got < 0 && errno == EINTR) continue;
+		if (got < 0 && (errno == EINTR || errno == EAGAIN)) continue;
 		if (got <= 0 || !append(p, chunk, got)) break;
 	}
 	pthread_mutex_lock(&p->lock);
@@ -156,6 +158,12 @@ static void* writeLoop(void* arg) {
 		for (int64_t done = 0; ok && done < n;) {
 			ssize_t wrote = write(p->master, batch.data + done, (size_t)(n - done));
 			if (wrote < 0 && errno == EINTR) continue;
+			if (wrote < 0 && errno == EAGAIN) {
+				struct pollfd out = { p->master, POLLOUT, 0 };
+				if (poll(&out, 1, WRITE_POLL_MS) < 0 && errno != EINTR) ok = 0;
+				if (stopping(p)) break;
+				continue;
+			}
 			ok = wrote >= 0;
 			if (ok) done += wrote;
 		}
@@ -326,7 +334,10 @@ static int openIn(
 		? (int)files.rlim_cur : CHILD_FD_SCAN_MAX;
 	pid_t pid = forkpty(&master, NULL, NULL, &size);
 	if (pid == 0) execChild(argv, env, cwd, failed[1], fdLimit);
-	if (pid > 0) closeOnExec(master);
+	if (pid > 0) {
+		closeOnExec(master);
+		fcntl(master, F_SETFL, fcntl(master, F_GETFL) | O_NONBLOCK);
+	}
 	free(env);
 	free(pwd);
 	close(failed[1]);

@@ -281,6 +281,22 @@ when (!windows) {
 		}
 	}
 
+	test "closing returns at once while a job in its own session holds the terminal and reads nothing" {
+		const job = "stty raw -echo; perl -e 'use POSIX; exit 0 if fork(); POSIX::setsid(); sleep 6'";
+		const opened = NativePty.open(job, 80, 24);
+		assert opened.ok;
+		if (opened.ok) {
+			const p = opened.value;
+			while (p.exitCode() === null) { const _ready = p.wait(100); }
+			let chunk: Vec<uint8> = new Array(1048576);
+			for (let i = 0; i < chunk.length; i++) { chunk[i] = 0x61; }
+			assert p.write(chunk).ok;
+			const start: float64 = performance.now();
+			p.close();
+			assert performance.now() - start < 3000;
+		}
+	}
+
 	test "a command line means what it means to the shell, run in the start directory" {
 		const dir = `${normalize(tmpDir())}/haroStartDir${getpid()}`;
 		assert ensureDir(dir).ok;

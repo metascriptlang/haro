@@ -28,7 +28,7 @@ export function open(this typeof Screen, cols: int32, rows: int32): Result<Scree
 	let grid = createList<RowSlot>([]);
 	fitGrid(grid, rows);
 	let shown: Vec<Shown> = [];
-	fitShown(shown, rows);
+	shown.fitShown(rows);
 	return Result.ok({
 		vt: created.value,
 		grid: grid,
@@ -77,7 +77,7 @@ export function resize(this s: Screen, cols: int32, rows: int32): Result<void, S
 	s.cols = cols;
 	s.rows = rows;
 	fitGrid(s.grid, rows);
-	fitShown(s.shown, rows);
+	s.shown.fitShown(rows);
 	return s.paint();
 }
 

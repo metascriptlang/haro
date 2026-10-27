@@ -14,7 +14,7 @@ import { MouseGeometry } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
 import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
 import { FrameRows } from "../../../rows";
-import { mark, noteKey, stats } from "../../../stats";
+import { Stats, mark, noteApplied, noteKey } from "../../../stats";
 import { CellMetrics } from "../../ui/cellText";
 import {
 	CursorModel,
@@ -35,6 +35,7 @@ const AUTOSCROLL_MS = 15;
 const RESTART_NOTICE = "config.ms: command and workingDirectory apply when Haro restarts";
 
 export interface AppHost {
+	clock: () => float64;
 	onWake: (handler: () => void) => void;
 	schedule: (run: () => void) => void;
 	exited: (code: int32) => void;
@@ -53,6 +54,7 @@ export interface PaneModel {
 	io: IoPort;
 	view: View;
 	host: AppHost;
+	stats: Stats;
 	started: Config;
 	shellStarted: boolean;
 	ended: Exit | null;
@@ -91,6 +93,7 @@ export function createPane(
 	started: Config,
 	notice: NoticeModel,
 	dialog: PasteDialogModel,
+	stats: Stats,
 ): PaneModel {
 	const [fontSize, setFontSize] = createSignal<number>(started.fontPx());
 	const [fontFamily, setFontFamily] = createSignal<string>(host.fontFamily);
@@ -111,6 +114,7 @@ export function createPane(
 		io: io,
 		view: view,
 		host: host,
+		stats: stats,
 		started: started,
 		shellStarted: false,
 		ended: null,
@@ -228,15 +232,15 @@ export function scheduleRefresh(this m: PaneModel): void {
 }
 
 export function refresh(this m: PaneModel): void {
-	stats.tally.refreshes += 1;
+	m.stats.tally.refreshes += 1;
 	m.io.frame((got: IoFrame): void => { m.applied(got); });
 }
 
 function applied(this m: PaneModel, got: IoFrame): void {
 	m.shellStarted = got.started;
 	for (const failure of got.failures) { m.reported(failure); }
-	for (const launch of got.marks) { stats.mark(launch.name, launch.at); }
-	if (got.keyAt >= 0) { stats.noteKey(got.keyAt); }
+	for (const launch of got.marks) { m.stats.mark(launch.name, launch.at); }
+	if (got.keyAt >= 0) { m.stats.noteKey(got.keyAt); }
 	const f = got.frame;
 	if (f !== null) {
 		const copied = f.copied;
@@ -248,10 +252,10 @@ function applied(this m: PaneModel, got: IoFrame): void {
 			m.host.notify(notification.title, notification.body);
 		}
 		if (f.held) {
-			stats.tally.held += 1;
+			m.stats.tally.held += 1;
 			m.watchHold();
 		} else {
-			if (f.rows !== null) { m.view.paint(f.rows!); }
+			if (f.rows !== null) { m.painted(f.rows!); }
 			const colors = f.colors;
 			if (colors !== null) {
 				m.setBackground(hexOf(colors.bg));
@@ -274,11 +278,16 @@ function applied(this m: PaneModel, got: IoFrame): void {
 	m.autoscrollSoon();
 	if (got.again) { m.scheduleRefresh(); }
 	if (f !== null && f.more) {
-		stats.tally.more += 1;
+		m.stats.tally.more += 1;
 		m.scheduleRefresh();
 	}
 	const exit = got.exit;
 	if (exit !== null) { m.shellEnded(exit); }
+}
+
+function painted(this m: PaneModel, rows: FrameRows): void {
+	const chars = m.view.paint(rows);
+	m.stats.noteApplied(rows.rows.length as int32, rows.scrolled, chars, m.host.clock());
 }
 
 function shellEnded(this m: PaneModel, exit: Exit): void {

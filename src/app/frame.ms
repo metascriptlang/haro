@@ -4,7 +4,6 @@ import { Style } from "../../../neon/src/render/style";
 import { CellInk, GridLine, LineRun } from "../grid/lines";
 import { Marked } from "../select/select";
 import { Cursor, Rgb, Underline, Vt } from "../vt/vt";
-import { stats, noteApplied } from "./stats";
 import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "./rows";
 
 export { Shown, fitShown } from "./rows";
@@ -168,9 +167,8 @@ export function fitRows(this v: View, rows: int32): void {
 	fitGrid(v.grid, rows);
 }
 
-export function paint(this v: View, f: FrameRows): void {
-	const chars = applyRows(v.grid, v.styles, f);
-	stats.noteApplied(f.rows.length as int32, f.scrolled, chars, performance.now());
+export function paint(this v: View, f: FrameRows): int32 {
+	return applyRows(v.grid, v.styles, f);
 }
 
 export function repaintCursor(this v: View, f: FrameRows): void {
@@ -189,8 +187,7 @@ export function applyFrame(
 	ink: CellInk | null,
 ): Result<Cursor | null, FrameError> {
 	const planned = try planRows(shown, vt, ink);
-	const chars = applyRows(grid, styles, planned.rows);
-	stats.noteApplied(planned.rows.rows.length as int32, planned.rows.scrolled, chars, performance.now());
+	const _chars = applyRows(grid, styles, planned.rows);
 	return Result.ok(planned.cursor);
 }
 

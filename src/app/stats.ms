@@ -36,8 +36,6 @@ export function empty(this typeof Stats): Stats {
 	return { tally: Tally.zero(), keyAt: -1, wakeAt: -1, marks: [], recording: false };
 }
 
-export const stats: Stats = Stats.empty();
-
 function marked(this s: Stats, name: string): boolean {
 	for (const m of s.marks) {
 		if (m.name == name) { return true; }
@@ -79,7 +77,7 @@ export function noteApplied(
 	s.tally.rows += rows;
 	s.tally.scrolled += scrolled;
 	s.tally.chars += chars;
-	if (chars > 0) { s.mark("painted", Date.now()); }
+	if (chars > 0 && !s.launched()) { s.mark("painted", Date.now()); }
 	if (rows > 0 && s.keyAt >= 0) {
 		s.tally.echoes.push(at - s.keyAt);
 		if (s.wakeAt >= s.keyAt) { s.tally.settles.push(at - s.wakeAt); }

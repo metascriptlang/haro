@@ -6,6 +6,7 @@ import { Replay } from "../../../../pty/replay";
 import { writeText } from "../../../../vt/vt";
 import { createNotice } from "../notice/notice";
 import { createPasteDialog } from "../paste/pasteDialog";
+import { Stats, empty } from "../../../stats";
 import { AppHost, PaneModel, createPane, failed, refresh } from "./paneModel";
 import { cancelDialog, confirmDialog } from "./paneEvents";
 import { Io, open, port } from "./io";
@@ -29,6 +30,7 @@ function noCalls(): Calls {
 
 function hostFor(calls: Calls): AppHost {
 	return {
+		clock: (): float64 => 0,
 		onWake: (handler: () => void): void => {},
 		schedule: (run: () => void): void => {},
 		exited: (code: int32): void => { calls.exits += `${code} `; },
@@ -47,7 +49,7 @@ function hostFor(calls: Calls): AppHost {
 function paneWith(io: Io, calls: Calls): PaneModel {
 	const view = View.open();
 	view.fitRows(io.term.shown.length as int32);
-	return createPane(io.port(), view, hostFor(calls), defaults(), createNotice(), createPasteDialog());
+	return createPane(io.port(), view, hostFor(calls), defaults(), createNotice(), createPasteDialog(), Stats.empty());
 }
 
 function paneOf(t: Term, calls: Calls): PaneModel {
@@ -64,6 +66,21 @@ function lifted(code: string): NeonEvent {
 	const e = neonEvent("keyup");
 	e.code = code;
 	return e;
+}
+
+test "an applied frame is stamped by the host's clock into the stats the pane was given" {
+	assert onFresh("abc", (t: Term, sink: Sink): void => {
+		const calls = noCalls();
+		const stats = Stats.empty();
+		stats.recording = true;
+		stats.noteKey(10);
+		const view = View.open();
+		view.fitRows(t.shown.length as int32);
+		const host: AppHost = { ...hostFor(calls), clock: (): float64 => 15.5 };
+		const m = createPane(Io.open(t).port(), view, host, defaults(), createNotice(), createPasteDialog(), stats);
+		m.refresh();
+		assert stats.line().includes("echo n=1 p50=5.5 max=5.5");
+	}).ok;
 }
 
 test "a program's title reaches the window" {

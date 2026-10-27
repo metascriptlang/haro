@@ -30,7 +30,7 @@ export function keyed(this m: PaneModel, e: NeonEvent): void {
 		if (!modifierKey(e.code)) { m.host.exited(ended.code); }
 		return;
 	}
-	m.io.key(keyOf(e), performance.now());
+	m.io.key(keyOf(e), m.host.clock());
 	m.scheduleRefresh();
 }
 
@@ -41,7 +41,7 @@ export function keyReleased(this m: PaneModel, e: NeonEvent): void {
 
 export function committed(this m: PaneModel, e: NeonEvent): void {
 	m.preedit.setText("");
-	m.io.text(e.text, performance.now());
+	m.io.text(e.text, m.host.clock());
 	m.scheduleRefresh();
 }
 
@@ -72,7 +72,7 @@ function hit(this m: PaneModel, e: NeonEvent): Hit {
 
 export function pressed(this m: PaneModel, e: NeonEvent): void {
 	if (m.metrics.cellWidth() <= 0) { return; }
-	m.io.press(e.button as int32, m.hit(e), performance.now());
+	m.io.press(e.button as int32, m.hit(e), m.host.clock());
 	m.scheduleRefresh();
 }
 

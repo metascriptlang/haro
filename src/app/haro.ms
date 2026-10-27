@@ -12,7 +12,7 @@ import { appendFile, ensureDir, readFile } from "std/fs";
 import { homeDir } from "std/os";
 import { App } from "./app";
 import { Pace } from "./pace";
-import { stats, mark, noteWake } from "./stats";
+import { Stats, empty, mark, noteWake } from "./stats";
 import { logStatsEverySecond } from "./statsLog";
 import { familyList, registerFallbacks } from "./fonts";
 import { Config } from "../config/config";
@@ -76,6 +76,7 @@ when (macos) {
 }
 
 const pace = Pace.start();
+const stats = Stats.empty();
 const config = ConfigWatch.forFile(flagValue("--config") ?? configPath());
 
 function note(line: string): void {
@@ -143,6 +144,7 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 	registerFallbacks();
 	const families = familyList(config.loaded.faces);
 	const host: AppHost = {
+		clock: (): float64 => performance.now(),
 		onWake: (handler: () => void): void => {
 			onWake((): void => {
 				stats.noteWake(performance.now());
@@ -178,7 +180,7 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 		},
 		fontFamily: families.join(", "),
 	};
-	if (hasFlag("--stats")) { logStatsEverySecond(pace); }
+	if (hasFlag("--stats")) { logStatsEverySecond(pace, stats); }
 	when (macos) {
 		const bar = setAppMenu(menuBar());
 		if (!bar.ok) { fail(bar.error); }
@@ -189,7 +191,7 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 		font: families[0],
 		fontFamily: families.join(", "),
 	};
-	const code = runWindow(opts, (): NeonNode => App(portOf(shell), view, host, config.loaded.config));
+	const code = runWindow(opts, (): NeonNode => App(portOf(shell), view, host, config.loaded.config, stats));
 	note("the window closed");
 	await closed(shell);
 	return code;

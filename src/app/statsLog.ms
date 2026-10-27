@@ -4,7 +4,7 @@ when (voidProfiler) {
 	import { DurationRing, ringCount, ringPercentile } from "../../../void/src/void2d/profiler";
 }
 import { Pace } from "./pace";
-import { launchLine, launched, line, reset, stats } from "./stats";
+import { Stats, launchLine, launched, line, reset } from "./stats";
 
 const STATS_MS = 1000;
 
@@ -36,6 +36,7 @@ function voidLine(): string {
 
 function logSince(
 	pace: Pace,
+	stats: Stats,
 	wakes: int32,
 	applies: int32,
 	requested: number,
@@ -53,11 +54,11 @@ function logSince(
 			launchShown = true;
 			console.log(`haro launch: ${stats.launchLine()}`);
 		}
-		logSince(pace, pace.wakes, pace.applies, counts[0], counts[1]);
+		logSince(pace, stats, pace.wakes, pace.applies, counts[0], counts[1]);
 	}, STATS_MS);
 }
 
-export function logStatsEverySecond(pace: Pace): void {
+export function logStatsEverySecond(pace: Pace, stats: Stats): void {
 	stats.recording = true;
-	logSince(pace, 0, 0, 0, 0);
+	logSince(pace, stats, 0, 0, 0, 0);
 }

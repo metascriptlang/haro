@@ -32,7 +32,7 @@ function quietWaitMs(this p: NativePty, timeoutMs: int32): Result<float64, PtyEr
 		const start: float64 = performance.now();
 		const ready = try p.wait(timeoutMs);
 		if (!ready) { return Result.ok(performance.now() - start); }
-		const _read = try p.read(buf);
+		try p.read(buf);
 	}
 }
 
@@ -417,5 +417,5 @@ test "output past the read buffer's limit arrives whole and in order while the a
 		assert check.byteCount > readLimit;
 		assert check.linesInOrder == count;
 	});
-	const _gone = remove(path);
+	assert remove(path).ok;
 }

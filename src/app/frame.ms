@@ -132,6 +132,7 @@ function styleOf(styles: Styles, run: LineRun, background: Rgb): Style {
 }
 
 export function spansOf(styles: Styles, l: GridLine, background: Rgb): TextSpan[] {
+	if (l.runs.length == 1) { return [{ text: l.text, style: styleOf(styles, l.runs[0], background) }]; }
 	let spans: TextSpan[] = [];
 	let at = 0;
 	for (const run of l.runs) {
@@ -332,6 +333,20 @@ test "each run becomes a span over its own text, sharing one style per look" {
 	assert spans[0].text == "ab" && spans[1].text == " " && spans[2].text == "cd";
 	assert spans[0].style === spans[2].style;
 	assert styles.looks.size == 2;
+}
+
+test "a line of one run is one span holding the whole text, wide characters included" {
+	const styles = Styles.empty();
+	const l: GridLine = {
+		text: "h\u00e9llo \u{1F600}",
+		runs: [run(8, WHITE, BLACK, Underline.None)],
+		widths: [],
+		cursorCell: -1,
+		cursorInk: null,
+	};
+	const spans = spansOf(styles, l, BLACK);
+	assert spans.length == 1;
+	assert spans[0].text == l.text;
 }
 
 test "truecolour output that never repeats a look keeps the style cache bounded" {

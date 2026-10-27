@@ -147,7 +147,7 @@ export function openTerm(
 }
 
 function resizeGrid(this t: Term, rows: int32): void {
-	fitShown(t.shown, rows);
+	t.shown.fitShown(rows);
 }
 
 export function fit(
@@ -242,7 +242,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 			notification: events.notification,
 		});
 	}
-	const planned = planRows(t.shown, vt, t.cursorInk);
+	const planned = t.shown.planRows(vt, t.cursorInk);
 	if (!planned.ok) { return Result.err(frameFailure(planned.error)); }
 	const look = vt.cursorLook();
 	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
@@ -267,12 +267,12 @@ export function inkCursor(this t: Term, ink: CellInk | null): Result<FrameRows, 
 	t.cursorInk = ink;
 	const s = t.session;
 	if (s === null) { return Result.ok(FrameRows.none()); }
-	const relit = relitRows(t.shown, s.vt, ink);
+	const relit = t.shown.relitRows(s.vt, ink);
 	if (!relit.ok) { return Result.err(frameFailure(relit.error)); }
 	return Result.ok(relit.value);
 }
 
-function sendBytes(s: Session, bytes: Span<uint8>): Result<int32, TermError> {
+function sendBytes(this s: Session, bytes: Span<uint8>): Result<int32, TermError> {
 	if (bytes.length == 0) { return Result.ok(0); }
 	if (!s.send(bytes).ok) { return Result.err(TermError.WriteFailed); }
 	return Result.ok(bytes.length as int32);

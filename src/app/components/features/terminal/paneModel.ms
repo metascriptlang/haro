@@ -141,7 +141,7 @@ export function open(
 		cellWidth: cellWidth,
 		rowHeight: rowHeight,
 	};
-	io.configure(settingsOf(started));
+	io.configure(started.settingsOf());
 	return {
 		io: io,
 		view: view,
@@ -340,7 +340,7 @@ function reconfigure(this m: PaneModel, change: ConfigChange): void {
 	const c = change.config;
 	const family = change.family;
 	const error = change.error;
-	m.io.configure(settingsOf(c));
+	m.io.configure(c.settingsOf());
 	const resized = c.fontPx() != m.metrics.fontSize() || family != m.metrics.fontFamily();
 	m.setPadding(c.padding);
 	m.setFontSize(c.fontPx());

@@ -64,7 +64,7 @@ export function pointerDown(
 	time: float64,
 ): Result<boolean, TermError> {
 	if (c.holding()) { return Result.ok(false); }
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
 	const modes = vt.modes();
 	if (!modes.ok) { return Result.err(TermError.VtFailed); }
@@ -108,7 +108,7 @@ export function pointerMove(
 	pressed: boolean,
 ): Result<boolean, TermError> {
 	if (c.holding()) { return Result.ok(false); }
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
 	const modes = vt.modes();
 	if (!modes.ok) { return Result.err(TermError.VtFailed); }
@@ -150,7 +150,7 @@ export function endDrag(this c: Controls): void {
 }
 
 export function autoscrollTick(this c: Controls, t: Term): Result<boolean, TermError> {
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (vt === null || !c.pointer.dragging || c.autoscroll == 0) {
 		c.autoscroll = 0;
 		return Result.ok(false);
@@ -168,7 +168,7 @@ export function roll(
 	h: Hit,
 ): Result<boolean, TermError> {
 	if (c.holding()) { return Result.ok(false); }
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
 	const modes = vt.modes();

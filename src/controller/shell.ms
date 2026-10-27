@@ -40,7 +40,7 @@ export struct PtySpec {
 	recording: string | null;
 }
 
-function openerOf(spec: PtySpec): OpenPty {
+function openerOf(this spec: PtySpec): OpenPty {
 	const recording = spec.recording;
 	if (recording !== null) {
 		const replay = Replay.ofText(recording);
@@ -60,7 +60,7 @@ export actor Shell {
 	private refused: TermError | null = null;
 
 	constructor(spec: PtySpec) {
-		const opened = openTerm(openerOf(spec));
+		const opened = openTerm(spec.openerOf());
 		if (opened.ok) {
 			this.io = Io.open(opened.value);
 		} else {

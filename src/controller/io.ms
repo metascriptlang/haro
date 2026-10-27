@@ -38,7 +38,7 @@ export struct Settings {
 	optionAsAlt: OptionAsAlt;
 }
 
-export function settingsOf(c: Config): Settings {
+export function settingsOf(this c: Config): Settings {
 	return {
 		foreground: c.foreground,
 		background: c.background,

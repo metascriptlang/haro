@@ -64,7 +64,7 @@ export function open(this typeof Controls): Controls {
 	};
 }
 
-export function vtOf(t: Term): Vt | null {
+export function vtOf(this t: Term): Vt | null {
 	const s = t.session;
 	if (s === null) { return null; }
 	return s.vt;
@@ -95,13 +95,13 @@ export function refit(
 ): Result<boolean, TermError> {
 	const reflows = cols != t.cols;
 	const fitted = t.fit(cols, rows, cellWidth, cellHeight);
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (fitted.ok && reflows && vt !== null) { c.pointer.clear(vt); }
 	return fitted;
 }
 
 export function typed(this c: Controls, t: Term): Result<boolean, TermError> {
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
 	const bottom = vt.atBottom();
 	if (!bottom.ok) { return Result.err(TermError.VtFailed); }

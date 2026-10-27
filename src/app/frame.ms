@@ -42,7 +42,7 @@ function hexBytes(): string[] {
 
 const HEX_BYTES = hexBytes();
 
-export function hexOf(c: Rgb): string {
+export function hexOf(this c: Rgb): string {
 	return `#${HEX_BYTES[c.r]}${HEX_BYTES[c.g]}${HEX_BYTES[c.b]}`;
 }
 
@@ -56,7 +56,7 @@ function recall<K>(now: Map<K, Style>, older: Map<K, Style>, key: K): Style | un
 
 type Decoration = "none" | "underline" | "line-through" | "underline line-through";
 
-function decorationOf(run: LineRun): Decoration {
+function decorationOf(this run: LineRun): Decoration {
 	const under = run.underline != Underline.None;
 	if (under && run.flags.has(CellFlag.Strikethrough)) { return "underline line-through"; }
 	if (under) { return "underline"; }
@@ -66,13 +66,13 @@ function decorationOf(run: LineRun): Decoration {
 
 const PLAIN_BG: uint64 = (1 as uint64) << 24;
 
-function rgbBits(c: Rgb): uint64 {
+function rgbBits(this c: Rgb): uint64 {
 	return ((c.r as uint64) << 16) | ((c.g as uint64) << 8) | (c.b as uint64);
 }
 
 const FLAGS_BITS: uint64 = 9;
 
-function lookBits(run: LineRun): uint64 {
+function lookBits(this run: LineRun): uint64 {
 	const under: uint64 = match (run.underline) {
 		Underline.None => 0,
 		Underline.Curly => 2,
@@ -81,22 +81,22 @@ function lookBits(run: LineRun): uint64 {
 	return (under << FLAGS_BITS) | ((run.flags as uint32) as uint64);
 }
 
-function styleOf(styles: Styles, run: LineRun, background: Rgb): Style {
+function styleOf(this styles: Styles, run: LineRun, background: Rgb): Style {
 	const plain = run.bg == background;
 	const tint = run.underlineColor;
 	const tinted = tint !== null && run.underline != Underline.None;
-	const bgBits = plain ? PLAIN_BG : rgbBits(run.bg);
-	const look = (bgBits << 33) | (rgbBits(run.fg) << 9) | lookBits(run);
-	const key = tinted ? `${look}${hexOf(tint!)}` : "";
+	const bgBits = plain ? PLAIN_BG : run.bg.rgbBits();
+	const look = (bgBits << 33) | (run.fg.rgbBits() << 9) | run.lookBits();
+	const key = tinted ? `${look}${tint!.hexOf()}` : "";
 	const known = tinted ? recall(styles.tinted, styles.olderTinted, key) : recall(styles.looks, styles.olderLooks, look);
 	if (known !== undefined) { return known; }
-	const fg = hexOf(run.fg);
-	const bg = plain ? "" : hexOf(run.bg);
-	const decoration = decorationOf(run);
+	const fg = run.fg.hexOf();
+	const bg = plain ? "" : run.bg.hexOf();
+	const decoration = run.decorationOf();
 	const weight: "bold" | "normal" = run.flags.has(CellFlag.Bold) ? "bold" : "normal";
 	const slant: "italic" | "normal" = run.flags.has(CellFlag.Italic) ? "italic" : "normal";
 	const line: "wavy" | "solid" = run.underline == Underline.Curly ? "wavy" : "solid";
-	const lineColor = tinted ? hexOf(tint!) : "";
+	const lineColor = tinted ? tint!.hexOf() : "";
 	const style: Style = {
 		color: fg,
 		textDecorationLine: decoration,
@@ -122,13 +122,13 @@ function styleOf(styles: Styles, run: LineRun, background: Rgb): Style {
 	return style;
 }
 
-export function spansOf(styles: Styles, l: GridLine, background: Rgb): TextSpan[] {
-	if (l.runs.length == 1) { return [{ text: l.text, style: styleOf(styles, l.runs[0], background) }]; }
+export function spansOf(this styles: Styles, l: GridLine, background: Rgb): TextSpan[] {
+	if (l.runs.length == 1) { return [{ text: l.text, style: styles.styleOf(l.runs[0], background) }]; }
 	let spans: TextSpan[] = [];
 	let at = 0;
 	for (const run of l.runs) {
 		const text = l.text.slice(at, at + run.units);
-		spans.push({ text: text, style: styleOf(styles, run, background) });
+		spans.push({ text: text, style: styles.styleOf(run, background) });
 		at += run.units;
 	}
 	return spans;
@@ -140,7 +140,7 @@ export function applyRows(grid: List<RowSlot>, styles: Styles, f: FrameRows): in
 	for (let i = 0; i < f.scrolled; i++) { grid.move(0, last); }
 	for (let i = 0; i < f.rows.length; i++) {
 		chars += f.rows[i].line.text.length as int32;
-		grid.set(f.rows[i].y, { line: f.rows[i].line, spans: spansOf(styles, f.rows[i].line, f.background) });
+		grid.set(f.rows[i].y, { line: f.rows[i].line, spans: styles.spansOf(f.rows[i].line, f.background) });
 	}
 	return chars;
 }
@@ -183,7 +183,7 @@ export function applyFrame(
 	vt: Vt,
 	ink: CellInk | null,
 ): Result<Cursor | null, FrameError> {
-	const planned = try planRows(shown, vt, ink);
+	const planned = try shown.planRows(vt, ink);
 	const _chars = applyRows(grid, styles, planned.rows);
 	return Result.ok(planned.cursor);
 }
@@ -195,7 +195,7 @@ export function relightCursor(
 	vt: Vt,
 	ink: CellInk | null,
 ): Result<void, FrameError> {
-	const _chars = applyRows(grid, styles, try relitRows(shown, vt, ink));
+	const _chars = applyRows(grid, styles, try shown.relitRows(vt, ink));
 	return Result.ok(null);
 }
 

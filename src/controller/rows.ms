@@ -34,7 +34,7 @@ export function none(this typeof FrameRows): FrameRows {
 	return { scrolled: 0, rows: [], background: { r: 0, g: 0, b: 0 } };
 }
 
-export function fitShown(ref shown: Vec<Shown>, rows: int32): void {
+export function fitShown(this ref shown: Vec<Shown>, rows: int32): void {
 	while ((shown.length as int32) < rows) { shown.push({ cell: -1, ink: null }); }
 	while ((shown.length as int32) > rows) { shown.pop(); }
 }
@@ -72,7 +72,7 @@ function relight(
 	return Result.ok(null);
 }
 
-export function relitRows(ref shown: Vec<Shown>, vt: Vt, ink: CellInk | null): Result<FrameRows, FrameError> {
+export function relitRows(this ref shown: Vec<Shown>, vt: Vt, ink: CellInk | null): Result<FrameRows, FrameError> {
 	const colors = vt.painted.palette;
 	if (colors === null || shown.length != vt.painted.rows.length) { return Result.ok(FrameRows.none()); }
 	const at = vt.cursor();
@@ -87,7 +87,7 @@ export struct Planned {
 	rows: FrameRows;
 }
 
-export function planRows(ref shown: Vec<Shown>, vt: Vt, ink: CellInk | null): Result<Planned, FrameError> {
+export function planRows(this ref shown: Vec<Shown>, vt: Vt, ink: CellInk | null): Result<Planned, FrameError> {
 	const planned = vt.plan();
 	if (!planned.ok) { return Result.err(FrameError.PlanFailed); }
 	const at = vt.cursor();

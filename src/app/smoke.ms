@@ -4,7 +4,7 @@ import { IoPort } from "../controller/io";
 import { View, text } from "./frame";
 
 
-function dump(view: View, label: string): void {
+function dump(this view: View, label: string): void {
 	console.log(`smoke: ${label}`);
 	const n = view.grid.length() as int32;
 	for (let i = 0; i < n; i++) {
@@ -20,32 +20,32 @@ function counts(label: string): void {
 
 export function smokeReplay(io: IoPort, view: View, quit: () => void): void {
 	setTimeout((): void => {
-		dump(view, "replayed");
+		view.dump("replayed");
 		counts("after the replay");
 		quit();
 	}, 3000);
 }
 
 export function smoke(io: IoPort, view: View, quit: () => void): void {
-	setTimeout((): void => { dump(view, "prompt"); counts("after the prompt"); }, 4000);
+	setTimeout((): void => { view.dump("prompt"); counts("after the prompt"); }, 4000);
 	setTimeout((): void => {
 		io.text("1..200 | % { \"line $_\" }\r", performance.now());
 		console.log("smoke: sent 200 lines");
 	}, 4200);
-	setTimeout((): void => { dump(view, "after 200 lines"); }, 6500);
+	setTimeout((): void => { view.dump("after 200 lines"); }, 6500);
 	setTimeout((): void => { counts("idle begins"); }, 7000);
 	setTimeout((): void => {
 		counts("idle 2 s later");
 		console.log("smoke: waiting for keys");
 	}, 9000);
 	setTimeout((): void => {
-		dump(view, "after keys");
+		view.dump("after keys");
 		counts("end");
 		quit();
 	}, 42000);
 }
 
-function shows(view: View, wanted: string): boolean {
+function shows(this view: View, wanted: string): boolean {
 	const n = view.grid.length() as int32;
 	for (let i = 0; i < n; i++) {
 		if (view.text(i) == wanted) { return true; }
@@ -70,11 +70,11 @@ export function smokeFlood(io: IoPort, view: View, pace: Pace, quit: () => void)
 	const tick = (): void => {
 		ticks += 1;
 		report(`tick ${ticks}`);
-		if (doneAt < 0 && shows(view, `line ${FLOOD_LINES}`)) { doneAt = ticks; }
+		if (doneAt < 0 && view.shows(`line ${FLOOD_LINES}`)) { doneAt = ticks; }
 		const finished = doneAt >= 0 && ticks >= doneAt + FLOOD_IDLE_TICKS;
 		if (finished || ticks >= FLOOD_MAX_TICKS) {
 			console.log(`smoke: flood ${doneAt >= 0 ? "ended" : "did not end"} at tick ${doneAt}`);
-			dump(view, "after the flood");
+			view.dump("after the flood");
 			quit();
 			return;
 		}

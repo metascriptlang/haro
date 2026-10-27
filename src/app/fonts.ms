@@ -38,7 +38,7 @@ when (windows) {
 let registeredFamilies: string[] = [];
 let fallbackFamilies: string[] = [];
 
-function registerFamily(faces: Faces): string {
+function registerFamily(this faces: Faces): string {
 	const family = faces.regular;
 	if (registeredFamilies.includes(family)) { return family; }
 	registeredFamilies.push(family);
@@ -53,7 +53,7 @@ function registerFamily(faces: Faces): string {
 }
 
 export function registerFallbacks(): void {
-	fallbackFamilies.push(registerFamily(BUILT_IN));
+	fallbackFamilies.push(BUILT_IN.registerFamily());
 	for (const face of fallbackFaces()) {
 		registerFace(face.path, face.family, 400, FontStyle.Normal);
 		fallbackFamilies.push(face.family);
@@ -62,7 +62,7 @@ export function registerFallbacks(): void {
 
 export function familyList(configured: Vec<Faces>): string[] {
 	let families: string[] = [];
-	for (const faces of configured) { families.push(registerFamily(faces)); }
+	for (const faces of configured) { families.push(faces.registerFamily()); }
 	for (const family of fallbackFamilies) { families.push(family); }
 	return families;
 }

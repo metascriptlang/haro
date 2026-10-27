@@ -34,7 +34,7 @@ function runKeybind(
 }
 
 export function closeKey(this c: Controls, t: Term): Result<boolean, TermError> {
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (vt !== null) {
 		const alt = vt.alternateScreen();
 		if (!alt.ok) { return Result.err(TermError.VtFailed); }
@@ -88,7 +88,7 @@ function controlKey(
 		return Result.ok(true);
 	}
 	if (c.holding()) { return c.answerHeld(t, e); }
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
 	if (!alt.ok) { return Result.err(TermError.VtFailed); }

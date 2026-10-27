@@ -27,7 +27,7 @@ function send(
 }
 
 export function paste(this c: Controls, t: Term, text: string): Result<Pasted, TermError> {
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(Pasted.Empty); }
 	const modes = vt.modes();
 	if (!modes.ok) { return Result.err(TermError.VtFailed); }
@@ -49,7 +49,7 @@ function answerRead(
 	text: string,
 	allow: boolean,
 ): Result<boolean, TermError> {
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
 	if (!vt.answerClipboard(text, allow).ok) { return Result.err(TermError.VtFailed); }
 	const _replied = try t.sendReplies();
@@ -114,7 +114,7 @@ export function pasteFrom(this c: Controls): void {
 }
 
 export function copySelection(this c: Controls, t: Term): Result<boolean, TermError> {
-	const vt = vtOf(t);
+	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
 	const text = c.pointer.copyText(vt);
 	if (!text.ok) { return Result.err(TermError.VtFailed); }

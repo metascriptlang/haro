@@ -58,16 +58,16 @@ function point(x: float64, y: float64): Point {
 	return { x: x, y: y };
 }
 
-function length(p: Point): float64 {
+function length(this p: Point): float64 {
 	return Math.hypot(p.x, p.y);
 }
 
-function normalized(p: Point): Point {
-	const l = length(p);
+function normalized(this p: Point): Point {
+	const l = p.length();
 	return point(p.x / l, p.y / l);
 }
 
-function rotated(p: Point, by: float64): Point {
+function rotated(this p: Point, by: float64): Point {
 	const sin = Math.sin(by);
 	const cos = Math.cos(by);
 	return point(p.x * cos - p.y * sin, p.x * sin + p.y * cos);
@@ -77,7 +77,7 @@ function lerp(from: float64, to: float64, t: float64): float64 {
 	return from + (to - from) * t;
 }
 
-function settle(s: Spring, dt: float64, span: float64): Spring {
+function settle(this s: Spring, dt: float64, span: float64): Spring {
 	if (span <= dt) { return AT_REST; }
 	if (s.position == 0) { return s; }
 	const omega = 4 / span;
@@ -89,7 +89,7 @@ function settle(s: Spring, dt: float64, span: float64): Spring {
 	return { position: position, velocity: c * (-a * omega - b * dt * omega + b) };
 }
 
-function relativeFor(standard: Point, shape: CursorShape): Point {
+function relativeFor(this standard: Point, shape: CursorShape): Point {
 	return match (shape) {
 		CursorShape.Bar => point((standard.x + 0.5) * BAR_FRACTION - 0.5, standard.y),
 		CursorShape.Underline => point(standard.x, -((-standard.y + 0.5) * BAR_FRACTION - 0.5)),
@@ -115,8 +115,8 @@ function target(this c: Corner, center: Point, w: float64, h: float64): Point {
 
 function alignment(this c: Corner, center: Point, w: float64, h: float64): float64 {
 	const to = c.target(center, w, h);
-	const travel = normalized(point(to.x - c.previous.x, to.y - c.previous.y));
-	const facing = normalized(c.relative);
+	const travel = point(to.x - c.previous.x, to.y - c.previous.y).normalized();
+	const facing = c.relative.normalized();
 	return travel.x * facing.x + travel.y * facing.y;
 }
 
@@ -145,8 +145,8 @@ function follow(this c: Corner, center: Point, w: float64, h: float64, dt: float
 		c.current = to;
 		return false;
 	}
-	c.x = settle(c.x, dt, c.length);
-	c.y = settle(c.y, dt, c.length);
+	c.x = c.x.settle(dt, c.length);
+	c.y = c.y.settle(dt, c.length);
 	c.current = point(to.x - c.x.position, to.y - c.y.position);
 	return c.x.position != 0 || c.y.position != 0;
 }
@@ -179,7 +179,7 @@ function unit(this t: Trail): float64 {
 function direction(this t: Trail): Point {
 	const x = t.unit();
 	const y = t.unit();
-	return normalized(point(x * 2 - 1, y * 2 - 1));
+	return point(x * 2 - 1, y * 2 - 1).normalized();
 }
 
 export function moveTo(this t: Trail, x: float64, y: float64): void {
@@ -188,11 +188,11 @@ export function moveTo(this t: Trail, x: float64, y: float64): void {
 }
 
 function reshape(this t: Trail, shape: CursorShape): boolean {
-	const probe = relativeFor(point(0.5, -0.5), shape);
+	const probe = point(0.5, -0.5).relativeFor(shape);
 	if (probe == t.shape) { return false; }
 	t.shape = probe;
 	for (const c of t.corners) {
-		c.relative = relativeFor(c.standard, shape);
+		c.relative = c.standard.relativeFor(shape);
 	}
 	return true;
 }
@@ -208,7 +208,7 @@ function spray(this t: Trail, center: Point, h: float64, dt: float64, immediate:
 		}
 		t.particles[i] = {
 			pos: point(p.pos.x + p.speed.x * dt, p.pos.y + p.speed.y * dt),
-			speed: rotated(p.speed, dt * p.rotation),
+			speed: p.speed.rotated(dt * p.rotation),
 			rotation: p.rotation,
 			lifetime: p.lifetime - dt,
 		};
@@ -218,7 +218,7 @@ function spray(this t: Trail, center: Point, h: float64, dt: float64, immediate:
 	if (!immediate) {
 		const from = t.spawnedFrom;
 		const travel = point(center.x - from.x, center.y - from.y);
-		const wanted = (length(travel) / h) * PARTICLE_DENSITY + t.remainder;
+		const wanted = (travel.length() / h) * PARTICLE_DENSITY + t.remainder;
 		const count = Math.floor(wanted) as int32;
 		t.remainder = wanted - (count as float64);
 		for (let n = 0; n < count; n++) {
@@ -281,13 +281,13 @@ export function cornerAt(this t: Trail, i: int32): Point {
 	return point(Math.round(c.x - fx) + fx, Math.round(c.y - fy) + fy);
 }
 
-export function particleAlpha(p: Particle): float64 {
+export function particleAlpha(this p: Particle): float64 {
 	return (p.lifetime / PARTICLE_LIFETIME) * PARTICLE_OPACITY;
 }
 
 const FRAME: float64 = 1.0 / 60;
 
-function settled(t: Trail, shape: CursorShape, w: float64, h: float64): int32 {
+function settled(this t: Trail, shape: CursorShape, w: float64, h: float64): int32 {
 	let frames = 0;
 	while (t.animate(FRAME, shape, w, h, false)) { frames += 1; }
 	return frames;
@@ -296,7 +296,7 @@ function settled(t: Trail, shape: CursorShape, w: float64, h: float64): int32 {
 function placed(x: float64, y: float64): Trail {
 	const t = Trail.start();
 	t.moveTo(x, y);
-	const _frames = settled(t, CursorShape.Block, 10, 20);
+	const _frames = t.settled(CursorShape.Block, 10, 20);
 	return t;
 }
 
@@ -315,7 +315,7 @@ test "a critically damped spring closes on its target without overshooting and r
 	let s: Spring = { position: 100, velocity: 0 };
 	let steps = 0;
 	while (s.position != 0) {
-		s = settle(s, FRAME, ANIMATION_LENGTH);
+		s = s.settle(FRAME, ANIMATION_LENGTH);
 		assert s.position >= 0;
 		steps += 1;
 	}
@@ -324,7 +324,8 @@ test "a critically damped spring closes on its target without overshooting and r
 }
 
 test "a spring whose animation is shorter than the frame snaps to its target" {
-	assert settle({ position: 100, velocity: 5 }, FRAME, FRAME) == AT_REST;
+	const wound: Spring = { position: 100, velocity: 5 };
+	assert wound.settle(FRAME, FRAME) == AT_REST;
 }
 
 test "the cursor rests with its corners on the cell it was moved to" {
@@ -357,7 +358,7 @@ test "on a long jump the leading corners land at once and the trailing ones stre
 test "a bar keeps its corners in the left eighth of the cell" {
 	const t = placed(30, 40);
 	const _moving = t.animate(FRAME, CursorShape.Bar, 10, 20, false);
-	const _frames = settled(t, CursorShape.Bar, 10, 20);
+	const _frames = t.settled(CursorShape.Bar, 10, 20);
 	assert near(t.corners[1].current.x, 31.25);
 	assert near(t.corners[2].current.y, 60);
 }
@@ -371,7 +372,7 @@ test "a jump of ten rows sprays density particles per row that fade out within t
 		assert p.lifetime <= PARTICLE_LIFETIME;
 		assert particleAlpha(p) <= PARTICLE_OPACITY;
 	}
-	const frames = settled(t, CursorShape.Block, 10, 20);
+	const frames = t.settled(CursorShape.Block, 10, 20);
 	assert t.particles.length == 0;
 	assert frames <= ((PARTICLE_LIFETIME / FRAME) as int32) + 1;
 }

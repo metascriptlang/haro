@@ -140,18 +140,21 @@ function underlineColorOf(
 			const found: Rgb | null = rgb(palette.c[color.value.palette]);
 			return Result.ok(found);
 		},
-		_ => Result.ok(null),
+		GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_NONE => Result.ok(null),
+		GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_TAG_MAX_VALUE => Result.err(VtError.ReadFailed),
 	};
 }
 
 export function widthOf(raw: GhosttyCell): Result<CellWidth, VtError> {
 	let wide = GhosttyCellWide.GHOSTTY_CELL_WIDE_NARROW;
 	try checked(cellWide(raw, GhosttyCellData.GHOSTTY_CELL_DATA_WIDE, wide), VtError.ReadFailed);
-	return Result.ok(match (wide) {
-		GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE => CellWidth.Wide,
-		GhosttyCellWide.GHOSTTY_CELL_WIDE_SPACER_TAIL => CellWidth.Tail,
-		_ => CellWidth.Narrow,
-	});
+	return match (wide) {
+		GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE => Result.ok(CellWidth.Wide),
+		GhosttyCellWide.GHOSTTY_CELL_WIDE_SPACER_TAIL => Result.ok(CellWidth.Tail),
+		GhosttyCellWide.GHOSTTY_CELL_WIDE_NARROW => Result.ok(CellWidth.Narrow),
+		GhosttyCellWide.GHOSTTY_CELL_WIDE_SPACER_HEAD => Result.ok(CellWidth.Narrow),
+		GhosttyCellWide.GHOSTTY_CELL_WIDE_MAX_VALUE => Result.err(VtError.ReadFailed),
+	};
 }
 
 struct RawFacts {

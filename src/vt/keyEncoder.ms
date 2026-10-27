@@ -119,7 +119,9 @@ export function pasteBytes(
 	text: string,
 	allowUnsafe: boolean,
 ): Result<Vec<uint8>, PasteError> {
-	const bracketed = try modeOn(vt.terminal, MODE_BRACKETED_PASTE) catch false;
+	const mode = modeOn(vt.terminal, MODE_BRACKETED_PASTE);
+	if (!mode.ok) { return Result.err(PasteError.EncodeFailed); }
+	const bracketed = mode.value;
 	const unsafe = bracketed ? text.includes(PASTE_END) : !pasteSafe(text.asBytes());
 	if (unsafe && !allowUnsafe) { return Result.err(PasteError.Unsafe); }
 	let data: Vec<uint8> = [];

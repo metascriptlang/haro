@@ -174,10 +174,11 @@ static void* waitLoop(void* arg) {
 	Pty* p = arg;
 	siginfo_t info;
 	memset(&info, 0, sizeof info);
-	while (waitid(P_PID, (id_t)p->pid, &info, WEXITED | WNOWAIT) < 0 && errno == EINTR) {}
+	int waited;
+	while ((waited = waitid(P_PID, (id_t)p->pid, &info, WEXITED | WNOWAIT)) < 0 && errno == EINTR) {}
 	pthread_mutex_lock(&p->lock);
-	p->exitCode = info.si_code == CLD_EXITED ? info.si_status : 128 + info.si_status;
-	p->exitSignal = info.si_code == CLD_EXITED ? 0 : info.si_status;
+	p->exitCode = waited < 0 ? -1 : info.si_code == CLD_EXITED ? info.si_status : 128 + info.si_status;
+	p->exitSignal = waited < 0 || info.si_code == CLD_EXITED ? 0 : info.si_status;
 	p->exited = 1;
 	pthread_cond_broadcast(&p->changed);
 	pthread_mutex_unlock(&p->lock);

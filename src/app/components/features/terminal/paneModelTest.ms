@@ -9,6 +9,7 @@ import { AppHost, PaneModel, bridge, createPane, failed, refresh } from "./paneM
 import { cancelDialog, confirmDialog } from "./paneEvents";
 import { closeKey } from "./keyboard";
 import { Term, TermError, openTerm, shutdown } from "./term";
+import { View, fitRows, open, text } from "../../../frame";
 import { holding } from "./controls";
 import { Sink, key, onFresh, onTerm } from "./terminalRig";
 
@@ -43,7 +44,9 @@ function hostFor(calls: Calls): AppHost {
 }
 
 function paneOf(t: Term, calls: Calls): PaneModel {
-	return createPane(t, hostFor(calls), defaults(), createNotice(), createPasteDialog());
+	const view = View.open();
+	view.fitRows(t.shown.length as int32);
+	return createPane(t, view, hostFor(calls), defaults(), createNotice(), createPasteDialog());
 }
 
 test "a program's title reaches the window" {
@@ -160,7 +163,7 @@ test "a shell killed by a signal keeps the window and names the signal; a key cl
 	assert afterExit(137, 9, 1000, (m: PaneModel, calls: Calls): void => {
 		assert calls.exits == "";
 		assert m.notice.text == "the shell was killed by signal 9, press any key to close";
-		assert m.term.grid.at(0).line.text.trimEnd() == "last output";
+		assert m.view.text(0) == "last output";
 		m.keyed(key("ShiftLeft", 0));
 		m.keyed(key("MetaRight", 0));
 		assert calls.exits == "";

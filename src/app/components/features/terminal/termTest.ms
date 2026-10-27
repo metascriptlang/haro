@@ -1,11 +1,8 @@
 import { KeyMod } from "../../../../keys/keys";
 import { MouseAction, MouseGeometry, MouseInput } from "../../../../vt/vt";
+import { View, fitRows, open, paint, text } from "../../../frame";
 import { Term } from "./term";
 import { Sink, onFresh, onTerm } from "./terminalRig";
-
-function rowText(t: Term, y: int32): string {
-	return t.grid.at(y).line.text.trimEnd();
-}
 
 test "a frame under synchronized output is not applied until the hold ends" {
 	assert onFresh("abc\x1b[?2026h", (t: Term, sink: Sink): void => {
@@ -14,8 +11,8 @@ test "a frame under synchronized output is not applied until the hold ends" {
 		if (held.ok) {
 			assert held.value.held;
 			assert held.value.cursor === null;
+			assert held.value.rows === null;
 		}
-		assert rowText(t, 0) == "";
 		const s = t.session;
 		assert s !== null;
 		if (s !== null) { s.vt.writeText("\x1b[?2026l"); }
@@ -24,8 +21,15 @@ test "a frame under synchronized output is not applied until the hold ends" {
 		if (released.ok) {
 			assert !released.value.held;
 			assert released.value.cursor !== null;
+			const rows = released.value.rows;
+			assert rows !== null;
+			if (rows !== null) {
+				const view = View.open();
+				view.fitRows(t.shown.length as int32);
+				view.paint(rows);
+				assert view.text(0) == "abc";
+			}
 		}
-		assert rowText(t, 0) == "abc";
 	}).ok;
 }
 

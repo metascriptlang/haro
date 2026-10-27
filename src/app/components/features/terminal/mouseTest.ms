@@ -1,4 +1,5 @@
 import { selected } from "../../../../input/pointer";
+import { View, fitRows, open, paint } from "../../../frame";
 import { bounds } from "../../../../select/select";
 import { Term, pumpFrame, releaseHeldKey, sendKey } from "./term";
 import { Controls, Hit } from "./controls";
@@ -206,12 +207,19 @@ test "a drag selects cells that the next frame draws with their colours swapped"
 		const c = Controls.open();
 		const clip = clipOf(boardOf(""));
 		assert drag(c, t, clip, at(2, 0), at(3, 1));
-		assert t.pumpFrame().ok;
-		const top = t.grid.at(0).line;
+		const view = View.open();
+		view.fitRows(t.shown.length as int32);
+		const frame = t.pumpFrame();
+		assert frame.ok;
+		if (frame.ok) {
+			const rows = frame.value.rows;
+			if (rows !== null) { view.paint(rows); }
+		}
+		const top = view.grid.at(0).line;
 		assert top.runs.length == 2;
 		assert top.runs[1].units == 18;
 		assert top.runs[1].bg == top.runs[0].fg;
-		const bottom = t.grid.at(1).line;
+		const bottom = view.grid.at(1).line;
 		assert bottom.runs[0].units == 4;
 		assert bottom.runs[0].bg == bottom.runs[1].fg;
 		const dropped = c.syncSelection(t);

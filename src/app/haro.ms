@@ -24,6 +24,7 @@ import { cacheDir, configPath } from "../config/source";
 import { ConfigWatch, forFile, readConfig, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { Term, exitCodeText, openTerm, shutdown } from "./components/features/terminal/term";
+import { View, open } from "./frame";
 import { AppHost } from "./components/features/terminal/paneModel";
 
 extern function appWireWake(): void;
@@ -136,7 +137,7 @@ function inFrame(run: () => void): void {
 	});
 }
 
-function openWindow(t: Term, exited: (code: int32) => void): int32 {
+function openWindow(t: Term, view: View, exited: (code: int32) => void): int32 {
 	registerFallbacks();
 	const families = familyList(config.loaded.faces);
 	const host: AppHost = {
@@ -189,7 +190,7 @@ function openWindow(t: Term, exited: (code: int32) => void): int32 {
 		font: families[0],
 		fontFamily: families.join(", "),
 	};
-	const code = runWindow(opts, (): NeonNode => App(t, host, config.loaded.config));
+	const code = runWindow(opts, (): NeonNode => App(t, view, host, config.loaded.config));
 	note("the window closed");
 	t.shutdown();
 	return code;
@@ -210,10 +211,11 @@ function runShell(shell: string): int32 {
 		return 1;
 	}
 	const t = opened.value;
+	const view = View.open();
 	appWireWake();
-	if (hasFlag("--smoke")) { smoke(t); }
-	if (hasFlag("--flood")) { smokeFlood(t, pace); }
-	return openWindow(t, (code: int32): void => {
+	if (hasFlag("--smoke")) { smoke(t, view); }
+	if (hasFlag("--flood")) { smokeFlood(t, view, pace); }
+	return openWindow(t, view, (code: int32): void => {
 		note(`the shell exited with code ${exitCodeText(code)}`);
 		t.shutdown();
 		exit(0);
@@ -235,8 +237,9 @@ function runReplay(path: string): int32 {
 		return 1;
 	}
 	const t = opened.value;
-	if (hasFlag("--smoke")) { smokeReplay(t); }
-	return openWindow(t, (code: int32): void => {
+	const view = View.open();
+	if (hasFlag("--smoke")) { smokeReplay(t, view); }
+	return openWindow(t, view, (code: int32): void => {
 		console.log(`haro: the recording ended with code ${exitCodeText(code)}`);
 	});
 }

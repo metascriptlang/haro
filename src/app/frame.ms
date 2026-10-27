@@ -227,6 +227,32 @@ export function fitGrid(grid: List<RowSlot>, rows: int32): void {
 	for (let i = have; i > rows; i--) { grid.remove(i - 1); }
 }
 
+export interface View {
+	grid: List<RowSlot>;
+	styles: Styles;
+}
+
+export function open(this typeof View): View {
+	return { grid: createList<RowSlot>([]), styles: Styles.empty() };
+}
+
+export function fitRows(this v: View, rows: int32): void {
+	fitGrid(v.grid, rows);
+}
+
+export function paint(this v: View, f: FrameRows): void {
+	const chars = applyRows(v.grid, v.styles, f);
+	stats.noteApplied(f.rows.length as int32, f.scrolled, chars, performance.now());
+}
+
+export function repaintCursor(this v: View, f: FrameRows): void {
+	const _chars = applyRows(v.grid, v.styles, f);
+}
+
+export function text(this v: View, y: int32): string {
+	return v.grid.at(y).line.text.trimEnd();
+}
+
 export function applyFrame(
 	grid: List<RowSlot>,
 	styles: Styles,

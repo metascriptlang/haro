@@ -4,15 +4,16 @@ import { Config } from "../config/config";
 import { Notice, createNotice } from "./components/features/notice/notice";
 import { PasteDialog, createPasteDialog } from "./components/features/paste/pasteDialog";
 import { Term } from "./components/features/terminal/term";
+import { View } from "./frame";
 import { AppHost, connectHost, createPane } from "./components/features/terminal/paneModel";
 import { cancelDialog, confirmDialog } from "./components/features/terminal/paneEvents";
 import { TerminalPane } from "./components/features/terminal/terminalPane";
 import { CursorTrail } from "./components/content/cursor";
 
-export function App(t: Term, host: AppHost, started: Config): NeonNode {
+export function App(t: Term, view: View, host: AppHost, started: Config): NeonNode {
 	const notice = createNotice();
 	const dialog = createPasteDialog();
-	const pane = createPane(t, host, started, notice, dialog);
+	const pane = createPane(t, view, host, started, notice, dialog);
 	pane.connectHost();
 	return <Void style={{ backgroundColor: pane.background() }}>
 		<TerminalPane model={pane} />

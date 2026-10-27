@@ -52,7 +52,7 @@ export function TerminalPane(props: { model: PaneModel }): NeonNode {
 		<View
 			style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}
 			onLayout={(e: NeonEvent): void => { m.laidOut(e); }}>
-			<ForList each={m.term.grid}>{row}</ForList>
+			<ForList each={m.view.grid}>{row}</ForList>
 			<Preedit
 				model={m.preedit}
 				metrics={metrics}

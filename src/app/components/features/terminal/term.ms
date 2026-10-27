@@ -1,4 +1,3 @@
-import { createList, List } from "../../../../../../neon/src/core/list";
 import { NeonEvent } from "../../../../../../neon/src/render/event";
 import {
 	KeyAction,
@@ -27,15 +26,16 @@ import {
 } from "../../../../vt/vt";
 import {
 	FrameError,
-	RowSlot,
+	FrameRows,
 	Shown,
-	Styles,
-	applyFrame,
-	blank,
-	empty,
-	fitGrid,
+	View,
+	fitRows,
 	fitShown,
-	relightCursor,
+	open,
+	paint,
+	planRows,
+	relitRows,
+	text,
 } from "../../../frame";
 import { stats, mark } from "../../../stats";
 
@@ -74,8 +74,6 @@ export interface Term {
 	session: Session | null;
 	keys: Keys;
 	held: KeyEvent | null;
-	grid: List<RowSlot>;
-	styles: Styles;
 	shown: Vec<Shown>;
 	cursorInk: CellInk | null;
 	buf: Vec<uint8>;
@@ -89,6 +87,7 @@ export interface Term {
 }
 
 export struct Frame {
+	rows: FrameRows | null;
 	cursor: Cursor | null;
 	look: CursorLook;
 	colors: Palette | null;
@@ -106,6 +105,7 @@ const HIDDEN: CursorLook = { visible: false, shape: CursorShape.Block, blinking:
 
 function idleFrame(more: boolean, ended: boolean): Frame {
 	return {
+		rows: null,
 		cursor: null,
 		look: HIDDEN,
 		colors: null,
@@ -129,8 +129,6 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 		session: null,
 		keys: keys.value,
 		held: null,
-		grid: createList<RowSlot>([]),
-		styles: Styles.empty(),
 		shown: [],
 		cursorInk: null,
 		buf: buf,
@@ -145,7 +143,6 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 }
 
 function resizeGrid(this t: Term, rows: int32): void {
-	fitGrid(t.grid, rows);
 	fitShown(t.shown, rows);
 }
 
@@ -235,13 +232,14 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 			notification: events.notification,
 		});
 	}
-	const applied = applyFrame(t.grid, t.styles, t.shown, vt, t.cursorInk);
-	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
+	const planned = planRows(t.shown, vt, t.cursorInk);
+	if (!planned.ok) { return Result.err(frameFailure(planned.error)); }
 	const look = vt.cursorLook();
 	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
 	t.ended = false;
 	return Result.ok({
-		cursor: applied.value,
+		rows: planned.value.rows,
+		cursor: planned.value.cursor,
 		look: look.value,
 		colors: vt.painted.palette,
 		more: more,
@@ -255,13 +253,13 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	});
 }
 
-export function inkCursor(this t: Term, ink: CellInk | null): Result<void, TermError> {
+export function inkCursor(this t: Term, ink: CellInk | null): Result<FrameRows, TermError> {
 	t.cursorInk = ink;
 	const s = t.session;
-	if (s === null) { return Result.ok(null); }
-	const relit = relightCursor(t.grid, t.styles, t.shown, s.vt, ink);
+	if (s === null) { return Result.ok(FrameRows.none()); }
+	const relit = relitRows(t.shown, s.vt, ink);
 	if (!relit.ok) { return Result.err(frameFailure(relit.error)); }
-	return Result.ok(null);
+	return Result.ok(relit.value);
 }
 
 function sendBytes(s: Session, bytes: Span<uint8>): Result<int32, TermError> {
@@ -445,19 +443,23 @@ test "output drained ahead of the frame shows in the grid only when the frame ap
 	if (opened.ok) {
 		const t = opened.value;
 		assert t.fit(20, 3).ok;
+		const view = View.open();
+		view.fitRows(3);
 		const drained = t.drain();
 		assert drained.ok;
 		if (drained.ok) { assert !drained.value; }
 		assert !t.alive;
-		assert t.grid.at(0).line.text.trimEnd() == "";
+		assert view.text(0) == "";
 		const frame = t.pumpFrame();
 		assert frame.ok;
 		if (frame.ok) {
 			assert frame.value.ended;
 			assert !frame.value.more;
+			const rows = frame.value.rows;
+			if (rows !== null) { view.paint(rows); }
 		}
-		assert t.grid.at(0).line.text.trimEnd() == "one";
-		assert t.grid.at(1).line.text.trimEnd() == "two";
+		assert view.text(0) == "one";
+		assert view.text(1) == "two";
 		const next = t.pumpFrame();
 		assert next.ok;
 		if (next.ok) { assert !next.value.ended; }
@@ -479,18 +481,22 @@ test "a replayed recording fills the grid in one frame and ends the stream once"
 		const fitted = t.fit(20, 3);
 		assert fitted.ok;
 		assert openedCols == 20;
-		assert t.grid.length() == 3;
+		assert t.shown.length == 3;
+		const view = View.open();
+		view.fitRows(3);
 		const first = t.pumpFrame();
 		assert first.ok;
 		if (first.ok) {
 			assert first.value.ended;
 			assert !first.value.more;
 			assert first.value.cursor !== null;
+			const rows = first.value.rows;
+			if (rows !== null) { view.paint(rows); }
 		}
-		assert t.grid.at(0).line.text.trimEnd() == "one";
-		assert t.grid.at(1).line.text.trimEnd() == "two";
-		assert t.grid.at(1).spans[0].text == "two";
-		assert t.grid.at(2).line.text.trimEnd() == "";
+		assert view.text(0) == "one";
+		assert view.text(1) == "two";
+		assert view.grid.at(1).spans[0].text == "two";
+		assert view.text(2) == "";
 		const second = t.pumpFrame();
 		assert second.ok;
 		if (second.ok) { assert !second.value.ended; }

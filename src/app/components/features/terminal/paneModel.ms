@@ -12,7 +12,7 @@ import { gridSize } from "../../../../grid/size";
 import { CellInk } from "../../../../grid/lines";
 import { MouseGeometry } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
-import { hexOf } from "../../../frame";
+import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
 import { stats } from "../../../stats";
 import { CellMetrics } from "../../ui/cellText";
 import {
@@ -60,6 +60,7 @@ export interface AppHost {
 
 export interface PaneModel {
 	term: Term;
+	view: View;
 	host: AppHost;
 	started: Config;
 	settings: Config;
@@ -92,6 +93,7 @@ export interface PaneModel {
 
 export function createPane(
 	t: Term,
+	view: View,
 	host: AppHost,
 	started: Config,
 	notice: NoticeModel,
@@ -116,6 +118,7 @@ export function createPane(
 	t.keys.optionAsAlt = started.optionAsAlt;
 	return {
 		term: t,
+		view: view,
 		host: host,
 		started: started,
 		settings: started,
@@ -138,7 +141,11 @@ export function createPane(
 		setViewWidth: setViewWidth,
 		cursor: createCursor(metrics, padding, started.foreground, (ink: CellInk | null): void => {
 			const relit = t.inkCursor(ink);
-			if (!relit.ok) { host.fail(`cursor: ${relit.error.toString()}`); }
+			if (!relit.ok) {
+				host.fail(`cursor: ${relit.error.toString()}`);
+				return;
+			}
+			view.repaintCursor(relit.value);
 		}),
 		preedit: createPreedit(),
 		grid: null,
@@ -226,6 +233,8 @@ export function refresh(this m: PaneModel): void {
 		stats.tally.held += 1;
 		m.watchHold();
 	} else {
+		const rows = f.rows;
+		if (rows !== null) { m.view.paint(rows); }
 		const colors = f.colors;
 		if (colors !== null) {
 			m.setBackground(hexOf(colors.bg));
@@ -399,6 +408,7 @@ function fitLayout(this m: PaneModel): void {
 		}
 		return;
 	}
+	m.view.fitRows(rows);
 	if (!m.settingsApplied) {
 		m.settingsApplied = true;
 		if (!m.applySettings()) { return; }

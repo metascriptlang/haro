@@ -4,12 +4,29 @@ import { Rgb, SCROLLBACK_LINES } from "../vt/vt";
 import { BindAction, Keybind, Screen, keybind } from "../input/bindings";
 import { OptionAsAlt } from "../keys/keys";
 
-export interface Config {
+export enum StartKind {
+	Inherit,
+	Home,
+	Path,
+}
+
+export struct StartDir = match (kind: StartKind) {
+	StartKind.Inherit => {},
+	StartKind.Home => {},
+	StartKind.Path => { path: string },
+};
+
+export function `==`(this a: StartDir, b: StartDir): boolean {
+	if (a.kind == StartKind.Path && b.kind == StartKind.Path) { return a.path == b.path; }
+	return a.kind == b.kind;
+}
+
+export struct Config {
 	fontFamily: Vec<string>;
 	fontSize: float64;
 	padding: float64;
 	command: string;
-	workingDirectory: string | null;
+	workingDirectory: StartDir | null;
 	scrollback: int64;
 	foreground: Rgb;
 	background: Rgb;
@@ -57,11 +74,12 @@ export function defaults(): Config {
 }
 
 export function startDirectory(this c: Config, probableCli: boolean, home: string): string | null {
-	const dir = c.workingDirectory ?? (probableCli ? "inherit" : "home");
-	return match (dir) {
-		"inherit" => null,
-		"home" => home,
-		_ => dir.startsWith("~/") ? `${home}${dir.slice(1)}` : dir,
+	const dir = c.workingDirectory;
+	if (dir === null) { return probableCli ? null : home; }
+	return match (dir.kind) {
+		StartKind.Inherit => null,
+		StartKind.Home => home,
+		StartKind.Path => dir.path.startsWith("~/") ? `${home}${dir.path.slice(1)}` : dir.path,
 	};
 }
 
@@ -188,11 +206,11 @@ function readKeybind(v: JsonValue, key: string): Result<Keybind, string> {
 	return Result.ok(b.value);
 }
 
-function isWorkingDirectory(dir: string): boolean {
-	return match (dir) {
-		"home" | "inherit" => true,
-		_ => dir.startsWith("~/") || isAbsolute(dir),
-	};
+function startDirOf(text: string): StartDir | null {
+	if (text == "inherit") { return { kind: StartKind.Inherit }; }
+	if (text == "home") { return { kind: StartKind.Home }; }
+	if (text.startsWith("~/") || isAbsolute(text)) { return { kind: StartKind.Path, path: text }; }
+	return null;
 }
 
 export function parse(json: string): Result<Config, string> {
@@ -200,7 +218,7 @@ export function parse(json: string): Result<Config, string> {
 	if (!parsed.ok) { return Result.err(`the config is not JSON: ${parsed.error}`); }
 	const root = parsed.value;
 	if (root.kind != JsonKind.Object) { return Result.err("config must be an object"); }
-	const c = defaults();
+	let c = defaults();
 	for (let i = 0; i < root.keys.length; i++) {
 		const key = root.keys[i];
 		const v = root.values[i];
@@ -223,10 +241,11 @@ export function parse(json: string): Result<Config, string> {
 			},
 			"command" => { c.command = try readString(v, key); },
 			"workingDirectory" => {
-				const dir = try readString(v, key);
-				if (!isWorkingDirectory(dir)) {
+				const text = try readString(v, key);
+				const dir = startDirOf(text);
+				if (dir === null) {
 					return Result.err(
-						`workingDirectory "${dir}" must be home, inherit, an absolute path ` +
+						`workingDirectory "${text}" must be home, inherit, an absolute path ` +
 							"or a path under ~/",
 					);
 				}
@@ -401,4 +420,17 @@ test "a configured working directory wins, with ~/ under home" {
 	assert at("inherit") === null;
 	assert at("~/code") == "/Users/me/code";
 	assert at("/srv/www") == "/srv/www";
+}
+
+test "start directories are equal by kind and, for a path, by path" {
+	const home: StartDir = { kind: StartKind.Home };
+	const inherit: StartDir = { kind: StartKind.Inherit };
+	const here: StartDir = { kind: StartKind.Path, path: "/a" };
+	const same: StartDir = { kind: StartKind.Path, path: "/a" };
+	const other: StartDir = { kind: StartKind.Path, path: "/b" };
+	assert here == same;
+	assert here != other;
+	assert home != here;
+	assert home != inherit;
+	assert home == home;
 }

@@ -79,14 +79,14 @@ when (windows) {
 	}
 }
 
-export interface Faces {
+export struct Faces {
 	regular: string;
 	bold: string | null;
 	italic: string | null;
 	boldItalic: string | null;
 }
 
-interface FontFile {
+struct FontFile {
 	name: string;
 	path: string;
 }
@@ -114,7 +114,7 @@ function registryFiles(listing: string, fontsDir: string): Vec<FontFile> {
 	return files;
 }
 
-function facesAmong(files: Vec<FontFile>, family: string): Result<Faces, string> {
+function facesAmong(files: Readonly<Span<FontFile>>, family: string): Result<Faces, string> {
 	let regular: string | null = null;
 	let bold: string | null = null;
 	let italic: string | null = null;

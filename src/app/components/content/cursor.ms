@@ -29,6 +29,7 @@ export interface CursorModel {
 	setDust: Setter<TileCell[]>;
 	trail: Trail;
 	tint: Rgb;
+	shownTint: Rgb;
 	ink: CellInk | null;
 	inked: (ink: CellInk | null) => void;
 	frame: int32;
@@ -64,6 +65,7 @@ export function createCursor(
 		setDust: setDust,
 		trail: Trail.start(),
 		tint: tint,
+		shownTint: tint,
 		ink: null,
 		inked: inked,
 		frame: 0,
@@ -136,8 +138,10 @@ function step(this c: CursorModel, now: number): void {
 	c.last = now;
 	const shape = c.look.shapeOf(c.focused);
 	const moving = c.trail.animate(dt, shape, c.cursorWidth(), c.metrics.rowHeight(), false);
-	c.setDrawing(c.operations());
-	c.setDust(c.dustCells());
+	const ops = c.operations();
+	if (ops.length > 0 || c.drawing().length > 0) { c.setDrawing(ops); }
+	const cells = c.dustCells();
+	if (cells.length > 0 || c.dust().length > 0) { c.setDust(cells); }
 	c.frame = moving ? requestFrame((next: number): void => { c.step(next); }) : 0;
 }
 
@@ -193,6 +197,9 @@ function restartBlink(this c: CursorModel): void {
 }
 
 export function showCursor(this c: CursorModel, at: Cursor | null, look: CursorLook): void {
+	const unchanged = at == c.at && look == c.look && c.tint == c.shownTint;
+	if (unchanged && c.frame == 0 && c.trail.resting()) { return; }
+	c.shownTint = c.tint;
 	if (at !== null) {
 		c.setCol(at.x);
 		c.setRow(at.y);
@@ -321,4 +328,48 @@ test "each particle is a square a fifth of a cell wide that fades with its lifet
 	assert cells.length > 0;
 	assert cells[0].tile.w == 2;
 	assert cells[0].color.a <= 1;
+}
+
+function settle(this c: CursorModel): void {
+	let now = c.last;
+	while (c.frame != 0) {
+		now += 16;
+		c.step(now);
+	}
+}
+
+test "showing a cursor that has not moved, changed look or tint arms no frame once it has settled" {
+	const c = cursorFor({ visible: true, shape: CursorShape.Bar, blinking: false });
+	const at: Cursor = { x: 3, y: 2, wide: false };
+	const look: CursorLook = { visible: true, shape: CursorShape.Block, blinking: false };
+	c.showCursor(at, look);
+	assert c.frame != 0;
+	c.settle();
+	c.showCursor(at, look);
+	assert c.frame == 0;
+	c.showCursor({ x: 4, y: 2, wide: false }, look);
+	assert c.frame != 0;
+	c.settle();
+	c.tint = { r: 0, g: 0, b: 255 };
+	c.showCursor({ x: 4, y: 2, wide: false }, look);
+	assert c.frame != 0;
+}
+
+test "a step at rest leaves the drawing and the dust alone, and clears them once when they empty" {
+	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: false });
+	c.trail.moveTo(34, 44);
+	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
+	const sets = { drawing: 0, dust: 0 };
+	const setDrawing = c.setDrawing;
+	const setDust = c.setDust;
+	c.setDrawing = (v: GraphicsOp[] | ((prev: GraphicsOp[]) => GraphicsOp[])): void => {
+		sets.drawing += 1;
+		setDrawing(v);
+	};
+	c.setDust = (v: TileCell[] | ((prev: TileCell[]) => TileCell[])): void => {
+		sets.dust += 1;
+		setDust(v);
+	};
+	c.step(100);
+	assert sets.drawing == 0 && sets.dust == 0;
 }

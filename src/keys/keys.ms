@@ -106,7 +106,7 @@ export function modifierKey(code: string): boolean {
 	return false;
 }
 
-export function releasesOf(held: KeyEvent): Vec<KeyEvent> {
+export function releasesOf(this held: KeyEvent): Vec<KeyEvent> {
 	let release: KeyEvent = { ...held, action: KeyAction.Release };
 	let out: Vec<KeyEvent> = [];
 	if (release.key != "") { out.push(release); }
@@ -170,8 +170,7 @@ test "macOS private-use function key codes are not passed on as text" {
 }
 
 test "Ctrl+Alt the layout consumed for AltGr text is dropped, and a plain Ctrl+Alt is kept" {
-	const none = 0 as BitSet<KeyMod>;
-	const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt).incl(KeyMod.AltRight);
+	const ctrlAlt = NO_MODS.incl(KeyMod.Ctrl).incl(KeyMod.Alt).incl(KeyMod.AltRight);
 	const altGr: KeyEvent = {
 		action: KeyAction.Press,
 		key: "KeyQ",
@@ -181,19 +180,18 @@ test "Ctrl+Alt the layout consumed for AltGr text is dropped, and a plain Ctrl+A
 		text: "@",
 	};
 	const typed = altGr.withoutAltGr();
-	assert typed.mods == none.incl(KeyMod.Shift);
-	assert typed.consumedMods == none;
-	const chord: KeyEvent = { ...altGr, consumedMods: none, text: "" };
+	assert typed.mods == NO_MODS.incl(KeyMod.Shift);
+	assert typed.consumedMods == NO_MODS;
+	const chord: KeyEvent = { ...altGr, consumedMods: NO_MODS, text: "" };
 	assert chord.withoutAltGr().mods == chord.mods;
 }
 
 test "a keypad digit with NumLock off is the navigation key printed under it" {
-	const none = 0 as BitSet<KeyMod>;
 	const eight: KeyEvent = {
 		action: KeyAction.Press,
 		key: "Numpad8",
-		mods: none,
-		consumedMods: none,
+		mods: NO_MODS,
+		consumedMods: NO_MODS,
 		unshifted: 0x38,
 		text: "",
 	};
@@ -201,7 +199,7 @@ test "a keypad digit with NumLock off is the navigation key printed under it" {
 	assert eight.withNumLockApplied().unshifted == 0;
 	const decimal: KeyEvent = { ...eight, key: "NumpadDecimal" };
 	assert decimal.withNumLockApplied().key == "NumpadDelete";
-	const locked: KeyEvent = { ...eight, mods: none.incl(KeyMod.NumLock), text: "8" };
+	const locked: KeyEvent = { ...eight, mods: NO_MODS.incl(KeyMod.NumLock), text: "8" };
 	assert locked.withNumLockApplied().key == "Numpad8";
 	assert locked.withNumLockApplied().text == "8";
 	const plus: KeyEvent = { ...eight, key: "NumpadAdd", text: "+" };
@@ -209,15 +207,14 @@ test "a keypad digit with NumLock off is the navigation key printed under it" {
 }
 
 test "the modifier mask keeps libghostty-vt's bit order" {
-	const none = 0 as BitSet<KeyMod>;
-	assert modsMask(none) == 0;
-	assert modsMask(none.incl(KeyMod.Shift)) == 0x01;
-	assert modsMask(none.incl(KeyMod.Ctrl)) == 0x02;
-	assert modsMask(none.incl(KeyMod.Alt)) == 0x04;
-	assert modsMask(none.incl(KeyMod.NumLock)) == 0x20;
-	assert modsMask(none.incl(KeyMod.ShiftRight)) == 0x40;
-	assert modsMask(none.incl(KeyMod.AltRight)) == 0x100;
-	const wide = none.incl(KeyMod.Ctrl).incl(KeyMod.AltRight);
+	assert modsMask(NO_MODS) == 0;
+	assert modsMask(NO_MODS.incl(KeyMod.Shift)) == 0x01;
+	assert modsMask(NO_MODS.incl(KeyMod.Ctrl)) == 0x02;
+	assert modsMask(NO_MODS.incl(KeyMod.Alt)) == 0x04;
+	assert modsMask(NO_MODS.incl(KeyMod.NumLock)) == 0x20;
+	assert modsMask(NO_MODS.incl(KeyMod.ShiftRight)) == 0x40;
+	assert modsMask(NO_MODS.incl(KeyMod.AltRight)) == 0x100;
+	const wide = NO_MODS.incl(KeyMod.Ctrl).incl(KeyMod.AltRight);
 	assert modsOf(modsMask(wide)) == wide;
 }
 
@@ -231,11 +228,11 @@ test "a modifier mask outside the KeyMod bits is refused" {
 }
 
 function event(action: KeyAction, key: string, mods: BitSet<KeyMod>): KeyEvent {
-	return { action: action, key: key, mods: mods, consumedMods: 0 as BitSet<KeyMod>, unshifted: 0, text: "" };
+	return { action: action, key: key, mods: mods, consumedMods: NO_MODS, unshifted: 0, text: "" };
 }
 
 test "the key still held is the last one pressed, until its release leaves only the modifiers held with it" {
-	const empty = 0 as BitSet<KeyMod>;
+	const empty = NO_MODS;
 	const ctrl = empty.incl(KeyMod.Ctrl);
 	const a = event(KeyAction.Press, "KeyA", ctrl);
 	const held = heldAfter(null, a);
@@ -254,6 +251,6 @@ test "a focus loss releases the held key, then each held modifier on both sides"
 	const shift = ctrlShift.excl(KeyMod.Ctrl);
 	const own = releasesOf(event(KeyAction.Press, "ShiftLeft", shift)).map((e: KeyEvent): string => e.key).join(" ");
 	assert own == "ShiftLeft ShiftRight";
-	const plain = releasesOf(event(KeyAction.Press, "KeyA", 0 as BitSet<KeyMod>));
+	const plain = releasesOf(event(KeyAction.Press, "KeyA", NO_MODS));
 	assert plain.length == 1 && plain[0].action == KeyAction.Release;
 }

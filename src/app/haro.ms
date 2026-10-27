@@ -90,7 +90,7 @@ function note(line: string): void {
 	const _logged = appendFile(`${dir}/haro.log`, `${Date.now()} ${line}\n`);
 }
 
-function fail(message: string): void {
+function fail(message: string): never {
 	note(message);
 	exit(1);
 }
@@ -212,16 +212,15 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 	return code;
 }
 
-async function started(shell: Shell): Promise<boolean> {
+async function started(shell: Shell): Promise<void> {
 	const refused = await opened(shell);
 	if (refused !== null) { fail(`open: ${refused.toString()}`); }
-	return refused === null;
 }
 
 async function runShell(command: string): Promise<int32> {
 	const cwd = config.loaded.config.startDirectory(probableCli(), homeDir());
 	const shell = new Shell({ command: command, cwd: cwd, recording: null });
-	if (!(await started(shell))) { return 1; }
+	await started(shell);
 	const view = View.open();
 	appWireWake();
 	if (hasFlag("--smoke")) { smoke(portOf(shell), view, quitWith(shell)); }
@@ -236,10 +235,9 @@ async function runReplay(path: string): Promise<int32> {
 	const recording = readFile(path);
 	if (!recording.ok) {
 		fail(`the recording ${path} did not read`);
-		return 1;
 	}
 	const shell = new Shell({ command: "", cwd: null, recording: recording.value });
-	if (!(await started(shell))) { return 1; }
+	await started(shell);
 	const view = View.open();
 	if (hasFlag("--smoke")) { smokeReplay(portOf(shell), view, quitWith(shell)); }
 	return await openWindow(shell, view, (code: int32): void => {
@@ -256,4 +254,6 @@ async function main(): Promise<int32> {
 	return await runShell(flagValue("--shell") ?? config.loaded.config.command);
 }
 
-exit(await main());
+when (!testBuild) {
+	exit(await main());
+}

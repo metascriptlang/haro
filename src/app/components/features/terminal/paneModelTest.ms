@@ -1,19 +1,31 @@
 import { flush } from "../../../../../../neon/src/core/runtime";
 import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
-import { defaults } from "../../../../config/config";
-import { Pty, PtyError } from "../../../../pty/transport";
-import { Replay } from "../../../../pty/replay";
+import { installClipboardServices } from "../../../../../../neon/src/api/clipboardServices";
+import { Config, defaults } from "../../../../config/config";
 import { writeText } from "../../../../vt/vt";
 import { open, NoticeModel } from "../notice/notice";
 import { open, PasteDialogModel } from "../paste/pasteDialog";
 import { Stats, empty } from "../../../stats";
-import { Desktop, PaneModel, Report, Timing, open, failed, refresh } from "./paneModel";
+import {
+	ConfigChange,
+	ConfigOutcome,
+	Desktop,
+	HostEvents,
+	PaneModel,
+	Report,
+	Timing,
+	connectHost,
+	open,
+	failed,
+	refresh,
+} from "./paneModel";
 import { cancelDialog, confirmDialog } from "./paneEvents";
 import { Io, Where, open, port } from "../../../../controller/io";
-import { Term, TermError, openTerm, shutdown } from "../../../../controller/term";
-import { View, fitRows, open, text } from "../../../frame";
+import { Term, TermError } from "../../../../controller/term";
+import { View, fitRows, hexOf, open, text } from "../../../frame";
 import { holding } from "../../../../controller/controls";
-import { Sink, onFresh, onTerm } from "../../../../controller/terminalRig";
+import { MouseButton } from "../../../../controller/mouseButton";
+import { Sink, exiting, hitAt, lines, onFresh, onPty, onTerm } from "../../../../controller/terminalRig";
 
 interface Calls {
 	fatal: string;
@@ -49,7 +61,7 @@ function timingAt(now: float64): Timing {
 	return { clock: (): float64 => now, schedule: (run: () => void): void => {} };
 }
 
-function paneWith(io: Io, calls: Calls): PaneModel {
+function paneWith(io: Io, calls: Calls, timing: Timing = timingAt(0)): PaneModel {
 	const view = View.open();
 	view.fitRows(io.term.shown.length as int32);
 	return PaneModel.open(
@@ -57,7 +69,7 @@ function paneWith(io: Io, calls: Calls): PaneModel {
 		view,
 		desktopFor(calls),
 		reportFor(calls),
-		timingAt(0),
+		timing,
 		"",
 		defaults(),
 		NoticeModel.open(),
@@ -68,6 +80,50 @@ function paneWith(io: Io, calls: Calls): PaneModel {
 
 function paneOf(t: Term, calls: Calls): PaneModel {
 	return paneWith(Io.open(t), calls);
+}
+
+interface Scheduled {
+	runs: Vec<() => void>;
+}
+
+function timingCounting(scheduled: Scheduled): Timing {
+	return { clock: (): float64 => 0, schedule: (run: () => void): void => { scheduled.runs.push(run); } };
+}
+
+interface Host {
+	config: ((change: ConfigChange) => void) | null;
+	closeKey: (() => void) | null;
+	wake: (() => void) | null;
+}
+
+function hostOf(host: Host): HostEvents {
+	return {
+		onConfig: (handler: (change: ConfigChange) => void): void => { host.config = handler; },
+		onCloseKey: (handler: () => void): void => { host.closeKey = handler; },
+		onWake: (handler: () => void): void => { host.wake = handler; },
+	};
+}
+
+function loaded(c: Config, error: string = ""): ConfigChange {
+	return { outcome: ConfigOutcome.Loaded, config: c, family: "", error: error };
+}
+
+interface Board {
+	copied: Vec<string>;
+	offer: string;
+	reads: int32;
+}
+
+function withClipboard(board: Board, body: () => void): void {
+	installClipboardServices({
+		getClipboard: async (): Promise<string> => {
+			board.reads += 1;
+			return board.offer;
+		},
+		setClipboard: (text: string): void => { board.copied.push(text); },
+	});
+	body();
+	installClipboardServices(null);
 }
 
 function pressed(code: string): NeonEvent {
@@ -146,18 +202,13 @@ test "an internal failure while the shell runs is a notice logged once, and the 
 }
 
 test "an internal failure before the shell started is fatal" {
-	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
-		return Result.ok(Replay.ofText("").toPty());
-	});
-	assert opened.ok;
-	if (opened.ok) {
+	assert onFresh("", (t: Term, sink: Sink): void => {
 		const calls = noCalls();
-		const m = paneOf(opened.value, calls);
+		const m = paneOf(t, calls);
 		m.failed(Where.Fit, "SessionStartFailed");
 		assert calls.fatal == "fit: SessionStartFailed";
 		assert calls.noted == "";
-		opened.value.shutdown();
-	}
+	}).ok;
 }
 
 function closeAsked(this m: PaneModel): boolean {
@@ -201,23 +252,14 @@ function afterExit(
 	body: (m: PaneModel, calls: Calls, io: Io) => void,
 ): Result<void, TermError> {
 	let at: float64 = 0;
-	const t = try openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
-		const base = Replay.ofText("last output").toPty();
-		return Result.ok({
-			...base,
-			exitCode: (): int32 | null => { return code; },
-			exitSignal: (): int32 => { return signal; },
-		});
-	}, (): float64 => { return at; });
-	defer t.shutdown();
-	const _fit = try t.fit(20, 3);
-	at = lateMs;
-	const calls = noCalls();
-	const io = Io.open(t);
-	const m = paneWith(io, calls);
-	m.refresh();
-	body(m, calls, io);
-	return Result.ok(null);
+	return onPty(exiting("last output", code, signal), (): float64 => { return at; }, 20, 3, (t: Term): void => {
+		at = lateMs;
+		const calls = noCalls();
+		const io = Io.open(t);
+		const m = paneWith(io, calls);
+		m.refresh();
+		body(m, calls, io);
+	});
 }
 
 test "a shell killed by a signal keeps the window and names the signal; a key closes it" {
@@ -276,5 +318,117 @@ test "a dead shell takes no typed text, key release or focus change, and keeps i
 		assert io.controls.holding();
 		assert calls.fatal == "";
 		assert calls.noted == "";
+	}).ok;
+}
+
+test "refreshes are counted, and a frame that has more output waiting is followed by a scheduled refresh" {
+	assert onFresh(lines(120000), (t: Term, sink: Sink): void => {
+		const scheduled: Scheduled = { runs: [] };
+		const m = paneWith(Io.open(t), noCalls(), timingCounting(scheduled));
+		m.refresh();
+		assert m.stats.line().startsWith("refreshes=1 more=1 held=0");
+		assert scheduled.runs.length == 1;
+		scheduled.runs[0]();
+		assert m.stats.tally.refreshes == 2;
+	}).ok;
+}
+
+test "a frame held by synchronized output is counted each time, and its recheck timer is not doubled" {
+	assert onFresh("abc\x1b[?2026h", (t: Term, sink: Sink): void => {
+		const m = paneOf(t, noCalls());
+		m.refresh();
+		assert m.stats.line().startsWith("refreshes=1 more=0 held=1");
+		const timer = m.holdTimer;
+		assert timer >= 0;
+		m.refresh();
+		assert m.stats.tally.held == 2;
+		assert m.holdTimer == timer;
+		clearTimeout(timer);
+	}).ok;
+}
+
+test "dragging above the grid keeps a refresh timer running for the autoscroll, one at a time" {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
+		const m = paneOf(t, noCalls());
+		assert m.scrollTimer < 0;
+		m.io.press(MouseButton.Left, hitAt(3, 2), 0);
+		m.io.move({ ...hitAt(3, 0), y: -12 }, true);
+		m.refresh();
+		assert m.autoscrolling;
+		const timer = m.scrollTimer;
+		assert timer >= 0;
+		m.refresh();
+		assert m.scrollTimer == timer;
+		clearTimeout(timer);
+	}).ok;
+}
+
+test "a program's clipboard write reaches the system clipboard" {
+	assert onFresh("\x1b]52;c;aGk=\x07", (t: Term, sink: Sink): void => {
+		const board: Board = { copied: [], offer: "", reads: 0 };
+		withClipboard(board, (): void => {
+			paneOf(t, noCalls()).refresh();
+		});
+		assert board.copied.length == 1;
+		assert board.copied[0] == "hi";
+	}).ok;
+}
+
+test "a clipboard read the program asks for goes to the system clipboard, once per ask" {
+	assert onFresh("\x1b]52;c;?\x07", (t: Term, sink: Sink): void => {
+		const board: Board = { copied: [], offer: "x", reads: 0 };
+		withClipboard(board, (): void => {
+			const m = paneOf(t, noCalls());
+			m.refresh();
+			m.refresh();
+		});
+		assert board.reads == 1;
+	}).ok;
+}
+
+test "a config change applies live except a command or directory, which asks for a restart" {
+	assert onFresh("", (t: Term, sink: Sink): void => {
+		const m = paneOf(t, noCalls());
+		const host: Host = { config: null, closeKey: null, wake: null };
+		m.connectHost(hostOf(host));
+		const onConfig = host.config;
+		assert onConfig !== null;
+		if (onConfig !== null) {
+			onConfig(loaded({ ...defaults(), padding: 6, background: { r: 1, g: 2, b: 3 } }));
+			assert m.padding() == 6;
+			assert m.notice.text == "";
+			flush();
+			assert m.background() == hexOf({ r: 1, g: 2, b: 3 });
+			onConfig(loaded({ ...defaults(), command: "other" }));
+			assert m.notice.text == "config.ms: command and workingDirectory apply when Haro restarts";
+			onConfig(loaded(defaults(), "bad key"));
+			assert m.notice.text == "config.ms: bad key";
+			onConfig({ outcome: ConfigOutcome.Refused, error: "syntax error" });
+			assert m.notice.text == "config.ms: syntax error";
+			assert m.padding() == 0;
+		}
+	}).ok;
+}
+
+test "the host's wake drains the shell and refreshes on the scheduler; its close key asks to close" {
+	assert onTerm("$ ", (t: Term, sink: Sink): void => {
+		const scheduled: Scheduled = { runs: [] };
+		const calls = noCalls();
+		const m = paneWith(Io.open(t), calls, timingCounting(scheduled));
+		const host: Host = { config: null, closeKey: null, wake: null };
+		m.connectHost(hostOf(host));
+		const wake = host.wake;
+		const closeKey = host.closeKey;
+		assert wake !== null && closeKey !== null;
+		if (wake !== null && closeKey !== null) {
+			wake();
+			assert scheduled.runs.length == 1;
+			assert m.stats.tally.refreshes == 0;
+			scheduled.runs[0]();
+			assert m.stats.tally.refreshes == 1;
+			assert calls.closed == 0;
+			closeKey();
+			assert calls.closed == 1;
+		}
 	}).ok;
 }

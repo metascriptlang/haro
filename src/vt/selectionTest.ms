@@ -112,6 +112,7 @@ test "a selection follows its text when scrollback is pruned" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
+		defer vt.free();
 		assert vt.setScrollback(1000).ok;
 		vt.writeText(numberedLines(6000));
 		assert vt.update().ok;
@@ -128,7 +129,6 @@ test "a selection follows its text when scrollback is pruned" {
 			if (m !== null) { assert m.range.start.row < row; }
 		}
 		assert shown(vt.selectedText()) == "r5999";
-		vt.free();
 	}
 }
 

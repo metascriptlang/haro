@@ -27,7 +27,7 @@ function press(key: string, text: string, unshifted: uint32, mods: BitSet<KeyMod
 	};
 }
 
-function encoded(k: Keys, vt: Vt, e: KeyEvent): string {
+function encoded(this k: Keys, vt: Vt, e: KeyEvent): string {
 	let buf: Vec<uint8> = new Array(64);
 	const r = k.encode(vt, e, buf);
 	if (!r.ok) { return ""; }
@@ -48,32 +48,32 @@ test "AltGr text reaches the program as the text once the consumed Ctrl+Alt is d
 		const none = 0 as BitSet<KeyMod>;
 		const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt);
 		const brace: KeyEvent = { ...press("Digit7", "{", 0x37, ctrlAlt), consumedMods: ctrlAlt };
-		assert encoded(k, vt, brace.withoutAltGr()) == "{";
+		assert k.encoded(vt, brace.withoutAltGr()) == "{";
 		const polish: KeyEvent = { ...brace, key: "KeyA", unshifted: 0x61, text: "ą" };
-		assert encoded(k, vt, polish.withoutAltGr()) == "Ä";
+		assert k.encoded(vt, polish.withoutAltGr()) == "Ä";
 	});
 }
 
 test "enter encodes as a carriage return" {
 	assert withKeys((k: Keys, vt: Vt): void => {
 		const none = 0 as BitSet<KeyMod>;
-		assert encoded(k, vt, press("Enter", "\r", 0x0D, none)) == "\r";
+		assert k.encoded(vt, press("Enter", "\r", 0x0D, none)) == "\r";
 	});
 }
 
 test "ctrl+c encodes as ETX even when the platform reports the byte as text" {
 	assert withKeys((k: Keys, vt: Vt): void => {
 		const ctrl = (0 as BitSet<KeyMod>).incl(KeyMod.Ctrl);
-		assert encoded(k, vt, press("KeyC", "\x03", 0x63, ctrl)) == "\x03";
+		assert k.encoded(vt, press("KeyC", "\x03", 0x63, ctrl)) == "\x03";
 	});
 }
 
 test "arrow up follows the cursor key mode the vt is in" {
 	assert withKeys((k: Keys, vt: Vt): void => {
 		const none = 0 as BitSet<KeyMod>;
-		assert encoded(k, vt, press("ArrowUp", "", 0, none)) == "\x1b[A";
+		assert k.encoded(vt, press("ArrowUp", "", 0, none)) == "\x1b[A";
 		vt.writeText("\x1b[?1h");
-		assert encoded(k, vt, press("ArrowUp", "", 0, none)) == "\x1bOA";
+		assert k.encoded(vt, press("ArrowUp", "", 0, none)) == "\x1bOA";
 	});
 }
 
@@ -81,9 +81,9 @@ test "alt prefixes the escape, except macOS Option, whose text the system compos
 	assert withKeys((k: Keys, vt: Vt): void => {
 		const alt = (0 as BitSet<KeyMod>).incl(KeyMod.Alt);
 		when (macos) {
-			assert encoded(k, vt, press("KeyX", "x", 0x78, alt)) == "x";
+			assert k.encoded(vt, press("KeyX", "x", 0x78, alt)) == "x";
 		} else {
-			assert encoded(k, vt, press("KeyX", "x", 0x78, alt)) == "\x1bx";
+			assert k.encoded(vt, press("KeyX", "x", 0x78, alt)) == "\x1bx";
 		}
 	});
 }
@@ -97,9 +97,9 @@ test "macOS Option sends the escape before the key text the window kept when it 
 		const composed: KeyEvent = { ...press("KeyB", "ı", 0x62, left), consumedMods: left };
 		when (macos) {
 			k.optionAsAlt = OptionAsAlt.Left;
-			assert encoded(k, vt, asAlt) == "\x1bB";
+			assert k.encoded(vt, asAlt) == "\x1bB";
 			k.optionAsAlt = OptionAsAlt.Neither;
-			assert encoded(k, vt, composed) == "\u00c4\u00b1";
+			assert k.encoded(vt, composed) == "\u00c4\u00b1";
 		}
 	});
 }
@@ -109,7 +109,7 @@ test "a consumed alt lets the text through unprefixed" {
 		const none = 0 as BitSet<KeyMod>;
 		const alt = none.incl(KeyMod.Alt);
 		const e: KeyEvent = { ...press("BracketLeft", "{", 0x5B, alt), consumedMods: alt };
-		assert encoded(k, vt, e) == "{";
+		assert k.encoded(vt, e) == "{";
 	});
 }
 
@@ -118,7 +118,7 @@ test "ctrl with printable text encodes as fixterms csi u" {
 		const none = 0 as BitSet<KeyMod>;
 		const ctrlAlt = none.incl(KeyMod.Ctrl).incl(KeyMod.Alt);
 		const e: KeyEvent = { ...press("BracketLeft", "{", 0x5B, ctrlAlt), consumedMods: ctrlAlt };
-		assert encoded(k, vt, e) == "\x1b[123;7u";
+		assert k.encoded(vt, e) == "\x1b[123;7u";
 	});
 }
 
@@ -137,7 +137,7 @@ test "a committed grapheme arrives as its utf-8 bytes" {
 	});
 }
 
-function pasted(vt: Vt, text: string, allowUnsafe: boolean): string {
+function pasted(this vt: Vt, text: string, allowUnsafe: boolean): string {
 	const bytes = vt.pasteBytes(text, allowUnsafe);
 	if (bytes.ok) { return ascii(bytes.value); }
 	return bytes.error == PasteError.Unsafe ? "<unsafe>" : "<failed>";
@@ -145,19 +145,19 @@ function pasted(vt: Vt, text: string, allowUnsafe: boolean): string {
 
 test "an unbracketed paste turns newlines into carriage returns and refuses them unconfirmed" {
 	assert withVt(10, 4, (vt: Vt): void => {
-		assert pasted(vt, "hello", false) == "hello";
-		assert pasted(vt, "a\nb", false) == "<unsafe>";
-		assert pasted(vt, "a\nb", true) == "a\rb";
+		assert vt.pasted("hello", false) == "hello";
+		assert vt.pasted("a\nb", false) == "<unsafe>";
+		assert vt.pasted("a\nb", true) == "a\rb";
 	});
 }
 
 test "a bracketed paste is framed and only its end marker is unsafe" {
 	assert withVt(10, 4, (vt: Vt): void => {
 		vt.writeText("\x1b[?2004h");
-		assert pasted(vt, "a\nb", false) == "\x1b[200~a\nb\x1b[201~";
-		assert pasted(vt, "x\x1b[31my", false) == "\x1b[200~x [31my\x1b[201~";
-		assert pasted(vt, "evil\x1b[201~rm", false) == "<unsafe>";
+		assert vt.pasted("a\nb", false) == "\x1b[200~a\nb\x1b[201~";
+		assert vt.pasted("x\x1b[31my", false) == "\x1b[200~x [31my\x1b[201~";
+		assert vt.pasted("evil\x1b[201~rm", false) == "<unsafe>";
 		vt.writeText("\x1b[?2004l");
-		assert pasted(vt, "plain", false) == "plain";
+		assert vt.pasted("plain", false) == "plain";
 	});
 }

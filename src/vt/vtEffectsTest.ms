@@ -24,7 +24,7 @@ import { ascii, withVt } from "./vtRig";
 test "a cursor position query is answered with the cursor's place" {
 	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("ab\x1b[6n");
-		assert pending(vt) == "\x1b[1;3R";
+		assert vt.pending() == "\x1b[1;3R";
 	});
 }
 
@@ -91,9 +91,9 @@ function replyTo(query: string): string {
 	const created = Vt.create(20, 4);
 	if (!created.ok) { return "create failed"; }
 	const vt = created.value;
+	defer vt.free();
 	vt.writeText(query);
-	const replied = pending(vt);
-	vt.free();
+	const replied = vt.pending();
 	return replied;
 }
 
@@ -124,16 +124,16 @@ test "a theme the host sets is what a colour query reports" {
 	assert withVt(20, 4, (vt: Vt): void => {
 		assert vt.setDefaultColors({ r: 0x28, g: 0x2c, b: 0x34 }, { r: 0xff, g: 0xff, b: 0xfe }).ok;
 		vt.writeText("\x1b]11;?\x1b\\");
-		assert pending(vt) == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\";
+		assert vt.pending() == "\x1b]11;rgb:ffff/ffff/fefe\x1b\\";
 	});
 }
 
 function cursorColorAfter(text: string): Result<Rgb | null, VtError> {
 	const vt = try Vt.create(20, 4);
+	defer vt.free();
 	vt.writeText(text);
 	const updated = vt.update();
 	const colors = vt.palette();
-	vt.free();
 	if (!updated.ok || !colors.ok) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(colors.value.cursor);
 }
@@ -161,19 +161,19 @@ test "an OSC 52 write reaches the host once, and only for the standard clipboard
 	});
 }
 
-function pending(vt: Vt): string {
-	let replies = vt.takeReplies();
+function pending(this vt: Vt): string {
+	const replies = vt.takeReplies();
 	return ascii(replies);
 }
 
 test "a size query is answered with the terminal's own cells and pixels, as is the report mode 2048 starts with" {
 	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x1b[18t");
-		assert pending(vt) == "\x1b[8;4;20t";
+		assert vt.pending() == "\x1b[8;4;20t";
 		vt.writeText("\x1b[14t\x1b[16t");
-		assert pending(vt) == "\x1b[4;0;0t\x1b[6;0;0t";
+		assert vt.pending() == "\x1b[4;0;0t\x1b[6;0;0t";
 		vt.writeText("\x1b[?2048h");
-		assert pending(vt) == "\x1b[48;4;20;0;0t";
+		assert vt.pending() == "\x1b[48;4;20;0;0t";
 	});
 }
 
@@ -181,16 +181,16 @@ test "an OSC 52 read waits for the host and is answered in the frame the program
 	assert withVt(20, 4, (vt: Vt): void => {
 		assert !vt.clipboardAsked();
 		vt.writeText("\x1b]52;c;?\x1b\\");
-		assert pending(vt) == "";
+		assert vt.pending() == "";
 		assert vt.clipboardAsked();
 		assert !vt.clipboardAsked();
 		assert vt.answerClipboard("hello", true).ok;
-		assert pending(vt) == "\x1b]52;c;aGVsbG8=\x1b\\";
+		assert vt.pending() == "\x1b]52;c;aGVsbG8=\x1b\\";
 		assert !vt.answerClipboard("again", true).ok;
 		vt.writeText("\x1b]52;c;?\x07");
 		assert vt.clipboardAsked();
 		assert vt.answerClipboard("secret", false).ok;
-		assert pending(vt) == "\x1b]52;c;\x07";
+		assert vt.pending() == "\x1b]52;c;\x07";
 	});
 }
 
@@ -198,13 +198,13 @@ test "base64 in an OSC 52 answer pads one and two leftover bytes" {
 	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x1b]52;c;?\x1b\\");
 		assert vt.answerClipboard("ab", true).ok;
-		assert pending(vt) == "\x1b]52;c;YWI=\x1b\\";
+		assert vt.pending() == "\x1b]52;c;YWI=\x1b\\";
 		vt.writeText("\x1b]52;c;?\x1b\\");
 		assert vt.answerClipboard("a", true).ok;
-		assert pending(vt) == "\x1b]52;c;YQ==\x1b\\";
+		assert vt.pending() == "\x1b]52;c;YQ==\x1b\\";
 		vt.writeText("\x1b]52;c;?\x1b\\");
 		assert vt.answerClipboard("", true).ok;
-		assert pending(vt) == "\x1b]52;c;\x1b\\";
+		assert vt.pending() == "\x1b]52;c;\x1b\\";
 	});
 }
 
@@ -212,7 +212,7 @@ test "an OSC 5522 clipboard read is refused at once rather than waiting for an O
 	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x1b]5522;type=read:id=r1;dGV4dC9wbGFpbg==\x1b\\");
 		assert !vt.clipboardAsked();
-		assert pending(vt) == "\x1b]5522;type=read:status=EPERM:id=r1\x1b\\";
+		assert vt.pending() == "\x1b]5522;type=read:status=EPERM:id=r1\x1b\\";
 	});
 }
 
@@ -222,7 +222,7 @@ test "clipboard writes while a read waits leave the waiting answer intact" {
 		assert vt.clipboardAsked();
 		vt.writeText("\x1b]52;c;YQ==\x1b\\\x1b]52;c;Yg==\x1b\\");
 		assert vt.answerClipboard("hello", true).ok;
-		assert pending(vt) == "\x1b]52;c;aGVsbG8=\x1b\\";
+		assert vt.pending() == "\x1b]52;c;aGVsbG8=\x1b\\";
 	});
 }
 
@@ -231,12 +231,12 @@ test "a second read while one waits, and a primary-selection read, get an empty 
 		vt.writeText("\x1b]52;c;?\x1b\\");
 		assert vt.clipboardAsked();
 		vt.writeText("\x1b]52;c;?\x1b\\");
-		assert pending(vt) == "\x1b]52;c;\x1b\\";
+		assert vt.pending() == "\x1b]52;c;\x1b\\";
 		assert !vt.clipboardAsked();
 		assert vt.answerClipboard("x", true).ok;
-		assert pending(vt) == "\x1b]52;c;eA==\x1b\\";
+		assert vt.pending() == "\x1b]52;c;eA==\x1b\\";
 		vt.writeText("\x1b]52;p;?\x1b\\");
-		assert pending(vt) == "\x1b]52;p;\x1b\\";
+		assert vt.pending() == "\x1b]52;p;\x1b\\";
 		assert !vt.clipboardAsked();
 	});
 }

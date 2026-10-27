@@ -88,8 +88,8 @@ export const SCROLLBACK_LINES: int64 = 10000;
 const SCROLLBACK_MAX_BYTES: uint64 = 50000000;
 
 function applyColors(terminal: GhosttyTerminal, fg: Rgb, bg: Rgb): Result<void, VtError> {
-	let f = ghosttyColor(fg);
-	let b = ghosttyColor(bg);
+	let f = fg.ghosttyColor();
+	let b = bg.ghosttyColor();
 	const fgOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND;
 	const bgOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND;
 	try checked(terminalSet(terminal, fgOption, f), VtError.WriteFailed);
@@ -262,7 +262,7 @@ export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<voi
 		return Result.err(VtError.ReadFailed);
 	}
 	for (let i = 0; i < colors.length; i++) {
-		palette.c[i] = ghosttyColor(colors[i]);
+		palette.c[i] = colors[i].ghosttyColor();
 	}
 	try checked(terminalSet(vt.terminal, option, palette), VtError.WriteFailed);
 	vt.painted.rows = [];

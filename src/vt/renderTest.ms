@@ -173,7 +173,7 @@ test "a skin-tone emoji is one wide cell, also after a full reset" {
 	});
 }
 
-function clusterAt(vt: Vt, base: uint32): Vec<uint32> {
+function clusterAt(this vt: Vt, base: uint32): Vec<uint32> {
 	let found: Vec<uint32> = [];
 	if (!vt.update().ok) { return found; }
 	const rows = vt.rows();
@@ -198,12 +198,12 @@ test "a cluster that widens in the last column wraps with its codepoints, below 
 	for (const at of ["\x1b[2;4r\x1b[6;20H", "\x1b[6;20H", "\x1b[2;4r\x1b[4;20H"]) {
 		assert withVt(20, 6, (vt: Vt): void => {
 			vt.writeText(at + heart);
-			const cluster = clusterAt(vt, 0x2764);
+			const cluster = vt.clusterAt(0x2764);
 			assert cluster.length == 3 && cluster[1] == 0x200D && cluster[2] == 0x1F44D;
 		});
 		assert withVt(20, 6, (vt: Vt): void => {
 			vt.writeText(at + kssa);
-			const cluster = clusterAt(vt, 0x915);
+			const cluster = vt.clusterAt(0x915);
 			assert cluster.length == 3 && cluster[1] == 0x94D && cluster[2] == 0x937;
 		});
 	}

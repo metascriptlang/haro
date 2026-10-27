@@ -102,12 +102,12 @@ function rowsAfterGrowing(pull: boolean): string {
 	const created = Vt.create(10, 3);
 	if (!created.ok) { return "create failed"; }
 	const vt = created.value;
+	defer vt.free();
 	vt.setPullScrollback(pull);
 	vt.writeText("l1\r\nl2\r\nl3\r\nl4\r\nl5");
 	vt.resize(10, 5);
 	vt.update();
 	const lines = vt.lines();
-	vt.free();
 	if (!lines.ok) { return "read failed"; }
 	return lines.value.join("|");
 }
@@ -116,12 +116,12 @@ function keptAfter(lines: int32, keep: int64): int32 {
 	const created = Vt.create(20, 4);
 	if (!created.ok) { return -1; }
 	const vt = created.value;
+	defer vt.free();
 	if (keep != SCROLLBACK_LINES && !vt.setScrollback(keep).ok) { return -1; }
 	vt.writeText(numberedLines(lines));
 	vt.scrollTop();
 	if (!vt.update().ok) { return -1; }
-	const oldest = topLine(vt);
-	vt.free();
+	const oldest = vt.topLine();
 	return lines - (oldest.slice(1).parseInt() as int32);
 }
 

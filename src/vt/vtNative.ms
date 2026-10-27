@@ -192,8 +192,11 @@ export function vtGridRef(
 
 export function vtScroll(terminal: GhosttyTerminal, tag: GhosttyTerminalScrollViewportTag, amount: int64): void {
 	let v: GhosttyTerminalScrollViewport = { tag: tag };
-	if (tag == GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_DELTA) { v.value.delta = amount; }
-	if (tag == GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_ROW) { v.value.row = amount as uint64; }
+	match (tag) {
+		GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_DELTA => { v.value.delta = amount; },
+		GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_ROW => { v.value.row = amount as uint64; },
+		_ => {},
+	}
 	scrollViewport(terminal, v);
 }
 
@@ -286,6 +289,6 @@ export function rgb(c: GhosttyColorRgb): Rgb {
 	return { r: c.r, g: c.g, b: c.b };
 }
 
-export function ghosttyColor(c: Rgb): GhosttyColorRgb {
+export function ghosttyColor(this c: Rgb): GhosttyColorRgb {
 	return { r: c.r, g: c.g, b: c.b };
 }

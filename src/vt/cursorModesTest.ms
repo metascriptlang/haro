@@ -71,10 +71,10 @@ function lookAfter(input: string): CursorLook | null {
 	const created = Vt.create(20, 4);
 	if (!created.ok) { return null; }
 	const vt = created.value;
+	defer vt.free();
 	vt.writeText(input);
 	const updated = vt.update();
 	const look = vt.cursorLook();
-	vt.free();
 	if (!updated.ok || !look.ok) { return null; }
 	const found: CursorLook | null = look.value;
 	return found;
@@ -111,10 +111,10 @@ function cursorAfter(text: string): Cursor | null {
 	const created = Vt.create(20, 4);
 	if (!created.ok) { return null; }
 	const vt = created.value;
+	defer vt.free();
 	vt.writeText(text);
 	const updated = vt.update();
 	const at = vt.cursor();
-	vt.free();
 	if (!updated.ok || !at.ok) { return null; }
 	return at.value;
 }

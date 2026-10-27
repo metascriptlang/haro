@@ -10,12 +10,12 @@ import {
 export function withVt(cols: int32, rows: int32, body: (vt: Vt) => void): boolean {
 	const created = Vt.create(cols, rows);
 	if (!created.ok) { return false; }
+	defer created.value.free();
 	body(created.value);
-	created.value.free();
 	return true;
 }
 
-export function ascii(bytes: Span<uint8>): string {
+export function ascii(bytes: Readonly<Span<uint8>>): string {
 	let text = "";
 	for (const b of bytes) { text += String.fromCharCode(b as int32); }
 	return text;
@@ -40,7 +40,7 @@ export function linefeedLines(count: int32): string {
 	return text;
 }
 
-export function topLine(vt: Vt): string {
+export function topLine(this vt: Vt): string {
 	const lines = vt.lines();
 	if (lines.ok) { return lines.value[0]; }
 	return "<unreadable>";

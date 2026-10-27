@@ -1,6 +1,6 @@
 import { createList, List } from "../../../neon/src/core/list";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
-import { RowSlot, Styles, applyFrame, empty } from "../app/frame";
+import { RowSlot, Shown, Styles, applyFrame, empty, fitGrid, fitShown } from "../app/frame";
 import { SELECTION } from "../app/theme";
 import { LineRun, cellOnRow, line } from "../grid/lines";
 import { Cursor, Vt } from "../vt/vt";
@@ -9,6 +9,7 @@ export interface Screen {
 	vt: Vt;
 	grid: List<RowSlot>;
 	styles: Styles;
+	shown: Vec<Shown>;
 	cols: int32;
 	rows: int32;
 	cursor: Cursor | null;
@@ -24,12 +25,15 @@ export enum ScreenError {
 export function open(this typeof Screen, cols: int32, rows: int32): Result<Screen, ScreenError> {
 	const created = Vt.create(cols, rows);
 	if (!created.ok) { return Result.err(ScreenError.CreateFailed); }
-	let slots: RowSlot[] = [];
-	for (let i = 0; i < rows; i++) { slots.push(RowSlot.blank()); }
+	let grid = createList<RowSlot>([]);
+	fitGrid(grid, rows);
+	let shown: Vec<Shown> = [];
+	fitShown(shown, rows);
 	return Result.ok({
 		vt: created.value,
-		grid: createList<RowSlot>(slots),
+		grid: grid,
 		styles: Styles.empty(),
+		shown: shown,
 		cols: cols,
 		rows: rows,
 		cursor: null,
@@ -37,7 +41,7 @@ export function open(this typeof Screen, cols: int32, rows: int32): Result<Scree
 }
 
 export function paint(this s: Screen): Result<void, ScreenError> {
-	const applied = applyFrame(s.grid, s.styles, s.vt, null);
+	const applied = applyFrame(s.grid, s.styles, s.shown, s.vt, null);
 	if (!applied.ok) { return Result.err(ScreenError.FrameFailed); }
 	s.cursor = applied.value;
 	return Result.ok(null);
@@ -72,9 +76,8 @@ export function resize(this s: Screen, cols: int32, rows: int32): Result<void, S
 	if (!s.vt.resize(cols, rows).ok) { return Result.err(ScreenError.ResizeFailed); }
 	s.cols = cols;
 	s.rows = rows;
-	const have = s.grid.length() as int32;
-	for (let i = have; i < rows; i++) { s.grid.push(RowSlot.blank()); }
-	for (let i = have; i > rows; i--) { s.grid.remove(i - 1); }
+	fitGrid(s.grid, rows);
+	fitShown(s.shown, rows);
 	return s.paint();
 }
 

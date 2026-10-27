@@ -28,10 +28,13 @@ import {
 import {
 	FrameError,
 	RowSlot,
+	Shown,
 	Styles,
 	applyFrame,
 	blank,
 	empty,
+	fitGrid,
+	fitShown,
 	relightCursor,
 } from "../../../frame";
 import { stats, mark } from "../../../stats";
@@ -73,6 +76,7 @@ export interface Term {
 	held: KeyEvent | null;
 	grid: List<RowSlot>;
 	styles: Styles;
+	shown: Vec<Shown>;
 	cursorInk: CellInk | null;
 	buf: Vec<uint8>;
 	cols: int32;
@@ -127,6 +131,7 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 		held: null,
 		grid: createList<RowSlot>([]),
 		styles: Styles.empty(),
+		shown: [],
 		cursorInk: null,
 		buf: buf,
 		cols: 0,
@@ -140,9 +145,8 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 }
 
 function resizeGrid(this t: Term, rows: int32): void {
-	const have = t.grid.length() as int32;
-	for (let i = have; i < rows; i++) { t.grid.push(RowSlot.blank()); }
-	for (let i = have; i > rows; i--) { t.grid.remove(i - 1); }
+	fitGrid(t.grid, rows);
+	fitShown(t.shown, rows);
 }
 
 export function fit(
@@ -231,7 +235,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 			notification: events.notification,
 		});
 	}
-	const applied = applyFrame(t.grid, t.styles, vt, t.cursorInk);
+	const applied = applyFrame(t.grid, t.styles, t.shown, vt, t.cursorInk);
 	if (!applied.ok) { return Result.err(frameFailure(applied.error)); }
 	const look = vt.cursorLook();
 	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
@@ -255,7 +259,7 @@ export function inkCursor(this t: Term, ink: CellInk | null): Result<void, TermE
 	t.cursorInk = ink;
 	const s = t.session;
 	if (s === null) { return Result.ok(null); }
-	const relit = relightCursor(t.grid, t.styles, s.vt, ink);
+	const relit = relightCursor(t.grid, t.styles, t.shown, s.vt, ink);
 	if (!relit.ok) { return Result.err(frameFailure(relit.error)); }
 	return Result.ok(null);
 }

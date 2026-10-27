@@ -122,23 +122,48 @@ function inkOn(this ink: CellInk | null, cell: int32): CellInk | null {
 	return cell >= 0 ? ink : null;
 }
 
-function slotOf(
-	styles: Styles,
+export struct Shown {
+	cell: int32;
+	ink: CellInk | null;
+}
+
+export struct RowUpdate {
+	y: int32;
+	line: GridLine;
+}
+
+export struct FrameRows {
+	scrolled: int32;
+	rows: Vec<RowUpdate>;
+	background: Rgb;
+}
+
+export function none(this typeof FrameRows): FrameRows {
+	return { scrolled: 0, rows: [], background: { r: 0, g: 0, b: 0 } };
+}
+
+export function fitShown(ref shown: Vec<Shown>, rows: int32): void {
+	while ((shown.length as int32) < rows) { shown.push({ cell: -1, ink: null }); }
+	while ((shown.length as int32) > rows) { shown.pop(); }
+}
+
+function rowOf(
+	ref shown: Vec<Shown>,
 	row: Row,
 	cursor: Cursor | null,
 	ink: CellInk | null,
 	background: Rgb,
-): Result<RowSlot, FrameError> {
+): Result<RowUpdate, FrameError> {
 	const cell = cursor.cellOnRow(row.y);
 	const built = row.line(cell, ink.inkOn(cell), SELECTION, background);
 	if (!built.ok) { return Result.err(FrameError.LineFailed); }
-	const spans = spansOf(styles, built.value, background);
-	return Result.ok({ line: move built.value, spans: spans });
+	shown[row.y] = { cell: cell, ink: ink.inkOn(cell) };
+	return Result.ok({ y: row.y, line: move built.value });
 }
 
 function relight(
-	grid: List<RowSlot>,
-	styles: Styles,
+	ref out: Vec<RowUpdate>,
+	ref shown: Vec<Shown>,
 	vt: Vt,
 	cursor: Cursor | null,
 	ink: CellInk | null,
@@ -147,50 +172,83 @@ function relight(
 	for (let i = 0; i < vt.painted.rows.length; i++) {
 		const y = vt.painted.rows[i].y;
 		const cell = cursor.cellOnRow(y);
-		const shown = grid.at(y).line;
-		if (shown.cursorCell != cell || shown.cursorInk != ink.inkOn(cell)) {
-			grid.set(y, try slotOf(styles, vt.painted.rows[i], cursor, ink, background));
+		if (shown[y].cell != cell || shown[y].ink != ink.inkOn(cell)) {
+			out.push(try rowOf(shown, vt.painted.rows[i], cursor, ink, background));
 		}
 	}
 	return Result.ok(null);
 }
 
-export function relightCursor(
-	grid: List<RowSlot>,
-	styles: Styles,
-	vt: Vt,
-	ink: CellInk | null,
-): Result<void, FrameError> {
+export function relitRows(ref shown: Vec<Shown>, vt: Vt, ink: CellInk | null): Result<FrameRows, FrameError> {
 	const colors = vt.painted.palette;
-	if (colors === null || grid.length() != vt.painted.rows.length) { return Result.ok(null); }
+	if (colors === null || shown.length != vt.painted.rows.length) { return Result.ok(FrameRows.none()); }
 	const at = vt.cursor();
 	if (!at.ok) { return Result.err(FrameError.CursorFailed); }
-	return relight(grid, styles, vt, at.value, ink, colors.bg);
+	let rows: Vec<RowUpdate> = [];
+	const _relit = try relight(rows, shown, vt, at.value, ink, colors.bg);
+	return Result.ok({ scrolled: 0, rows: rows, background: colors.bg });
 }
 
-export function applyFrame(
-	grid: List<RowSlot>,
-	styles: Styles,
-	vt: Vt,
-	ink: CellInk | null,
-): Result<Cursor | null, FrameError> {
+export struct Planned {
+	cursor: Cursor | null;
+	rows: FrameRows;
+}
+
+export function planRows(ref shown: Vec<Shown>, vt: Vt, ink: CellInk | null): Result<Planned, FrameError> {
 	const planned = vt.plan();
 	if (!planned.ok) { return Result.err(FrameError.PlanFailed); }
 	const at = vt.cursor();
 	if (!at.ok) { return Result.err(FrameError.CursorFailed); }
 	const cursor = at.value;
 	const p = planned.value;
+	for (let i = 0; i < p.scrolled; i++) { shown.push(shown.shift()); }
+	let rows: Vec<RowUpdate> = [];
+	for (const y of p.ys) {
+		rows.push(try rowOf(shown, vt.painted.rows[y], cursor, ink, p.colors.bg));
+	}
+	const _relit = try relight(rows, shown, vt, cursor, ink, p.colors.bg);
+	return Result.ok({ cursor: cursor, rows: { scrolled: p.scrolled, rows: rows, background: p.colors.bg } });
+}
+
+export function applyRows(grid: List<RowSlot>, styles: Styles, f: FrameRows): int32 {
 	let chars: int32 = 0;
 	const last = grid.length() - 1;
-	for (let i = 0; i < p.scrolled; i++) { grid.move(0, last); }
-	for (const y of p.ys) {
-		const slot = try slotOf(styles, vt.painted.rows[y], cursor, ink, p.colors.bg);
-		chars += slot.line.text.length as int32;
-		grid.set(y, slot);
+	for (let i = 0; i < f.scrolled; i++) { grid.move(0, last); }
+	for (const r of f.rows) {
+		chars += r.line.text.length as int32;
+		grid.set(r.y, { line: r.line, spans: spansOf(styles, r.line, f.background) });
 	}
-	const _relit = try relight(grid, styles, vt, cursor, ink, p.colors.bg);
-	stats.noteApplied(p.ys.length as int32, p.scrolled, chars, performance.now());
-	return Result.ok(cursor);
+	return chars;
+}
+
+export function fitGrid(grid: List<RowSlot>, rows: int32): void {
+	const have = grid.length() as int32;
+	for (let i = have; i < rows; i++) { grid.push(RowSlot.blank()); }
+	for (let i = have; i > rows; i--) { grid.remove(i - 1); }
+}
+
+export function applyFrame(
+	grid: List<RowSlot>,
+	styles: Styles,
+	ref shown: Vec<Shown>,
+	vt: Vt,
+	ink: CellInk | null,
+): Result<Cursor | null, FrameError> {
+	const planned = try planRows(shown, vt, ink);
+	const chars = applyRows(grid, styles, planned.rows);
+	stats.noteApplied(planned.rows.rows.length as int32, planned.rows.scrolled, chars, performance.now());
+	return Result.ok(planned.cursor);
+}
+
+export function relightCursor(
+	grid: List<RowSlot>,
+	styles: Styles,
+	ref shown: Vec<Shown>,
+	vt: Vt,
+	ink: CellInk | null,
+): Result<void, FrameError> {
+	const _chars = applyRows(grid, styles, try relitRows(shown, vt, ink));
+	return Result.ok(null);
 }
 
 const BLACK: Rgb = { r: 0, g: 0, b: 0 };
@@ -283,17 +341,19 @@ test "a cursor that moves along its row rebuilds that row, so a ligature under i
 	if (created.ok) {
 		const vt = created.value;
 		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank()]);
+		let shown: Vec<Shown> = [];
+		fitShown(shown, 2);
 		const styles = Styles.empty();
 		vt.writeText("a->b");
-		assert applyFrame(grid, styles, vt, null).ok;
+		assert applyFrame(grid, styles, shown, vt, null).ok;
 		assert grid.at(0).spans[0].text == "a->b";
 		vt.writeText("\x1b[1;3H");
-		assert applyFrame(grid, styles, vt, null).ok;
+		assert applyFrame(grid, styles, shown, vt, null).ok;
 		assert grid.at(0).line.cursorCell == 2;
 		assert grid.at(0).spans.length == 3;
 		assert grid.at(0).spans[1].text == ">";
 		vt.writeText("\x1b[2;1H");
-		assert applyFrame(grid, styles, vt, null).ok;
+		assert applyFrame(grid, styles, shown, vt, null).ok;
 		assert grid.at(0).line.cursorCell == -1;
 		assert grid.at(0).spans.length == 1;
 		vt.free();
@@ -310,17 +370,19 @@ test "a lit cursor colours its cell and moves with it, rebuilding only the rows 
 	if (created.ok) {
 		const vt = created.value;
 		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank(), RowSlot.blank()]);
+		let shown: Vec<Shown> = [];
+		fitShown(shown, 3);
 		const styles = Styles.empty();
 		const lit: CellInk = { fg: null, bg: RED };
 		vt.writeText("ab\r\ncd\r\nef\x1b[2;3H");
-		assert applyFrame(grid, styles, vt, lit).ok;
+		assert applyFrame(grid, styles, shown, vt, lit).ok;
 		assert grid.at(1).spans.length == 2;
 		assert grid.at(1).spans[1].text == " ";
 		assert backgroundOf(grid.at(1), 1) == "#ff0000";
 		assert grid.at(0).spans.length == 1;
 		const untouched = grid.at(2);
 		vt.writeText("\x1b[1;2H");
-		assert applyFrame(grid, styles, vt, lit).ok;
+		assert applyFrame(grid, styles, shown, vt, lit).ok;
 		assert grid.at(0).spans[1].text == "b";
 		assert backgroundOf(grid.at(0), 1) == "#ff0000";
 		assert grid.at(1).spans.length == 1;
@@ -335,15 +397,17 @@ test "relighting the cursor rebuilds only its row, so a blink turns its cell off
 	if (created.ok) {
 		const vt = created.value;
 		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank()]);
+		let shown: Vec<Shown> = [];
+		fitShown(shown, 2);
 		const styles = Styles.empty();
 		const lit: CellInk = { fg: null, bg: RED };
 		vt.writeText("ab\r\ncd\x1b[1;1H");
-		assert applyFrame(grid, styles, vt, lit).ok;
+		assert applyFrame(grid, styles, shown, vt, lit).ok;
 		assert backgroundOf(grid.at(0), 0) == "#ff0000";
 		const other = grid.at(1);
-		assert relightCursor(grid, styles, vt, null).ok;
+		assert relightCursor(grid, styles, shown, vt, null).ok;
 		assert backgroundOf(grid.at(0), 0) == "none";
-		assert relightCursor(grid, styles, vt, lit).ok;
+		assert relightCursor(grid, styles, shown, vt, lit).ok;
 		assert backgroundOf(grid.at(0), 0) == "#ff0000";
 		assert grid.at(1) === other;
 		vt.free();
@@ -356,6 +420,8 @@ test "selected cells, a wide one included, draw with their colours swapped" {
 	if (created.ok) {
 		const vt = created.value;
 		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank()]);
+		let shown: Vec<Shown> = [];
+		fitShown(shown, 2);
 		const styles = Styles.empty();
 		vt.writeText("ab\u4e2dc");
 		const marked: Marked = {
@@ -363,7 +429,7 @@ test "selected cells, a wide one included, draw with their colours swapped" {
 			block: false,
 		};
 		assert vt.selectionSet(marked).ok;
-		assert applyFrame(grid, styles, vt, null).ok;
+		assert applyFrame(grid, styles, shown, vt, null).ok;
 		const colors = vt.palette();
 		assert colors.ok;
 		if (colors.ok) {

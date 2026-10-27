@@ -59,7 +59,7 @@ export function registerFallbacks(): void {
 	}
 }
 
-export function familyList(configured: Vec<Faces>): string[] {
+export function familyList(configured: Readonly<Span<Faces>>): string[] {
 	let families: string[] = [];
 	for (const faces of configured) { families.push(faces.registerFamily()); }
 	for (const family of fallbackFamilies) { families.push(family); }

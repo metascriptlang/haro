@@ -90,7 +90,7 @@ function hundredths(ms: float64): float64 {
 	return Math.round(ms * 100) / 100;
 }
 
-function summary(name: string, samples: Vec<float64>): string {
+function summary(name: string, samples: Readonly<Span<float64>>): string {
 	if (samples.length == 0) { return `${name} n=0`; }
 	let sorted: Vec<float64> = [...samples];
 	sorted.sort((a: float64, b: float64): number => a - b);

@@ -131,8 +131,8 @@ export function open(
 	const [fontFamily, setFontFamily] = createSignal<string>(fontFamily);
 	const [cellWidth, setCellWidth] = createSignal<number>(0);
 	const [rowHeight, setRowHeight] = createSignal<number>(0);
-	const [background, setBackground] = createSignal<string>(hexOf(started.background));
-	const [foreground, setForeground] = createSignal<string>(hexOf(started.foreground));
+	const [background, setBackground] = createSignal<string>(started.background.hexOf());
+	const [foreground, setForeground] = createSignal<string>(started.foreground.hexOf());
 	const [padding, setPadding] = createSignal<number>(started.padding);
 	const [viewWidth, setViewWidth] = createSignal<number>(0);
 	const metrics: CellMetrics = {
@@ -283,8 +283,8 @@ function applied(this m: PaneModel, got: IoFrame): void {
 			if (f.rows !== null) { m.painted(f.rows!); }
 			const colors = f.colors;
 			if (colors !== null) {
-				m.setBackground(hexOf(colors.bg));
-				m.setForeground(hexOf(colors.fg));
+				m.setBackground(colors.bg.hexOf());
+				m.setForeground(colors.fg.hexOf());
 				m.cursor.tint = colors.cursor ?? colors.fg;
 			}
 			m.cursor.showCursor(f.cursor, f.look);
@@ -295,7 +295,7 @@ function applied(this m: PaneModel, got: IoFrame): void {
 	m.autoscrolling = got.autoscroll;
 	m.autoscrollSoon();
 	if (got.again) { m.scheduleRefresh(); }
-	if (f !== null && f.more) {
+	if (f?.more ?? false) {
 		m.stats.tally.more += 1;
 		m.scheduleRefresh();
 	}

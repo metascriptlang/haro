@@ -81,13 +81,13 @@ function styleOf(tone: Tone): Style {
 	};
 }
 
-function shownLine(line: Line): Shown {
+function shownLine(this line: Line): Shown {
 	return { spans: [{ text: line.text, style: styleOf(line.tone) }] };
 }
 
-function fill(list: List<Shown>, lines: Vec<Line>): void {
+function fill(list: List<Shown>, lines: Readonly<Span<Line>>): void {
 	while (list.length() > 0) { list.remove(0); }
-	for (const line of lines) { list.push(shownLine(line)); }
+	for (const line of lines) { list.push(line.shownLine()); }
 }
 
 export function open(this typeof PasteDialogModel): PasteDialogModel {

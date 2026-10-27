@@ -1,6 +1,6 @@
 import { List, createList } from "../../../neon/src/core/list";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
-import { Style } from "../../../neon/src/render/style";
+import { Style, TextDecorationLine, TextDecorationStyle } from "../../../neon/src/render/style";
 import { CellInk, GridLine, LineRun } from "../grid/lines";
 import { Marked } from "../select/select";
 import { CellFlag, Cursor, Rgb, Underline, Vt } from "../vt/vt";
@@ -54,14 +54,29 @@ function recall<K>(now: Map<K, Style>, older: Map<K, Style>, key: K): Style | nu
 	return kept;
 }
 
-type Decoration = "none" | "underline" | "line-through" | "underline line-through";
-
-function decorationOf(this run: LineRun): Decoration {
+function decorationOf(this run: LineRun): TextDecorationLine {
 	const under = run.underline != Underline.None;
-	if (under && run.flags.has(CellFlag.Strikethrough)) { return "underline line-through"; }
+	const through = run.flags.has(CellFlag.Strikethrough);
+	if (run.flags.has(CellFlag.Overline)) {
+		if (under && through) { return "underline overline line-through"; }
+		if (under) { return "underline overline"; }
+		if (through) { return "overline line-through"; }
+		return "overline";
+	}
+	if (under && through) { return "underline line-through"; }
 	if (under) { return "underline"; }
-	if (run.flags.has(CellFlag.Strikethrough)) { return "line-through"; }
+	if (through) { return "line-through"; }
 	return "none";
+}
+
+// A match here widens its arms to string: compiler card
+// 2026-10-08-match-arms-of-string-literals-widen-to-string
+function lineStyleOf(underline: Underline): TextDecorationStyle {
+	if (underline == Underline.Double) { return "double"; }
+	if (underline == Underline.Curly) { return "wavy"; }
+	if (underline == Underline.Dotted) { return "dotted"; }
+	if (underline == Underline.Dashed) { return "dashed"; }
+	return "solid";
 }
 
 const PLAIN_BG: uint64 = (1 as uint64) << 24;
@@ -71,16 +86,11 @@ function rgbBits(this c: Rgb): uint64 {
 }
 
 const FLAGS_BITS: uint64 = 9;
-const FG_SHIFT: uint64 = FLAGS_BITS + 2;
+const FG_SHIFT: uint64 = FLAGS_BITS + 3;
 const BG_SHIFT: uint64 = FG_SHIFT + 24;
 
 function lookBits(this run: LineRun): uint64 {
-	const under: uint64 = match (run.underline) {
-		Underline.None => 0,
-		Underline.Curly => 2,
-		_ => 1,
-	};
-	return (under << FLAGS_BITS) | ((run.flags as uint32) as uint64);
+	return ((run.underline as uint64) << FLAGS_BITS) | ((run.flags as uint32) as uint64);
 }
 
 function styleOf(this styles: Styles, run: LineRun, background: Rgb): Style {
@@ -97,12 +107,11 @@ function styleOf(this styles: Styles, run: LineRun, background: Rgb): Style {
 	const decoration = run.decorationOf();
 	const weight: "bold" | "normal" = run.flags.has(CellFlag.Bold) ? "bold" : "normal";
 	const slant: "italic" | "normal" = run.flags.has(CellFlag.Italic) ? "italic" : "normal";
-	const line: "wavy" | "solid" = run.underline == Underline.Curly ? "wavy" : "solid";
 	const lineColor = tinted ? tint!.hexOf() : "";
 	const style: Style = {
 		color: fg,
 		textDecorationLine: decoration,
-		textDecorationStyle: line,
+		textDecorationStyle: lineStyleOf(run.underline),
 		fontWeight: weight,
 		fontStyle: slant,
 	};
@@ -427,6 +436,39 @@ test "selected cells, a wide one included, draw with their colours swapped" {
 		}
 		vt.free();
 	}
+}
+
+test "each underline style and an overline reach the span's decoration" {
+	const styles = Styles.empty();
+	const over: LineRun = { ...run(1, WHITE, BLACK, Underline.None), flags: (0 as BitSet<CellFlag>).incl(CellFlag.Overline) };
+	const all: LineRun = {
+		...run(1, WHITE, BLACK, Underline.Double),
+		flags: CellFlag.Overline | CellFlag.Strikethrough,
+	};
+	const l: GridLine = {
+		text: "abcdefg",
+		runs: [
+			run(1, WHITE, BLACK, Underline.Single),
+			run(1, WHITE, BLACK, Underline.Double),
+			run(1, WHITE, BLACK, Underline.Curly),
+			run(1, WHITE, BLACK, Underline.Dotted),
+			run(1, WHITE, BLACK, Underline.Dashed),
+			over,
+			all,
+		],
+		widths: [],
+		cursorCell: -1,
+		cursorInk: null,
+	};
+	const spans = spansOf(styles, l, BLACK);
+	assert spans[0].style!.textDecorationStyle == "solid";
+	assert spans[1].style!.textDecorationStyle == "double";
+	assert spans[2].style!.textDecorationStyle == "wavy";
+	assert spans[3].style!.textDecorationStyle == "dotted";
+	assert spans[4].style!.textDecorationStyle == "dashed";
+	assert spans[4].style!.textDecorationLine == "underline";
+	assert spans[5].style!.textDecorationLine == "overline";
+	assert spans[6].style!.textDecorationLine == "underline overline line-through";
 }
 
 test "an underline never shares a cached style with a foreground one bit away" {

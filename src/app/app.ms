@@ -20,8 +20,19 @@ export function App(
 ): NeonNode {
 	const notice = createNotice();
 	const dialog = createPasteDialog();
-	const pane = createPane(io, view, host, started, notice, dialog, stats);
-	pane.connectHost();
+	const pane = createPane(
+		io,
+		view,
+		host.desktop,
+		host.report,
+		host.timing,
+		host.fontFamily,
+		started,
+		notice,
+		dialog,
+		stats,
+	);
+	pane.connectHost(host.events);
 	return <Void style={{ backgroundColor: pane.background() }}>
 		<TerminalPane model={pane} />
 		<CursorTrail model={pane.cursor} />

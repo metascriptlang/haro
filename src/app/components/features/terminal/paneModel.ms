@@ -34,26 +34,54 @@ const HOLD_RECHECK_MS = 100;
 const AUTOSCROLL_MS = 15;
 const RESTART_NOTICE = "config.ms: command and workingDirectory apply when Haro restarts";
 
-export interface AppHost {
-	clock: () => float64;
-	onWake: (handler: () => void) => void;
-	schedule: (run: () => void) => void;
-	exited: (code: int32) => void;
-	fail: (message: string) => void;
-	note: (message: string) => void;
+export interface Desktop {
 	setTitle: (title: string) => void;
 	notify: (title: string, body: string) => void;
 	openLink: (uri: string) => void;
 	close: () => void;
+	exited: (code: int32) => void;
+}
+
+export interface Report {
+	note: (message: string) => void;
+	fail: (message: string) => void;
+}
+
+export interface Timing {
+	clock: () => float64;
+	schedule: (run: () => void) => void;
+}
+
+export enum ConfigOutcome {
+	Loaded,
+	Refused,
+}
+
+export struct ConfigChange = match (outcome: ConfigOutcome) {
+	ConfigOutcome.Loaded => { config: Config, family: string, error: string },
+	ConfigOutcome.Refused => { error: string },
+};
+
+export interface HostEvents {
+	onWake: (handler: () => void) => void;
 	onCloseKey: (handler: () => void) => void;
-	onConfig: (handler: (c: Config | null, fontFamily: string, error: string) => void) => void;
+	onConfig: (handler: (change: ConfigChange) => void) => void;
+}
+
+export interface AppHost {
+	desktop: Desktop;
+	report: Report;
+	timing: Timing;
+	events: HostEvents;
 	fontFamily: string;
 }
 
 export interface PaneModel {
 	io: IoPort;
 	view: View;
-	host: AppHost;
+	desktop: Desktop;
+	report: Report;
+	timing: Timing;
 	stats: Stats;
 	started: Config;
 	shellStarted: boolean;
@@ -89,14 +117,17 @@ export interface PaneModel {
 export function createPane(
 	io: IoPort,
 	view: View,
-	host: AppHost,
+	desktop: Desktop,
+	report: Report,
+	timing: Timing,
+	fontFamily: string,
 	started: Config,
 	notice: NoticeModel,
 	dialog: PasteDialogModel,
 	stats: Stats,
 ): PaneModel {
 	const [fontSize, setFontSize] = createSignal<number>(started.fontPx());
-	const [fontFamily, setFontFamily] = createSignal<string>(host.fontFamily);
+	const [fontFamily, setFontFamily] = createSignal<string>(fontFamily);
 	const [cellWidth, setCellWidth] = createSignal<number>(0);
 	const [rowHeight, setRowHeight] = createSignal<number>(0);
 	const [background, setBackground] = createSignal<string>(hexOf(started.background));
@@ -113,7 +144,9 @@ export function createPane(
 	return {
 		io: io,
 		view: view,
-		host: host,
+		desktop: desktop,
+		report: report,
+		timing: timing,
 		stats: stats,
 		started: started,
 		shellStarted: false,
@@ -180,12 +213,12 @@ function reported(this m: PaneModel, f: Failure): void {
 function failedAs(this m: PaneModel, started: boolean, what: string, error: string): void {
 	const message = `${what}: ${error}`;
 	if (!started) {
-		m.host.fail(message);
+		m.report.fail(message);
 		return;
 	}
 	const text = `Haro hit an internal error and kept the shell running. ${message}`;
 	if (m.notice.text == text) { return; }
-	m.host.note(message);
+	m.report.note(message);
 	m.notify(text);
 }
 
@@ -200,14 +233,14 @@ function copyToClipboard(text: string): void {
 function answerAsks(this m: PaneModel, asks: Asks): void {
 	const copy = asks.copy;
 	if (copy !== null) { copyToClipboard(copy); }
-	for (const uri of asks.opens) { m.host.openLink(uri); }
+	for (const uri of asks.opens) { m.desktop.openLink(uri); }
 	for (let i = 0; i < asks.reads; i++) {
 		Clipboard.getString().then((text: string): void => {
 			m.io.pasted(text);
 			m.refresh();
 		});
 	}
-	if (asks.close) { m.host.close(); }
+	if (asks.close) { m.desktop.close(); }
 }
 
 function watchHold(this m: PaneModel): void {
@@ -228,7 +261,7 @@ function autoscrollSoon(this m: PaneModel): void {
 }
 
 export function scheduleRefresh(this m: PaneModel): void {
-	m.host.schedule((): void => { m.refresh(); });
+	m.timing.schedule((): void => { m.refresh(); });
 }
 
 export function refresh(this m: PaneModel): void {
@@ -246,10 +279,10 @@ function applied(this m: PaneModel, got: IoFrame): void {
 		const copied = f.copied;
 		if (copied !== null) { copyToClipboard(copied); }
 		const title = f.title;
-		if (title !== null) { m.host.setTitle(title); }
+		if (title !== null) { m.desktop.setTitle(title); }
 		const notification = f.notification;
 		if (notification !== null && !m.cursor.focused) {
-			m.host.notify(notification.title, notification.body);
+			m.desktop.notify(notification.title, notification.body);
 		}
 		if (f.held) {
 			m.stats.tally.held += 1;
@@ -287,7 +320,7 @@ function applied(this m: PaneModel, got: IoFrame): void {
 
 function painted(this m: PaneModel, rows: FrameRows): void {
 	const chars = m.view.paint(rows);
-	m.stats.noteApplied(rows.rows.length as int32, rows.scrolled, chars, m.host.clock());
+	m.stats.noteApplied(rows.rows.length as int32, rows.scrolled, chars, m.timing.clock());
 }
 
 function shellEnded(this m: PaneModel, exit: Exit): void {
@@ -301,7 +334,7 @@ function shellEnded(this m: PaneModel, exit: Exit): void {
 		m.notify(`the shell was killed by signal ${exit.signal}, press any key to close`);
 		return;
 	}
-	m.host.exited(exit.code);
+	m.desktop.exited(exit.code);
 }
 
 function notify(this m: PaneModel, text: string): void {
@@ -314,11 +347,14 @@ function restartNeeded(now: Config, started: Config): boolean {
 		now.workingDirectory != started.workingDirectory;
 }
 
-function reconfigure(this m: PaneModel, c: Config | null, family: string, error: string): void {
-	if (c === null) {
-		m.notify(`config.ms: ${error}`);
+function reconfigure(this m: PaneModel, change: ConfigChange): void {
+	if (change.outcome === ConfigOutcome.Refused) {
+		m.notify(`config.ms: ${change.error}`);
 		return;
 	}
+	const c = change.config;
+	const family = change.family;
+	const error = change.error;
 	m.io.configure(settingsOf(c));
 	const resized = c.fontPx() != m.metrics.fontSize() || family != m.metrics.fontFamily();
 	m.setPadding(c.padding);
@@ -341,14 +377,12 @@ function woke(this m: PaneModel): void {
 	m.refresh();
 }
 
-export function connectHost(this m: PaneModel): void {
-	m.host.onConfig((c: Config | null, family: string, error: string): void => {
-		m.reconfigure(c, family, error);
-	});
-	m.host.onCloseKey((): void => { m.closeKeyPressed(); });
-	m.host.onWake((): void => {
+export function connectHost(this m: PaneModel, events: HostEvents): void {
+	events.onConfig((change: ConfigChange): void => { m.reconfigure(change); });
+	events.onCloseKey((): void => { m.closeKeyPressed(); });
+	events.onWake((): void => {
 		m.io.drain();
-		m.host.schedule((): void => { m.woke(); });
+		m.timing.schedule((): void => { m.woke(); });
 	});
 	createEffect((): number => PixelRatio.get(), (ratio: number, was: number | null): Cleanup | null => {
 		if (was !== null && m.layoutWidth > 0) { m.fitLayout(); }

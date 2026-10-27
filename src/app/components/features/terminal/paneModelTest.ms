@@ -1,13 +1,13 @@
 import { flush } from "../../../../../../neon/src/core/runtime";
 import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
-import { Config, defaults } from "../../../../config/config";
+import { defaults } from "../../../../config/config";
 import { Pty, PtyError } from "../../../../pty/transport";
 import { Replay } from "../../../../pty/replay";
 import { writeText } from "../../../../vt/vt";
 import { createNotice } from "../notice/notice";
 import { createPasteDialog } from "../paste/pasteDialog";
 import { Stats, empty } from "../../../stats";
-import { AppHost, PaneModel, createPane, failed, refresh } from "./paneModel";
+import { Desktop, PaneModel, Report, Timing, createPane, failed, refresh } from "./paneModel";
 import { cancelDialog, confirmDialog } from "./paneEvents";
 import { Io, open, port } from "./io";
 import { Term, TermError, openTerm, shutdown } from "./term";
@@ -28,28 +28,42 @@ function noCalls(): Calls {
 	return { fatal: "", noted: "", title: "", notified: "", closed: 0, exits: "" };
 }
 
-function hostFor(calls: Calls): AppHost {
+function desktopFor(calls: Calls): Desktop {
 	return {
-		clock: (): float64 => 0,
-		onWake: (handler: () => void): void => {},
-		schedule: (run: () => void): void => {},
-		exited: (code: int32): void => { calls.exits += `${code} `; },
-		fail: (message: string): void => { calls.fatal = message; },
-		note: (message: string): void => { calls.noted += `${message}\n`; },
 		setTitle: (title: string): void => { calls.title = title; },
 		notify: (title: string, body: string): void => { calls.notified += `${title}|${body}\n`; },
 		openLink: (uri: string): void => {},
 		close: (): void => { calls.closed += 1; },
-		onCloseKey: (handler: () => void): void => {},
-		onConfig: (handler: (c: Config | null, fontFamily: string, error: string) => void): void => {},
-		fontFamily: "",
+		exited: (code: int32): void => { calls.exits += `${code} `; },
 	};
+}
+
+function reportFor(calls: Calls): Report {
+	return {
+		note: (message: string): void => { calls.noted += `${message}\n`; },
+		fail: (message: string): void => { calls.fatal = message; },
+	};
+}
+
+function timingAt(now: float64): Timing {
+	return { clock: (): float64 => now, schedule: (run: () => void): void => {} };
 }
 
 function paneWith(io: Io, calls: Calls): PaneModel {
 	const view = View.open();
 	view.fitRows(io.term.shown.length as int32);
-	return createPane(io.port(), view, hostFor(calls), defaults(), createNotice(), createPasteDialog(), Stats.empty());
+	return createPane(
+		io.port(),
+		view,
+		desktopFor(calls),
+		reportFor(calls),
+		timingAt(0),
+		"",
+		defaults(),
+		createNotice(),
+		createPasteDialog(),
+		Stats.empty(),
+	);
 }
 
 function paneOf(t: Term, calls: Calls): PaneModel {
@@ -76,8 +90,18 @@ test "an applied frame is stamped by the host's clock into the stats the pane wa
 		stats.noteKey(10);
 		const view = View.open();
 		view.fitRows(t.shown.length as int32);
-		const host: AppHost = { ...hostFor(calls), clock: (): float64 => 15.5 };
-		const m = createPane(Io.open(t).port(), view, host, defaults(), createNotice(), createPasteDialog(), stats);
+		const m = createPane(
+			Io.open(t).port(),
+			view,
+			desktopFor(calls),
+			reportFor(calls),
+			timingAt(15.5),
+			"",
+			defaults(),
+			createNotice(),
+			createPasteDialog(),
+			stats,
+		);
 		m.refresh();
 		assert stats.line().includes("echo n=1 p50=5.5 max=5.5");
 	}).ok;

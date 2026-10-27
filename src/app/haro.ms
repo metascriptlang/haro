@@ -23,7 +23,11 @@ import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { exitCodeText } from "./components/features/terminal/term";
 import { Shell, closeThen, closed, opened, portOf } from "./components/features/terminal/shell";
 import { View, open } from "./frame";
-import { AppHost } from "./components/features/terminal/paneModel";
+import {
+	AppHost,
+	ConfigChange,
+	ConfigOutcome,
+} from "./components/features/terminal/paneModel";
 
 extern function appWireWake(): void;
 
@@ -144,39 +148,50 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 	registerFallbacks();
 	const families = familyList(config.loaded.faces);
 	const host: AppHost = {
-		clock: (): float64 => performance.now(),
-		onWake: (handler: () => void): void => {
-			onWake((): void => {
-				stats.noteWake(performance.now());
-				handler();
-			});
+		desktop: {
+			setTitle: (title: string): void => { setWindowTitle(titleOr(title)); },
+			notify: (title: string, body: string): void => {
+				if (notificationsReachable()) { notify(titleOr(title), body, NOTIFICATION_ID); }
+			},
+			openLink: (uri: string): void => { openExternal(uri); },
+			close: (): void => {
+				note("Close Window or a keybind closed the window");
+				quitWith(shell)();
+			},
+			exited: exited,
 		},
-		schedule: inFrame,
-		exited: exited,
-		fail: fail,
-		note: note,
-		setTitle: (title: string): void => { setWindowTitle(titleOr(title)); },
-		notify: (title: string, body: string): void => {
-			if (notificationsReachable()) { notify(titleOr(title), body, NOTIFICATION_ID); }
-		},
-		openLink: (uri: string): void => { openExternal(uri); },
-		close: (): void => {
-			note("Close Window or a keybind closed the window");
-			quitWith(shell)();
-		},
-		onCloseKey: (handler: () => void): void => {
-			listen((name: string, id: string): void => {
-				if (name == "menu.click" && id == CLOSE_WINDOW) { handler(); }
-			});
-		},
-		onConfig: (
-			handler: (c: Config | null, fontFamily: string, error: string) => void,
-		): void => {
-			if (config.error != "") { handler(null, "", config.error); }
-			config.watchConfig((c: Config | null, error: string): void => {
-				if (c !== null) { setOptionAsAlt(sidesOf(c.optionAsAlt)); }
-				handler(c, c === null ? "" : familyList(config.loaded.faces).join(", "), error);
-			});
+		report: { note: note, fail: fail },
+		timing: { clock: (): float64 => performance.now(), schedule: inFrame },
+		events: {
+			onWake: (handler: () => void): void => {
+				onWake((): void => {
+					stats.noteWake(performance.now());
+					handler();
+				});
+			},
+			onCloseKey: (handler: () => void): void => {
+				listen((name: string, id: string): void => {
+					if (name == "menu.click" && id == CLOSE_WINDOW) { handler(); }
+				});
+			},
+			onConfig: (handler: (change: ConfigChange) => void): void => {
+				if (config.error != "") {
+					handler({ outcome: ConfigOutcome.Refused, error: config.error });
+				}
+				config.watchConfig((c: Config | null, error: string): void => {
+					if (c === null) {
+						handler({ outcome: ConfigOutcome.Refused, error: error });
+						return;
+					}
+					setOptionAsAlt(sidesOf(c.optionAsAlt));
+					handler({
+						outcome: ConfigOutcome.Loaded,
+						config: c,
+						family: familyList(config.loaded.faces).join(", "),
+						error: error,
+					});
+				});
+			},
 		},
 		fontFamily: families.join(", "),
 	};

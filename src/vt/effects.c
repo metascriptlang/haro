@@ -4,8 +4,8 @@
 #include "effects.h"
 
 #ifdef __EMSCRIPTEN__
-/* msc cannot build the vtable's function pointers:
-   .inbox/compiler/2026-10-16-function-into-c-function-pointer-emits-msclosure.md */
+/* msc cannot fill the vtable's function-pointer fields: compiler card
+   2026-10-27-header-struct-function-pointer-field-is-a-closure */
 static const uint8_t maxLog2Align = 4;
 
 static void* heapAlloc(void* ctx, size_t len, uint8_t log2Align, uintptr_t ra) {
@@ -41,15 +41,15 @@ const GhosttyAllocator* vtAllocator(void) {
 }
 #endif
 
-/* msc has no integer as wide as size_t on every target (32 bits on wasm32) for a callback's
-   parameter. */
+/* msc has no integer type as wide as size_t on every target (32 bits on wasm32) for a callback's
+   parameter; delete this shim when compiler card 2026-10-27-no-pointer-width-integer-type lands. */
 static void writePty(GhosttyTerminal terminal, void* userdata, const uint8_t* bytes, size_t n) {
 	(void)terminal;
 	haroVtWritePty(userdata, (uint8_t*)bytes, (int64_t)n);
 }
 
-/* msc cannot call the reply function pointer:
-   .inbox/compiler/2026-10-16-function-into-c-function-pointer-emits-msclosure.md */
+/* msc reads a function-pointer field of a header struct as a closure and cannot call `reply`; move
+   these two into vtEffects.ms when compiler card 2026-10-27-header-struct-function-pointer-field-is-a-closure lands. */
 static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const GhosttyClipboardWrite* write) {
 	(void)terminal;
 	GhosttyClipboardWriteReply reply = { sizeof reply, GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED, false };
@@ -76,7 +76,7 @@ static void onClipboardRead(GhosttyTerminal terminal, void* userdata, const Ghos
 	if (read->location == GHOSTTY_CLIPBOARD_LOCATION_STANDARD) haroVtClipboardRead(userdata, mark);
 }
 
-/* The callbacks are registered here because their addresses are C symbols. NULL effects clears them. */
+/* The table sits beside the C shims it registers. NULL effects clears the callbacks. */
 int vtEffectsWire(GhosttyTerminal terminal, void* effects) {
 	const struct { GhosttyTerminalOption option; const void* callback; } callbacks[] = {
 		{ GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*)writePty },

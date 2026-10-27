@@ -199,6 +199,10 @@ function reported(this m: PaneModel, f: Failure): void {
 		m.notify("the shell did not start: check command in config.ms, or --shell");
 		return;
 	}
+	if (f.error == TermError.InputBacklogged) {
+		m.notify("the program has not read the last 16 MB sent to it, so this input was dropped");
+		return;
+	}
 	m.failedAs(f.started, f.where, failureText(f.error));
 }
 

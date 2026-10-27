@@ -1,8 +1,10 @@
 import { KeyMod } from "../keys/keys";
 import { MouseAction, MouseInput, geometryOf } from "../vt/vt";
 import { View, fitRows, open, paint, text } from "../app/frame";
-import { Term } from "./term";
-import { Sink, onFresh, onTerm, onUnfit } from "./terminalRig";
+import { Term, TermError } from "./term";
+import { Sink, onFresh, onPty, onTerm, onUnfit } from "./terminalRig";
+import { Pty, PtyError } from "../pty/transport";
+import { Replay } from "../pty/replay";
 
 test "a frame under synchronized output is not applied until the hold ends" {
 	assert onFresh("abc\x1b[?2026h", (t: Term, sink: Sink): void => {
@@ -162,5 +164,20 @@ test "a replayed recording fills the grid in one frame and ends the stream once"
 		if (second.ok) { assert !second.value.ended; }
 		assert !t.alive;
 		assert t.shellExitCode() == 0;
+	}).ok;
+}
+
+test "input the program has not read past its limit is refused as backlogged, not as a broken write" {
+	const pty: Pty = {
+		...Replay.ofText("").toPty(),
+		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
+			return Result.err(PtyError.Backlogged);
+		},
+		exitCode: (): int32 | null => { return null; },
+	};
+	assert onPty(pty, (): float64 => 0, 80, 24, (t: Term): void => {
+		const sent = t.sendText("x");
+		assert !sent.ok;
+		if (!sent.ok) { assert sent.error == TermError.InputBacklogged; }
 	}).ok;
 }

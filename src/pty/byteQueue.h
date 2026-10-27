@@ -7,6 +7,7 @@
 
 #define READ_LIMIT (4 << 20)
 #define BATCH_KEEP (4 << 20)
+#define WRITE_LIMIT (16 << 20)
 
 typedef struct {
 	uint8_t* data;

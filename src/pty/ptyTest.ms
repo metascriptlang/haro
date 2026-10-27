@@ -355,6 +355,19 @@ test "a write to a child that does not read its input returns at once" {
 	});
 }
 
+test "input a child has not read stops being queued past its limit, and the write says so" {
+	assert withPty(QUIET_FOR_3S, (p: NativePty): void => {
+		let chunk: Vec<uint8> = new Array(1048576);
+		for (let i = 0; i < chunk.length; i++) { chunk[i] = "a".code + (i % 26) as uint8; }
+		let refused: PtyError | null = null;
+		for (let i = 0; i < 40 && refused === null; i++) {
+			const wrote = p.write(chunk);
+			if (!wrote.ok) { refused = wrote.error; }
+		}
+		assert refused == PtyError.Backlogged;
+	});
+}
+
 test "a line written to the child reaches it" {
 	assert withPty(ECHO_LINE_READ, (p: NativePty): void => {
 		let line: Vec<uint8> = [0x68, 0x69, 0x0D];

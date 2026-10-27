@@ -27,6 +27,7 @@ typedef struct {
 	CONDITION_VARIABLE pending;
 	ByteQueue in;
 	ByteQueue out;
+	int64_t sending;
 	int writeFailed;
 	int stopping;
 	int closed;
@@ -116,6 +117,7 @@ static DWORD WINAPI writeLoop(LPVOID arg) {
 		p->out = batch;
 		p->out.len = 0;
 		batch = full;
+		p->sending = batch.len;
 		LeaveCriticalSection(&p->lock);
 		int64_t n = batch.len;
 		int ok = 1;
@@ -130,6 +132,7 @@ static DWORD WINAPI writeLoop(LPVOID arg) {
 			batch = (ByteQueue){0};
 		}
 		EnterCriticalSection(&p->lock);
+		p->sending = 0;
 		if (!ok) p->writeFailed = 1;
 	}
 	LeaveCriticalSection(&p->lock);
@@ -329,6 +332,10 @@ int64_t ptyWrite(int id, const uint8_t* data, int64_t len) {
 	if (p->writeFailed) {
 		LeaveCriticalSection(&p->lock);
 		return -1;
+	}
+	if (p->sending + p->out.len - p->out.head + len > WRITE_LIMIT) {
+		LeaveCriticalSection(&p->lock);
+		return -3;
 	}
 	if (!queuePush(&p->out, data, len, 4096)) {
 		LeaveCriticalSection(&p->lock);

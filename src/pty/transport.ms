@@ -4,6 +4,7 @@ export enum PtyError {
 	OutOfMemory,
 	ResizeFailed,
 	WaitFailed,
+	Backlogged,
 }
 
 export interface Pty {

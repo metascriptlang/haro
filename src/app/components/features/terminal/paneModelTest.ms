@@ -26,6 +26,8 @@ import { View, fitRows, hexOf, open, text } from "../../../frame";
 import { holding } from "../../../../controller/controls";
 import { MouseButton } from "../../../../controller/mouseButton";
 import { Sink, exiting, hitAt, lines, onFresh, onPty, onTerm } from "../../../../controller/terminalRig";
+import { Replay } from "../../../../pty/replay";
+import { Pty, PtyError } from "../../../../pty/transport";
 
 interface Calls {
 	fatal: string;
@@ -443,5 +445,24 @@ test "the host's wake drains the shell and refreshes on the scheduler; its close
 			closeKey();
 			assert calls.closed == 1;
 		}
+	}).ok;
+}
+
+test "a key the program has no room for is a notice that says the input was dropped" {
+	const pty: Pty = {
+		...Replay.ofText("ready").toPty(),
+		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
+			return Result.err(PtyError.Backlogged);
+		},
+		exitCode: (): int32 | null => { return null; },
+	};
+	assert onPty(pty, (): float64 => 0, 80, 24, (t: Term): void => {
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		m.refresh();
+		m.keyed(pressed("Enter"));
+		m.refresh();
+		assert calls.fatal == "";
+		assert m.notice.text == "the program has not read the last 16 MB sent to it, so this input was dropped";
 	}).ok;
 }

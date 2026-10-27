@@ -5,6 +5,7 @@ import { Vt } from "../vt/vt";
 export enum SessionError {
 	PtyReadFailed,
 	PtyWriteFailed,
+	PtyBacklogged,
 	VtCreateFailed,
 	VtReadFailed,
 	ResizeFailed,
@@ -64,7 +65,9 @@ export function screen(this s: Session): Result<Vec<string>, SessionError> {
 }
 
 export function send(this s: Session, data: Readonly<Span<uint8>>): Result<void, SessionError> {
-	if (s.pty.write(data).ok || s.pty.exitCode() !== null) { return Result.ok(null); }
+	const wrote = s.pty.write(data);
+	if (wrote.ok || s.pty.exitCode() !== null) { return Result.ok(null); }
+	if (wrote.error == PtyError.Backlogged) { return Result.err(SessionError.PtyBacklogged); }
 	return Result.err(SessionError.PtyWriteFailed);
 }
 

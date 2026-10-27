@@ -9,7 +9,7 @@ import {
 } from "../keys/keys";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
-import { Session } from "../session/session";
+import { Session, SessionError } from "../session/session";
 import { CellInk } from "../grid/lines";
 import {
 	Cursor,
@@ -47,6 +47,7 @@ export enum TermError {
 	FrameLineFailed,
 	EncodeFailed,
 	WriteFailed,
+	InputBacklogged,
 	PasteUnsafe,
 	PasteEncodeFailed,
 	PasteModeReadFailed,
@@ -274,7 +275,10 @@ export function inkCursor(this t: Term, ink: CellInk | null): Result<FrameRows, 
 
 function sendBytes(this s: Session, bytes: Readonly<Span<uint8>>): Result<boolean, TermError> {
 	if (bytes.length == 0) { return Result.ok(false); }
-	if (!s.send(bytes).ok) { return Result.err(TermError.WriteFailed); }
+	const sent = s.send(bytes);
+	if (!sent.ok) {
+		return Result.err(sent.error == SessionError.PtyBacklogged ? TermError.InputBacklogged : TermError.WriteFailed);
+	}
 	return Result.ok(true);
 }
 

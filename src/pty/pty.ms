@@ -70,10 +70,12 @@ export function open(
 }
 
 const PTY_OUT_OF_MEMORY: int64 = -2;
+const PTY_BACKLOGGED: int64 = -3;
 
 function transferred(n: int64): Result<int32, PtyError> {
 	return match (n) {
 		PTY_OUT_OF_MEMORY => Result.err(PtyError.OutOfMemory),
+		PTY_BACKLOGGED => Result.err(PtyError.Backlogged),
 		_ when n < 0 => Result.err(PtyError.Closed),
 		_ => Result.ok(n as int32),
 	};

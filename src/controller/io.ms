@@ -176,12 +176,12 @@ export function fit(this io: Io, cols: int32, rows: int32, cellWidth: int32, cel
 	if (!started) { io.apply(); }
 }
 
-function input(this io: Io, sent: Result<int32, TermError>, where: Where, time: float64): void {
+function input(this io: Io, sent: Result<boolean, TermError>, where: Where, time: float64): void {
 	if (!sent.ok) {
 		io.fail(where, sent.error);
 		return;
 	}
-	if (sent.value == 0) { return; }
+	if (!sent.value) { return; }
 	if (io.keyAt < 0) { io.keyAt = time; }
 	io.check(Where.Typed, io.controls.typed(io.term));
 }

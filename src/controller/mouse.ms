@@ -22,8 +22,7 @@ function reportMouse(
 		x: (h.x * h.scale + h.cell.padLeft) as float32,
 		y: (h.y * h.scale + h.cell.padTop) as float32,
 	};
-	const sent = try t.sendMouse(input, h.cell);
-	return Result.ok(sent > 0);
+	return t.sendMouse(input, h.cell);
 }
 
 function openLink(this c: Controls, uri: string): void {
@@ -114,7 +113,7 @@ export function pointerMove(
 	if (!modes.ok) { return Result.err(TermError.VtFailed); }
 	if (claimsMouse(modes.value.mouseTracking, h.mods.has(KeyMod.Shift))) {
 		if (!pressed) { c.button = MouseButton.None; }
-		const _reported = try c.reportMouse(t, MouseAction.Motion, c.button, h);
+		try c.reportMouse(t, MouseAction.Motion, c.button, h);
 		return Result.ok(false);
 	}
 	if (!c.pointer.dragging) {
@@ -185,7 +184,7 @@ export function roll(
 			c.pointer.clear(vt);
 			const button = rows < 0 ? MouseButton.WheelUp : MouseButton.WheelDown;
 			for (let i = 0; i < presses; i++) {
-				const _reported = try c.reportMouse(t, MouseAction.Press, button, h);
+				try c.reportMouse(t, MouseAction.Press, button, h);
 			}
 			return Result.ok(shown);
 		},
@@ -194,7 +193,7 @@ export function roll(
 			c.pointer.clear(vt);
 			const code = rows < 0 ? "ArrowUp" : "ArrowDown";
 			for (let i = 0; i < presses; i++) {
-				const _sent = try t.tapKey(code);
+				try t.tapKey(code);
 			}
 			return Result.ok(shown);
 		},

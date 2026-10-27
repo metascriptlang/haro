@@ -272,13 +272,13 @@ export function inkCursor(this t: Term, ink: CellInk | null): Result<FrameRows, 
 	return Result.ok(relit.value);
 }
 
-function sendBytes(this s: Session, bytes: Span<uint8>): Result<int32, TermError> {
-	if (bytes.length == 0) { return Result.ok(0); }
+function sendBytes(this s: Session, bytes: Readonly<Span<uint8>>): Result<boolean, TermError> {
+	if (bytes.length == 0) { return Result.ok(false); }
 	if (!s.send(bytes).ok) { return Result.err(TermError.WriteFailed); }
-	return Result.ok(bytes.length as int32);
+	return Result.ok(true);
 }
 
-function sendBuffered(this t: Term, s: Session, n: int32): Result<int32, TermError> {
+function sendBuffered(this t: Term, s: Session, n: int32): Result<boolean, TermError> {
 	return sendBytes(s, t.buf[0..n]);
 }
 
@@ -290,56 +290,51 @@ export function cooked(this key: KeyEvent): KeyEvent {
 	}
 }
 
-function sendKeyEvent(this t: Term, s: Session, key: KeyEvent): Result<int32, TermError> {
+function sendKeyEvent(this t: Term, s: Session, key: KeyEvent): Result<boolean, TermError> {
 	const encoded = t.keys.encode(s.vt, key, t.buf);
 	if (!encoded.ok) { return Result.err(TermError.EncodeFailed); }
 	return t.sendBuffered(s, encoded.value);
 }
 
-export function sendKey(this t: Term, typed: KeyEvent): Result<int32, TermError> {
+export function sendKey(this t: Term, typed: KeyEvent): Result<boolean, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok(0); }
+	if (s === null) { return Result.ok(false); }
 	const key = typed.cooked();
 	t.held = heldAfter(t.held, key);
 	return t.sendKeyEvent(s, key);
 }
 
-export function tapKey(this t: Term, code: string): Result<int32, TermError> {
+export function tapKey(this t: Term, code: string): Result<void, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok(0); }
+	if (s === null) { return Result.ok(null); }
 	const press = keyEvent(KeyAction.Press, code, NO_MODS);
-	const pressed = try t.sendKeyEvent(s, press);
-	const released = try t.sendKeyEvent(s, { ...press, action: KeyAction.Release });
-	return Result.ok(pressed + released);
+	try t.sendKeyEvent(s, press);
+	try t.sendKeyEvent(s, { ...press, action: KeyAction.Release });
+	return Result.ok(null);
 }
 
-export function releaseHeldKey(this t: Term): Result<int32, TermError> {
+export function releaseHeldKey(this t: Term): Result<void, TermError> {
 	const s = t.session;
 	const held = t.held;
 	t.held = null;
-	if (s === null || held === null) { return Result.ok(0); }
-	let sent = 0;
-	for (const key of releasesOf(held)) { sent += try t.sendKeyEvent(s, key); }
-	return Result.ok(sent);
+	if (s === null || held === null) { return Result.ok(null); }
+	for (const key of releasesOf(held)) { try t.sendKeyEvent(s, key); }
+	return Result.ok(null);
 }
 
-export function sendText(this t: Term, text: string): Result<int32, TermError> {
+export function sendText(this t: Term, text: string): Result<boolean, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok(0); }
-	const bytes = text.asBytes();
-	const n = bytes.length as int32;
-	if (n == 0) { return Result.ok(0); }
-	if (!s.send(bytes).ok) { return Result.err(TermError.WriteFailed); }
-	return Result.ok(n);
+	if (s === null) { return Result.ok(false); }
+	return s.sendBytes(text.asBytes());
 }
 
 export function sendPaste(
 	this t: Term,
 	text: string,
 	check: PasteCheck,
-): Result<int32, TermError> {
+): Result<void, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok(0); }
+	if (s === null) { return Result.ok(null); }
 	const bytes = s.vt.pasteBytes(text, check == PasteCheck.Confirmed);
 	if (!bytes.ok) {
 		return Result.err(match (bytes.error) {
@@ -348,24 +343,26 @@ export function sendPaste(
 			PasteError.ModeReadFailed => TermError.PasteModeReadFailed,
 		});
 	}
-	return sendBytes(s, bytes.value);
+	try s.sendBytes(bytes.value);
+	return Result.ok(null);
 }
 
-export function sendFocus(this t: Term, gained: boolean): Result<int32, TermError> {
+export function sendFocus(this t: Term, gained: boolean): Result<void, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok(0); }
+	if (s === null) { return Result.ok(null); }
 	const n = s.vt.focusReport(gained, t.buf);
 	if (!n.ok) { return Result.err(TermError.FocusFailed); }
-	return t.sendBuffered(s, n.value);
+	try t.sendBuffered(s, n.value);
+	return Result.ok(null);
 }
 
 export function sendMouse(
 	this t: Term,
 	e: MouseInput,
 	g: MouseGeometry,
-): Result<int32, TermError> {
+): Result<boolean, TermError> {
 	const s = t.session;
-	if (s === null) { return Result.ok(0); }
+	if (s === null) { return Result.ok(false); }
 	const n = s.vt.mouseReport(e, g, e.action != MouseAction.Release && holdsButton(e.button), t.buf);
 	if (!n.ok) { return Result.err(TermError.MouseFailed); }
 	return t.sendBuffered(s, n.value);

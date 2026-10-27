@@ -140,6 +140,13 @@ export extern function cellGraphemesInto(
 	key: GhosttyRenderStateRowCellsData,
 	buf: Ptr<uint32>,
 ): GhosttyResult from "ghostty_render_state_row_cells_get";
+export extern function cellFacts(
+	raw: GhosttyCell,
+	count: uint64,
+	keys: Ptr<GhosttyCellData>,
+	values: Ptr<Ptr<void>>,
+	written: Ptr<uint64> | null,
+): GhosttyResult from "ghostty_cell_get_multi";
 export extern function cellWide(
 	raw: GhosttyCell,
 	key: GhosttyCellData,

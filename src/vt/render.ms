@@ -1,5 +1,6 @@
 import {
 	GhosttyCell,
+	GhosttyCellContentTag,
 	GhosttyCellData,
 	GhosttyCellWide,
 	GhosttyColorRgb,
@@ -23,6 +24,7 @@ import { Vt } from "./terminal";
 import {
 	Colors256,
 	cellGraphemesInto,
+	cellFacts,
 	cellWide,
 	cellsGet,
 	checked,
@@ -152,19 +154,45 @@ export function widthOf(raw: GhosttyCell): Result<CellWidth, VtError> {
 	});
 }
 
+struct RawFacts {
+	tag: GhosttyCellContentTag;
+	styled: boolean;
+	wide: GhosttyCellWide;
+	cp: uint32;
+}
+
+function rawFacts(raw: GhosttyCell): Result<RawFacts, VtError> {
+	let tag: GhosttyCellContentTag[1] = [GhosttyCellContentTag.GHOSTTY_CELL_CONTENT_CODEPOINT];
+	let styled: boolean[1] = [false];
+	let wide: GhosttyCellWide[1] = [GhosttyCellWide.GHOSTTY_CELL_WIDE_NARROW];
+	let cp: uint32[1] = [0];
+	let keys: GhosttyCellData[4] = [
+		GhosttyCellData.GHOSTTY_CELL_DATA_CONTENT_TAG,
+		GhosttyCellData.GHOSTTY_CELL_DATA_HAS_STYLING,
+		GhosttyCellData.GHOSTTY_CELL_DATA_WIDE,
+		GhosttyCellData.GHOSTTY_CELL_DATA_CODEPOINT,
+	];
+	let values: Ptr<void>[4] = [tag as Ptr<void>, styled as Ptr<void>, wide as Ptr<void>, cp as Ptr<void>];
+	try checked(cellFacts(raw, 4, keys as Ptr<GhosttyCellData>, values as Ptr<Ptr<void>>, null), VtError.ReadFailed);
+	return Result.ok({ tag: tag[0], styled: styled[0], wide: wide[0], cp: cp[0] });
+}
+
 function readCell(
 	state: GhosttyRenderState,
 	cells: GhosttyRenderStateRowCells,
 	colors: Palette,
 	ref extra: Vec<uint32>,
 ): Result<Cell, VtError> {
+	let raw: GhosttyCell = 0;
+	const rawKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW;
+	try checked(cellsGet(cells, rawKey, raw), VtError.ReadFailed);
+	const facts = try rawFacts(raw);
+	const grapheme = facts.tag == GhosttyCellContentTag.GHOSTTY_CELL_CONTENT_CODEPOINT_GRAPHEME;
+	const plain = facts.tag == GhosttyCellContentTag.GHOSTTY_CELL_CONTENT_CODEPOINT && !facts.styled;
 	const bgKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_BG_COLOR;
-	const bg = colorOr(cells, bgKey, colors.bg);
-	let count: uint32 = 0;
-	const lenKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN;
-	try checked(cellsGet(cells, lenKey, count), VtError.ReadFailed);
+	const bg = plain ? colors.bg : colorOr(cells, bgKey, colors.bg);
 	const none = 0 as BitSet<CellFlag>;
-	if (count == 0) {
+	if (facts.cp == 0 && !grapheme) {
 		return Result.ok({
 			cp: 0,
 			extra: 0,
@@ -175,17 +203,20 @@ function readCell(
 			underlineColor: null,
 		});
 	}
-	const base = try graphemesOf(cells, count, extra);
-	const fgKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR;
-	const fg = colorOr(cells, fgKey, colors.fg);
+	let count: uint32 = 1;
+	let base = facts.cp;
+	if (grapheme) {
+		const lenKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN;
+		try checked(cellsGet(cells, lenKey, count), VtError.ReadFailed);
+		base = try graphemesOf(cells, count, extra);
+	}
+	let fg = colors.fg;
 	let flags = none;
 	let underline = Underline.None;
 	let underlineColor: Rgb | null = null;
-	let styled = false;
-	const styledKey =
-		GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_HAS_STYLING;
-	try checked(cellsGet(cells, styledKey, styled), VtError.ReadFailed);
-	if (styled) {
+	if (facts.styled) {
+		const fgKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR;
+		fg = colorOr(cells, fgKey, colors.fg);
 		let style: GhosttyStyle = { size: sizeof GhosttyStyle };
 		const styleKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE;
 		try checked(cellsGet(cells, styleKey, style), VtError.ReadFailed);
@@ -193,11 +224,7 @@ function readCell(
 		underline = underlineOf(style);
 		if (underline != Underline.None) { underlineColor = try underlineColorOf(state, style); }
 	}
-	let raw: GhosttyCell = 0;
-	const rawKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW;
-	try checked(cellsGet(cells, rawKey, raw), VtError.ReadFailed);
-	const width = try widthOf(raw);
-	if (width == CellWidth.Wide) { flags = flags.incl(CellFlag.Wide); }
+	if (facts.wide == GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE) { flags = flags.incl(CellFlag.Wide); }
 	return Result.ok({
 		cp: base,
 		extra: (count - 1) as uint16,

@@ -6,11 +6,20 @@ import { Held } from "../../../../input/paste";
 import { MouseGeometry, Vt } from "../../../../vt/vt";
 import { Term, TermError, fit } from "./term";
 
-export interface Bridge {
-	write: (text: string) => void;
-	read: (done: (text: string) => void) => void;
-	open: (uri: string) => void;
-	close: () => void;
+export enum ClipRead {
+	Paste,
+	Answer,
+}
+
+export struct Asks {
+	copy: string | null;
+	opens: Vec<string>;
+	reads: int32;
+	close: boolean;
+}
+
+export function none(this typeof Asks): Asks {
+	return { copy: null, opens: [], reads: 0, close: false };
 }
 
 export struct Hit {
@@ -33,6 +42,8 @@ export interface Controls {
 	consumedKey: string;
 	closing: boolean;
 	ended: boolean;
+	asks: Asks;
+	waiting: Vec<ClipRead>;
 }
 
 export function open(this typeof Controls): Controls {
@@ -47,6 +58,8 @@ export function open(this typeof Controls): Controls {
 		consumedKey: "",
 		closing: false,
 		ended: false,
+		asks: Asks.none(),
+		waiting: [],
 	};
 }
 
@@ -54,6 +67,17 @@ export function vtOf(t: Term): Vt | null {
 	const s = t.session;
 	if (s === null) { return null; }
 	return s.vt;
+}
+
+export function takeAsks(this c: Controls): Asks {
+	const asks = c.asks;
+	c.asks = Asks.none();
+	return asks;
+}
+
+export function askRead(this c: Controls, kind: ClipRead): void {
+	c.waiting.push(kind);
+	c.asks.reads += 1;
 }
 
 export function holding(this c: Controls): boolean {

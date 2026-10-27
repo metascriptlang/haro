@@ -18,7 +18,7 @@ import {
 	Sink,
 	at,
 	boardOf,
-	clipOf,
+	settled,
 	drag,
 	handled,
 	hitAt,
@@ -32,15 +32,15 @@ import {
 test "while a paste is held the wheel, the buttons and the pointer do nothing" {
 	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
-		const clip = clipOf(boardOf("a\nb"));
+		const clip = boardOf("a\nb");
 		const bottom = offsetOf(t);
-		assert handled(c.keyDown(t, key("KeyV", CLIPBOARD_MODS), clip));
+		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyV", CLIPBOARD_MODS))));
 		assert !handled(c.roll(t, 1, hitAt(0, 0)));
 		assert offsetOf(t) == bottom;
-		assert !handled(c.pointerDown(t, clip, 1, hitAt(0, 0), 0));
+		assert !handled(settled(clip, c, t, c.pointerDown(t, 1, hitAt(0, 0), 0)));
 		assert !c.pointer.dragging;
-		assert !handled(c.pointerDown(t, clip, 2, hitAt(0, 0), 0));
-		assert clip.write !== null;
+		assert !handled(settled(clip, c, t, c.pointerDown(t, 2, hitAt(0, 0), 0)));
+		assert clip.reads == 1 && clip.copied == "";
 	}).ok;
 }
 
@@ -108,9 +108,9 @@ test "on the alternate screen the wheel is arrow keys, in the cursor key mode th
 test "an app that tracks the mouse gets presses, releases and wheel notches as its own reports" {
 	assert onTerm(lines(30) + "\x1b[?1000h\x1b[?1006h", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
-		const clip = clipOf(boardOf("x"));
+		const clip = boardOf("x");
 		const bottom = offsetOf(t);
-		assert handled(c.pointerDown(t, clip, 1, hitAt(2, 1), 0));
+		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitAt(2, 1), 0)));
 		assert !c.pointer.dragging;
 		assert sink.sent == "\x1b[<0;3;2M";
 		assert handled(c.pointerUp(t, 1, hitAt(2, 1)));
@@ -125,10 +125,10 @@ test "an app that tracks the mouse gets presses, releases and wheel notches as i
 test "motion is reported only in the modes that ask for it, and the held button rides along" {
 	assert onTerm("\x1b[?1002h\x1b[?1006h", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
-		const clip = clipOf(boardOf("x"));
+		const clip = boardOf("x");
 		assert !handled(c.pointerMove(t, hitAt(1, 1), false));
 		assert sink.sent == "";
-		assert handled(c.pointerDown(t, clip, 1, hitAt(1, 1), 0));
+		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitAt(1, 1), 0)));
 		assert !handled(c.pointerMove(t, hitAt(4, 1), true));
 		assert sink.sent == "\x1b[<0;2;2M\x1b[<32;5;2M";
 	}).ok;
@@ -137,9 +137,9 @@ test "motion is reported only in the modes that ask for it, and the held button 
 test "shift hands the mouse back from an app that tracks it, and a wheel reported to the app drops the selection" {
 	assert onTerm(lines(30) + "\x1b[?1000h\x1b[?1006h", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
-		const clip = clipOf(boardOf("x"));
+		const clip = boardOf("x");
 		const bottom = offsetOf(t);
-		assert handled(c.pointerDown(t, clip, 1, hitWith(0, 1, SHIFT), 0));
+		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitWith(0, 1, SHIFT), 0)));
 		assert c.pointer.dragging;
 		assert handled(c.pointerMove(t, hitWith(5, 1, SHIFT), true));
 		assert c.pointer.selected();
@@ -159,15 +159,15 @@ test "a ctrl click on an http link opens it, on a link to a program or on text i
 	assert onTerm(text, (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const board = boardOf("");
-		const clip = clipOf(board);
-		assert handled(c.pointerDown(t, clip, 1, hitWith(1, 0, CTRL), 0));
+		const clip = board;
+		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitWith(1, 0, CTRL), 0)));
 		assert board.opened == "https://example.com/a";
 		board.opened = "";
-		assert handled(c.pointerDown(t, clip, 1, hitWith(6, 0, CTRL), 0));
+		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitWith(6, 0, CTRL), 0)));
 		assert board.opened == "";
-		assert handled(c.pointerDown(t, clip, 1, hitWith(12, 0, CTRL), 10000));
+		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitWith(12, 0, CTRL), 10000)));
 		assert board.opened == "";
-		assert handled(c.pointerDown(t, clip, 1, hitWith(1, 0, 0), 20000));
+		assert handled(settled(clip, c, t, c.pointerDown(t, 1, hitWith(1, 0, 0), 20000)));
 		assert board.opened == "";
 	}, 30, 5).ok;
 }
@@ -176,11 +176,11 @@ test "a right click copies a selection and otherwise pastes" {
 	assert onTerm("alpha beta", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const board = boardOf("pasted");
-		const clip = clipOf(board);
-		assert !handled(c.pointerDown(t, clip, 2, hitAt(0, 0), 0));
+		const clip = board;
+		assert !handled(settled(clip, c, t, c.pointerDown(t, 2, hitAt(0, 0), 0)));
 		assert sink.sent == "pasted";
 		assert drag(c, t, clip, at(0, 0), at(4, 0));
-		assert handled(c.pointerDown(t, clip, 2, hitAt(0, 0), 1000));
+		assert handled(settled(clip, c, t, c.pointerDown(t, 2, hitAt(0, 0), 1000)));
 		assert board.copied == "alpha";
 		assert sink.sent == "pasted";
 		assert !c.pointer.selected();
@@ -190,8 +190,8 @@ test "a right click copies a selection and otherwise pastes" {
 test "a move that finds the button released ends the drag, and a wheel while dragging extends it" {
 	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
-		const clip = clipOf(boardOf(""));
-		assert c.pointerDown(t, clip, 1, hitAt(0, 4), 0).ok;
+		const clip = boardOf("");
+		assert settled(clip, c, t, c.pointerDown(t, 1, hitAt(0, 4), 0)).ok;
 		assert handled(c.pointerMove(t, hitAt(3, 4), true));
 		assert handled(c.roll(t, 1, hitAt(0, 0)));
 		const kept = c.pointer.sel;
@@ -205,7 +205,7 @@ test "a move that finds the button released ends the drag, and a wheel while dra
 test "a drag selects cells that the next frame draws with their colours swapped" {
 	assert onTerm("alpha beta\r\ngamma", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
-		const clip = clipOf(boardOf(""));
+		const clip = boardOf("");
 		assert drag(c, t, clip, at(2, 0), at(3, 1));
 		const view = View.open();
 		view.fitRows(t.shown.length as int32);
@@ -231,9 +231,9 @@ test "a drag selects cells that the next frame draws with their colours swapped"
 test "a drag held past the top edge scrolls back a row per tick, and the release stops it" {
 	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
-		const clip = clipOf(boardOf(""));
+		const clip = boardOf("");
 		const bottom = offsetOf(t);
-		assert c.pointerDown(t, clip, 1, hitAt(3, 2), 0).ok;
+		assert settled(clip, c, t, c.pointerDown(t, 1, hitAt(3, 2), 0)).ok;
 		const above: Hit = { ...hitAt(3, 0), y: -12 };
 		assert c.pointerMove(t, above, true).ok;
 		assert c.autoscroll == -1;
@@ -252,9 +252,9 @@ test "a drag held past the top edge scrolls back a row per tick, and the release
 test "losing focus mid-drag ends the drag and its scrolling, and keeps the selection" {
 	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const c = Controls.open();
-		const clip = clipOf(boardOf(""));
+		const clip = boardOf("");
 		const bottom = offsetOf(t);
-		assert c.pointerDown(t, clip, 1, hitAt(3, 2), 0).ok;
+		assert settled(clip, c, t, c.pointerDown(t, 1, hitAt(3, 2), 0)).ok;
 		const above: Hit = { ...hitAt(3, 0), y: -12 };
 		assert c.pointerMove(t, above, true).ok;
 		c.endDrag();
@@ -268,7 +268,7 @@ test "losing focus mid-drag ends the drag and its scrolling, and keeps the selec
 test "a press in the padding reaches a tracking app as the nearest cell" {
 	assert onTerm("\x1b[?1000h\x1b[?1006h", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
-		const clip = clipOf(boardOf(""));
+		const clip = boardOf("");
 		const base = hitAt(0, 0);
 		const padded: Hit = {
 			...base,
@@ -276,7 +276,7 @@ test "a press in the padding reaches a tracking app as the nearest cell" {
 			y: -6,
 			cell: { ...base.cell, width: 180, height: 100, padLeft: 10, padTop: 10, padRight: 10, padBottom: 10 },
 		};
-		assert handled(c.pointerDown(t, clip, 1, padded, 0));
+		assert handled(settled(clip, c, t, c.pointerDown(t, 1, padded, 0)));
 		assert sink.sent == "\x1b[<0;1;1M";
 	}).ok;
 }

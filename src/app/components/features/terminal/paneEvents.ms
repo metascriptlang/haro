@@ -12,7 +12,6 @@ import { answerClose, keyDown } from "./keyboard";
 import { autoscrollTick, endDrag, pointerDown, pointerMove, pointerUp, roll } from "./mouse";
 import {
 	PaneModel,
-	bridge,
 	failed,
 	refresh,
 	scheduleRefresh,
@@ -48,7 +47,7 @@ export function keyed(this m: PaneModel, e: NeonEvent): void {
 		if (!modifierKey(e.code)) { m.host.exited(m.term.shellExitCode()); }
 		return;
 	}
-	const handled = m.controls.keyDown(m.term, e, m.bridge());
+	const handled = m.controls.keyDown(m.term, e);
 	if (!handled.ok) {
 		m.failed("key", handled.error.toString());
 		return;
@@ -110,7 +109,7 @@ function hit(this m: PaneModel, e: NeonEvent): Hit {
 export function pressed(this m: PaneModel, e: NeonEvent): void {
 	if (m.metrics.cellWidth() <= 0) { return; }
 	const button = e.button as int32;
-	const handled = m.controls.pointerDown(m.term, m.bridge(), button, m.hit(e), performance.now());
+	const handled = m.controls.pointerDown(m.term, button, m.hit(e), performance.now());
 	if (!handled.ok) {
 		m.failed("press", handled.error.toString());
 		return;
@@ -164,7 +163,7 @@ export function wheeled(this m: PaneModel, e: NeonEvent): void {
 
 export function confirmDialog(this m: PaneModel): void {
 	if (m.controls.closing) {
-		m.controls.answerClose(Reply.Confirm, m.bridge());
+		m.controls.answerClose(Reply.Confirm);
 	} else {
 		const sent = m.controls.confirm(m.term);
 		if (!sent.ok) { m.failed("paste", sent.error.toString()); }
@@ -174,7 +173,7 @@ export function confirmDialog(this m: PaneModel): void {
 
 export function cancelDialog(this m: PaneModel): void {
 	if (m.controls.closing) {
-		m.controls.answerClose(Reply.Cancel, m.bridge());
+		m.controls.answerClose(Reply.Cancel);
 	} else {
 		const dropped = m.controls.cancel(m.term);
 		if (!dropped.ok) { m.failed("clipboard", dropped.error.toString()); }

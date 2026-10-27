@@ -4,7 +4,7 @@ import { WheelRoute, reportButton, route } from "../../../../input/wheel";
 import { openable, refusalText } from "../../../../term/link";
 import { MouseAction, MouseInput } from "../../../../vt/vt";
 import { Term, TermError, tapKey } from "./term";
-import { Bridge, Controls, Hit, holding, vtOf } from "./controls";
+import { Controls, Hit, holding, vtOf } from "./controls";
 import { copySelection, pasteFrom } from "./clipboard";
 
 const LEFT: int32 = 1;
@@ -29,10 +29,10 @@ function reportMouse(
 	return Result.ok(sent > 0);
 }
 
-function openLink(host: Bridge, uri: string): void {
+function openLink(this c: Controls, uri: string): void {
 	const verdict = openable(uri);
 	if (verdict.ok) {
-		host.open(uri);
+		c.asks.opens.push(uri);
 	} else {
 		console.log(`haro: link refused, ${refusalText(verdict.error)}: ${uri}`);
 	}
@@ -41,7 +41,6 @@ function openLink(host: Bridge, uri: string): void {
 export function pointerDown(
 	this c: Controls,
 	t: Term,
-	host: Bridge,
 	button: int32,
 	h: Hit,
 	time: float64,
@@ -56,7 +55,7 @@ export function pointerDown(
 		if (!link.ok) { return Result.err(TermError.VtFailed); }
 		const uri = link.value;
 		if (uri !== null) {
-			openLink(host, uri);
+			c.openLink(uri);
 			return Result.ok(true);
 		}
 	}
@@ -72,8 +71,8 @@ export function pointerDown(
 		return Result.ok(true);
 	}
 	if (button == RIGHT) {
-		const copied = try c.copySelection(t, host);
-		if (!copied) { c.pasteFrom(t, host); }
+		const copied = try c.copySelection(t);
+		if (!copied) { c.pasteFrom(); }
 		return Result.ok(copied);
 	}
 	return Result.ok(false);

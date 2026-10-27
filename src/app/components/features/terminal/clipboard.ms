@@ -3,7 +3,7 @@ import { Reply, replyTo, replyToRead, warningFor, Warning } from "../../../../in
 import { clear, copyText } from "../../../../input/pointer";
 import { answerClipboard, modes } from "../../../../vt/vt";
 import { Term, TermError } from "./term";
-import { Bridge, Controls, typed, vtOf } from "./controls";
+import { ClipRead, Controls, askRead, typed, vtOf } from "./controls";
 
 export enum Pasted {
 	Sent,
@@ -56,17 +56,23 @@ function answerRead(
 	return Result.ok(true);
 }
 
-export function clipboardAsked(this c: Controls, t: Term, host: Bridge): void {
-	host.read((text: string): void => {
-		if (text == "") {
-			const answered = c.answerRead(t, "", true);
-			if (!answered.ok) {
-				console.log(`haro: clipboard answer failed: ${answered.error.toString()}`);
-			}
-			return;
-		}
-		c.reading = text;
-	});
+export function clipboardAsked(this c: Controls): void {
+	c.askRead(ClipRead.Answer);
+}
+
+export function clipboardText(this c: Controls, t: Term, text: string): Result<boolean, TermError> {
+	if (c.waiting.length == 0) { return Result.err(TermError.ClipboardUnasked); }
+	match (c.waiting.shift()) {
+		ClipRead.Paste => {
+			const _pasted = try c.paste(t, text);
+			return Result.ok(true);
+		},
+		ClipRead.Answer => {
+			if (text == "") { return c.answerRead(t, "", true); }
+			c.reading = text;
+			return Result.ok(true);
+		},
+	}
 }
 
 export function confirm(this c: Controls, t: Term): Result<boolean, TermError> {
@@ -102,25 +108,18 @@ export function answerHeld(this c: Controls, t: Term, e: NeonEvent): Result<bool
 	return Result.ok(true);
 }
 
-export function pasteFrom(this c: Controls, t: Term, host: Bridge): void {
-	host.read((text: string): void => {
-		const sent = c.paste(t, text);
-		if (!sent.ok) { console.log(`haro: paste failed: ${sent.error.toString()}`); }
-	});
+export function pasteFrom(this c: Controls): void {
+	c.askRead(ClipRead.Paste);
 }
 
-export function copySelection(
-	this c: Controls,
-	t: Term,
-	host: Bridge,
-): Result<boolean, TermError> {
+export function copySelection(this c: Controls, t: Term): Result<boolean, TermError> {
 	const vt = vtOf(t);
 	if (vt === null) { return Result.ok(false); }
 	const text = c.pointer.copyText(vt);
 	if (!text.ok) { return Result.err(TermError.VtFailed); }
 	const got = text.value;
 	if (got === null) { return Result.ok(false); }
-	host.write(got);
+	c.asks.copy = got;
 	c.pointer.clear(vt);
 	return Result.ok(true);
 }

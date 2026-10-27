@@ -25,8 +25,8 @@ import {
 import { PreeditModel, createPreedit } from "../../content/preedit";
 import { NoticeModel, noticeCols, showNotice } from "../notice/notice";
 import { PasteDialogModel, showPending } from "../paste/pasteDialog";
-import { Bridge, Controls, refit } from "./controls";
-import { clipboardAsked } from "./clipboard";
+import { Controls, refit, takeAsks } from "./controls";
+import { clipboardAsked, clipboardText } from "./clipboard";
 import { closeKey } from "./keyboard";
 import { syncSelection } from "./mouse";
 import {
@@ -186,18 +186,19 @@ function copyToClipboard(text: string): void {
 	}
 }
 
-export function bridge(this m: PaneModel): Bridge {
-	return {
-		write: copyToClipboard,
-		read: (done: (text: string) => void): void => {
-			Clipboard.getString().then((text: string): void => {
-				done(text);
-				m.refresh();
-			});
-		},
-		open: m.host.openLink,
-		close: m.host.close,
-	};
+function answerAsks(this m: PaneModel): void {
+	const asks = m.controls.takeAsks();
+	const copy = asks.copy;
+	if (copy !== null) { copyToClipboard(copy); }
+	for (const uri of asks.opens) { m.host.openLink(uri); }
+	for (let i = 0; i < asks.reads; i++) {
+		Clipboard.getString().then((text: string): void => {
+			const answered = m.controls.clipboardText(m.term, text);
+			if (!answered.ok) { m.failed("clipboard", answered.error.toString()); }
+			m.refresh();
+		});
+	}
+	if (asks.close) { m.host.close(); }
 }
 
 function watchHold(this m: PaneModel): void {
@@ -228,7 +229,7 @@ export function refresh(this m: PaneModel): void {
 	if (notification !== null && !m.cursor.focused) {
 		m.host.notify(notification.title, notification.body);
 	}
-	if (f.asked) { m.controls.clipboardAsked(m.term, m.bridge()); }
+	if (f.asked) { m.controls.clipboardAsked(); }
 	if (f.held) {
 		stats.tally.held += 1;
 		m.watchHold();
@@ -256,6 +257,7 @@ export function refresh(this m: PaneModel): void {
 		m.metrics.cellWidth(),
 		m.viewWidth(),
 	);
+	m.answerAsks();
 	if (f.more) {
 		stats.tally.more += 1;
 		m.scheduleRefresh();
@@ -323,7 +325,7 @@ function reconfigure(this m: PaneModel, c: Config | null, family: string, error:
 }
 
 function closeKeyPressed(this m: PaneModel): void {
-	const done = m.controls.closeKey(m.term, m.bridge());
+	const done = m.controls.closeKey(m.term);
 	if (!done.ok) {
 		m.failed("close key", done.error.toString());
 		return;

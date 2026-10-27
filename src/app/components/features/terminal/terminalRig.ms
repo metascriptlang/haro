@@ -5,7 +5,8 @@ import { Pty, PtyError } from "../../../../pty/transport";
 import { Replay } from "../../../../pty/replay";
 import { atBottom, scrollOffset } from "../../../../vt/vt";
 import { Term, TermError, openTerm } from "./term";
-import { Bridge, Controls, Hit } from "./controls";
+import { Controls, Hit, takeAsks } from "./controls";
+import { clipboardText } from "./clipboard";
 import { pointerDown, pointerMove, pointerUp } from "./mouse";
 
 export interface Sink {
@@ -76,16 +77,27 @@ export function boardOf(offer: string): Board {
 	return { opened: "", copied: "", offer: offer, reads: 0, closed: 0 };
 }
 
-export function clipOf(board: Board): Bridge {
-	return {
-		write: (text: string): void => { board.copied = text; },
-		open: (uri: string): void => { board.opened = uri; },
-		close: (): void => { board.closed += 1; },
-		read: (done: (text: string) => void): void => {
-			board.reads += 1;
-			done(board.offer);
-		},
-	};
+export function settle(this board: Board, c: Controls, t: Term): Result<void, TermError> {
+	const asks = c.takeAsks();
+	const copy = asks.copy;
+	if (copy !== null) { board.copied = copy; }
+	for (const uri of asks.opens) { board.opened = uri; }
+	if (asks.close) { board.closed += 1; }
+	for (let i = 0; i < asks.reads; i++) {
+		board.reads += 1;
+		const _answered = try c.clipboardText(t, board.offer);
+	}
+	return Result.ok(null);
+}
+
+export function settled(
+	board: Board,
+	c: Controls,
+	t: Term,
+	r: Result<boolean, TermError>,
+): Result<boolean, TermError> {
+	const _settled = try board.settle(c, t);
+	return r;
 }
 
 export function key(code: string, mods: int32): NeonEvent {
@@ -145,8 +157,8 @@ export function hitWith(col: int32, row: int32, mods: int32): Hit {
 	};
 }
 
-export function drag(c: Controls, t: Term, clip: Bridge, from: Spot, to: Spot): boolean {
-	const pressed = c.pointerDown(t, clip, 1, hitAt(from.col, from.row), 0).ok;
+export function drag(c: Controls, t: Term, clip: Board, from: Spot, to: Spot): boolean {
+	const pressed = settled(clip, c, t, c.pointerDown(t, 1, hitAt(from.col, from.row), 0)).ok;
 	const moved = c.pointerMove(t, hitAt(to.col, to.row), true).ok;
 	const _released = c.pointerUp(t, 1, hitAt(to.col, to.row));
 	return pressed && moved;

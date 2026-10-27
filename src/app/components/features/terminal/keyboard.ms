@@ -13,7 +13,7 @@ import {
 	scrollTop,
 } from "../../../../vt/vt";
 import { Term, TermError, busy, keyEventOf } from "./term";
-import { Bridge, Controls, holding, typed, vtOf } from "./controls";
+import { Controls, holding, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";
 
 const SUPER_ONLY: BitSet<KeyMod> = (0 as BitSet<KeyMod>).incl(KeyMod.Super);
@@ -23,11 +23,10 @@ function runKeybind(
 	this c: Controls,
 	t: Term,
 	bind: Keybind | null,
-	host: Bridge,
 ): Result<boolean, TermError> {
 	if (bind === null) { return Result.ok(false); }
 	if (bind.action == BindAction.CloseWindow) {
-		c.closeWindow(t, host);
+		c.closeWindow(t);
 		return Result.ok(true);
 	}
 	const _sent = try t.sendText(bind.text);
@@ -35,31 +34,31 @@ function runKeybind(
 	return Result.ok(true);
 }
 
-export function closeKey(this c: Controls, t: Term, host: Bridge): Result<boolean, TermError> {
+export function closeKey(this c: Controls, t: Term): Result<boolean, TermError> {
 	const vt = vtOf(t);
 	if (vt !== null) {
 		const alt = vt.alternateScreen();
 		if (!alt.ok) { return Result.err(TermError.VtFailed); }
 		const bind = bindFor(c.keybinds, "KeyW", SUPER_ONLY as uint16, alt.value);
-		if (try c.runKeybind(t, bind, host)) { return Result.ok(true); }
+		if (try c.runKeybind(t, bind)) { return Result.ok(true); }
 	}
-	c.closeWindow(t, host);
+	c.closeWindow(t);
 	return Result.ok(true);
 }
 
-function closeWindow(this c: Controls, t: Term, host: Bridge): void {
+function closeWindow(this c: Controls, t: Term): void {
 	if (t.busy()) {
 		c.closing = true;
 		return;
 	}
-	host.close();
+	c.asks.close = true;
 }
 
-export function answerClose(this c: Controls, reply: Reply, host: Bridge): void {
+export function answerClose(this c: Controls, reply: Reply): void {
 	match (reply) {
 		Reply.Confirm => {
 			c.closing = false;
-			host.close();
+			c.asks.close = true;
 		},
 		Reply.Cancel => { c.closing = false; },
 		Reply.Ignore => {},
@@ -70,9 +69,8 @@ export function keyDown(
 	this c: Controls,
 	t: Term,
 	e: NeonEvent,
-	host: Bridge,
 ): Result<boolean, TermError> {
-	const handled = try c.controlKey(t, e, host);
+	const handled = try c.controlKey(t, e);
 	c.consumedKey = handled ? e.code : "";
 	return Result.ok(handled);
 }
@@ -85,10 +83,9 @@ function controlKey(
 	this c: Controls,
 	t: Term,
 	e: NeonEvent,
-	host: Bridge,
 ): Result<boolean, TermError> {
 	if (c.closing) {
-		c.answerClose(replyToClose(e.code, e.mods), host);
+		c.answerClose(replyToClose(e.code, e.mods));
 		return Result.ok(true);
 	}
 	if (c.holding()) { return c.answerHeld(t, e); }
@@ -97,14 +94,14 @@ function controlKey(
 	const alt = vt.alternateScreen();
 	if (!alt.ok) { return Result.err(TermError.VtFailed); }
 	const mods = modsMask(keyEventOf(e).mods) as number;
-	if (try c.runKeybind(t, bindFor(c.keybinds, e.code, mods, alt.value), host)) {
+	if (try c.runKeybind(t, bindFor(c.keybinds, e.code, mods, alt.value))) {
 		return Result.ok(true);
 	}
 	const action = resolve(e.code, mods, alt.value);
 	match (action) {
 		Action.None => { return Result.ok(false); },
-		Action.Copy => { return c.copySelection(t, host); },
-		Action.Paste => { c.pasteFrom(t, host); },
+		Action.Copy => { return c.copySelection(t); },
+		Action.Paste => { c.pasteFrom(); },
 		Action.PageUp | Action.PageDown => {
 			const pages: int32 = action == Action.PageUp ? -1 : 1;
 			if (!vt.scrollPages(pages).ok) { return Result.err(TermError.VtFailed); }

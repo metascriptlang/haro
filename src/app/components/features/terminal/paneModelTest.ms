@@ -5,7 +5,7 @@ import { Replay } from "../../../../pty/replay";
 import { writeText } from "../../../../vt/vt";
 import { createNotice } from "../notice/notice";
 import { createPasteDialog } from "../paste/pasteDialog";
-import { AppHost, PaneModel, bridge, createPane, failed, refresh } from "./paneModel";
+import { AppHost, PaneModel, createPane, failed, refresh } from "./paneModel";
 import { cancelDialog, confirmDialog } from "./paneEvents";
 import { closeKey } from "./keyboard";
 import { Term, TermError, openTerm, shutdown } from "./term";
@@ -102,7 +102,7 @@ test "an internal failure before the shell started is fatal" {
 }
 
 function closeAsked(this m: PaneModel): boolean {
-	if (!m.controls.closeKey(m.term, m.bridge()).ok) { return false; }
+	if (!m.controls.closeKey(m.term).ok) { return false; }
 	m.refresh();
 	flush();
 	return m.dialog.visible();

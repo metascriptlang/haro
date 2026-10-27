@@ -350,7 +350,7 @@ static int openIn(
 		stopped = 0;
 	}
 	if (!stopped) {
-		if (got == 0) kill(pid, SIGKILL);
+		if (got <= 0) kill(pid, SIGKILL);
 		waitpid(pid, NULL, 0);
 		close(master);
 		return -1;

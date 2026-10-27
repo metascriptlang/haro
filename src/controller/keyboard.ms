@@ -28,8 +28,8 @@ function runKeybind(
 		c.closeWindow(t);
 		return Result.ok(true);
 	}
-	const _sent = try t.sendText(bind.text);
-	const _snapped = try c.typed(t);
+	try t.sendText(bind.text);
+	try c.typed(t);
 	return Result.ok(true);
 }
 

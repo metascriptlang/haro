@@ -78,7 +78,7 @@ export function relitRows(this ref shown: Vec<Shown>, vt: Vt, ink: CellInk | nul
 	const at = vt.cursor();
 	if (!at.ok) { return Result.err(FrameError.CursorFailed); }
 	let rows: Vec<RowUpdate> = [];
-	const _relit = try relight(rows, shown, vt, at.value, ink, colors.bg);
+	try relight(rows, shown, vt, at.value, ink, colors.bg);
 	return Result.ok({ scrolled: 0, rows: rows, background: colors.bg });
 }
 
@@ -100,6 +100,6 @@ export function planRows(this ref shown: Vec<Shown>, vt: Vt, ink: CellInk | null
 		const built = try rowOf(shown, vt.painted.rows[y], cursor, ink, p.colors.bg);
 		rows.push(move built);
 	}
-	const _relit = try relight(rows, shown, vt, cursor, ink, p.colors.bg);
+	try relight(rows, shown, vt, cursor, ink, p.colors.bg);
 	return Result.ok({ cursor: cursor, rows: { scrolled: p.scrolled, rows: rows, background: p.colors.bg } });
 }

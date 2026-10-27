@@ -22,7 +22,7 @@ function send(
 	text: string,
 	check: PasteCheck,
 ): Result<boolean, TermError> {
-	const _sent = try t.sendPaste(text, check);
+	try t.sendPaste(text, check);
 	return c.typed(t);
 }
 
@@ -39,7 +39,7 @@ export function paste(this c: Controls, t: Term, text: string): Result<Pasted, T
 		c.held = { text: clean, warning: warning };
 		return Result.ok(Pasted.Held);
 	}
-	const _sent = try c.send(t, clean, PasteCheck.Checked);
+	try c.send(t, clean, PasteCheck.Checked);
 	return Result.ok(Pasted.Sent);
 }
 
@@ -52,7 +52,7 @@ function answerRead(
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
 	if (!vt.answerClipboard(text, allow).ok) { return Result.err(TermError.VtFailed); }
-	const _replied = try t.sendReplies();
+	try t.sendReplies();
 	return Result.ok(true);
 }
 
@@ -64,7 +64,7 @@ export function clipboardText(this c: Controls, t: Term, text: string): Result<b
 	if (c.waiting.length == 0) { return Result.err(TermError.ClipboardUnasked); }
 	match (c.waiting.shift()) {
 		ClipRead.Paste => {
-			const _pasted = try c.paste(t, text);
+			try c.paste(t, text);
 			return Result.ok(true);
 		},
 		ClipRead.Answer => {
@@ -79,7 +79,7 @@ export function confirm(this c: Controls, t: Term): Result<boolean, TermError> {
 	const held = c.held;
 	if (held !== null) {
 		c.held = null;
-		const _sent = try c.send(t, held.text, PasteCheck.Confirmed);
+		try c.send(t, held.text, PasteCheck.Confirmed);
 		return Result.ok(true);
 	}
 	const reading = c.reading;
@@ -102,8 +102,8 @@ export function answerHeld(this c: Controls, t: Term, e: KeyEvent): Result<boole
 	const mods = e.mods;
 	const reply = c.held !== null ? replyTo(e.key, mods) : replyToRead(e.key, mods);
 	match (reply) {
-		Reply.Confirm => { const _sent = try c.confirm(t); },
-		Reply.Cancel => { const _dropped = try c.cancel(t); },
+		Reply.Confirm => { try c.confirm(t); },
+		Reply.Cancel => { try c.cancel(t); },
 		Reply.Ignore => {},
 	}
 	return Result.ok(true);

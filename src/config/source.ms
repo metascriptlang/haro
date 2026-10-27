@@ -55,7 +55,9 @@ function evaluate(path: string, dir: string, api: string): Result<string, string
 		return Result.err(`cannot write ${dir}/evaluate.ms`);
 	}
 	const beside = `${dirname(path)}/build.ms`;
-	if (!exists(beside)) { const _written = writeFile(beside, packagesOf(api)); }
+	if (!exists(beside) && !writeFile(beside, packagesOf(api)).ok) {
+		return Result.err(`cannot write ${beside}`);
+	}
 	const made = createInterpreter(`${homeDir().replaceAll("\\", "/")}/.metascript`, [dirname(api)]);
 	if (!made.ok) {
 		return Result.err(`running config.ms needs MetaScript installed: ${made.error}`);

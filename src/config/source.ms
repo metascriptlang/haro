@@ -69,11 +69,9 @@ function evaluate(path: string, dir: string, api: string): Result<string, string
 			(d) => `${d.file}${d.line > 0 ? `:${d.line}:${d.column}` : ""}: ${d.message}`,
 		).join("\n"));
 	}
-	const routine = selectRoutine(interp, "configJson");
-	if (!routine.ok) { return Result.err(routine.error); }
-	const got = callRoutine(interp, routine.value, []);
-	if (!got.ok) { return Result.err(got.error); }
-	return Result.ok(got.value.text());
+	const routine = try selectRoutine(interp, "configJson");
+	const got = try callRoutine(interp, routine, []);
+	return Result.ok(got.text());
 }
 
 interface FontsFound {

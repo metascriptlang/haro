@@ -37,6 +37,7 @@ typedef struct {
 } Pty;
 
 static Pty ptys[PTY_MAX];
+static SRWLOCK table = SRWLOCK_INIT;
 
 typedef HRESULT (WINAPI *CreateFn)(COORD, HANDLE, HANDLE, DWORD, HPCON*);
 typedef HRESULT (WINAPI *ResizeFn)(HPCON, COORD);
@@ -158,8 +159,30 @@ static DWORD WINAPI waitLoop(LPVOID arg) {
 }
 
 static Pty* slot(int id) {
-	if (id < 0 || id >= PTY_MAX || !ptys[id].used) return NULL;
-	return &ptys[id];
+	if (id < 0 || id >= PTY_MAX) return NULL;
+	AcquireSRWLockExclusive(&table);
+	int used = ptys[id].used;
+	ReleaseSRWLockExclusive(&table);
+	return used ? &ptys[id] : NULL;
+}
+
+static int claimSlot(void) {
+	int id = -1;
+	AcquireSRWLockExclusive(&table);
+	for (int i = 0; id < 0 && i < PTY_MAX; i++) {
+		if (!ptys[i].used) {
+			ptys[i].used = 1;
+			id = i;
+		}
+	}
+	ReleaseSRWLockExclusive(&table);
+	return id;
+}
+
+static void releaseSlot(int id) {
+	AcquireSRWLockExclusive(&table);
+	memset(&ptys[id], 0, sizeof ptys[id]);
+	ReleaseSRWLockExclusive(&table);
 }
 
 static wchar_t* widened(const char* text) {
@@ -184,16 +207,10 @@ static wchar_t* expanded(wchar_t* text) {
 	return out;
 }
 
-int ptyOpen(
-	const char* commandLine, const char* cwd, const char* langEntry,
+static int openIn(
+	int id, const char* commandLine, const char* cwd, const char* langEntry,
 	int cols, int rows, int widthPx, int heightPx
 ) {
-	int id = -1;
-	for (int i = 0; i < PTY_MAX; i++) {
-		if (!ptys[i].used) { id = i; break; }
-	}
-	if (id < 0) return -1;
-
 	HANDLE inRead = NULL, inWrite = NULL, outRead = NULL, outWrite = NULL;
 	if (!CreatePipe(&inRead, &inWrite, NULL, 0)) return -1;
 	if (!CreatePipe(&outRead, &outWrite, NULL, 0)) {
@@ -249,8 +266,6 @@ int ptyOpen(
 	CloseHandle(pi.hThread);
 
 	Pty* p = &ptys[id];
-	memset(p, 0, sizeof *p);
-	p->used = 1;
 	p->console = console;
 	p->input = inWrite;
 	p->output = outRead;
@@ -268,6 +283,17 @@ int ptyOpen(
 		return -1;
 	}
 	return id;
+}
+
+int ptyOpen(
+	const char* commandLine, const char* cwd, const char* langEntry,
+	int cols, int rows, int widthPx, int heightPx
+) {
+	int id = claimSlot();
+	if (id < 0) return -1;
+	int opened = openIn(id, commandLine, cwd, langEntry, cols, rows, widthPx, heightPx);
+	if (opened < 0) releaseSlot(id);
+	return opened;
 }
 
 int64_t ptyRead(int id, uint8_t* buf, int64_t cap) {
@@ -367,5 +393,5 @@ void ptyClose(int id) {
 	DeleteCriticalSection(&p->lock);
 	free(p->in.data);
 	free(p->out.data);
-	memset(p, 0, sizeof *p);
+	releaseSlot(id);
 }

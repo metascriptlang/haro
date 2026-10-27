@@ -52,6 +52,7 @@ typedef struct {
 } Pty;
 
 static Pty ptys[PTY_MAX];
+static pthread_mutex_t table = PTHREAD_MUTEX_INITIALIZER;
 
 void ptySetWake(void (*wake)(void)) {
 	wakeInstall(wake);
@@ -193,8 +194,30 @@ static struct timespec deadlineAfter(int ms) {
 }
 
 static Pty* slot(int id) {
-	if (id < 0 || id >= PTY_MAX || !ptys[id].used) return NULL;
-	return &ptys[id];
+	if (id < 0 || id >= PTY_MAX) return NULL;
+	pthread_mutex_lock(&table);
+	int used = ptys[id].used;
+	pthread_mutex_unlock(&table);
+	return used ? &ptys[id] : NULL;
+}
+
+static int claimSlot(void) {
+	int id = -1;
+	pthread_mutex_lock(&table);
+	for (int i = 0; id < 0 && i < PTY_MAX; i++) {
+		if (!ptys[i].used) {
+			ptys[i].used = 1;
+			id = i;
+		}
+	}
+	pthread_mutex_unlock(&table);
+	return id;
+}
+
+static void releaseSlot(int id) {
+	pthread_mutex_lock(&table);
+	memset(&ptys[id], 0, sizeof ptys[id]);
+	pthread_mutex_unlock(&table);
 }
 
 static void closeOnExec(int fd) {
@@ -271,16 +294,10 @@ static struct winsize winsizeOf(int cols, int rows, int widthPx, int heightPx) {
 	};
 }
 
-int ptyOpen(
-	const char* commandLine, const char* cwd, const char* langEntry,
+static int openIn(
+	int id, const char* commandLine, const char* cwd, const char* langEntry,
 	int cols, int rows, int widthPx, int heightPx
 ) {
-	int id = -1;
-	for (int i = 0; i < PTY_MAX; i++) {
-		if (!ptys[i].used) { id = i; break; }
-	}
-	if (id < 0) return -1;
-
 	wordexp_t words;
 	int parsed = wordexp(commandLine, &words, WRDE_NOCMD);
 	if (parsed != 0) {
@@ -328,8 +345,6 @@ int ptyOpen(
 	closeOnExec(stop[1]);
 
 	Pty* p = &ptys[id];
-	memset(p, 0, sizeof *p);
-	p->used = 1;
 	p->pid = pid;
 	p->master = master;
 	p->stop[0] = stop[0];
@@ -350,6 +365,17 @@ int ptyOpen(
 		p->threads++;
 	}
 	return id;
+}
+
+int ptyOpen(
+	const char* commandLine, const char* cwd, const char* langEntry,
+	int cols, int rows, int widthPx, int heightPx
+) {
+	int id = claimSlot();
+	if (id < 0) return -1;
+	int opened = openIn(id, commandLine, cwd, langEntry, cols, rows, widthPx, heightPx);
+	if (opened < 0) releaseSlot(id);
+	return opened;
 }
 
 int64_t ptyRead(int id, uint8_t* buf, int64_t cap) {
@@ -475,5 +501,5 @@ void ptyClose(int id) {
 	pthread_mutex_destroy(&p->lock);
 	free(p->in.data);
 	free(p->out.data);
-	memset(p, 0, sizeof *p);
+	releaseSlot(id);
 }

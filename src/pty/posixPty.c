@@ -19,6 +19,7 @@
 
 #include "byteQueue.h"
 #include "nativePty.h"
+#include "wakeHook.h"
 
 #define PTY_MAX 16
 #define CLOSE_GRACE_MS 1000
@@ -51,14 +52,9 @@ typedef struct {
 } Pty;
 
 static Pty ptys[PTY_MAX];
-static void (*wakeApp)(void);
 
 void ptySetWake(void (*wake)(void)) {
-	wakeApp = wake;
-}
-
-static void wake(void) {
-	if (wakeApp) wakeApp();
+	wakeInstall(wake);
 }
 
 static void signalReady(Pty* p) {

@@ -8,6 +8,7 @@
 
 #include "byteQueue.h"
 #include "nativePty.h"
+#include "wakeHook.h"
 
 #define PTY_MAX 16
 
@@ -36,7 +37,6 @@ typedef struct {
 } Pty;
 
 static Pty ptys[PTY_MAX];
-static void (*wakeApp)(void);
 
 typedef HRESULT (WINAPI *CreateFn)(COORD, HANDLE, HANDLE, DWORD, HPCON*);
 typedef HRESULT (WINAPI *ResizeFn)(HPCON, COORD);
@@ -62,11 +62,7 @@ static void loadApi(void) {
 }
 
 void ptySetWake(void (*wake)(void)) {
-	wakeApp = wake;
-}
-
-static void wake(void) {
-	if (wakeApp) wakeApp();
+	wakeInstall(wake);
 }
 
 static int append(Pty* p, const uint8_t* bytes, int64_t n) {

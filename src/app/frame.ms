@@ -71,6 +71,8 @@ function rgbBits(this c: Rgb): uint64 {
 }
 
 const FLAGS_BITS: uint64 = 9;
+const FG_SHIFT: uint64 = FLAGS_BITS + 2;
+const BG_SHIFT: uint64 = FG_SHIFT + 24;
 
 function lookBits(this run: LineRun): uint64 {
 	const under: uint64 = match (run.underline) {
@@ -86,7 +88,7 @@ function styleOf(this styles: Styles, run: LineRun, background: Rgb): Style {
 	const tint = run.underlineColor;
 	const tinted = tint !== null && run.underline != Underline.None;
 	const bgBits = plain ? PLAIN_BG : run.bg.rgbBits();
-	const look = (bgBits << 33) | (run.fg.rgbBits() << 9) | run.lookBits();
+	const look = (bgBits << BG_SHIFT) | (run.fg.rgbBits() << FG_SHIFT) | run.lookBits();
 	const key = tinted ? `${look}${tint!.hexOf()}` : "";
 	const known = tinted ? recall(styles.tinted, styles.olderTinted, key) : recall(styles.looks, styles.olderLooks, look);
 	if (known !== null) { return known; }
@@ -425,4 +427,19 @@ test "selected cells, a wide one included, draw with their colours swapped" {
 		}
 		vt.free();
 	}
+}
+
+test "an underline never shares a cached style with a foreground one bit away" {
+	const styles = Styles.empty();
+	const near: Rgb = { r: 0, g: 0, b: 1 };
+	const l: GridLine = {
+		text: "xy",
+		runs: [run(1, BLACK, WHITE, Underline.Single), run(1, near, WHITE, Underline.None)],
+		widths: [],
+		cursorCell: -1,
+		cursorInk: null,
+	};
+	const spans = spansOf(styles, l, BLACK);
+	assert spans[1].style!.textDecorationLine == "none";
+	assert spans[1].style!.color == "#000001";
 }

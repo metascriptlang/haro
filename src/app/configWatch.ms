@@ -21,10 +21,9 @@ export function forFile(this typeof ConfigWatch, file: string): ConfigWatch {
 }
 
 function reload(this w: ConfigWatch): Result<Config, string> {
-	const got = load(w.file, API);
-	if (!got.ok) { return Result.err(got.error); }
-	w.loaded = got.value;
-	return Result.ok(got.value.config);
+	const got = try load(w.file, API);
+	w.loaded = got;
+	return Result.ok(got.config);
 }
 
 export function readConfig(this w: ConfigWatch): void {

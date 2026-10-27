@@ -2,6 +2,7 @@ import { readFile } from "std/fs";
 import { Screen, blankScreen } from "./screen";
 
 const GRAPHEMES_ON = "\x1b[?2027h";
+const GRAPHEMES_OFF = "\x1b[?2027l";
 
 function screenAfter(cols: int32, rows: int32, bytes: string): Screen | null {
 	const s = blankScreen(cols, rows);
@@ -97,7 +98,7 @@ test "a zero-width joiner with nothing before it is ignored" {
 test "a family of emoji joined by ZWJ is one wide cell with grapheme clustering on, six cells off" {
 	const family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
 	const on = screenAfter(80, 2, GRAPHEMES_ON + family);
-	const off = screenAfter(80, 2, family);
+	const off = screenAfter(80, 2, GRAPHEMES_OFF + family);
 	assert on !== null && off !== null;
 	defer on.close();
 	defer off.close();
@@ -112,7 +113,7 @@ test "a skin tone modifier joins an emoji base and stays apart from a quote" {
 	const tone = "\u{1F3FF}";
 	const on = screenAfter(5, 3, GRAPHEMES_ON + hand + "\r\n" + hand + tone);
 	const quoted = screenAfter(80, 2, GRAPHEMES_ON + "\"" + tone + "\"");
-	const off = screenAfter(5, 3, hand + "\r\n" + hand + tone);
+	const off = screenAfter(5, 3, GRAPHEMES_OFF + hand + "\r\n" + hand + tone);
 	assert on !== null && quoted !== null && off !== null;
 	defer on.close();
 	defer quoted.close();

@@ -121,7 +121,7 @@ async function relit(shell: Shell, ink: CellInk | null, done: (rows: FrameRows) 
 }
 
 export async function closed(shell: Shell): Promise<void> {
-	const _closed = await shell.shutdown();
+	await shell.shutdown();
 }
 
 export async function closeThen(shell: Shell, then: () => void): Promise<void> {

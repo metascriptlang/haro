@@ -81,7 +81,7 @@ export interface Term {
 	cellHeight: int32;
 	alive: boolean;
 	ended: boolean;
-	spawnedAt: number;
+	spawnedAt: float64;
 	marks: Vec<Mark>;
 }
 
@@ -390,7 +390,7 @@ export function busy(this t: Term): boolean {
 	return s.pty.busy();
 }
 
-export const ABNORMAL_EXIT_MS: number = 250;
+export const ABNORMAL_EXIT_MS: float64 = 250;
 
 export function exitedAbnormally(this t: Term): boolean {
 	return t.shellExitCode() != 0 && t.now() - t.spawnedAt <= ABNORMAL_EXIT_MS;

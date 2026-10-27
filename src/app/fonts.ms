@@ -1,6 +1,5 @@
 import { resourcePath } from "../../../ion/src/index";
 import { FontStyle, registerFace } from "../../../void/src/void2d/font";
-import { env } from "std/process";
 import { Faces } from "../config/fonts";
 
 const ASSETS = resourcePath() == "" ? "assets" : `${resourcePath().replaceAll("\\", "/")}/assets`;

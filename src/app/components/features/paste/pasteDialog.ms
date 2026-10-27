@@ -54,7 +54,7 @@ export interface PasteDialogModel {
 	shown: Pending;
 }
 
-const MARGIN: number = 24;
+const MARGIN: float64 = 24;
 const MIN_COLS: int32 = 16;
 const MAX_COLS: int32 = 88;
 const PREVIEW_ROWS: int32 = 8;

@@ -46,11 +46,11 @@ export function hexOf(this c: Rgb): string {
 	return `#${HEX_BYTES[c.r]}${HEX_BYTES[c.g]}${HEX_BYTES[c.b]}`;
 }
 
-function recall<K>(now: Map<K, Style>, older: Map<K, Style>, key: K): Style | undefined {
+function recall<K>(now: Map<K, Style>, older: Map<K, Style>, key: K): Style | null {
 	const known = now.get(key);
-	if (known !== undefined) { return known; }
+	if (known !== null) { return known; }
 	const kept = older.get(key);
-	if (kept !== undefined) { now.set(key, kept); }
+	if (kept !== null) { now.set(key, kept); }
 	return kept;
 }
 
@@ -89,7 +89,7 @@ function styleOf(this styles: Styles, run: LineRun, background: Rgb): Style {
 	const look = (bgBits << 33) | (run.fg.rgbBits() << 9) | run.lookBits();
 	const key = tinted ? `${look}${tint!.hexOf()}` : "";
 	const known = tinted ? recall(styles.tinted, styles.olderTinted, key) : recall(styles.looks, styles.olderLooks, look);
-	if (known !== undefined) { return known; }
+	if (known !== null) { return known; }
 	const fg = run.fg.hexOf();
 	const bg = plain ? "" : run.bg.hexOf();
 	const decoration = run.decorationOf();

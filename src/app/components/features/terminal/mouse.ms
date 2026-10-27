@@ -2,7 +2,7 @@ import { KeyMod } from "../../../../keys/keys";
 import { autoscrollOf, claimsMouse } from "../../../../input/pointer";
 import { WheelRoute, reportButton, route } from "../../../../input/wheel";
 import { openable, refusalText } from "../../../../term/link";
-import { MouseAction, MouseInput } from "../../../../vt/vt";
+import { MouseAction, MouseInput, Vt } from "../../../../vt/vt";
 import { Term, TermError, tapKey } from "./term";
 import { Controls, Hit, holding, vtOf } from "./controls";
 import { copySelection, pasteFrom } from "./clipboard";
@@ -38,6 +38,27 @@ function openLink(this c: Controls, uri: string): void {
 	}
 }
 
+export enum PressPlan {
+	Link,
+	Report,
+	Select,
+	CopyOrPaste,
+	Ignore,
+}
+
+export function planPress(
+	button: int32,
+	mods: BitSet<KeyMod>,
+	tracking: boolean,
+	overLink: boolean,
+): PressPlan {
+	if (button == LEFT && mods.has(KeyMod.Ctrl) && overLink) { return PressPlan.Link; }
+	if (claimsMouse(tracking, mods.has(KeyMod.Shift))) { return PressPlan.Report; }
+	if (button == LEFT) { return PressPlan.Select; }
+	if (button == RIGHT) { return PressPlan.CopyOrPaste; }
+	return PressPlan.Ignore;
+}
+
 export function pointerDown(
 	this c: Controls,
 	t: Term,
@@ -50,32 +71,37 @@ export function pointerDown(
 	if (vt === null) { return Result.ok(false); }
 	const modes = vt.modes();
 	if (!modes.ok) { return Result.err(TermError.VtFailed); }
+	let uri: string | null = null;
 	if (button == LEFT && h.mods.has(KeyMod.Ctrl)) {
 		const link = vt.linkAt(h.at.col, h.at.row);
 		if (!link.ok) { return Result.err(TermError.VtFailed); }
-		const uri = link.value;
-		if (uri !== null) {
-			c.openLink(uri);
+		uri = link.value;
+	}
+	match (planPress(button, h.mods, modes.value.mouseTracking, uri !== null)) {
+		PressPlan.Link => {
+			c.openLink(uri!);
 			return Result.ok(true);
-		}
+		},
+		PressPlan.Report => {
+			c.pointer.clear(vt);
+			c.button = button;
+			return c.reportMouse(t, MouseAction.Press, button, h, true);
+		},
+		PressPlan.Select => {
+			const reach = (h.cell.cellWidth as float64) / h.scale;
+			const pressed = c.pointer.press(vt, h.at, h.x, h.y, time, reach);
+			if (!pressed.ok) { return Result.err(TermError.VtFailed); }
+			return Result.ok(true);
+		},
+		PressPlan.CopyOrPaste => {
+			const copied = try c.copySelection(t);
+			if (!copied) { c.pasteFrom(); }
+			return Result.ok(copied);
+		},
+		PressPlan.Ignore => {
+			return Result.ok(false);
+		},
 	}
-	if (claimsMouse(modes.value.mouseTracking, h.mods.has(KeyMod.Shift))) {
-		c.pointer.clear(vt);
-		c.button = button;
-		return c.reportMouse(t, MouseAction.Press, button, h, true);
-	}
-	if (button == LEFT) {
-		const reach = (h.cell.cellWidth as float64) / h.scale;
-		const pressed = c.pointer.press(vt, h.at, h.x, h.y, time, reach);
-		if (!pressed.ok) { return Result.err(TermError.VtFailed); }
-		return Result.ok(true);
-	}
-	if (button == RIGHT) {
-		const copied = try c.copySelection(t);
-		if (!copied) { c.pasteFrom(); }
-		return Result.ok(copied);
-	}
-	return Result.ok(false);
 }
 
 export function pointerMove(
@@ -186,9 +212,7 @@ export function roll(
 	}
 }
 
-export function syncSelection(this c: Controls, t: Term): Result<boolean, TermError> {
-	const vt = vtOf(t);
-	if (vt === null) { return Result.ok(false); }
+export function syncSelection(this c: Controls, vt: Vt): Result<boolean, TermError> {
 	const shown = c.pointer.selected();
 	const kept = c.pointer.sync(vt);
 	if (!kept.ok) { return Result.err(TermError.VtFailed); }

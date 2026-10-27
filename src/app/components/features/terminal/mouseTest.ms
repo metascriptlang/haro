@@ -1,4 +1,4 @@
-import { KeyEvent } from "../../../../keys/keys";
+import { KeyEvent, KeyMod } from "../../../../keys/keys";
 import { selected } from "../../../../input/pointer";
 import { View, fitRows, open, paint } from "../../../frame";
 import { bounds } from "../../../../select/select";
@@ -7,7 +7,9 @@ import { Controls, Hit } from "./controls";
 import { keyDown } from "./keyboard";
 import {
 	autoscrollTick,
+	PressPlan,
 	endDrag,
+	planPress,
 	pointerDown,
 	pointerMove,
 	pointerUp,
@@ -221,7 +223,7 @@ test "a drag selects cells that the next frame draws with their colours swapped"
 		const bottom = view.grid.at(1).line;
 		assert bottom.runs[0].units == 4;
 		assert bottom.runs[0].bg == bottom.runs[1].fg;
-		const dropped = c.syncSelection(t);
+		const dropped = c.syncSelection(t.session!.vt);
 		assert dropped.ok;
 		if (dropped.ok) { assert !dropped.value; }
 	}).ok;
@@ -278,4 +280,18 @@ test "a press in the padding reaches a tracking app as the nearest cell" {
 		assert handled(settled(clip, c, t, c.pointerDown(t, 1, padded, 0)));
 		assert sink.sent == "\x1b[<0;1;1M";
 	}).ok;
+}
+
+test "a press picks one plan from the button, the modifiers, mouse tracking and a link under it" {
+	const none = 0 as BitSet<KeyMod>;
+	const ctrl = none.incl(KeyMod.Ctrl);
+	const shift = none.incl(KeyMod.Shift);
+	assert planPress(1, ctrl, true, true) == PressPlan.Link;
+	assert planPress(1, ctrl, false, false) == PressPlan.Select;
+	assert planPress(2, ctrl, false, true) == PressPlan.CopyOrPaste;
+	assert planPress(1, none, true, true) == PressPlan.Report;
+	assert planPress(1, shift, true, false) == PressPlan.Select;
+	assert planPress(2, none, true, false) == PressPlan.Report;
+	assert planPress(2, shift, true, false) == PressPlan.CopyOrPaste;
+	assert planPress(3, none, false, false) == PressPlan.Ignore;
 }

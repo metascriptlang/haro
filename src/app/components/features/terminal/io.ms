@@ -6,7 +6,7 @@ import { CellInk } from "../../../../grid/lines";
 import { Config } from "../../../../config/config";
 import { FrameRows, none } from "../../../rows";
 import { Mark } from "../../../mark";
-import { Asks, Controls, Hit, holding, refit, takeAsks, typed } from "./controls";
+import { Asks, Controls, Hit, holding, refit, takeAsks, typed, vtOf } from "./controls";
 import { cancel, clipboardAsked, clipboardText, confirm } from "./clipboard";
 import { answerClose, closeKey, keyDown, keyUp } from "./keyboard";
 import { autoscrollTick, endDrag, pointerDown, pointerMove, pointerUp, roll, syncSelection } from "./mouse";
@@ -281,8 +281,9 @@ export function frame(this io: Io): IoFrame {
 		const ended = pumped.value.ended;
 		frame = move pumped.value;
 		if (asked) { io.controls.clipboardAsked(); }
-		if (!held) {
-			const dropped = io.controls.syncSelection(io.term);
+		const vt = vtOf(io.term);
+		if (!held && vt !== null) {
+			const dropped = io.controls.syncSelection(vt);
 			if (!dropped.ok) {
 				io.fail("selection", dropped.error);
 			} else {

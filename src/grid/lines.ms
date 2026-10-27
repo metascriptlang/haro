@@ -12,10 +12,10 @@ export struct LineRun {
 	bg: Rgb;
 	underline: Underline;
 	underlineColor: Rgb | null;
-	bold: boolean;
-	italic: boolean;
-	strikethrough: boolean;
+	flags: BitSet<CellFlag>;
 }
+
+const RUN_FLAGS: BitSet<CellFlag> = CellFlag.Bold | CellFlag.Italic | CellFlag.Strikethrough;
 
 export struct CellInk {
 	fg: Rgb | null;
@@ -35,9 +35,7 @@ function sameStyle(this a: LineRun, b: LineRun): boolean {
 		a.bg == b.bg &&
 		a.underline == b.underline &&
 		a.underlineColor == b.underlineColor &&
-		a.bold == b.bold &&
-		a.italic == b.italic &&
-		a.strikethrough == b.strikethrough;
+		a.flags == b.flags;
 }
 
 const FAINT_OPACITY: float64 = 0.5;
@@ -60,9 +58,7 @@ function lineRun(this cell: Cell): LineRun {
 		bg: bg,
 		underline: cell.underline,
 		underlineColor: cell.underlineColor,
-		bold: cell.flags.has(CellFlag.Bold),
-		italic: cell.flags.has(CellFlag.Italic),
-		strikethrough: cell.flags.has(CellFlag.Strikethrough),
+		flags: cell.flags.intersection(RUN_FLAGS),
 	};
 }
 
@@ -111,7 +107,7 @@ function breaksShapingBefore(this row: Row, i: int32, cursorCell: int32): boolea
 function isEmpty(this cell: Cell, background: Rgb): boolean {
 	const run = cell.lineRun();
 	return (cell.cp == 0 || cell.cp == 0x20) && cell.extra == 0 && run.bg == background &&
-		run.underline == Underline.None && !run.strikethrough;
+		run.underline == Underline.None && !run.flags.has(CellFlag.Strikethrough);
 }
 
 export function cellOnRow(this cursor: Cursor | null, y: int32): int32 {
@@ -162,7 +158,11 @@ export function line(
 			const blank = cell.flags.has(CellFlag.Wide) ? "  " : " ";
 			text += blank;
 			for (let b = 0; b < blank.length; b++) { pushCell(widths, 1, 1); }
-			const hidden: LineRun = { ...run, underline: Underline.None, strikethrough: false };
+			const hidden: LineRun = {
+				...run,
+				underline: Underline.None,
+				flags: run.flags.excl(CellFlag.Strikethrough),
+			};
 			pushUnits(runs, hidden, blank.length as int32, split);
 			continue;
 		}
@@ -238,10 +238,10 @@ test "each styled stretch is its own run" {
 		assert line.text == "Ab";
 		assert line.runs.length == 2;
 		assert line.runs[0].units == 1;
-		assert line.runs[0].bold;
+		assert line.runs[0].flags.has(CellFlag.Bold);
 		assert line.runs[0].fg == red;
 		assert line.runs[1].units == 1;
-		assert !line.runs[1].bold;
+		assert !line.runs[1].flags.has(CellFlag.Bold);
 		assert line.cursorCell == 0;
 	}
 }
@@ -296,8 +296,8 @@ test "strikethrough is part of the run" {
 	const line = firstLine("\x1b[9mx\x1b[0my", 10, -1);
 	assert line !== null;
 	if (line !== null) {
-		assert line.runs[0].strikethrough;
-		assert !line.runs[1].strikethrough;
+		assert line.runs[0].flags.has(CellFlag.Strikethrough);
+		assert !line.runs[1].flags.has(CellFlag.Strikethrough);
 	}
 }
 
@@ -309,7 +309,7 @@ test "a concealed cell keeps its background and draws no text or line" {
 		const hidden = line.runs[0];
 		assert hidden.units == 2;
 		assert hidden.underline == Underline.None;
-		assert !hidden.strikethrough;
+		assert !hidden.flags.has(CellFlag.Strikethrough);
 		assert hidden.bg != line.runs[1].bg;
 	}
 }
@@ -322,7 +322,7 @@ test "a codepoint above the BMP is two UTF-16 units of its run" {
 		assert line.runs.length == 2;
 		assert line.runs[0].units == 3;
 		assert line.text.slice(0, 3) == "a😀";
-		assert line.runs[1].bold;
+		assert line.runs[1].flags.has(CellFlag.Bold);
 	}
 }
 

@@ -280,7 +280,7 @@ function sentAfterExit(running: boolean): string {
 	const base = Replay.ofText("bye").toPty();
 	const pty: Pty = {
 		...base,
-		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => {
+		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
 			return Result.err(PtyError.Closed);
 		},
 		resize: (
@@ -331,9 +331,9 @@ test "a resize sends a mode 2048 subscriber its new size in cells and pixels at 
 	let sent = "";
 	const pty: Pty = {
 		...Replay.ofText("\x1b[?2048h").toPty(),
-		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => {
+		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
 			sent += data.asString();
-			return Result.ok(data.length as int32);
+			return Result.ok(null);
 		},
 	};
 	const s = startedOrNull(pty, 20, 4);

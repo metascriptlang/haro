@@ -19,9 +19,9 @@ function recorder(text: string, sink: Sink): Pty {
 	return {
 		wait: base.wait,
 		read: base.read,
-		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => {
+		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
 			sink.sent += data.asString();
-			return Result.ok(data.length as int32);
+			return Result.ok(null);
 		},
 		resize: base.resize,
 		exitCode: base.exitCode,

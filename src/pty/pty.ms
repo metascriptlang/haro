@@ -92,8 +92,10 @@ export function wait(this p: NativePty, timeoutMs: int32): Result<boolean, PtyEr
 	};
 }
 
-export function write(this p: NativePty, data: Readonly<Span<uint8>>): Result<int32, PtyError> {
-	return transferred(ptyWrite(p.id, data));
+export function write(this p: NativePty, data: Readonly<Span<uint8>>): Result<void, PtyError> {
+	const sent = transferred(ptyWrite(p.id, data));
+	if (!sent.ok) { return Result.err(sent.error); }
+	return Result.ok(null);
 }
 
 export function resize(
@@ -141,7 +143,7 @@ export function toPty(this p: NativePty): Pty {
 	return {
 		wait: (timeoutMs: int32): Result<boolean, PtyError> => { return p.wait(timeoutMs); },
 		read: (buf: Span<uint8>): Result<int32, PtyError> => { return p.read(buf); },
-		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => { return p.write(data); },
+		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => { return p.write(data); },
 		resize: (
 			cols: int32,
 			rows: int32,

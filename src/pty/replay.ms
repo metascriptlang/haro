@@ -23,9 +23,9 @@ export function toPty(this r: Replay): Pty {
 			at += n;
 			return Result.ok(n);
 		},
-		write: (data: Readonly<Span<uint8>>): Result<int32, PtyError> => {
+		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
 			if (closed) { return Result.err(PtyError.Closed); }
-			return Result.ok(data.length as int32);
+			return Result.ok(null);
 		},
 		resize: (
 			cols: int32,

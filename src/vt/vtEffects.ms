@@ -145,7 +145,7 @@ export const NOTIFICATION_BODY_BYTES = 1024;
 const REPLACEMENT_CHARACTER = "\u{fffd}";
 const LONGEST_UTF8_BYTES = 4;
 
-function byteAt(text: GhosttyString, at: int32): int32 {
+export function byteAt(text: GhosttyString, at: int32): int32 {
 	return text.ptr[at] as int32;
 }
 
@@ -181,7 +181,7 @@ function wellFormedPrefix(text: GhosttyString, maxBytes: int32): string {
 		if (width == 0) {
 			pushAll(out, replacement);
 		} else {
-			for (let i = 0; i < width; i++) { out.push(text.ptr[at + i]); }
+			for (let i = 0; i < width; i++) { out.push(byteAt(text, at + i) as uint8); }
 		}
 		at += Math.max(width, 1);
 	}

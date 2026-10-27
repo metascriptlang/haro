@@ -32,6 +32,7 @@ import {
 	NO_EVENTS,
 	VtEvents,
 	answerRead,
+	byteAt,
 	closeEffects,
 	openEffects,
 } from "./vtEffects";
@@ -189,7 +190,7 @@ function terminalString(
 	let text: GhosttyString;
 	try checked(terminalGet(terminal, key, text), VtError.ReadFailed);
 	let bytes: Vec<uint8> = [];
-	for (let i = 0; i < (text.len as int32); i++) { bytes.push(text.ptr[i]); }
+	for (let i = 0; i < (text.len as int32); i++) { bytes.push(byteAt(text, i) as uint8); }
 	return Result.ok(bytes[0..bytes.length].asString());
 }
 

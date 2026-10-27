@@ -157,3 +157,23 @@ test "without stats logging a key leaves no echo or settle sample behind" {
 	s.noteApplied(2, 0, 160, 15.5);
 	assert s.line() == "refreshes=0 more=0 held=0 rows=2 scrolled=0 chars=160 echo n=0 settle n=0";
 }
+
+test "the line reports each counter under its own name, and a reset zeroes them all" {
+	const s = Stats.empty();
+	s.tally.refreshes = 7;
+	s.tally.more = 3;
+	s.tally.held = 2;
+	s.noteApplied(4, 1, 90, 5);
+	s.noteApplied(2, 2, 10, 6);
+	assert s.line() == "refreshes=7 more=3 held=2 rows=6 scrolled=3 chars=100 echo n=0 settle n=0";
+	s.reset();
+	assert s.tally.refreshes == 0 && s.tally.more == 0 && s.tally.held == 0 && s.tally.scrolled == 0;
+}
+
+test "painted rows mark the launch only when characters were drawn" {
+	const s = Stats.empty();
+	s.noteApplied(3, 0, 0, 5);
+	assert !s.launched();
+	s.noteApplied(3, 0, 12, 6);
+	assert s.launched();
+}

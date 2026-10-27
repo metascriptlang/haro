@@ -136,7 +136,7 @@ function sizeReport(terminal: GhosttyTerminal, effects: Ptr<void>, out size: Gho
 
 @exportName("haroVtXtversion")
 function xtversion(terminal: GhosttyTerminal, effects: Ptr<void>): GhosttyString {
-	const name: GhosttyString = { ptr: XTVERSION_NAME as Borrow<uint8>, len: XTVERSION_NAME_BYTES };
+	const name: GhosttyString = { ptr: XTVERSION_NAME as Ptr<uint8>, len: XTVERSION_NAME_BYTES };
 	return name;
 }
 

@@ -117,6 +117,25 @@ test "a directory that does not exist is skipped and the command still runs" {
 when (!windows) {
 	import { env } from "std/process";
 
+	extern function dup(fd: int32): int32;
+	extern function dup2(from: int32, to: int32): int32;
+	extern function closeFd(fd: int32): int32 from "close";
+
+	test "a child does not inherit a descriptor the app holds without close-on-exec" {
+		const leaked = 200;
+		const spare = dup(2);
+		assert spare >= 0;
+		assert dup2(spare, leaked) == leaked;
+		assert closeFd(spare) == 0;
+		assert withPty("sh -c 'ls -1 /dev/fd'", (p: NativePty): void => {
+			const listing = p.toPty().drainText(4096).split("\r\n");
+			assert listing.includes("0");
+			assert !listing.includes(`${leaked}`);
+		});
+		assert closeFd(leaked) == 0;
+	}
+
+
 	@include("signal.h");
 
 	extern function kill(pid: int32, signal: int32): int32;

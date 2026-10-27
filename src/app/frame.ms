@@ -17,13 +17,20 @@ export function blank(this typeof RowSlot): RowSlot {
 	return { line: { text: "", runs: [], widths: [], cursorCell: -1, cursorInk: null }, spans: [] };
 }
 
-export struct Styles {
+export interface Styles {
 	looks: Map<uint64, Style>;
+	olderLooks: Map<uint64, Style>;
 	tinted: Map<string, Style>;
+	olderTinted: Map<string, Style>;
 }
 
 export function empty(this typeof Styles): Styles {
-	return { looks: new Map<uint64, Style>(), tinted: new Map<string, Style>() };
+	return {
+		looks: new Map<uint64, Style>(),
+		olderLooks: new Map<uint64, Style>(),
+		tinted: new Map<string, Style>(),
+		olderTinted: new Map<string, Style>(),
+	};
 }
 
 export enum FrameError {
@@ -33,15 +40,26 @@ export enum FrameError {
 }
 
 const HEX = "0123456789abcdef";
-export const STYLE_CACHE_LIMIT = 4096;
+export const STYLE_CACHE_LIMIT = 8192;
 
-function hexByte(v: uint8): string {
-	const n = v as int32;
-	return HEX[n >> 4] + HEX[n & 15];
+function hexBytes(): string[] {
+	let table: string[] = [];
+	for (let n = 0; n < 256; n++) { table.push(HEX[n >> 4] + HEX[n & 15]); }
+	return table;
 }
 
+const HEX_BYTES = hexBytes();
+
 export function hexOf(c: Rgb): string {
-	return "#" + hexByte(c.r) + hexByte(c.g) + hexByte(c.b);
+	return `#${HEX_BYTES[c.r]}${HEX_BYTES[c.g]}${HEX_BYTES[c.b]}`;
+}
+
+function recall<K>(now: Map<K, Style>, older: Map<K, Style>, key: K): Style | undefined {
+	const known = now.get(key);
+	if (known !== undefined) { return known; }
+	const kept = older.get(key);
+	if (kept !== undefined) { now.set(key, kept); }
+	return kept;
 }
 
 type Decoration = "none" | "underline" | "line-through" | "underline line-through";
@@ -79,7 +97,7 @@ function styleOf(styles: Styles, run: LineRun, background: Rgb): Style {
 	const bgBits = plain ? PLAIN_BG : rgbBits(run.bg);
 	const look = (bgBits << 29) | (rgbBits(run.fg) << 5) | lookBits(run);
 	const key = tinted ? `${look}${hexOf(tint!)}` : "";
-	const known = tinted ? styles.tinted.get(key) : styles.looks.get(look);
+	const known = tinted ? recall(styles.tinted, styles.olderTinted, key) : recall(styles.looks, styles.olderLooks, look);
 	if (known !== undefined) { return known; }
 	const fg = hexOf(run.fg);
 	const bg = plain ? "" : hexOf(run.bg);
@@ -98,10 +116,16 @@ function styleOf(styles: Styles, run: LineRun, background: Rgb): Style {
 	if (bg != "") { style.backgroundColor = bg; }
 	if (lineColor != "") { style.textDecorationColor = lineColor; }
 	if (tinted) {
-		if (styles.tinted.size >= STYLE_CACHE_LIMIT) { styles.tinted.clear(); }
+		if (styles.tinted.size >= STYLE_CACHE_LIMIT) {
+			styles.olderTinted = styles.tinted;
+			styles.tinted = new Map<string, Style>();
+		}
 		styles.tinted.set(key, style);
 	} else {
-		if (styles.looks.size >= STYLE_CACHE_LIMIT) { styles.looks.clear(); }
+		if (styles.looks.size >= STYLE_CACHE_LIMIT) {
+			styles.olderLooks = styles.looks;
+			styles.looks = new Map<uint64, Style>();
+		}
 		styles.looks.set(look, style);
 	}
 	return style;
@@ -325,6 +349,27 @@ test "truecolour output that never repeats a look keeps the style cache bounded"
 		assert spans[0].style!.color == hexOf(fg);
 	}
 	assert styles.looks.size <= STYLE_CACHE_LIMIT;
+}
+
+test "a screenful of truecolour looks wider than one cache generation keeps its styles across repaints" {
+	const styles = Styles.empty();
+	const looks = STYLE_CACHE_LIMIT + STYLE_CACHE_LIMIT / 2;
+	let first: TextSpan[] = [];
+	for (let pass = 0; pass < 3; pass++) {
+		for (let i = 0; i < looks; i++) {
+			const fg: Rgb = { r: (i & 255) as uint8, g: ((i >> 8) & 255) as uint8, b: 7 };
+			const l: GridLine = {
+				text: "x",
+				runs: [run(1, fg, BLACK, Underline.None)],
+				widths: [],
+				cursorCell: -1,
+				cursorInk: null,
+			};
+			const spans = spansOf(styles, l, BLACK);
+			if (pass == 0) { first.push(spans[0]); }
+			else { assert spans[0].style === first[i].style; }
+		}
+	}
 }
 
 test "a background differs from the terminal's only where a run says so" {

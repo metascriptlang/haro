@@ -42,7 +42,8 @@ export interface CursorModel {
 	lastReset: float64;
 }
 
-export function createCursor(
+export function open(
+	this typeof CursorModel,
 	metrics: CellMetrics,
 	padding: Accessor<number>,
 	tint: Rgb,
@@ -247,7 +248,7 @@ function cursorFor(look: CursorLook): CursorModel {
 		cellWidth: cellWidth,
 		rowHeight: rowHeight,
 	};
-	const c = createCursor(metrics, padding, RED, (ink: CellInk | null): void => {});
+	const c = CursorModel.open(metrics, padding, RED, (ink: CellInk | null): void => {});
 	c.at = { x: 3, y: 2, wide: false };
 	c.look = look;
 	return c;

@@ -90,7 +90,7 @@ function fill(list: List<Shown>, lines: Vec<Line>): void {
 	for (const line of lines) { list.push(shownLine(line)); }
 }
 
-export function createPasteDialog(): PasteDialogModel {
+export function open(this typeof PasteDialogModel): PasteDialogModel {
 	const [visible, setVisible] = createSignal<boolean>(false);
 	const [cols, setCols] = createSignal<number>(MIN_COLS as number);
 	const [confirmLabel, setConfirmLabel] = createSignal<string>(PASTE_CONFIRM);
@@ -200,7 +200,7 @@ test "the card is as wide as the window leaves room for, between sixteen and eig
 }
 
 test "a held paste opens the view with its lines and cancelling closes it" {
-	const v = createPasteDialog();
+	const v = PasteDialogModel.open();
 	assert !v.visible();
 	const held: Held = { text: "ls\ncd ..\nrm x", warning: Warning.MultiLine };
 	v.showPending(pendingOf(held, null, false), 8.4, 960);
@@ -225,7 +225,7 @@ test "a held paste opens the view with its lines and cancelling closes it" {
 }
 
 test "a close asked over a held paste shows first, and the paste shows again once it is answered" {
-	const v = createPasteDialog();
+	const v = PasteDialogModel.open();
 	const held: Held = { text: "a\nb", warning: Warning.MultiLine };
 	v.showPending(pendingOf(held, null, true), 8.4, 960);
 	flush();
@@ -248,7 +248,7 @@ test "a close asked over a held paste shows first, and the paste shows again onc
 }
 
 test "a clipboard read opens the view with its own labels and closes it again" {
-	const v = createPasteDialog();
+	const v = PasteDialogModel.open();
 	v.showPending(pendingOf(null, "secret\ntoken", false), 8.4, 960);
 	flush();
 	assert v.visible();

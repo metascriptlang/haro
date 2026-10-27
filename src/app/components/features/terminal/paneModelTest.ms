@@ -4,10 +4,10 @@ import { defaults } from "../../../../config/config";
 import { Pty, PtyError } from "../../../../pty/transport";
 import { Replay } from "../../../../pty/replay";
 import { writeText } from "../../../../vt/vt";
-import { createNotice } from "../notice/notice";
-import { createPasteDialog } from "../paste/pasteDialog";
+import { open, NoticeModel } from "../notice/notice";
+import { open, PasteDialogModel } from "../paste/pasteDialog";
 import { Stats, empty } from "../../../stats";
-import { Desktop, PaneModel, Report, Timing, createPane, failed, refresh } from "./paneModel";
+import { Desktop, PaneModel, Report, Timing, open, failed, refresh } from "./paneModel";
 import { cancelDialog, confirmDialog } from "./paneEvents";
 import { Io, Where, open, port } from "../../../../controller/io";
 import { Term, TermError, openTerm, shutdown } from "../../../../controller/term";
@@ -52,7 +52,7 @@ function timingAt(now: float64): Timing {
 function paneWith(io: Io, calls: Calls): PaneModel {
 	const view = View.open();
 	view.fitRows(io.term.shown.length as int32);
-	return createPane(
+	return PaneModel.open(
 		io.port(),
 		view,
 		desktopFor(calls),
@@ -60,8 +60,8 @@ function paneWith(io: Io, calls: Calls): PaneModel {
 		timingAt(0),
 		"",
 		defaults(),
-		createNotice(),
-		createPasteDialog(),
+		NoticeModel.open(),
+		PasteDialogModel.open(),
 		Stats.empty(),
 	);
 }
@@ -90,7 +90,7 @@ test "an applied frame is stamped by the host's clock into the stats the pane wa
 		stats.noteKey(10);
 		const view = View.open();
 		view.fitRows(t.shown.length as int32);
-		const m = createPane(
+		const m = PaneModel.open(
 			Io.open(t).port(),
 			view,
 			desktopFor(calls),
@@ -98,8 +98,8 @@ test "an applied frame is stamped by the host's clock into the stats the pane wa
 			timingAt(15.5),
 			"",
 			defaults(),
-			createNotice(),
-			createPasteDialog(),
+			NoticeModel.open(),
+			PasteDialogModel.open(),
 			stats,
 		);
 		m.refresh();

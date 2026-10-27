@@ -39,7 +39,7 @@ export interface NoticeModel {
 	rows: List<string>;
 }
 
-export function createNotice(): NoticeModel {
+export function open(this typeof NoticeModel): NoticeModel {
 	const [shown, setShown] = createSignal<boolean>(false);
 	return { text: "", shown: shown, setShown: setShown, rows: createList<string>([]) };
 }

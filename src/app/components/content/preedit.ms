@@ -9,7 +9,7 @@ export interface PreeditModel {
 	setText: Setter<string>;
 }
 
-export function createPreedit(): PreeditModel {
+export function open(this typeof PreeditModel): PreeditModel {
 	const [text, setText] = createSignal<string>("");
 	return { text: text, setText: setText };
 }

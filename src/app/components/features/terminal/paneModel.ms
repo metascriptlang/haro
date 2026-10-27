@@ -18,12 +18,12 @@ import { Stats, mark, noteApplied, noteKey } from "../../../stats";
 import { CellMetrics } from "../../ui/cellText";
 import {
 	CursorModel,
-	createCursor,
+	open,
 	paintCursor,
 	showCursor,
 	wakeCursor,
 } from "../../content/cursor";
-import { PreeditModel, createPreedit } from "../../content/preedit";
+import { PreeditModel, open } from "../../content/preedit";
 import { NoticeModel, noticeCols, showNotice } from "../notice/notice";
 import { PasteDialogModel, invalidate, showPending } from "../paste/pasteDialog";
 import { Asks } from "../../../../controller/controls";
@@ -114,7 +114,8 @@ export interface PaneModel {
 	layoutHeight: number;
 }
 
-export function createPane(
+export function open(
+	this typeof PaneModel,
 	io: IoPort,
 	view: View,
 	desktop: Desktop,
@@ -169,10 +170,10 @@ export function createPane(
 		setPadding: setPadding,
 		viewWidth: viewWidth,
 		setViewWidth: setViewWidth,
-		cursor: createCursor(metrics, padding, started.foreground, (ink: CellInk | null): void => {
+		cursor: CursorModel.open(metrics, padding, started.foreground, (ink: CellInk | null): void => {
 			io.relight(ink, (rows: FrameRows): void => { view.repaintCursor(rows); });
 		}),
-		preedit: createPreedit(),
+		preedit: PreeditModel.open(),
 		grid: null,
 		holdTimer: -1,
 		scrollTimer: -1,

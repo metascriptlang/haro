@@ -2722,6 +2722,42 @@ test "a skin-tone emoji is one wide cell, also after a full reset" {
 	});
 }
 
+function clusterAt(vt: Vt, base: uint32): Vec<uint32> {
+	let found: Vec<uint32> = [];
+	if (!vt.update().ok) { return found; }
+	const rows = vt.rows();
+	if (!rows.ok) { return found; }
+	for (const row of rows.value) {
+		let extraAt = 0;
+		for (const cell of row.cells) {
+			if (cell.cp == base && cell.flags.has(CellFlag.Wide)) {
+				found.push(base);
+				for (let k = 0; k < (cell.extra as int32); k++) { found.push(row.extra[extraAt + k]); }
+				return found;
+			}
+			extraAt += cell.extra as int32;
+		}
+	}
+	return found;
+}
+
+test "a cluster that widens in the last column wraps with its codepoints, below a scroll region too" {
+	const heart = "\u{2764}\u{200D}\u{1F44D}";
+	const kssa = "\u{915}\u{94D}\u{937}";
+	for (const at of ["\x1b[2;4r\x1b[6;20H", "\x1b[6;20H", "\x1b[2;4r\x1b[4;20H"]) {
+		assert withVt(20, 6, (vt: Vt): void => {
+			vt.writeText(at + heart);
+			const cluster = clusterAt(vt, 0x2764);
+			assert cluster.length == 3 && cluster[1] == 0x200D && cluster[2] == 0x1F44D;
+		});
+		assert withVt(20, 6, (vt: Vt): void => {
+			vt.writeText(at + kssa);
+			const cluster = clusterAt(vt, 0x915);
+			assert cluster.length == 3 && cluster[1] == 0x94D && cluster[2] == 0x937;
+		});
+	}
+}
+
 test "a line's text keeps each cell's combining marks with that cell" {
 	assert withVt(10, 2, (vt: Vt): void => {
 		vt.writeText("éậx");

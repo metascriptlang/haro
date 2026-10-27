@@ -5,7 +5,7 @@ import { CellInk } from "../../../../grid/lines";
 import { NativePty, spawn } from "../../../../pty/pty";
 import { Replay, ofText, toPty } from "../../../../pty/replay";
 import { Pty, PtyError } from "../../../../pty/transport";
-import { FrameRows, none } from "../../../frame";
+import { FrameRows, none } from "../../../rows";
 import { Hit } from "./controls";
 import {
 	Io,

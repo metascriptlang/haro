@@ -1,3 +1,5 @@
+import { Mark } from "./mark";
+
 export struct Tally {
 	refreshes: int32;
 	more: int32;
@@ -29,8 +31,6 @@ export interface Stats {
 	marks: Vec<Mark>;
 	recording: boolean;
 }
-
-export struct Mark { name: string; at: float64; }
 
 export function empty(this typeof Stats): Stats {
 	return { tally: Tally.zero(), keyAt: -1, wakeAt: -1, marks: [], recording: false };

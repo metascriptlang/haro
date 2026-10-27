@@ -1,7 +1,9 @@
 import { KeyMod } from "../../../../keys/keys";
 import { MouseAction, MouseGeometry, MouseInput } from "../../../../vt/vt";
 import { View, fitRows, open, paint, text } from "../../../frame";
-import { Term } from "./term";
+import { Pty, PtyError } from "../../../../pty/transport";
+import { Replay } from "../../../../pty/replay";
+import { Term, openTerm } from "./term";
 import { Sink, onFresh, onTerm } from "./terminalRig";
 
 test "a frame under synchronized output is not applied until the hold ends" {
@@ -115,4 +117,76 @@ test "a mouse report is the program's encoding of the pointer, nothing while it 
 		assert t.sendMouse(release, geometry, false).ok;
 		assert sink.sent == "\x1b[<0;3;2M\x1b[<0;3;2m";
 	}).ok;
+}
+
+test "output drained ahead of the frame shows in the grid only when the frame applies it" {
+	const replay = Replay.ofText("one\r\ntwo");
+	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+		return Result.ok(replay.toPty());
+	});
+	assert opened.ok;
+	if (opened.ok) {
+		const t = opened.value;
+		assert t.fit(20, 3).ok;
+		const view = View.open();
+		view.fitRows(3);
+		const drained = t.drain();
+		assert drained.ok;
+		if (drained.ok) { assert !drained.value; }
+		assert !t.alive;
+		assert view.text(0) == "";
+		const frame = t.pumpFrame();
+		assert frame.ok;
+		if (frame.ok) {
+			assert frame.value.ended;
+			assert !frame.value.more;
+			const rows = frame.value.rows;
+			if (rows !== null) { view.paint(rows); }
+		}
+		assert view.text(0) == "one";
+		assert view.text(1) == "two";
+		const next = t.pumpFrame();
+		assert next.ok;
+		if (next.ok) { assert !next.value.ended; }
+		t.shutdown();
+	}
+}
+
+test "a replayed recording fills the grid in one frame and ends the stream once" {
+	const replay = Replay.ofText("one\r\n\x1b[31mtwo\x1b[0m");
+	let openedCols = 0;
+	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+		openedCols = cols;
+		return Result.ok(replay.toPty());
+	});
+	assert opened.ok;
+	if (opened.ok) {
+		const t = opened.value;
+		assert openedCols == 0;
+		const fitted = t.fit(20, 3);
+		assert fitted.ok;
+		assert openedCols == 20;
+		assert t.shown.length == 3;
+		const view = View.open();
+		view.fitRows(3);
+		const first = t.pumpFrame();
+		assert first.ok;
+		if (first.ok) {
+			assert first.value.ended;
+			assert !first.value.more;
+			assert first.value.cursor !== null;
+			const rows = first.value.rows;
+			if (rows !== null) { view.paint(rows); }
+		}
+		assert view.text(0) == "one";
+		assert view.text(1) == "two";
+		assert view.grid.at(1).spans[0].text == "two";
+		assert view.text(2) == "";
+		const second = t.pumpFrame();
+		assert second.ok;
+		if (second.ok) { assert !second.value.ended; }
+		assert !t.alive;
+		assert t.shellExitCode() == 0;
+		t.shutdown();
+	}
 }

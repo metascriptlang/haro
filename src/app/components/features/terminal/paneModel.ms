@@ -12,7 +12,8 @@ import { gridSize } from "../../../../grid/size";
 import { CellInk } from "../../../../grid/lines";
 import { MouseGeometry } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
-import { FrameRows, View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
+import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
+import { FrameRows } from "../../../rows";
 import { mark, noteKey, stats } from "../../../stats";
 import { CellMetrics } from "../../ui/cellText";
 import {

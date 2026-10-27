@@ -22,20 +22,8 @@ import {
 	PasteError,
 	Palette,
 } from "../../../../vt/vt";
-import {
-	FrameError,
-	FrameRows,
-	Shown,
-	View,
-	fitRows,
-	fitShown,
-	open,
-	paint,
-	planRows,
-	relitRows,
-	text,
-} from "../../../frame";
-import { Mark } from "../../../stats";
+import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "../../../rows";
+import { Mark } from "../../../mark";
 
 const BUFFER_BYTES = 65536;
 const DRAIN_LIMIT = 16;
@@ -454,78 +442,6 @@ test "a drain stops after its time budget and reports more, so a key queued behi
 		}
 		assert calls >= 3;
 		assert !more;
-		t.shutdown();
-	}
-}
-
-test "output drained ahead of the frame shows in the grid only when the frame applies it" {
-	const replay = Replay.ofText("one\r\ntwo");
-	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
-		return Result.ok(replay.toPty());
-	});
-	assert opened.ok;
-	if (opened.ok) {
-		const t = opened.value;
-		assert t.fit(20, 3).ok;
-		const view = View.open();
-		view.fitRows(3);
-		const drained = t.drain();
-		assert drained.ok;
-		if (drained.ok) { assert !drained.value; }
-		assert !t.alive;
-		assert view.text(0) == "";
-		const frame = t.pumpFrame();
-		assert frame.ok;
-		if (frame.ok) {
-			assert frame.value.ended;
-			assert !frame.value.more;
-			const rows = frame.value.rows;
-			if (rows !== null) { view.paint(rows); }
-		}
-		assert view.text(0) == "one";
-		assert view.text(1) == "two";
-		const next = t.pumpFrame();
-		assert next.ok;
-		if (next.ok) { assert !next.value.ended; }
-		t.shutdown();
-	}
-}
-
-test "a replayed recording fills the grid in one frame and ends the stream once" {
-	const replay = Replay.ofText("one\r\n\x1b[31mtwo\x1b[0m");
-	let openedCols = 0;
-	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
-		openedCols = cols;
-		return Result.ok(replay.toPty());
-	});
-	assert opened.ok;
-	if (opened.ok) {
-		const t = opened.value;
-		assert openedCols == 0;
-		const fitted = t.fit(20, 3);
-		assert fitted.ok;
-		assert openedCols == 20;
-		assert t.shown.length == 3;
-		const view = View.open();
-		view.fitRows(3);
-		const first = t.pumpFrame();
-		assert first.ok;
-		if (first.ok) {
-			assert first.value.ended;
-			assert !first.value.more;
-			assert first.value.cursor !== null;
-			const rows = first.value.rows;
-			if (rows !== null) { view.paint(rows); }
-		}
-		assert view.text(0) == "one";
-		assert view.text(1) == "two";
-		assert view.grid.at(1).spans[0].text == "two";
-		assert view.text(2) == "";
-		const second = t.pumpFrame();
-		assert second.ok;
-		if (second.ok) { assert !second.value.ended; }
-		assert !t.alive;
-		assert t.shellExitCode() == 0;
 		t.shutdown();
 	}
 }

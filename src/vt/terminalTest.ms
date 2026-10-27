@@ -143,3 +143,23 @@ test "text without a query leaves nothing to reply" {
 		assert vt.takeReplies().length == 0;
 	});
 }
+
+test "a grid size outside 1 to 65535 is refused instead of wrapping into another size" {
+	assert !Vt.create(0, 24).ok;
+	assert !Vt.create(80, 0).ok;
+	assert !Vt.create(-1, 24).ok;
+	assert !Vt.create(70000, 24).ok;
+	assert !Vt.create(80, 65536).ok;
+	assert withVt(20, 4, (vt: Vt): void => {
+		assert !vt.resize(0, 4).ok;
+		assert !vt.resize(20, -3).ok;
+		assert !vt.resize(65536, 4).ok;
+		assert vt.update().ok;
+		const size = vt.size();
+		assert size.ok;
+		if (size.ok) {
+			assert size.value[0] == 20;
+			assert size.value[1] == 4;
+		}
+	});
+}

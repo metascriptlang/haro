@@ -123,9 +123,18 @@ function applyScrollback(terminal: GhosttyTerminal, lines: int64): Result<void, 
 	return Result.ok(null);
 }
 
+const MAX_GRID_SIDE = 65535;
+
+function gridSide(cells: int32, fail: VtError): Result<uint16, VtError> {
+	if (cells < 1 || cells > MAX_GRID_SIDE) { return Result.err(fail); }
+	return Result.ok(cells as uint16);
+}
+
 export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtError> {
+	const wide = try gridSide(cols, VtError.CreateFailed);
+	const tall = try gridSide(rows, VtError.CreateFailed);
 	let terminal: GhosttyTerminal;
-	try checked(ghostty_terminal_new(vtAllocator(), terminal, cols as uint16, rows as uint16), VtError.CreateFailed);
+	try checked(ghostty_terminal_new(vtAllocator(), terminal, wide, tall), VtError.CreateFailed);
 	let state: GhosttyRenderState;
 	let iterator: GhosttyRenderStateRowIterator;
 	let cells: GhosttyRenderStateRowCells;
@@ -225,10 +234,12 @@ export function resize(
 	cellWidth: int32 = 0,
 	cellHeight: int32 = 0,
 ): Result<void, VtError> {
+	const wide = try gridSide(cols, VtError.ResizeFailed);
+	const tall = try gridSide(rows, VtError.ResizeFailed);
 	const r = ghostty_terminal_resize(
 		vt.terminal,
-		cols as uint16,
-		rows as uint16,
+		wide,
+		tall,
 		cellWidth as uint32,
 		cellHeight as uint32,
 	);

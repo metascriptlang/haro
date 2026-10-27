@@ -18,7 +18,7 @@ import { familyList, registerFallbacks } from "./fonts";
 import { Config } from "../config/config";
 import { OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
-import { ConfigWatch, forFile, readConfig, watchConfig } from "./configWatch";
+import { ConfigWatch, forFile, readConfig, startIn, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { exitCodeText } from "../controller/term";
 import { Shell, closeThen, closed, opened, portOf } from "../controller/shell";
@@ -219,7 +219,7 @@ async function started(shell: Shell): Promise<void> {
 }
 
 async function runShell(command: string): Promise<int32> {
-	const cwd = config.loaded.config.startDirectory(probableCli(), homeDir());
+	const cwd = config.startIn(probableCli(), homeDir());
 	const shell = new Shell({ command: command, cwd: cwd, recording: null });
 	await started(shell);
 	const view = View.open();

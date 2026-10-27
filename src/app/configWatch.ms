@@ -1,5 +1,5 @@
-import { changeStamp, ensureDir, writeFile } from "std/fs";
-import { Config, defaults } from "../config/config";
+import { changeStamp, ensureDir, isDir, writeFile } from "std/fs";
+import { Config, StartKind, defaults } from "../config/config";
 import { Loaded, empty, load } from "../config/source";
 import { resourcePath } from "../../../ion/src/index";
 import { cwd } from "std/process";
@@ -53,6 +53,14 @@ function poll(this w: ConfigWatch, handler: (c: Config | null, error: string) =>
 	}
 }
 
+export function startIn(this w: ConfigWatch, probableCli: boolean, home: string): string | null {
+	const dir = w.loaded.config.startDirectory(probableCli, home);
+	if (dir === null || isDir(dir)) { return dir; }
+	const skipped = `workingDirectory ${dir} does not exist, so the shell starts where Haro was started`;
+	w.error = w.error == "" ? skipped : `${w.error}; ${skipped}`;
+	return null;
+}
+
 export function watchConfig(
 	this w: ConfigWatch,
 	handler: (c: Config | null, error: string) => void,
@@ -61,6 +69,18 @@ export function watchConfig(
 		w.poll(handler);
 		w.watchConfig(handler);
 	}, CONFIG_POLL_MS);
+}
+
+test "a start directory that does not exist is skipped and said, and one that exists is kept" {
+	const w = ConfigWatch.forFile("/no/such/haro/config.ms");
+	w.loaded = { config: { ...defaults(), workingDirectory: { kind: StartKind.Path, path: "/no/such/haro/dir" } }, faces: [], stamp: "", notice: "" };
+	assert w.startIn(true, "/Users/me") === null;
+	assert w.error == "workingDirectory /no/such/haro/dir does not exist, so the shell starts where Haro was started";
+	const here = cwd();
+	w.loaded.config.workingDirectory = { kind: StartKind.Path, path: here };
+	w.error = "";
+	assert w.startIn(true, "/Users/me") == here;
+	assert w.error == "";
 }
 
 test "a config file that disappears keeps the last config and says so once" {

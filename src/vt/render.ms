@@ -241,15 +241,19 @@ function readRow(
 	iterator: GhosttyRenderStateRowIterator,
 	y: int32,
 	colors: Palette,
+	cols: int32,
 ): Result<Row, VtError> {
 	let cells = vt.cells;
 	const cellsKey = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_CELLS;
 	try checked(rowGet(iterator, cellsKey, cells), VtError.ReadFailed);
-	let row: Row = { y: y, cells: [], extra: [], selected: try selectedIn(iterator) };
+	let row: Row = { y: y, cells: new Array(cols), extra: [], selected: try selectedIn(iterator) };
+	let at = 0;
 	while (ghostty_render_state_row_cells_next(cells)) {
-		const cell = try readCell(vt.state, cells, colors, row.extra);
-		row.cells.push(cell);
+		if (at == cols) { return Result.err(VtError.ReadFailed); }
+		row.cells[at] = try readCell(vt.state, cells, colors, row.extra);
+		at++;
 	}
+	if (at < cols) { row.cells.shrink(at); }
 	return Result.ok(row);
 }
 
@@ -273,11 +277,12 @@ function rowIterator(this vt: Vt): Result<GhosttyRenderStateRowIterator, VtError
 
 export function rows(this vt: Vt): Result<Vec<Row>, VtError> {
 	const colors = try vt.palette();
+	const cols = (try vt.size())[0];
 	const iterator = try vt.rowIterator();
 	let out: Vec<Row> = [];
 	let y = 0;
 	while (ghostty_render_state_row_iterator_next(iterator)) {
-		const row = try vt.readRow(iterator, y, colors);
+		const row = try vt.readRow(iterator, y, colors, cols);
 		out.push(row);
 		y++;
 	}
@@ -286,11 +291,12 @@ export function rows(this vt: Vt): Result<Vec<Row>, VtError> {
 
 export function dirtyRows(this vt: Vt): Result<Vec<Row>, VtError> {
 	const colors = try vt.palette();
+	const cols = (try vt.size())[0];
 	const iterator = try vt.rowIterator();
 	let out: Vec<Row> = [];
 	let y: uint16 = 0;
 	while (ghostty_render_state_row_iterator_next_dirty(iterator, y)) {
-		const row = try vt.readRow(iterator, y as int32, colors);
+		const row = try vt.readRow(iterator, y as int32, colors, cols);
 		out.push(row);
 	}
 	return Result.ok(out);

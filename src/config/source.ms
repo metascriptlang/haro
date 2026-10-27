@@ -140,10 +140,9 @@ export function load(path: string, api: string): Result<Loaded, string> {
 	const json = try evaluate(path, dir, api);
 	const config = try parse(json);
 	const fonts = fontsFound(config.fontFamily);
-	if (fonts.notice == "" && !writeFile(cacheFile, encodeCache(stamp, json, fonts.faces)).ok) {
-		return Result.err(`cannot write ${cacheFile}`);
-	}
-	return Result.ok({ config: config, faces: fonts.faces, stamp: stamp, notice: fonts.notice });
+	const uncached = fonts.notice == "" && !writeFile(cacheFile, encodeCache(stamp, json, fonts.faces)).ok;
+	const notice = uncached ? `cannot write ${cacheFile}, so the config is read again next start` : fonts.notice;
+	return Result.ok({ config: config, faces: fonts.faces, stamp: stamp, notice: notice });
 }
 
 test "a cached record gives back each family's faces in order" {

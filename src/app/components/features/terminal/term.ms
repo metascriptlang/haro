@@ -39,6 +39,7 @@ import { Mark } from "../../../stats";
 
 const BUFFER_BYTES = 65536;
 const DRAIN_LIMIT = 16;
+const DRAIN_BUDGET_MS: float64 = 8;
 
 export enum TermError {
 	KeysOpenFailed,
@@ -189,8 +190,13 @@ function frameFailure(error: FrameError): TermError {
 }
 
 export function drain(this t: Term): Result<boolean, TermError> {
+	return t.drainFor(DRAIN_BUDGET_MS);
+}
+
+function drainFor(this t: Term, budgetMs: float64): Result<boolean, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(false); }
+	const began = performance.now();
 	let more = false;
 	for (let i = 0; i < DRAIN_LIMIT && t.alive; i++) {
 		const ready = s.pty.wait(0);
@@ -202,7 +208,8 @@ export function drain(this t: Term): Result<boolean, TermError> {
 			t.alive = false;
 			t.ended = true;
 		}
-		more = alive.value && i == DRAIN_LIMIT - 1;
+		more = alive.value && (i == DRAIN_LIMIT - 1 || performance.now() - began >= budgetMs);
+		if (more) { break; }
 	}
 	return Result.ok(more);
 }
@@ -426,6 +433,29 @@ test "an exit code past a byte reads as the unsigned status with its hex, as Win
 	assert exitCodeText(-1073741510) == "3221225786 (0xc000013a)";
 	assert exitCodeText(-1) == "4294967295 (0xffffffff)";
 	assert exitCodeText(259) == "259 (0x00000103)";
+}
+
+test "a drain stops after its time budget and reports more, so a key queued behind it is served between chunks" {
+	const replay = Replay.ofText("x".repeat(BUFFER_BYTES * 3));
+	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+		return Result.ok(replay.toPty());
+	});
+	assert opened.ok;
+	if (opened.ok) {
+		const t = opened.value;
+		assert t.fit(20, 3).ok;
+		let calls = 0;
+		let more = true;
+		while (more && calls < 100) {
+			const drained = t.drainFor(0);
+			assert drained.ok;
+			more = drained.ok && drained.value;
+			calls += 1;
+		}
+		assert calls >= 3;
+		assert !more;
+		t.shutdown();
+	}
 }
 
 test "output drained ahead of the frame shows in the grid only when the frame applies it" {

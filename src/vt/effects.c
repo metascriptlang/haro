@@ -5,7 +5,7 @@
 
 #ifdef __EMSCRIPTEN__
 /* msc cannot fill the vtable's function-pointer fields: compiler card
-   2026-10-27-header-struct-function-pointer-field-is-a-closure */
+   2026-10-19-a-function-passed-to-a-c-function-pointer-fails-at-clang */
 static const uint8_t maxLog2Align = 4;
 
 static void* heapAlloc(void* ctx, size_t len, uint8_t log2Align, uintptr_t ra) {
@@ -49,7 +49,7 @@ static void writePty(GhosttyTerminal terminal, void* userdata, const uint8_t* by
 }
 
 /* msc reads a function-pointer field of a header struct as a closure and cannot call `reply`; move
-   these two into vtEffects.ms when compiler card 2026-10-27-header-struct-function-pointer-field-is-a-closure lands. */
+   these two into vtEffects.ms when compiler card 2026-10-19-a-function-passed-to-a-c-function-pointer-fails-at-clang lands. */
 static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const GhosttyClipboardWrite* write) {
 	(void)terminal;
 	GhosttyClipboardWriteReply reply = { sizeof reply, GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED, false };

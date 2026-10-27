@@ -148,13 +148,13 @@ function spot(col: int32, row: int32): Spot {
 	return { col: col, row: row };
 }
 
-function click(p: Pointer, vt: Vt, col: int32, row: int32, time: float64): boolean {
+function click(this p: Pointer, vt: Vt, col: int32, row: int32, time: float64): boolean {
 	const x = col as float64 * CELL_WIDTH;
 	const y = row as float64 * ROW_HEIGHT;
 	return p.press(vt, spot(col, row), x, y, time, REACH).ok;
 }
 
-function copied(p: Pointer, vt: Vt): string {
+function copied(this p: Pointer, vt: Vt): string {
 	const text = p.copyText(vt);
 	return text.ok ? (text.value ?? "none") : "read failed";
 }
@@ -171,16 +171,16 @@ test "a press with no drag leaves nothing selected and a drag selects the cells 
 	const vt = viewOf(20, 3, "hello world");
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const p = Pointer.open();
-		assert click(p, vt, 1, 0, 0);
+		assert p.click(vt, 1, 0, 0);
 		assert !p.selected();
 		assert p.copyText(vt).ok;
 		assert p.drag(vt, spot(4, 0)).ok;
 		assert p.selected();
-		assert copied(p, vt) == "ello";
+		assert p.copied(vt) == "ello";
 		p.release();
 		assert p.selected();
-		vt.free();
 	}
 }
 
@@ -188,11 +188,11 @@ test "a drag back past the press selects the other way" {
 	const vt = viewOf(20, 3, "hello world");
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const p = Pointer.open();
-		assert click(p, vt, 8, 0, 0);
+		assert p.click(vt, 8, 0, 0);
 		assert p.drag(vt, spot(6, 0)).ok;
-		assert copied(p, vt) == "wor";
-		vt.free();
+		assert p.copied(vt) == "wor";
 	}
 }
 
@@ -200,16 +200,16 @@ test "a double click selects a word, a triple click the line, and a fourth start
 	const vt = viewOf(20, 3, "foo bar-baz qux");
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const p = Pointer.open();
-		assert click(p, vt, 5, 0, 0);
+		assert p.click(vt, 5, 0, 0);
 		assert !p.selected();
-		assert click(p, vt, 5, 0, 100);
-		assert copied(p, vt) == "bar-baz";
-		assert click(p, vt, 5, 0, 200);
-		assert copied(p, vt) == "foo bar-baz qux";
-		assert click(p, vt, 5, 0, 300);
+		assert p.click(vt, 5, 0, 100);
+		assert p.copied(vt) == "bar-baz";
+		assert p.click(vt, 5, 0, 200);
+		assert p.copied(vt) == "foo bar-baz qux";
+		assert p.click(vt, 5, 0, 300);
 		assert !p.selected();
-		vt.free();
 	}
 }
 
@@ -217,11 +217,11 @@ test "a double click takes its word from the first press, though the second drif
 	const vt = viewOf(20, 3, "foo bar baz");
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const p = Pointer.open();
-		assert click(p, vt, 4, 0, 0);
-		assert click(p, vt, 3, 0, 100);
-		assert copied(p, vt) == "bar";
-		vt.free();
+		assert p.click(vt, 4, 0, 0);
+		assert p.click(vt, 3, 0, 100);
+		assert p.copied(vt) == "bar";
 	}
 }
 
@@ -229,12 +229,12 @@ test "a drag after a double click grows the selection by whole words" {
 	const vt = viewOf(30, 3, "foo bar baz qux");
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const p = Pointer.open();
-		assert click(p, vt, 5, 0, 0);
-		assert click(p, vt, 5, 0, 100);
+		assert p.click(vt, 5, 0, 0);
+		assert p.click(vt, 5, 0, 100);
 		assert p.drag(vt, spot(9, 0)).ok;
-		assert copied(p, vt) == "bar baz";
-		vt.free();
+		assert p.copied(vt) == "bar baz";
 	}
 }
 
@@ -242,12 +242,13 @@ test "a click away from a selection clears it, and so does clear" {
 	const vt = viewOf(20, 3, "hello world");
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const p = Pointer.open();
-		assert click(p, vt, 0, 0, 0);
+		assert p.click(vt, 0, 0, 0);
 		assert p.drag(vt, spot(4, 0)).ok;
 		assert p.selected();
 		p.release();
-		assert click(p, vt, 9, 1, 2000);
+		assert p.click(vt, 9, 1, 2000);
 		assert !p.selected();
 		const gone = vt.selectedText();
 		assert gone.ok;
@@ -257,7 +258,6 @@ test "a click away from a selection clears it, and so does clear" {
 		p.clear(vt);
 		assert !p.selected();
 		assert !p.dragging;
-		vt.free();
 	}
 }
 
@@ -265,12 +265,12 @@ test "a move with no press in progress selects nothing" {
 	const vt = viewOf(20, 3, "hello world");
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const p = Pointer.open();
 		const moved = p.drag(vt, spot(4, 0));
 		assert moved.ok;
 		if (moved.ok) { assert !moved.value; }
 		assert !p.selected();
-		vt.free();
 	}
 }
 
@@ -296,7 +296,7 @@ function prunable(): Vt | null {
 	return null;
 }
 
-function pruneOnePage(vt: Vt): boolean {
+function pruneOnePage(this vt: Vt): boolean {
 	const before = vt.scrollOffset();
 	if (!before.ok) { return false; }
 	for (let i = 0; i < 100; i++) {
@@ -313,13 +313,14 @@ test "a selection whose start is pruned from scrollback shows what the terminal 
 	const vt = prunable();
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const bottom = (try vt.scrollOffset() catch 0) + 3;
 		const p = Pointer.open();
 		const sel = Selection.press(Unit.Cell, { start: { row: 0, col: 1 }, end: { row: 0, col: 1 } }, false)
 			.drag({ start: { row: bottom, col: 2 }, end: { row: bottom, col: 2 } });
 		p.sel = sel;
 		assert vt.selectionSet(sel.marked()).ok;
-		assert pruneOnePage(vt);
+		assert vt.pruneOnePage();
 		const kept = p.sync(vt);
 		assert kept.ok;
 		if (kept.ok) { assert kept.value; }
@@ -334,7 +335,6 @@ test "a selection whose start is pruned from scrollback shows what the terminal 
 				if (p.sel !== null) { assert p.sel.marked().range == m.range; }
 			}
 		}
-		vt.free();
 	}
 }
 
@@ -342,12 +342,13 @@ test "a selection pruned whole from scrollback is gone" {
 	const vt = prunable();
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const p = Pointer.open();
 		const sel = Selection.press(Unit.Cell, { start: { row: 0, col: 0 }, end: { row: 0, col: 0 } }, false)
 			.drag({ start: { row: 1, col: 1 }, end: { row: 1, col: 1 } });
 		p.sel = sel;
 		assert vt.selectionSet(sel.marked()).ok;
-		assert pruneOnePage(vt);
+		assert vt.pruneOnePage();
 		const kept = p.sync(vt);
 		assert kept.ok;
 		if (kept.ok) { assert !kept.value; }
@@ -355,7 +356,6 @@ test "a selection pruned whole from scrollback is gone" {
 		const now = vt.selection();
 		assert now.ok;
 		if (now.ok) { assert now.value === null; }
-		vt.free();
 	}
 }
 
@@ -363,16 +363,16 @@ test "new output that scrolls the terminal moves the selection with its text" {
 	const vt = viewOf(10, 3, "one\r\ntwo\r\nthree");
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const p = Pointer.open();
-		assert click(p, vt, 0, 1, 0);
+		assert p.click(vt, 0, 1, 0);
 		assert p.drag(vt, spot(2, 1)).ok;
 		vt.writeText("\r\nfour\r\nfive");
 		assert vt.update().ok;
 		const kept = p.sync(vt);
 		assert kept.ok;
 		if (kept.ok) { assert kept.value; }
-		assert copied(p, vt) == "two";
-		vt.free();
+		assert p.copied(vt) == "two";
 	}
 }
 
@@ -380,8 +380,9 @@ test "a selection the terminal let go of is dropped here too" {
 	const vt = viewOf(10, 3, "hello");
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		const p = Pointer.open();
-		assert click(p, vt, 0, 0, 0);
+		assert p.click(vt, 0, 0, 0);
 		assert p.drag(vt, spot(3, 0)).ok;
 		vt.selectionClear();
 		const kept = p.sync(vt);
@@ -389,7 +390,6 @@ test "a selection the terminal let go of is dropped here too" {
 		if (kept.ok) { assert !kept.value; }
 		assert !p.selected();
 		assert !p.dragging;
-		vt.free();
 	}
 }
 
@@ -409,18 +409,18 @@ test "a drag within a pixel of the top or the bottom scrolls that way" {
 	assert autoscrollOf(420, 300) == 1;
 }
 
-function selectedAndCopied(p: Pointer, vt: Vt, from: int32, to: int32): string {
-	if (!click(p, vt, from, 0, 0) || !p.drag(vt, spot(to, 0)).ok) { return "select failed"; }
-	return copied(p, vt);
+function selectedAndCopied(this p: Pointer, vt: Vt, from: int32, to: int32): string {
+	if (!p.click(vt, from, 0, 0) || !p.drag(vt, spot(to, 0)).ok) { return "select failed"; }
+	return p.copied(vt);
 }
 
 test "a wide character is copied whole whichever of its cells the selection reaches" {
 	const vt = viewOf(10, 1, "中文 x");
 	assert vt !== null;
 	if (vt !== null) {
-		assert selectedAndCopied(Pointer.open(), vt, 0, 2) == "中文";
-		assert selectedAndCopied(Pointer.open(), vt, 1, 4) == "中文";
-		vt.free();
+		defer vt.free();
+		assert Pointer.open().selectedAndCopied(vt, 0, 2) == "中文";
+		assert Pointer.open().selectedAndCopied(vt, 1, 4) == "中文";
 	}
 }
 
@@ -428,9 +428,9 @@ test "a wide character in a row scrolled into view is copied whole" {
 	const vt = viewOf(10, 1, "a\r\n中文 x\r\nab");
 	assert vt !== null;
 	if (vt !== null) {
+		defer vt.free();
 		vt.scrollLines(-1);
 		assert vt.update().ok;
-		assert selectedAndCopied(Pointer.open(), vt, 1, 2) == "中文";
-		vt.free();
+		assert Pointer.open().selectedAndCopied(vt, 1, 2) == "中文";
 	}
 }

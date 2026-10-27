@@ -286,10 +286,6 @@ test "a keybind that is not a trigger is refused by name" {
 	assert !keybind("f01", "x", BindAction.SendText, Screen.Any).ok;
 }
 
-function textOf(b: Keybind | null): string | null {
-	return b === null ? null : b.text;
-}
-
 test "a keybind's text answers exactly its chord, side and lock bits aside" {
 	const binds: Vec<Keybind> = [
 		{ code: "Enter", mods: modsMask(SHIFT), text: "a", action: BindAction.SendText, screen: Screen.Any },
@@ -301,11 +297,11 @@ test "a keybind's text answers exactly its chord, side and lock bits aside" {
 			screen: Screen.Any,
 		},
 	];
-	assert textOf(bindFor(binds, "Enter", SHIFT, false)) == "a";
-	assert textOf(bindFor(binds, "Enter", SHIFT | SHIFT_RIGHT | NUM_LOCK, true)) == "a";
+	assert bindFor(binds, "Enter", SHIFT, false)?.text == "a";
+	assert bindFor(binds, "Enter", SHIFT | SHIFT_RIGHT | NUM_LOCK, true)?.text == "a";
 	assert bindFor(binds, "Enter", NO_MODS, false) === null;
 	assert bindFor(binds, "Enter", SHIFT | CTRL, false) === null;
-	assert textOf(bindFor(binds, "KeyH", CTRL | SHIFT, false)) == "b";
+	assert bindFor(binds, "KeyH", CTRL | SHIFT, false)?.text == "b";
 }
 
 test "a keybind for one screen answers only on that screen" {

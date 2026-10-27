@@ -11,7 +11,7 @@ were rejected.
   `scripts/buildVt.sh` with Zig 0.16 into `ghostty-vt-static.lib`, linked with `GHOSTTY_STATIC`.
   Moving the pin is its own commit, with the build and the gate re-run: upstream marks the C API
   unstable.
-- Getters that write through `void* out` are bound as typed externs in `src/vt/vt.ms`
+- Getters that write through `void* out` are bound as typed externs in `src/vt/vtNative.ms`
   (`stateU16`, `cellColor`, `cellStyle`…) rather than called through the header import. Through
   the import a `void*` out takes any variable, so a `uint32` handed to a key that writes a
   `uint16` compiles and corrupts memory. The typed extern pins each key to its type. A getter that

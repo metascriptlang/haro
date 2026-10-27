@@ -45,7 +45,7 @@ const GhosttyAllocator* vtAllocator(void) {
 }
 #endif
 
-/* The callbacks' state lives in vt.ms, which defines these. */
+/* The callbacks' state lives in vtEffects.ms, which defines these. */
 void haroVtWritePty(void* effects, uint8_t* bytes, int64_t n);
 void haroVtBell(GhosttyTerminal terminal, void* effects);
 void haroVtTitleChanged(GhosttyTerminal terminal, void* effects);

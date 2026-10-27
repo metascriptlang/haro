@@ -12,7 +12,7 @@ import { Warning } from "../input/paste";
 import { BindAction, CLIPBOARD_MODS, Keybind, Screen } from "../input/bindings";
 import {
 	Sink,
-	at,
+	spotAt,
 	atBottomOf,
 	boardOf,
 	settled,
@@ -56,7 +56,7 @@ test "the copy chord, and enter on windows, copy the selection to the clipboard 
 		const clip = board;
 		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyC", CLIPBOARD_MODS))));
 		assert board.copied == "";
-		assert drag(c, t, clip, at(0, 0), at(4, 0));
+		assert drag(c, t, clip, spotAt(0, 0), spotAt(4, 0));
 		assert c.pointer.selected();
 		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyC", CLIPBOARD_MODS))));
 		assert board.copied == "alpha";
@@ -64,12 +64,12 @@ test "the copy chord, and enter on windows, copy the selection to the clipboard 
 		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyC", CLIPBOARD_MODS))));
 		when (windows) {
 			assert !handled(settled(clip, c, t, c.keyDown(t, key("Enter", NO_MODS))));
-			assert drag(c, t, clip, at(6, 0), at(9, 0));
+			assert drag(c, t, clip, spotAt(6, 0), spotAt(9, 0));
 			assert handled(settled(clip, c, t, c.keyDown(t, key("Enter", NO_MODS))));
 			assert board.copied == "beta";
 		}
 		when (!macos) {
-			assert drag(c, t, clip, at(0, 1), at(4, 1));
+			assert drag(c, t, clip, spotAt(0, 1), spotAt(4, 1));
 			assert handled(settled(clip, c, t, c.keyDown(t, key("Insert", CTRL))));
 			assert board.copied == "gamma";
 		}

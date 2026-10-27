@@ -12,7 +12,7 @@ const CTRL = modSet(KeyMod.Ctrl);
 const SHIFT = modSet(KeyMod.Shift);
 import {
 	Sink,
-	at,
+	spotAt,
 	atBottomOf,
 	boardOf,
 	settle,
@@ -94,7 +94,7 @@ test "typing or pasting snaps the viewport to the bottom and drops the selection
 		const clip = boardOf("x");
 		assert !handled(c.typed(t));
 		assert handled(settled(clip, c, t, c.keyDown(t, key("PageUp", CTRL | SHIFT))));
-		assert drag(c, t, clip, at(0, 0), at(3, 0));
+		assert drag(c, t, clip, spotAt(0, 0), spotAt(3, 0));
 		assert c.pointer.selected();
 		assert handled(c.typed(t));
 		assert atBottomOf(t);
@@ -150,7 +150,7 @@ test "a width change drops the selection, a height change keeps it" {
 	assert onTerm("0123456789abcde", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = boardOf("x");
-		assert drag(c, t, clip, at(0, 1), at(2, 1));
+		assert drag(c, t, clip, spotAt(0, 1), spotAt(2, 1));
 		assert c.refit(t, 10, 4).ok;
 		assert c.pointer.selected();
 		assert c.refit(t, 20, 4).ok;

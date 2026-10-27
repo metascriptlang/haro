@@ -1,10 +1,8 @@
 import { KeyMod } from "../keys/keys";
 import { MouseAction, MouseInput, geometryOf } from "../vt/vt";
 import { View, fitRows, open, paint, text } from "../app/frame";
-import { Pty, PtyError } from "../pty/transport";
-import { Replay } from "../pty/replay";
-import { Term, openTerm } from "./term";
-import { Sink, onFresh, onTerm } from "./terminalRig";
+import { Term } from "./term";
+import { Sink, onFresh, onTerm, onUnfit } from "./terminalRig";
 
 test "a frame under synchronized output is not applied until the hold ends" {
 	assert onFresh("abc\x1b[?2026h", (t: Term, sink: Sink): void => {
@@ -111,13 +109,7 @@ test "a mouse report is the program's encoding of the pointer, nothing while it 
 }
 
 test "output drained ahead of the frame shows in the grid only when the frame applies it" {
-	const replay = Replay.ofText("one\r\ntwo");
-	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
-		return Result.ok(replay.toPty());
-	});
-	assert opened.ok;
-	if (opened.ok) {
-		const t = opened.value;
+	assert onUnfit("one\r\ntwo", (t: Term, sink: Sink): void => {
 		assert t.fit(20, 3).ok;
 		const view = View.open();
 		view.fitRows(3);
@@ -132,6 +124,7 @@ test "output drained ahead of the frame shows in the grid only when the frame ap
 			assert frame.value.ended;
 			assert !frame.value.more;
 			const rows = frame.value.rows;
+			assert rows !== null;
 			if (rows !== null) { view.paint(rows); }
 		}
 		assert view.text(0) == "one";
@@ -139,24 +132,14 @@ test "output drained ahead of the frame shows in the grid only when the frame ap
 		const next = t.pumpFrame();
 		assert next.ok;
 		if (next.ok) { assert !next.value.ended; }
-		t.shutdown();
-	}
+	}).ok;
 }
 
 test "a replayed recording fills the grid in one frame and ends the stream once" {
-	const replay = Replay.ofText("one\r\n\x1b[31mtwo\x1b[0m");
-	let openedCols = 0;
-	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
-		openedCols = cols;
-		return Result.ok(replay.toPty());
-	});
-	assert opened.ok;
-	if (opened.ok) {
-		const t = opened.value;
-		assert openedCols == 0;
-		const fitted = t.fit(20, 3);
-		assert fitted.ok;
-		assert openedCols == 20;
+	assert onUnfit("one\r\n\x1b[31mtwo\x1b[0m", (t: Term, sink: Sink): void => {
+		assert t.cols == 0;
+		assert t.fit(20, 3).ok;
+		assert t.cols == 20;
 		assert t.shown.length == 3;
 		const view = View.open();
 		view.fitRows(3);
@@ -167,6 +150,7 @@ test "a replayed recording fills the grid in one frame and ends the stream once"
 			assert !first.value.more;
 			assert first.value.cursor !== null;
 			const rows = first.value.rows;
+			assert rows !== null;
 			if (rows !== null) { view.paint(rows); }
 		}
 		assert view.text(0) == "one";
@@ -178,6 +162,5 @@ test "a replayed recording fills the grid in one frame and ends the stream once"
 		if (second.ok) { assert !second.value.ended; }
 		assert !t.alive;
 		assert t.shellExitCode() == 0;
-		t.shutdown();
-	}
+	}).ok;
 }

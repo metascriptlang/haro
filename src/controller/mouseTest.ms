@@ -23,7 +23,7 @@ const CTRL = modSet(KeyMod.Ctrl);
 const SHIFT = modSet(KeyMod.Shift);
 import {
 	Sink,
-	at,
+	spotAt,
 	boardOf,
 	settled,
 	drag,
@@ -184,7 +184,7 @@ test "a right click copies a selection and otherwise pastes" {
 		const clip = board;
 		assert !handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Right, hitAt(0, 0), 0)));
 		assert sink.sent == "pasted";
-		assert drag(c, t, clip, at(0, 0), at(4, 0));
+		assert drag(c, t, clip, spotAt(0, 0), spotAt(4, 0));
 		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Right, hitAt(0, 0), 1000)));
 		assert board.copied == "alpha";
 		assert sink.sent == "pasted";
@@ -211,7 +211,7 @@ test "a drag selects cells that the next frame draws with their colours swapped"
 	assert onTerm("alpha beta\r\ngamma", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const clip = boardOf("");
-		assert drag(c, t, clip, at(2, 0), at(3, 1));
+		assert drag(c, t, clip, spotAt(2, 0), spotAt(3, 1));
 		const view = View.open();
 		view.fitRows(t.shown.length as int32);
 		const frame = t.pumpFrame();

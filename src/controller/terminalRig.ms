@@ -15,20 +15,46 @@ export interface Sink {
 }
 
 function recorder(text: string, sink: Sink): Pty {
-	const base = Replay.ofText(text).toPty();
 	return {
-		wait: base.wait,
-		read: base.read,
+		...Replay.ofText(text).toPty(),
 		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
 			sink.sent += data.asString();
 			return Result.ok(null);
 		},
-		resize: base.resize,
-		exitCode: base.exitCode,
-		exitSignal: base.exitSignal,
-		close: base.close,
 		busy: (): boolean => { return sink.busy; },
 	};
+}
+
+export function exiting(text: string, code: int32, signal: int32): Pty {
+	return {
+		...Replay.ofText(text).toPty(),
+		exitCode: (): int32 | null => { return code; },
+		exitSignal: (): int32 => { return signal; },
+	};
+}
+
+export function onPty(
+	pty: Pty,
+	now: () => float64,
+	cols: int32,
+	rows: int32,
+	body: (t: Term) => void,
+): Result<void, TermError> {
+	const t = try openTerm((c: int32, r: int32): Result<Pty, PtyError> => { return Result.ok(pty); }, now);
+	defer t.shutdown();
+	const _fit = try t.fit(cols, rows);
+	body(t);
+	return Result.ok(null);
+}
+
+export function onUnfit(text: string, body: (t: Term, sink: Sink) => void): Result<void, TermError> {
+	const sink: Sink = { sent: "", busy: false };
+	const t = try openTerm((c: int32, r: int32): Result<Pty, PtyError> => {
+		return Result.ok(recorder(text, sink));
+	});
+	defer t.shutdown();
+	body(t, sink);
+	return Result.ok(null);
 }
 
 function onFitted(
@@ -122,7 +148,7 @@ export function atBottomOf(t: Term): boolean {
 	return try s.vt.atBottom() catch false;
 }
 
-export function at(col: int32, row: int32): Spot {
+export function spotAt(col: int32, row: int32): Spot {
 	return { col: col, row: row };
 }
 
@@ -136,7 +162,7 @@ export function hitAt(col: int32, row: int32): Hit {
 
 export function hitWith(col: int32, row: int32, mods: BitSet<KeyMod>): Hit {
 	return {
-		at: at(col, row),
+		at: spotAt(col, row),
 		x: col as float64 * 8,
 		y: row as float64 * 16,
 		scale: 1,

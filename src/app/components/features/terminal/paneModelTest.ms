@@ -8,7 +8,7 @@ import { createNotice } from "../notice/notice";
 import { createPasteDialog } from "../paste/pasteDialog";
 import { AppHost, PaneModel, createPane, failed, refresh } from "./paneModel";
 import { cancelDialog, confirmDialog } from "./paneEvents";
-import { closeKey } from "./keyboard";
+import { Io, closeKey, open } from "./io";
 import { Term, TermError, openTerm, shutdown } from "./term";
 import { View, fitRows, open, text } from "../../../frame";
 import { holding } from "./controls";
@@ -47,7 +47,7 @@ function hostFor(calls: Calls): AppHost {
 function paneOf(t: Term, calls: Calls): PaneModel {
 	const view = View.open();
 	view.fitRows(t.shown.length as int32);
-	return createPane(t, view, hostFor(calls), defaults(), createNotice(), createPasteDialog());
+	return createPane(Io.open(t), view, hostFor(calls), defaults(), createNotice(), createPasteDialog());
 }
 
 function pressed(code: string): NeonEvent {
@@ -115,7 +115,7 @@ test "an internal failure before the shell started is fatal" {
 }
 
 function closeAsked(this m: PaneModel): boolean {
-	if (!m.controls.closeKey(m.term).ok) { return false; }
+	m.io.closeKey();
 	m.refresh();
 	flush();
 	return m.dialog.visible();
@@ -225,7 +225,7 @@ test "a dead shell takes no typed text, key release or focus change, and keeps i
 		m.focusChanged(false);
 		m.keyReleased(lifted("KeyA"));
 		assert m.notice.text == text;
-		assert m.controls.holding();
+		assert m.io.controls.holding();
 		assert calls.fatal == "";
 		assert calls.noted == "";
 	}).ok;

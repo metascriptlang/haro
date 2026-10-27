@@ -25,22 +25,25 @@ import {
 import { PreeditModel, createPreedit } from "../../content/preedit";
 import { NoticeModel, noticeCols, showNotice } from "../notice/notice";
 import { PasteDialogModel, showPending } from "../paste/pasteDialog";
-import { Controls, refit, takeAsks } from "./controls";
-import { clipboardAsked, clipboardText } from "./clipboard";
-import { closeKey } from "./keyboard";
-import { syncSelection } from "./mouse";
+import { Asks } from "./controls";
 import {
-	Term,
-	TermError,
-	exitCodeText,
-	exitedAbnormally,
-	shellExitSignal,
-	inkCursor,
-	pumpFrame,
-	shellExitCode,
-} from "./term";
+	Exit,
+	Failure,
+	Io,
+	autoscroll,
+	closeKey,
+	configure,
+	fit,
+	frame,
+	pasted,
+	relight,
+	settingsOf,
+	started,
+} from "./io";
+import { TermError, exitCodeText } from "./term";
 
 const HOLD_RECHECK_MS = 100;
+const AUTOSCROLL_MS = 15;
 const RESTART_NOTICE = "config.ms: command and workingDirectory apply when Haro restarts";
 
 export interface AppHost {
@@ -59,13 +62,15 @@ export interface AppHost {
 }
 
 export interface PaneModel {
-	term: Term;
+	io: Io;
 	view: View;
 	host: AppHost;
 	started: Config;
-	settings: Config;
-	settingsApplied: boolean;
-	controls: Controls;
+	shellStarted: boolean;
+	ended: Exit | null;
+	autoscrolling: boolean;
+	cols: int32;
+	rows: int32;
 	notice: NoticeModel;
 	dialog: PasteDialogModel;
 	metrics: CellMetrics;
@@ -92,7 +97,7 @@ export interface PaneModel {
 }
 
 export function createPane(
-	t: Term,
+	io: Io,
 	view: View,
 	host: AppHost,
 	started: Config,
@@ -113,17 +118,17 @@ export function createPane(
 		cellWidth: cellWidth,
 		rowHeight: rowHeight,
 	};
-	const controls = Controls.open();
-	controls.keybinds = started.keybinds;
-	t.keys.optionAsAlt = started.optionAsAlt;
+	io.configure(settingsOf(started));
 	return {
-		term: t,
+		io: io,
 		view: view,
 		host: host,
 		started: started,
-		settings: started,
-		settingsApplied: false,
-		controls: controls,
+		shellStarted: io.started(),
+		ended: null,
+		autoscrolling: false,
+		cols: 0,
+		rows: 0,
 		notice: notice,
 		dialog: dialog,
 		metrics: metrics,
@@ -140,7 +145,7 @@ export function createPane(
 		viewWidth: viewWidth,
 		setViewWidth: setViewWidth,
 		cursor: createCursor(metrics, padding, started.foreground, (ink: CellInk | null): void => {
-			const relit = t.inkCursor(ink);
+			const relit = io.relight(ink);
 			if (!relit.ok) {
 				host.fail(`cursor: ${relit.error.toString()}`);
 				return;
@@ -167,8 +172,27 @@ export function createPane(
 }
 
 export function failed(this m: PaneModel, what: string, error: string): void {
+	m.failedAs(m.shellStarted, what, error);
+}
+
+function failureText(error: TermError): string {
+	return match (error) {
+		TermError.SettingsRefused => "the terminal refused the configured colours or scrollback",
+		_ => error.toString(),
+	};
+}
+
+function reported(this m: PaneModel, f: Failure): void {
+	if (f.what == "fit" && f.error == TermError.PtyOpenFailed) {
+		m.notify("the shell did not start: check command in config.ms, or --shell");
+		return;
+	}
+	m.failedAs(f.started, f.what, failureText(f.error));
+}
+
+function failedAs(this m: PaneModel, started: boolean, what: string, error: string): void {
 	const message = `${what}: ${error}`;
-	if (m.term.session === null) {
+	if (!started) {
 		m.host.fail(message);
 		return;
 	}
@@ -186,15 +210,13 @@ function copyToClipboard(text: string): void {
 	}
 }
 
-function answerAsks(this m: PaneModel): void {
-	const asks = m.controls.takeAsks();
+function answerAsks(this m: PaneModel, asks: Asks): void {
 	const copy = asks.copy;
 	if (copy !== null) { copyToClipboard(copy); }
 	for (const uri of asks.opens) { m.host.openLink(uri); }
 	for (let i = 0; i < asks.reads; i++) {
 		Clipboard.getString().then((text: string): void => {
-			const answered = m.controls.clipboardText(m.term, text);
-			if (!answered.ok) { m.failed("clipboard", answered.error.toString()); }
+			m.io.pasted(text);
 			m.refresh();
 		});
 	}
@@ -209,76 +231,81 @@ function watchHold(this m: PaneModel): void {
 	}, HOLD_RECHECK_MS);
 }
 
+function autoscrollSoon(this m: PaneModel): void {
+	if (m.scrollTimer >= 0 || !m.autoscrolling) { return; }
+	m.scrollTimer = setTimeout((): void => {
+		m.scrollTimer = -1;
+		m.io.autoscroll();
+		m.refresh();
+	}, AUTOSCROLL_MS);
+}
+
 export function scheduleRefresh(this m: PaneModel): void {
 	m.host.schedule((): void => { m.refresh(); });
 }
 
 export function refresh(this m: PaneModel): void {
 	stats.tally.refreshes += 1;
-	const frame = m.term.pumpFrame();
-	if (!frame.ok) {
-		m.failed("output", frame.error.toString());
-		return;
-	}
-	const f = frame.value;
-	const copied = f.copied;
-	if (copied !== null) { copyToClipboard(copied); }
-	const title = f.title;
-	if (title !== null) { m.host.setTitle(title); }
-	const notification = f.notification;
-	if (notification !== null && !m.cursor.focused) {
-		m.host.notify(notification.title, notification.body);
-	}
-	if (f.asked) { m.controls.clipboardAsked(); }
-	if (f.held) {
-		stats.tally.held += 1;
-		m.watchHold();
-	} else {
-		const rows = f.rows;
-		if (rows !== null) { m.view.paint(rows); }
-		const colors = f.colors;
-		if (colors !== null) {
-			m.setBackground(hexOf(colors.bg));
-			m.setForeground(hexOf(colors.fg));
-			m.cursor.tint = colors.cursor ?? colors.fg;
+	const got = m.io.frame();
+	m.shellStarted = got.started;
+	for (const failure of got.failures) { m.reported(failure); }
+	const f = got.frame;
+	if (f !== null) {
+		const copied = f.copied;
+		if (copied !== null) { copyToClipboard(copied); }
+		const title = f.title;
+		if (title !== null) { m.host.setTitle(title); }
+		const notification = f.notification;
+		if (notification !== null && !m.cursor.focused) {
+			m.host.notify(notification.title, notification.body);
 		}
-		m.cursor.showCursor(f.cursor, f.look);
-		const dropped = m.controls.syncSelection(m.term);
-		if (!dropped.ok) {
-			m.failed("selection", dropped.error.toString());
-		} else if (dropped.value) {
-			m.scheduleRefresh();
+		if (f.held) {
+			stats.tally.held += 1;
+			m.watchHold();
+		} else {
+			const rows = f.rows;
+			if (rows !== null) { m.view.paint(rows); }
+			const colors = f.colors;
+			if (colors !== null) {
+				m.setBackground(hexOf(colors.bg));
+				m.setForeground(hexOf(colors.fg));
+				m.cursor.tint = colors.cursor ?? colors.fg;
+			}
+			m.cursor.showCursor(f.cursor, f.look);
 		}
 	}
+	const pending = got.pending;
 	m.dialog.showPending(
-		m.controls.held,
-		m.controls.reading,
-		m.controls.closing,
+		pending.held,
+		pending.reading,
+		pending.closing,
 		m.metrics.cellWidth(),
 		m.viewWidth(),
 	);
-	m.answerAsks();
-	if (f.more) {
+	m.answerAsks(got.asks);
+	m.autoscrolling = got.autoscroll;
+	m.autoscrollSoon();
+	if (got.again) { m.scheduleRefresh(); }
+	if (f !== null && f.more) {
 		stats.tally.more += 1;
 		m.scheduleRefresh();
 	}
-	if (f.ended) { m.shellEnded(); }
+	const exit = got.exit;
+	if (exit !== null) { m.shellEnded(exit); }
 }
 
-function shellEnded(this m: PaneModel): void {
-	const code = m.term.shellExitCode();
-	const signal = m.term.shellExitSignal();
-	if (m.term.exitedAbnormally()) {
-		m.controls.ended = true;
-		m.notify(`the shell exited with code ${exitCodeText(code)} as it started: check command in config.ms, or --shell; press any key to close`);
+function shellEnded(this m: PaneModel, exit: Exit): void {
+	if (exit.abnormal) {
+		m.ended = exit;
+		m.notify(`the shell exited with code ${exitCodeText(exit.code)} as it started: check command in config.ms, or --shell; press any key to close`);
 		return;
 	}
-	if (signal != 0) {
-		m.controls.ended = true;
-		m.notify(`the shell was killed by signal ${signal}, press any key to close`);
+	if (exit.signal != 0) {
+		m.ended = exit;
+		m.notify(`the shell was killed by signal ${exit.signal}, press any key to close`);
 		return;
 	}
-	m.host.exited(code);
+	m.host.exited(exit.code);
 }
 
 function notify(this m: PaneModel, text: string): void {
@@ -291,28 +318,12 @@ function restartNeeded(now: Config, started: Config): boolean {
 		now.workingDirectory != started.workingDirectory;
 }
 
-function applySettings(this m: PaneModel): boolean {
-	const s = m.term.session;
-	if (s === null) { return true; }
-	const vt = s.vt;
-	const settings = m.settings;
-	if (!vt.setDefaultColors(settings.foreground, settings.background).ok ||
-		!vt.setPalette(settings.palette).ok ||
-		!vt.setScrollback(settings.scrollback).ok) {
-		m.failed("settings", "the terminal refused the configured colours or scrollback");
-		return false;
-	}
-	return true;
-}
-
 function reconfigure(this m: PaneModel, c: Config | null, family: string, error: string): void {
 	if (c === null) {
 		m.notify(`config.ms: ${error}`);
 		return;
 	}
-	m.settings = c;
-	m.controls.keybinds = c.keybinds;
-	m.term.keys.optionAsAlt = c.optionAsAlt;
+	m.io.configure(settingsOf(c));
 	const resized = c.fontPx() != m.metrics.fontSize() || family != m.metrics.fontFamily();
 	m.setPadding(c.padding);
 	m.setFontSize(c.fontPx());
@@ -321,15 +332,11 @@ function reconfigure(this m: PaneModel, c: Config | null, family: string, error:
 	const restart = restartNeeded(c, m.started) ? RESTART_NOTICE : "";
 	m.notify(error != "" ? `config.ms: ${error}` : restart);
 	if (resized && m.layoutWidth > 0) { m.fitLayout(); }
-	if (m.settingsApplied && m.applySettings()) { m.refresh(); }
+	m.refresh();
 }
 
 function closeKeyPressed(this m: PaneModel): void {
-	const done = m.controls.closeKey(m.term);
-	if (!done.ok) {
-		m.failed("close key", done.error.toString());
-		return;
-	}
+	m.io.closeKey();
 	m.refresh();
 }
 
@@ -401,19 +408,9 @@ function fitLayout(this m: PaneModel): void {
 		`haro: layout ${m.layoutWidth}x${m.layoutHeight} ratio ${ratio} ` +
 			`cell ${cellPx}x${rowPx} px grid ${cols}x${rows}`
 	);
-	const fitted = m.controls.refit(m.term, cols, rows, cellPx, rowPx);
-	if (!fitted.ok) {
-		if (fitted.error == TermError.PtyOpenFailed) {
-			m.notify("the shell did not start: check command in config.ms, or --shell");
-		} else {
-			m.failed("fit", fitted.error.toString());
-		}
-		return;
-	}
+	m.cols = cols;
+	m.rows = rows;
+	m.io.fit(cols, rows, cellPx, rowPx);
 	m.view.fitRows(rows);
-	if (!m.settingsApplied) {
-		m.settingsApplied = true;
-		if (!m.applySettings()) { return; }
-	}
-	if (fitted.value) { m.refresh(); }
+	m.refresh();
 }

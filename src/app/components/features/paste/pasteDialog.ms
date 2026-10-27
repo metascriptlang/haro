@@ -124,7 +124,8 @@ export function showPending(
 	}
 	d.shownClose = false;
 	if (held !== null) {
-		if (d.shownFor === held) { return; }
+		const shown = d.shownFor;
+		if (shown !== null && shown.text == held.text && shown.warning == held.warning) { return; }
 		const dialog = dialogOf(held.warning, held.text, cols, PREVIEW_ROWS);
 		d.present(dialog, cols, PASTE_CONFIRM, PASTE_CANCEL);
 		d.shownFor = held;

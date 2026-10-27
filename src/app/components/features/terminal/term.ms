@@ -59,6 +59,7 @@ export enum TermError {
 	MouseFailed,
 	VtFailed,
 	ClipboardUnasked,
+	SettingsRefused,
 }
 
 export type OpenPty = (

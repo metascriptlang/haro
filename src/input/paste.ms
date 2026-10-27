@@ -30,7 +30,7 @@ export struct Dialog {
 	code: Vec<Line>;
 }
 
-export interface Held {
+export struct Held {
 	text: string;
 	warning: Warning;
 }

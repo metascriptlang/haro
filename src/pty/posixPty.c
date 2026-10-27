@@ -334,7 +334,13 @@ static int openIn(
 	while ((got = read(failed[0], &err, sizeof err)) < 0 && errno == EINTR) {}
 	close(failed[0]);
 	int stop[2] = { -1, -1 };
-	if (got != 0 || master >= FD_SETSIZE || pipe(stop) != 0) {
+	int stopped = got == 0 && master < FD_SETSIZE && pipe(stop) == 0;
+	if (stopped && stop[0] >= FD_SETSIZE) {
+		close(stop[0]);
+		close(stop[1]);
+		stopped = 0;
+	}
+	if (!stopped) {
 		if (got == 0) kill(pid, SIGKILL);
 		waitpid(pid, NULL, 0);
 		close(master);

@@ -197,6 +197,7 @@ function inkedLine(
 	const created = Vt.create(cols, 2);
 	if (!created.ok) { return null; }
 	const vt = created.value;
+	defer vt.free();
 	vt.writeText(text);
 	const marked = selected === null || vt.selectionSet(selected).ok;
 	const updated = vt.update();
@@ -207,7 +208,6 @@ function inkedLine(
 		const line = rows.value[0].line(cursorCell, cursorInk, SWAP, colors.value.bg);
 		if (line.ok) { found = line.value; }
 	}
-	vt.free();
 	return found;
 }
 
@@ -331,6 +331,7 @@ test "an inverse cell swaps its run's colours" {
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
+		defer vt.free();
 		vt.writeText("\x1b[7mx\x1b[0my");
 		assert vt.update().ok;
 		const colors = vt.palette();
@@ -345,7 +346,6 @@ test "an inverse cell swaps its run's colours" {
 				assert line.value.runs[1].fg == colors.value.fg;
 			}
 		}
-		vt.free();
 	}
 }
 
@@ -364,6 +364,7 @@ test "a trailing blank that shows a background, an underline or a strikethrough 
 	assert created.ok;
 	if (created.ok) {
 		const vt = created.value;
+		defer vt.free();
 		vt.writeText("a   \r\nb\x1b[41m \x1b[0m\r\nc\x1b[4m \x1b[0m\r\nd\x1b[9m \x1b[0m");
 		assert vt.update().ok;
 		const colors = vt.palette();
@@ -378,7 +379,6 @@ test "a trailing blank that shows a background, an underline or a strikethrough 
 			}
 			assert texts.join("|") == "a|b |c |d ";
 		}
-		vt.free();
 	}
 }
 
@@ -408,7 +408,7 @@ test "a lit block cursor draws its cell in the cursor colour, its text in the ce
 	if (line !== null) {
 		assert line.runs.length == 3;
 		assert line.runs[1].units == 1;
-		assert line.runs[1].bg == RED;
+		assert line.runs[1].bg == red;
 		assert line.runs[1].fg == line.runs[0].bg;
 		assert line.runs[2].bg == line.runs[0].bg;
 		assert line.cursorInk !== null;
@@ -420,7 +420,7 @@ test "a lit cursor past the end of the text still draws its cell, and an unlit o
 	assert lit !== null;
 	if (lit !== null) {
 		assert lit.text == "ab   ";
-		assert lit.runs[lit.runs.length - 1].bg == RED;
+		assert lit.runs[lit.runs.length - 1].bg == red;
 		assert lit.runs[lit.runs.length - 1].units == 1;
 	}
 	const unlit = firstLine("ab", 10, 4);
@@ -434,7 +434,7 @@ test "a lit cursor on either cell of a wide character inks the whole character" 
 		assert line !== null;
 		if (line !== null) {
 			assert line.runs[0].units == 1;
-			assert line.runs[0].bg == RED;
+			assert line.runs[0].bg == red;
 			assert line.runs[1].bg != RED;
 			assert line.widths.join("") == "2001";
 		}
@@ -482,7 +482,7 @@ test "the cursor's ink wins over the selection on its cell" {
 	assert line !== null;
 	if (line !== null) {
 		assert line.runs.length == 3;
-		assert line.runs[1].bg == RED;
+		assert line.runs[1].bg == red;
 		assert line.runs[0].bg == line.runs[2].bg && line.runs[0].bg != RED;
 	}
 }

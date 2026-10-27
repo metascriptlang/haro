@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/resource.h>
 #include <sys/select.h>
 #include <sys/wait.h>
 #include <termios.h>
@@ -25,6 +26,7 @@
 #define CLOSE_GRACE_MS 1000
 #define EXIT_QUIET_MS 50
 #define EXIT_DRAIN_MS 1000
+#define CHILD_FD_SCAN_MAX 65536
 
 typedef struct {
 	int used;
@@ -269,12 +271,15 @@ static char** childEnv(const char* cwd, const char* langEntry, char** pwd) {
 	return env;
 }
 
-static void execChild(char** argv, char** env, const char* cwd, int failed) {
+static void execChild(char** argv, char** env, const char* cwd, int failed, int fdLimit) {
 	sigset_t none;
 	sigemptyset(&none);
 	sigprocmask(SIG_SETMASK, &none, NULL);
 	int inherited[] = { SIGPIPE, SIGINT, SIGQUIT, SIGTERM, SIGHUP, SIGCHLD };
 	for (size_t i = 0; i < COUNT(inherited); i++) signal(inherited[i], SIG_DFL);
+	for (int fd = STDERR_FILENO + 1; fd < fdLimit; fd++) {
+		if (fd != failed) close(fd);
+	}
 	if (cwd[0] != '\0' && chdir(cwd) != 0) {
 		size_t last = 0;
 		while (env[last] != NULL) last++;
@@ -318,8 +323,12 @@ static int openIn(
 
 	struct winsize size = winsizeOf(cols, rows, widthPx, heightPx);
 	int master = -1;
+	struct rlimit files;
+	int fdLimit = getrlimit(RLIMIT_NOFILE, &files) == 0 && files.rlim_cur < CHILD_FD_SCAN_MAX
+		? (int)files.rlim_cur : CHILD_FD_SCAN_MAX;
 	pid_t pid = forkpty(&master, NULL, NULL, &size);
-	if (pid == 0) execChild(words.we_wordv, env, cwd, failed[1]);
+	if (pid == 0) execChild(words.we_wordv, env, cwd, failed[1], fdLimit);
+	if (pid > 0) closeOnExec(master);
 	free(env);
 	free(pwd);
 	wordfree(&words);
@@ -346,7 +355,6 @@ static int openIn(
 		close(master);
 		return -1;
 	}
-	closeOnExec(master);
 	closeOnExec(stop[0]);
 	closeOnExec(stop[1]);
 

@@ -1,3 +1,5 @@
+import { KeyMod, NO_MODS, modSet, modsMask } from "../keys/keys";
+
 export enum Action {
 	None,
 	Copy,
@@ -12,17 +14,14 @@ export enum Action {
 	PromptDown,
 }
 
-export const SHIFT: int32 = 1;
-export const CTRL: int32 = 2;
-export const ALT: int32 = 4;
-export const SUPER: int32 = 8;
-const CHORD: int32 = SHIFT | CTRL | ALT | SUPER;
-const CAPS_LOCK: int32 = 16;
-export const NUM_LOCK: int32 = 32;
-const SHIFT_RIGHT: int32 = 64;
+const SHIFT = modSet(KeyMod.Shift);
+const CTRL = modSet(KeyMod.Ctrl);
+const ALT = modSet(KeyMod.Alt);
+const SUPER = modSet(KeyMod.Super);
+const CHORD = SHIFT | CTRL | ALT | SUPER;
 
-export function chordOf(mods: number): int32 {
-	return (mods as int32) & CHORD;
+export function chordOf(mods: BitSet<KeyMod>): BitSet<KeyMod> {
+	return mods.intersection(CHORD);
 }
 
 export enum Screen {
@@ -33,23 +32,23 @@ export enum Screen {
 
 struct Binding {
 	code: string;
-	mods: int32;
+	mods: BitSet<KeyMod>;
 	action: Action;
 	screen: Screen;
 }
 
 when (macos) {
-	export const CLIPBOARD_MODS: int32 = SUPER;
+	export const CLIPBOARD_MODS: BitSet<KeyMod> = SUPER;
 	const OS_CHORDS: Vec<Binding> = [];
 } else when (windows) {
-	export const CLIPBOARD_MODS: int32 = CTRL | SHIFT;
+	export const CLIPBOARD_MODS: BitSet<KeyMod> = CTRL | SHIFT;
 	const OS_CHORDS: Vec<Binding> = [
 		{ code: "Insert", mods: CTRL, action: Action.Copy, screen: Screen.Any },
 		{ code: "Insert", mods: SHIFT, action: Action.Paste, screen: Screen.Any },
-		{ code: "Enter", mods: 0, action: Action.Copy, screen: Screen.Any },
+		{ code: "Enter", mods: NO_MODS, action: Action.Copy, screen: Screen.Any },
 	];
 } else {
-	export const CLIPBOARD_MODS: int32 = CTRL | SHIFT;
+	export const CLIPBOARD_MODS: BitSet<KeyMod> = CTRL | SHIFT;
 	const OS_CHORDS: Vec<Binding> = [
 		{ code: "Insert", mods: CTRL, action: Action.Copy, screen: Screen.Any },
 		{ code: "Insert", mods: SHIFT, action: Action.Paste, screen: Screen.Any },
@@ -78,19 +77,20 @@ export enum BindAction {
 
 export struct Keybind {
 	code: string;
-	mods: int32;
+	// modsMask of the chord; BitSet<KeyMod> once the compiler accepts a BitSet inside an actor argument (card: a-bitset-or-a-moved-match-union-is-refused-as-an-actor-argument)
+	mods: uint16;
 	text: string;
 	action: BindAction;
 	screen: Screen;
 }
 
-function modOf(name: string): int32 {
+function modOf(name: string): KeyMod | null {
 	return match (name) {
-		"shift" => SHIFT,
-		"ctrl" | "control" => CTRL,
-		"alt" | "opt" | "option" => ALT,
-		"super" | "cmd" | "command" => SUPER,
-		_ => 0,
+		"shift" => KeyMod.Shift,
+		"ctrl" | "control" => KeyMod.Ctrl,
+		"alt" | "opt" | "option" => KeyMod.Alt,
+		"super" | "cmd" | "command" => KeyMod.Super,
+		_ => null,
 	};
 }
 
@@ -131,13 +131,13 @@ export function keybind(
 	action: BindAction,
 	screen: Screen,
 ): Result<Keybind, string> {
-	let mods: int32 = 0;
+	let mods = NO_MODS;
 	let code: string | null = null;
 	for (const part of keys.split("+")) {
 		const mod = modOf(part);
-		if (mod != 0) {
-			if ((mods & mod) != 0) { return Result.err(`"${keys}" names ${part} twice`); }
-			mods |= mod;
+		if (mod !== null) {
+			if (mods.has(mod)) { return Result.err(`"${keys}" names ${part} twice`); }
+			mods = mods.incl(mod);
 			continue;
 		}
 		if (code !== null) { return Result.err(`"${keys}" names more than one key`); }
@@ -147,7 +147,7 @@ export function keybind(
 		}
 	}
 	if (code === null) { return Result.err(`"${keys}" names no key`); }
-	return Result.ok({ code: code, mods: mods, text: text, action: action, screen: screen });
+	return Result.ok({ code: code, mods: modsMask(mods), text: text, action: action, screen: screen });
 }
 
 function appliesOn(screen: Screen, altScreen: boolean): boolean {
@@ -157,10 +157,10 @@ function appliesOn(screen: Screen, altScreen: boolean): boolean {
 export function bindFor(
 	binds: Readonly<Span<Keybind>>,
 	code: string,
-	mods: number,
+	mods: BitSet<KeyMod>,
 	altScreen: boolean,
 ): Keybind | null {
-	const held = chordOf(mods);
+	const held = modsMask(chordOf(mods));
 	for (const b of binds) {
 		if (b.code == code && b.mods == held && appliesOn(b.screen, altScreen)) { return b; }
 	}
@@ -170,7 +170,7 @@ export function bindFor(
 function lookup(
 	table: Readonly<Span<Binding>>,
 	code: string,
-	held: int32,
+	held: BitSet<KeyMod>,
 	altScreen: boolean,
 ): Action {
 	for (const b of table) {
@@ -179,11 +179,15 @@ function lookup(
 	return Action.None;
 }
 
-export function resolve(code: string, mods: number, altScreen: boolean): Action {
+export function resolve(code: string, mods: BitSet<KeyMod>, altScreen: boolean): Action {
 	const held = chordOf(mods);
 	const found = lookup(BINDINGS, code, held, altScreen);
 	return found != Action.None ? found : lookup(OS_CHORDS, code, held, altScreen);
 }
+
+const CAPS_LOCK = modSet(KeyMod.CapsLock);
+const NUM_LOCK = modSet(KeyMod.NumLock);
+const SHIFT_RIGHT = modSet(KeyMod.ShiftRight);
 
 test "copy and paste take cmd on macos, and ctrl shift or the insert pair elsewhere" {
 	assert resolve("KeyC", CLIPBOARD_MODS, false) == Action.Copy;
@@ -215,7 +219,7 @@ test "a chord needs exactly its modifiers" {
 	assert resolve("KeyC", SHIFT | CTRL | ALT, false) == Action.None;
 	assert resolve("KeyV", CTRL, false) == Action.None;
 	assert resolve("Enter", SHIFT, false) == Action.None;
-	assert resolve("ArrowUp", 0, false) == Action.None;
+	assert resolve("ArrowUp", NO_MODS, false) == Action.None;
 	assert resolve("ArrowUp", SHIFT, false) == Action.None;
 }
 
@@ -228,10 +232,10 @@ test "lock and side bits do not change the chord" {
 
 test "enter copies a selection on windows only" {
 	when (windows) {
-		assert resolve("Enter", 0, false) == Action.Copy;
+		assert resolve("Enter", NO_MODS, false) == Action.Copy;
 		assert resolve("Enter", CAPS_LOCK, false) == Action.Copy;
 	} else {
-		assert resolve("Enter", 0, false) == Action.None;
+		assert resolve("Enter", NO_MODS, false) == Action.None;
 	}
 }
 
@@ -251,9 +255,9 @@ test "ctrl alt up and down jump between prompts, ctrl shift up and down scroll b
 }
 
 test "a key with no binding resolves to nothing" {
-	assert resolve("KeyA", 0, false) == Action.None;
-	assert resolve("KeyC", 0, false) == Action.None;
-	assert resolve("", 0, false) == Action.None;
+	assert resolve("KeyA", NO_MODS, false) == Action.None;
+	assert resolve("KeyC", NO_MODS, false) == Action.None;
+	assert resolve("", NO_MODS, false) == Action.None;
 }
 
 function bound(keys: string): string {
@@ -288,10 +292,10 @@ function textOf(b: Keybind | null): string | null {
 
 test "a keybind's text answers exactly its chord, side and lock bits aside" {
 	const binds: Vec<Keybind> = [
-		{ code: "Enter", mods: SHIFT, text: "a", action: BindAction.SendText, screen: Screen.Any },
+		{ code: "Enter", mods: modsMask(SHIFT), text: "a", action: BindAction.SendText, screen: Screen.Any },
 		{
 			code: "KeyH",
-			mods: CTRL | SHIFT,
+			mods: modsMask(CTRL | SHIFT),
 			text: "b",
 			action: BindAction.SendText,
 			screen: Screen.Any,
@@ -299,7 +303,7 @@ test "a keybind's text answers exactly its chord, side and lock bits aside" {
 	];
 	assert textOf(bindFor(binds, "Enter", SHIFT, false)) == "a";
 	assert textOf(bindFor(binds, "Enter", SHIFT | SHIFT_RIGHT | NUM_LOCK, true)) == "a";
-	assert bindFor(binds, "Enter", 0, false) === null;
+	assert bindFor(binds, "Enter", NO_MODS, false) === null;
 	assert bindFor(binds, "Enter", SHIFT | CTRL, false) === null;
 	assert textOf(bindFor(binds, "KeyH", CTRL | SHIFT, false)) == "b";
 }
@@ -308,14 +312,14 @@ test "a keybind for one screen answers only on that screen" {
 	const binds: Vec<Keybind> = [
 		{
 			code: "KeyW",
-			mods: SUPER,
+			mods: modsMask(SUPER),
 			text: "\x1b[119;9u",
 			action: BindAction.SendText,
 			screen: Screen.Alternate,
 		},
 		{
 			code: "KeyW",
-			mods: SUPER,
+			mods: modsMask(SUPER),
 			text: "",
 			action: BindAction.CloseWindow,
 			screen: Screen.Primary,

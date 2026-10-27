@@ -26,6 +26,12 @@ export struct KeyEvent {
 	text: string;
 }
 
+export const NO_MODS = 0 as BitSet<KeyMod>;
+
+export function modSet(mod: KeyMod): BitSet<KeyMod> {
+	return NO_MODS.incl(mod);
+}
+
 const ALT_GR: BitSet<KeyMod> = KeyMod.Ctrl | KeyMod.Alt | KeyMod.CtrlRight | KeyMod.AltRight;
 
 export function withoutAltGr(this e: KeyEvent): KeyEvent {
@@ -118,7 +124,12 @@ export function modsMask(mods: BitSet<KeyMod>): uint16 {
 	return (mods as uint32) as uint16;
 }
 
+const MODS_LIMIT: int32 = 1 << 10;
+
 export function modsOf(mask: number): BitSet<KeyMod> {
+	if (!(mask >= 0 && mask < MODS_LIMIT) || Math.floor(mask) != mask) {
+		throw new Error(`modifier mask ${mask} is not a set of the ${MODS_LIMIT} KeyMod bits`);
+	}
 	return (mask as uint16) as BitSet<KeyMod>;
 }
 
@@ -208,6 +219,15 @@ test "the modifier mask keeps libghostty-vt's bit order" {
 	assert modsMask(none.incl(KeyMod.AltRight)) == 0x100;
 	const wide = none.incl(KeyMod.Ctrl).incl(KeyMod.AltRight);
 	assert modsOf(modsMask(wide)) == wide;
+}
+
+test "a modifier mask outside the KeyMod bits is refused" {
+	for (const bad of [-1, 1024, 65537, 1.5]) {
+		let refused = false;
+		try { modsOf(bad); } catch (e) { refused = true; }
+		assert refused;
+	}
+	assert modsOf(1023).has(KeyMod.SuperRight);
 }
 
 function event(action: KeyAction, key: string, mods: BitSet<KeyMod>): KeyEvent {

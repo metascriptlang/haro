@@ -1,4 +1,5 @@
-import { Action, CLIPBOARD_MODS, CTRL, SHIFT, chordOf, resolve } from "./bindings";
+import { KeyMod, NO_MODS, modSet } from "../keys/keys";
+import { Action, CLIPBOARD_MODS, chordOf, resolve } from "./bindings";
 
 export enum Warning {
 	None,
@@ -51,25 +52,27 @@ export function warningFor(text: string, bracketed: boolean): Warning {
 	return Warning.None;
 }
 
-export function replyToClose(code: string, mods: number): Reply {
+const CTRL_ONLY = modSet(KeyMod.Ctrl);
+
+export function replyToClose(code: string, mods: BitSet<KeyMod>): Reply {
 	const held = chordOf(mods);
 	return match (code) {
-		"Escape" when held == 0 => Reply.Cancel,
-		"Enter" | "NumpadEnter" when held == 0 => Reply.Confirm,
+		"Escape" when held == NO_MODS => Reply.Cancel,
+		"Enter" | "NumpadEnter" when held == NO_MODS => Reply.Confirm,
 		_ => Reply.Ignore,
 	};
 }
 
-export function replyTo(code: string, mods: number): Reply {
+export function replyTo(code: string, mods: BitSet<KeyMod>): Reply {
 	if (resolve(code, mods, false) == Action.Paste) { return Reply.Confirm; }
 	return replyToClose(code, mods);
 }
 
-export function replyToRead(code: string, mods: number): Reply {
+export function replyToRead(code: string, mods: BitSet<KeyMod>): Reply {
 	const held = chordOf(mods);
 	return match (code) {
-		"Escape" | "Enter" | "NumpadEnter" when held == 0 => Reply.Cancel,
-		"Enter" | "NumpadEnter" when held == CTRL => Reply.Confirm,
+		"Escape" | "Enter" | "NumpadEnter" when held == NO_MODS => Reply.Cancel,
+		"Enter" | "NumpadEnter" when held == CTRL_ONLY => Reply.Confirm,
 		_ => Reply.Ignore,
 	};
 }
@@ -214,17 +217,20 @@ test "more than five KiB is a warning in either mode and exactly five is not" {
 	assert warningFor(big + "\n", false) == Warning.MultiLine;
 }
 
+const CTRL = modSet(KeyMod.Ctrl);
+const SHIFT = modSet(KeyMod.Shift);
+
 test "enter and the paste chords confirm, escape cancels and everything else is ignored" {
-	assert replyTo("Enter", 0) == Reply.Confirm;
-	assert replyTo("NumpadEnter", 0) == Reply.Confirm;
+	assert replyTo("Enter", NO_MODS) == Reply.Confirm;
+	assert replyTo("NumpadEnter", NO_MODS) == Reply.Confirm;
 	assert replyTo("KeyV", CLIPBOARD_MODS) == Reply.Confirm;
 	when (!macos) {
 		assert replyTo("Insert", SHIFT) == Reply.Confirm;
 	}
-	assert replyTo("Escape", 0) == Reply.Cancel;
+	assert replyTo("Escape", NO_MODS) == Reply.Cancel;
 	assert replyTo("Enter", SHIFT) == Reply.Ignore;
 	assert replyTo("Escape", CTRL) == Reply.Ignore;
-	assert replyTo("KeyV", 0) == Reply.Ignore;
+	assert replyTo("KeyV", NO_MODS) == Reply.Ignore;
 	assert replyTo("KeyC", CLIPBOARD_MODS) == Reply.Ignore;
 	assert replyTo("ShiftLeft", SHIFT) == Reply.Ignore;
 }
@@ -282,22 +288,22 @@ test "a trailing line break previews and counts a last empty line" {
 }
 
 test "a clipboard read is denied by escape or enter and allowed only by ctrl enter" {
-	assert replyToRead("Escape", 0) == Reply.Cancel;
-	assert replyToRead("Enter", 0) == Reply.Cancel;
-	assert replyToRead("NumpadEnter", 0) == Reply.Cancel;
+	assert replyToRead("Escape", NO_MODS) == Reply.Cancel;
+	assert replyToRead("Enter", NO_MODS) == Reply.Cancel;
+	assert replyToRead("NumpadEnter", NO_MODS) == Reply.Cancel;
 	assert replyToRead("Enter", CTRL) == Reply.Confirm;
 	assert replyToRead("Enter", CTRL | SHIFT) == Reply.Ignore;
 	assert replyToRead("KeyV", CLIPBOARD_MODS) == Reply.Ignore;
-	assert replyToRead("KeyY", 0) == Reply.Ignore;
+	assert replyToRead("KeyY", NO_MODS) == Reply.Ignore;
 }
 
 test "a close is confirmed by enter alone and cancelled by escape alone" {
-	assert replyToClose("Enter", 0) == Reply.Confirm;
-	assert replyToClose("NumpadEnter", 0) == Reply.Confirm;
-	assert replyToClose("Escape", 0) == Reply.Cancel;
+	assert replyToClose("Enter", NO_MODS) == Reply.Confirm;
+	assert replyToClose("NumpadEnter", NO_MODS) == Reply.Confirm;
+	assert replyToClose("Escape", NO_MODS) == Reply.Cancel;
 	assert replyToClose("KeyV", CLIPBOARD_MODS) == Reply.Ignore;
 	assert replyToClose("Enter", SHIFT) == Reply.Ignore;
-	assert replyToClose("KeyW", 0) == Reply.Ignore;
+	assert replyToClose("KeyW", NO_MODS) == Reply.Ignore;
 }
 
 test "the close dialog says a program runs and asks to end it, with nothing to preview" {

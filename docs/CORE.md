@@ -1,7 +1,7 @@
 # Haro core — what the code does not say
 
-The headless core is `src/pty` (ConPTY on Windows, `forkpty` on POSIX), `src/vt` (libghostty-vt)
-and `src/session` (the two joined). Types, signatures and the API are in those files; this page
+The headless core is `src/pty` (ConPTY on Windows, `forkpty` on POSIX), `src/vt` (libghostty-vt),
+`src/session` (the two joined) and `src/controller` (what a window drives them with). Types, signatures and the API are in those files; this page
 holds what they cannot say: measured numbers, platform behaviour found by probing, and paths that
 were rejected.
 
@@ -10,11 +10,14 @@ were rejected.
 - Pinned as the submodule `vendor/ghostty` (`git submodule status`), built by
   `scripts/buildVt.sh` with Zig 0.16 into `ghostty-vt-static.lib`, linked with `GHOSTTY_STATIC`.
   Moving the pin is its own commit, with the build and the gate re-run: upstream marks the C API
-  unstable.
+  unstable. The web build takes the same pin through `scripts/buildVtWasm.sh`, which applies
+  `patches/ghostty-wasm-embedder.patch` (wasm32 takes its memory from the embedder) and builds
+  for `wasm32-freestanding`.
 - Getters that write through `void* out` are bound as typed externs in `src/vt/vtNative.ms`
-  (`stateU16`, `cellColor`, `cellStyle`…) rather than called through the header import. Through
-  the import a `void*` out takes any variable, so a `uint32` handed to a key that writes a
-  `uint16` compiles and corrupts memory. The typed extern pins each key to its type. A getter that
+  (`terminalGet`, `stateGet`, `cellsGet`, `rowGet`) rather than called through the header import.
+  Through the import a `void*` out takes any variable, so a `uint32` handed to a key that writes a
+  `uint16` compiles and corrupts memory. The typed extern gives the out the type of the variable
+  passed. A getter that
   writes a handle has to be an extern anyway: since msc `1718d72c` the import refuses a handle out.
 - `write_pty` and every other effect run synchronously inside `vt_write` and must neither block
   nor re-enter the terminal (`terminal.h`, "Effects"). So `src/vt/effects.c` only queues the
@@ -93,7 +96,7 @@ a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree
 - conhost may send `ESC[1C` for a space inside a line (`line ESC[1C3971`) and puts its exit-time
   mode resets between CR and LF. Under 90 % machine load a check that took LF as the end of each
   line stopped at line 23, the first scroll of an 80x24 screen, with every byte present (two gate
-  runs, 2026-10-19). So the flood test in `src/pty/pty.ms` reads each number between `L` and `.`
+  runs, 2026-10-19). So the flood check in `src/pty/ptyTest.ms` reads each number between `L` and `.`
   and skips CSI, wherever conhost ends the line.
 
 - conhost answers a cursor position query (`ESC[6n`) and DA1 (`ESC[c`) itself: a child's query
@@ -136,7 +139,7 @@ a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree
 - The prompt and command output appear with no window event: the ConPTY reader calls
   `ionWakeLoop()` (`src/pty/conpty.c` `ptySetWake`) and `onWake` pumps and applies the frame plan.
 - 200 lines (`1..200 | % { "line $_" }`) leave rows `line 168` … `line 200` and the prompt in
-  order: the scroll path (`remove` of the top slots, `push` of the new rows) is correct.
+  order: the scroll path is correct.
 - Idle: frame counts did not move over 2 s (`requested=4 drawn=5` before and after), and the
   process used 0–15.6 ms of CPU over 3 s.
 - Keys (`WM_KEYDOWN`/`WM_CHAR` posted to the window), committed text (`ệ`), Up-arrow history

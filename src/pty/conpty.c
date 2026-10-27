@@ -147,11 +147,11 @@ static void closeConsole(Pty* p) {
 
 static DWORD WINAPI waitLoop(LPVOID arg) {
 	Pty* p = arg;
-	WaitForSingleObject(p->process, INFINITE);
 	DWORD code = 0;
-	GetExitCodeProcess(p->process, &code);
+	int known = WaitForSingleObject(p->process, INFINITE) == WAIT_OBJECT_0
+		&& GetExitCodeProcess(p->process, &code);
 	EnterCriticalSection(&p->lock);
-	p->exitCode = (int)code;
+	p->exitCode = known ? (int)code : -1;
 	p->exited = 1;
 	LeaveCriticalSection(&p->lock);
 	closeConsole(p);

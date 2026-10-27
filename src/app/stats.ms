@@ -66,7 +66,7 @@ export function noteKey(this s: Stats, at: float64): void {
 
 export function noteWake(this s: Stats, at: float64): void {
 	s.mark("output", Date.now());
-	if (s.keyAt >= 0) { s.wakeAt = at; }
+	s.wakeAt = at;
 }
 
 export function noteApplied(
@@ -82,7 +82,7 @@ export function noteApplied(
 	if (chars > 0) { s.mark("painted", Date.now()); }
 	if (rows > 0 && s.keyAt >= 0) {
 		s.tally.echoes.push(at - s.keyAt);
-		if (s.wakeAt >= 0) { s.tally.settles.push(at - s.wakeAt); }
+		if (s.wakeAt >= s.keyAt) { s.tally.settles.push(at - s.wakeAt); }
 		s.keyAt = -1;
 		s.wakeAt = -1;
 	}
@@ -126,6 +126,19 @@ test "a key's echo runs to the first apply with rows, its settle from the last w
 		"echo n=1 p50=5.5 max=5.5 settle n=1 p50=0.5 max=0.5";
 	s.reset();
 	assert s.line() == "refreshes=0 more=0 held=0 rows=0 scrolled=0 chars=0 echo n=0 settle n=0";
+}
+
+test "a key noted after the wake that carried its echo still settles from that wake" {
+	const s = Stats.empty();
+	s.recording = true;
+	s.noteWake(17);
+	s.noteWake(20);
+	s.noteKey(18);
+	s.noteApplied(1, 0, 80, 21);
+	s.noteKey(30);
+	s.noteApplied(1, 0, 80, 32);
+	assert s.line() == "refreshes=0 more=0 held=0 rows=2 scrolled=0 chars=160 " +
+		"echo n=2 p50=3 max=3 settle n=1 p50=1 max=1";
 }
 
 test "each launch mark keeps its first time, and the launch ends at the first painted rows" {

@@ -1,6 +1,7 @@
 import { argv } from "std/process";
 import { createList } from "../../neon/src/core/list";
 import { RowSlot, Styles, applyFrame, empty, spansOf } from "../src/app/frame";
+import { SELECTION, Shown, fitShown } from "../src/app/rows";
 import { GridLine, cellOnRow, line } from "../src/grid/lines";
 import { plan } from "../src/screen/plan";
 import { Cursor, Vt, palette } from "../src/vt/vt";
@@ -76,7 +77,7 @@ function stageName(stage: Stage): string {
 function blankSlots(rows: int32): RowSlot[] {
 	const slots: RowSlot[] = [];
 	for (let i = 0; i < rows; i++) {
-		slots.push({ line: { text: "", runs: [], cursorCell: -1 }, spans: [] });
+		slots.push(RowSlot.blank());
 	}
 	return slots;
 }
@@ -95,7 +96,7 @@ function framePass(
 	const cursor: Cursor | null = cursorRead.value;
 	let built: Vec<GridLine> = [];
 	for (const y of planned.value.ys) {
-		const l = vt.painted.rows[y].line(cursor.cellOnRow(y), colors.value.bg);
+		const l = vt.painted.rows[y].line(cursor.cellOnRow(y), null, SELECTION, colors.value.bg);
 		if (l.ok) { built.push(l.value); } else { totals.lineErrors += 1; }
 	}
 	const spansStart: float64 = performance.now();
@@ -122,6 +123,8 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 	if (stage != Stage.Write && !vt.plan().ok) { return Result.err(BenchError.Plan); }
 	const styles = Styles.empty();
 	const grid = createList<RowSlot>(blankSlots(w.rows));
+	let shown: Vec<Shown> = [];
+	fitShown(shown, w.rows);
 	let totals = Totals.zero();
 	const size = payload.length as int32;
 	let at = 0;
@@ -146,7 +149,7 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 		if (stage == Stage.Write) { continue; }
 		totals.frames += 1;
 		if (stage == Stage.Apply) {
-			const applied = applyFrame(grid, styles, vt);
+			const applied = applyFrame(grid, styles, shown, vt, null);
 			totals.apply += performance.now() - writeEnd;
 			if (!applied.ok) { totals.lineErrors += 1; }
 		} else {

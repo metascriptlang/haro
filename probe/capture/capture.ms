@@ -2,8 +2,8 @@ import { argv } from "std/process";
 import { NativePty } from "../../src/pty/pty";
 import { Cell, CellFlag, Underline, Vt, palette } from "../../src/vt/vt";
 import { line } from "../../src/grid/lines";
-import { spansOf } from "../../src/app/frame";
-import { Style } from "../../../neon/src/render/style";
+import { Styles, empty, spansOf } from "../../src/app/frame";
+import { SELECTION } from "../../src/app/rows";
 
 function cellMark(c: Cell): string {
 	if (c.underline != Underline.None) { return "u"; }
@@ -54,9 +54,9 @@ if (opened.ok) {
 		}
 		const colors = vt.palette();
 		if (colors.ok && rows.ok) {
-			const styles = new Map<string, Style>();
+			const styles = Styles.empty();
 			for (let y = 0; y < 3; y++) {
-				const l = rows.value[y].line(-1, colors.value.bg);
+				const l = rows.value[y].line(-1, null, SELECTION, colors.value.bg);
 				if (l.ok) {
 					for (const sp of spansOf(styles, l.value, colors.value.bg)) {
 						const st = sp.style;

@@ -124,8 +124,7 @@ export function pasteBytes(
 	const bracketed = mode.value;
 	const unsafe = bracketed ? text.includes(PASTE_END) : !pasteSafe(text.asBytes());
 	if (unsafe && !allowUnsafe) { return Result.err(PasteError.Unsafe); }
-	let data: Vec<uint8> = [];
-	for (const b of text.asBytes()) { data.push(b); }
+	let data: Vec<uint8> = [...text.asBytes()];
 	let out: Vec<uint8> = new Array(data.length + 16);
 	let written: uint64 = 0;
 	if (!ok(pasteEncode(data, bracketed, out, written))) {

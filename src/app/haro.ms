@@ -10,9 +10,6 @@ import { listen, notify, onWake, openExternal } from "../../../ion/src/index";
 import { argv, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
 import { homeDir } from "std/os";
-import { Pty, PtyError } from "../pty/transport";
-import { NativePty } from "../pty/pty";
-import { Replay } from "../pty/replay";
 import { App } from "./app";
 import { Pace } from "./pace";
 import { stats, mark, noteWake } from "./stats";
@@ -23,8 +20,8 @@ import { OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
 import { ConfigWatch, forFile, readConfig, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
-import { exitCodeText, openTerm } from "./components/features/terminal/term";
-import { Io, open, shutdown } from "./components/features/terminal/io";
+import { exitCodeText } from "./components/features/terminal/term";
+import { Shell, closeThen, closed, opened, portOf } from "./components/features/terminal/shell";
 import { View, open } from "./frame";
 import { AppHost } from "./components/features/terminal/paneModel";
 
@@ -138,7 +135,11 @@ function inFrame(run: () => void): void {
 	});
 }
 
-function openWindow(io: Io, view: View, exited: (code: int32) => void): int32 {
+function quitWith(shell: Shell): () => void {
+	return (): void => { const _closing = closeThen(shell, (): void => { exit(0); }); };
+}
+
+async function openWindow(shell: Shell, view: View, exited: (code: int32) => void): Promise<int32> {
 	registerFallbacks();
 	const families = familyList(config.loaded.faces);
 	const host: AppHost = {
@@ -159,8 +160,7 @@ function openWindow(io: Io, view: View, exited: (code: int32) => void): int32 {
 		openLink: (uri: string): void => { openExternal(uri); },
 		close: (): void => {
 			note("Close Window or a keybind closed the window");
-			io.shutdown();
-			exit(0);
+			quitWith(shell)();
 		},
 		onCloseKey: (handler: () => void): void => {
 			listen((name: string, id: string): void => {
@@ -189,67 +189,54 @@ function openWindow(io: Io, view: View, exited: (code: int32) => void): int32 {
 		font: families[0],
 		fontFamily: families.join(", "),
 	};
-	const code = runWindow(opts, (): NeonNode => App(io, view, host, config.loaded.config));
+	const code = runWindow(opts, (): NeonNode => App(portOf(shell), view, host, config.loaded.config));
 	note("the window closed");
-	io.shutdown();
+	await closed(shell);
 	return code;
 }
 
-function runShell(shell: string): int32 {
+async function started(shell: Shell): Promise<boolean> {
+	const refused = await opened(shell);
+	if (refused !== null) { fail(`open: ${refused.toString()}`); }
+	return refused === null;
+}
+
+async function runShell(command: string): Promise<int32> {
 	const cwd = config.loaded.config.startDirectory(probableCli(), homeDir());
-	const opened = openTerm((
-		cols: int32,
-		rows: int32,
-		cellWidth: int32,
-		cellHeight: int32,
-	): Result<Pty, PtyError> => {
-		return NativePty.spawn(shell, cols, rows, cwd, cellWidth, cellHeight);
-	});
-	if (!opened.ok) {
-		fail(`open: ${opened.error.toString()}`);
-		return 1;
-	}
-	const io = Io.open(opened.value);
+	const shell = new Shell({ command: command, cwd: cwd, recording: null });
+	if (!(await started(shell))) { return 1; }
 	const view = View.open();
 	appWireWake();
-	if (hasFlag("--smoke")) { smoke(io, view); }
-	if (hasFlag("--flood")) { smokeFlood(io, view, pace); }
-	return openWindow(io, view, (code: int32): void => {
+	if (hasFlag("--smoke")) { smoke(portOf(shell), view, quitWith(shell)); }
+	if (hasFlag("--flood")) { smokeFlood(portOf(shell), view, pace, quitWith(shell)); }
+	return await openWindow(shell, view, (code: int32): void => {
 		note(`the shell exited with code ${exitCodeText(code)}`);
-		io.shutdown();
-		exit(0);
+		quitWith(shell)();
 	});
 }
 
-function runReplay(path: string): int32 {
+async function runReplay(path: string): Promise<int32> {
 	const recording = readFile(path);
 	if (!recording.ok) {
 		fail(`the recording ${path} did not read`);
 		return 1;
 	}
-	const replay = Replay.ofText(recording.value);
-	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
-		return Result.ok(replay.toPty());
-	});
-	if (!opened.ok) {
-		fail(`open: ${opened.error.toString()}`);
-		return 1;
-	}
-	const io = Io.open(opened.value);
+	const shell = new Shell({ command: "", cwd: null, recording: recording.value });
+	if (!(await started(shell))) { return 1; }
 	const view = View.open();
-	if (hasFlag("--smoke")) { smokeReplay(io, view); }
-	return openWindow(io, view, (code: int32): void => {
+	if (hasFlag("--smoke")) { smokeReplay(portOf(shell), view, quitWith(shell)); }
+	return await openWindow(shell, view, (code: int32): void => {
 		console.log(`haro: the recording ended with code ${exitCodeText(code)}`);
 	});
 }
 
-function main(): int32 {
+async function main(): Promise<int32> {
 	stats.mark("main", Date.now());
 	config.readConfig();
 	stats.mark("config", Date.now());
 	const replayPath = flagValue("--replay");
-	if (replayPath !== null) { return runReplay(replayPath); }
-	return runShell(flagValue("--shell") ?? config.loaded.config.command);
+	if (replayPath !== null) { return await runReplay(replayPath); }
+	return await runShell(flagValue("--shell") ?? config.loaded.config.command);
 }
 
-exit(main());
+exit(await main());

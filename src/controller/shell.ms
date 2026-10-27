@@ -1,7 +1,5 @@
 import { MouseButton } from "./mouseButton";
-import { KeyAction, KeyEvent, modsMask, modsOf } from "../keys/keys";
-import { Spot } from "../input/pointer";
-import { MouseGeometry } from "../vt/vt";
+import { KeyEvent } from "../keys/keys";
 import { CellInk } from "../grid/lines";
 import { NativePty, spawn } from "../pty/pty";
 import { Replay, ofText, toPty } from "../pty/replay";
@@ -57,42 +55,6 @@ function openerOf(spec: PtySpec): OpenPty {
 	};
 }
 
-// The mods cross as masks until msc takes a BitSet as an actor argument:
-// .inbox/compiler/2026-10-27-a-bitset-or-a-moved-match-union-is-refused-as-an-actor-argument.md
-struct SentKey {
-	action: KeyAction;
-	key: string;
-	mods: uint16;
-	consumedMods: uint16;
-	unshifted: uint32;
-	text: string;
-}
-
-struct SentHit {
-	at: Spot;
-	x: float64;
-	y: float64;
-	scale: float64;
-	mods: uint16;
-	cell: MouseGeometry;
-}
-
-function sent(k: KeyEvent): SentKey {
-	return { ...k, mods: modsMask(k.mods), consumedMods: modsMask(k.consumedMods) };
-}
-
-function keyOf(k: SentKey): KeyEvent {
-	return { ...k, mods: modsOf(k.mods), consumedMods: modsOf(k.consumedMods) };
-}
-
-function sentHit(h: Hit): SentHit {
-	return { ...h, mods: modsMask(h.mods) };
-}
-
-function hitOf(h: SentHit): Hit {
-	return { ...h, mods: modsOf(h.mods) };
-}
-
 export actor Shell {
 	private io: Io | null = null;
 	private refused: TermError | null = null;
@@ -112,14 +74,14 @@ export actor Shell {
 		this.io?.fit(cols, rows, cellWidth, cellHeight);
 	}
 	drain(): void { this.io?.drain(); }
-	key(k: SentKey, time: float64): void { this.io?.key(keyOf(k), time); }
-	keyReleased(k: SentKey): void { this.io?.keyReleased(keyOf(k)); }
+	key(k: KeyEvent, time: float64): void { this.io?.key(k, time); }
+	keyReleased(k: KeyEvent): void { this.io?.keyReleased(k); }
 	text(typed: string, time: float64): void { this.io?.text(typed, time); }
 	focus(gained: boolean): void { this.io?.focus(gained); }
-	press(button: MouseButton, h: SentHit, time: float64): void { this.io?.press(button, hitOf(h), time); }
-	move(h: SentHit, pressed: boolean): void { this.io?.move(hitOf(h), pressed); }
-	release(button: MouseButton, h: SentHit): void { this.io?.release(button, hitOf(h)); }
-	wheel(notches: float64, h: SentHit): void { this.io?.wheel(notches, hitOf(h)); }
+	press(button: MouseButton, h: Hit, time: float64): void { this.io?.press(button, h, time); }
+	move(h: Hit, pressed: boolean): void { this.io?.move(h, pressed); }
+	release(button: MouseButton, h: Hit): void { this.io?.release(button, h); }
+	wheel(notches: float64, h: Hit): void { this.io?.wheel(notches, h); }
 	autoscroll(): void { this.io?.autoscroll(); }
 	closeKey(): void { this.io?.closeKey(); }
 	confirmDialog(): void { this.io?.confirmDialog(); }
@@ -178,14 +140,14 @@ export function portOf(shell: Shell): IoPort {
 			shell.fit(cols, rows, cellWidth, cellHeight);
 		},
 		drain: (): void => { shell.drain(); },
-		key: (k: KeyEvent, time: float64): void => { shell.key(sent(k), time); },
-		keyReleased: (k: KeyEvent): void => { shell.keyReleased(sent(k)); },
+		key: (k: KeyEvent, time: float64): void => { shell.key(k, time); },
+		keyReleased: (k: KeyEvent): void => { shell.keyReleased(k); },
 		text: (typed: string, time: float64): void => { shell.text(typed, time); },
 		focus: (gained: boolean): void => { shell.focus(gained); },
-		press: (button: MouseButton, h: Hit, time: float64): void => { shell.press(button, sentHit(h), time); },
-		move: (h: Hit, pressed: boolean): void => { shell.move(sentHit(h), pressed); },
-		release: (button: MouseButton, h: Hit): void => { shell.release(button, sentHit(h)); },
-		wheel: (notches: float64, h: Hit): void => { shell.wheel(notches, sentHit(h)); },
+		press: (button: MouseButton, h: Hit, time: float64): void => { shell.press(button, h, time); },
+		move: (h: Hit, pressed: boolean): void => { shell.move(h, pressed); },
+		release: (button: MouseButton, h: Hit): void => { shell.release(button, h); },
+		wheel: (notches: float64, h: Hit): void => { shell.wheel(notches, h); },
 		autoscroll: (): void => { shell.autoscroll(); },
 		closeKey: (): void => { shell.closeKey(); },
 		confirmDialog: (): void => { shell.confirmDialog(); },

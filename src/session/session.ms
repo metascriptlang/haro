@@ -45,7 +45,7 @@ export function pump(this s: Session, buf: Span<uint8>): Result<boolean, Session
 	}
 	if (r.value > 0) {
 		s.vt.write(buf[0..r.value]);
-		const _replied = try s.sendReplies();
+		try s.sendReplies();
 	}
 	return Result.ok(true);
 }
@@ -53,8 +53,7 @@ export function pump(this s: Session, buf: Span<uint8>): Result<boolean, Session
 export function sendReplies(this s: Session): Result<void, SessionError> {
 	const replies = s.vt.takeReplies();
 	if (replies.length == 0) { return Result.ok(null); }
-	const _sent = try s.send(replies);
-	return Result.ok(null);
+	return s.send(replies);
 }
 
 export function screen(this s: Session): Result<Vec<string>, SessionError> {
@@ -64,10 +63,8 @@ export function screen(this s: Session): Result<Vec<string>, SessionError> {
 	return Result.ok(lines.value);
 }
 
-export function send(this s: Session, data: Readonly<Span<uint8>>): Result<int32, SessionError> {
-	const wrote = s.pty.write(data);
-	if (wrote.ok) { return Result.ok(wrote.value); }
-	if (s.pty.exitCode() !== null) { return Result.ok(0); }
+export function send(this s: Session, data: Readonly<Span<uint8>>): Result<void, SessionError> {
+	if (s.pty.write(data).ok || s.pty.exitCode() !== null) { return Result.ok(null); }
 	return Result.err(SessionError.PtyWriteFailed);
 }
 
@@ -303,12 +300,11 @@ function sentAfterExit(running: boolean): string {
 	const sent = s.send(bytes);
 	const resized = s.resize(12, 4);
 	s.close();
-	const sentText = sent.ok ? `sent ${sent.value}` : "send failed";
-	return `${sentText}, ${resized.ok ? "resized" : "resize failed"}`;
+	return `${sent.ok ? "sent" : "send failed"}, ${resized.ok ? "resized" : "resize failed"}`;
 }
 
 test "input and a resize after the shell exited are dropped, and still fail while it runs" {
-	assert sentAfterExit(false) == "sent 0, resized";
+	assert sentAfterExit(false) == "sent, resized";
 	assert sentAfterExit(true) == "send failed, resize failed";
 }
 

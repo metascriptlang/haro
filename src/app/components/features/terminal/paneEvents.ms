@@ -4,8 +4,8 @@ import { Spot, spotAt } from "../../../../input/pointer";
 import { notchesOf } from "../../../../input/wheel";
 import { KeyAction, KeyEvent, modifierKey, modsOf } from "../../../../keys/keys";
 import { focusCursor } from "../../content/cursor";
-import { buttonOf } from "../../../mouseButton";
-import { Hit } from "./controls";
+import { buttonOf } from "../../../../controller/mouseButton";
+import { Hit } from "../../../../controller/controls";
 import { PaneModel, refresh, scheduleRefresh } from "./paneModel";
 
 export function keyOf(e: NeonEvent): KeyEvent {

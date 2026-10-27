@@ -1,10 +1,10 @@
-import { KeyMod } from "../../../../keys/keys";
-import { Keybind } from "../../../../input/bindings";
-import { Pointer, Spot } from "../../../../input/pointer";
-import { Wheel } from "../../../../input/wheel";
-import { Held } from "../../../../input/paste";
-import { MouseGeometry, Vt } from "../../../../vt/vt";
-import { MouseButton } from "../../../mouseButton";
+import { KeyMod } from "../keys/keys";
+import { Keybind } from "../input/bindings";
+import { Pointer, Spot } from "../input/pointer";
+import { Wheel } from "../input/wheel";
+import { Held } from "../input/paste";
+import { MouseGeometry, Vt } from "../vt/vt";
+import { MouseButton } from "./mouseButton";
 import { Term, TermError, fit } from "./term";
 
 export enum ClipRead {

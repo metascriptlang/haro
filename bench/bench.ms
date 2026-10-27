@@ -1,7 +1,7 @@
 import { argv } from "std/process";
 import { createList } from "../../neon/src/core/list";
 import { RowSlot, Styles, applyFrame, empty, spansOf } from "../src/app/frame";
-import { SELECTION, Shown, fitShown } from "../src/app/rows";
+import { SELECTION, Shown, fitShown } from "../src/controller/rows";
 import { GridLine, cellOnRow, line } from "../src/grid/lines";
 import { plan } from "../src/screen/plan";
 import { Cursor, Vt, palette } from "../src/vt/vt";

@@ -1,12 +1,12 @@
-import { MouseButton } from "../../../mouseButton";
-import { selected } from "../../../../input/pointer";
+import { MouseButton } from "./mouseButton";
+import { selected } from "../input/pointer";
 import { Term } from "./term";
 import { Controls, holding, refit, typed } from "./controls";
 import { Pasted, cancel, clipboardAsked, confirm, normalized, paste } from "./clipboard";
 import { keyDown } from "./keyboard";
 import { pointerDown, roll } from "./mouse";
-import { Warning } from "../../../../input/paste";
-import { CLIPBOARD_MODS, CTRL, SHIFT } from "../../../../input/bindings";
+import { Warning } from "../input/paste";
+import { CLIPBOARD_MODS, CTRL, SHIFT } from "../input/bindings";
 import {
 	Sink,
 	at,

@@ -4,7 +4,7 @@ import { Style } from "../../../neon/src/render/style";
 import { CellInk, GridLine, LineRun } from "../grid/lines";
 import { Marked } from "../select/select";
 import { Cursor, Rgb, Underline, Vt } from "../vt/vt";
-import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "./rows";
+import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "../controller/rows";
 
 export interface RowSlot {
 	line: GridLine;

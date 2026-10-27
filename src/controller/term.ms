@@ -5,11 +5,11 @@ import {
 	heldAfter,
 	releasesOf,
 	withoutAltGr,
-} from "../../../../keys/keys";
-import { Pty, PtyError } from "../../../../pty/transport";
-import { Replay } from "../../../../pty/replay";
-import { Session } from "../../../../session/session";
-import { CellInk } from "../../../../grid/lines";
+} from "../keys/keys";
+import { Pty, PtyError } from "../pty/transport";
+import { Replay } from "../pty/replay";
+import { Session } from "../session/session";
+import { CellInk } from "../grid/lines";
 import {
 	Cursor,
 	CursorLook,
@@ -21,10 +21,10 @@ import {
 	MouseInput,
 	PasteError,
 	Palette,
-} from "../../../../vt/vt";
-import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "../../../rows";
-import { Mark } from "../../../mark";
-import { holdsButton } from "../../../mouseButton";
+} from "../vt/vt";
+import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "./rows";
+import { Mark } from "./mark";
+import { holdsButton } from "./mouseButton";
 
 const BUFFER_BYTES = 65536;
 const DRAIN_LIMIT = 16;

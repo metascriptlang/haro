@@ -3,7 +3,7 @@ import { Void } from "../../../neon/src/components/primitives";
 import { Config } from "../config/config";
 import { Notice, createNotice } from "./components/features/notice/notice";
 import { PasteDialog, createPasteDialog } from "./components/features/paste/pasteDialog";
-import { IoPort } from "./components/features/terminal/io";
+import { IoPort } from "../controller/io";
 import { View } from "./frame";
 import { Stats } from "./stats";
 import { AppHost, connectHost, createPane } from "./components/features/terminal/paneModel";

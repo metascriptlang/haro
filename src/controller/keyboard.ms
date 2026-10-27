@@ -1,7 +1,7 @@
-import { KeyEvent, KeyMod, modsMask } from "../../../../keys/keys";
-import { Action, BindAction, Keybind, bindFor, resolve } from "../../../../input/bindings";
-import { ROWS_PER_NOTCH } from "../../../../input/wheel";
-import { Reply, replyToClose } from "../../../../input/paste";
+import { KeyEvent, KeyMod, modsMask } from "../keys/keys";
+import { Action, BindAction, Keybind, bindFor, resolve } from "../input/bindings";
+import { ROWS_PER_NOTCH } from "../input/wheel";
+import { Reply, replyToClose } from "../input/paste";
 import {
 	PromptJump,
 	alternateScreen,
@@ -10,7 +10,7 @@ import {
 	scrollLines,
 	scrollPages,
 	scrollTop,
-} from "../../../../vt/vt";
+} from "../vt/vt";
 import { Term, TermError, busy, cooked } from "./term";
 import { Controls, holding, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";

@@ -1,9 +1,9 @@
-import { KeyMod } from "../../../../keys/keys";
-import { autoscrollOf, claimsMouse } from "../../../../input/pointer";
-import { WheelRoute, route } from "../../../../input/wheel";
-import { openable, refusalText } from "../../../../term/link";
-import { MouseAction, MouseInput, Vt } from "../../../../vt/vt";
-import { MouseButton } from "../../../mouseButton";
+import { KeyMod } from "../keys/keys";
+import { autoscrollOf, claimsMouse } from "../input/pointer";
+import { WheelRoute, route } from "../input/wheel";
+import { openable, refusalText } from "../term/link";
+import { MouseAction, MouseInput, Vt } from "../vt/vt";
+import { MouseButton } from "./mouseButton";
 import { Term, TermError, tapKey } from "./term";
 import { Controls, Hit, holding, vtOf } from "./controls";
 import { copySelection, pasteFrom } from "./clipboard";

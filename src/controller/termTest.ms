@@ -1,8 +1,8 @@
-import { KeyMod } from "../../../../keys/keys";
-import { MouseAction, MouseGeometry, MouseInput } from "../../../../vt/vt";
-import { View, fitRows, open, paint, text } from "../../../frame";
-import { Pty, PtyError } from "../../../../pty/transport";
-import { Replay } from "../../../../pty/replay";
+import { KeyMod } from "../keys/keys";
+import { MouseAction, MouseGeometry, MouseInput } from "../vt/vt";
+import { View, fitRows, open, paint, text } from "../app/frame";
+import { Pty, PtyError } from "../pty/transport";
+import { Replay } from "../pty/replay";
 import { Term, openTerm } from "./term";
 import { Sink, onFresh, onTerm } from "./terminalRig";
 

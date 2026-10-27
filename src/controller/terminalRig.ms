@@ -1,9 +1,9 @@
-import { MouseButton } from "../../../mouseButton";
-import { KeyAction, KeyEvent, modsOf } from "../../../../keys/keys";
-import { Spot } from "../../../../input/pointer";
-import { Pty, PtyError } from "../../../../pty/transport";
-import { Replay } from "../../../../pty/replay";
-import { atBottom, scrollOffset } from "../../../../vt/vt";
+import { MouseButton } from "./mouseButton";
+import { KeyAction, KeyEvent, modsOf } from "../keys/keys";
+import { Spot } from "../input/pointer";
+import { Pty, PtyError } from "../pty/transport";
+import { Replay } from "../pty/replay";
+import { atBottom, scrollOffset } from "../vt/vt";
 import { Term, TermError, openTerm } from "./term";
 import { Controls, Hit, takeAsks } from "./controls";
 import { clipboardText } from "./clipboard";

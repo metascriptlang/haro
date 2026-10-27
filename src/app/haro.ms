@@ -20,8 +20,8 @@ import { OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
 import { ConfigWatch, forFile, readConfig, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
-import { exitCodeText } from "./components/features/terminal/term";
-import { Shell, closeThen, closed, opened, portOf } from "./components/features/terminal/shell";
+import { exitCodeText } from "../controller/term";
+import { Shell, closeThen, closed, opened, portOf } from "../controller/shell";
 import { View, open } from "./frame";
 import {
 	AppHost,

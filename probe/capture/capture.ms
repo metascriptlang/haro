@@ -3,7 +3,7 @@ import { NativePty } from "../../src/pty/pty";
 import { Cell, CellFlag, Underline, Vt, palette } from "../../src/vt/vt";
 import { line } from "../../src/grid/lines";
 import { Styles, empty, spansOf } from "../../src/app/frame";
-import { SELECTION } from "../../src/app/rows";
+import { SELECTION } from "../../src/controller/rows";
 
 function cellMark(c: Cell): string {
 	if (c.underline != Underline.None) { return "u"; }

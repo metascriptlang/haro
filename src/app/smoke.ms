@@ -1,6 +1,6 @@
 import { frameCounts } from "../../../neon/src/platform/ion/window";
 import { Pace } from "./pace";
-import { IoPort } from "./components/features/terminal/io";
+import { IoPort } from "../controller/io";
 import { View, text } from "./frame";
 
 

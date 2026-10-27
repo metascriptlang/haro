@@ -9,11 +9,11 @@ import { createPasteDialog } from "../paste/pasteDialog";
 import { Stats, empty } from "../../../stats";
 import { Desktop, PaneModel, Report, Timing, createPane, failed, refresh } from "./paneModel";
 import { cancelDialog, confirmDialog } from "./paneEvents";
-import { Io, Where, open, port } from "./io";
-import { Term, TermError, openTerm, shutdown } from "./term";
+import { Io, Where, open, port } from "../../../../controller/io";
+import { Term, TermError, openTerm, shutdown } from "../../../../controller/term";
 import { View, fitRows, open, text } from "../../../frame";
-import { holding } from "./controls";
-import { Sink, onFresh, onTerm } from "./terminalRig";
+import { holding } from "../../../../controller/controls";
+import { Sink, onFresh, onTerm } from "../../../../controller/terminalRig";
 
 interface Calls {
 	fatal: string;

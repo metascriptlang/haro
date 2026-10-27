@@ -1,8 +1,8 @@
-import { MouseButton } from "../../../mouseButton";
-import { KeyEvent, KeyMod } from "../../../../keys/keys";
-import { selected } from "../../../../input/pointer";
-import { View, fitRows, open, paint } from "../../../frame";
-import { bounds } from "../../../../select/select";
+import { MouseButton } from "./mouseButton";
+import { KeyEvent, KeyMod } from "../keys/keys";
+import { selected } from "../input/pointer";
+import { View, fitRows, open, paint } from "../app/frame";
+import { bounds } from "../select/select";
 import { Term, pumpFrame, releaseHeldKey, sendKey } from "./term";
 import { Controls, Hit } from "./controls";
 import { keyDown } from "./keyboard";
@@ -17,7 +17,7 @@ import {
 	roll,
 	syncSelection,
 } from "./mouse";
-import { CLIPBOARD_MODS, CTRL, SHIFT } from "../../../../input/bindings";
+import { CLIPBOARD_MODS, CTRL, SHIFT } from "../input/bindings";
 import {
 	Sink,
 	at,

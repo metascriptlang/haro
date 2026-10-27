@@ -13,7 +13,7 @@ import { CellInk } from "../../../../grid/lines";
 import { MouseGeometry } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
 import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
-import { FrameRows } from "../../../rows";
+import { FrameRows } from "../../../../controller/rows";
 import { Stats, mark, noteApplied, noteKey } from "../../../stats";
 import { CellMetrics } from "../../ui/cellText";
 import {
@@ -26,9 +26,9 @@ import {
 import { PreeditModel, createPreedit } from "../../content/preedit";
 import { NoticeModel, noticeCols, showNotice } from "../notice/notice";
 import { PasteDialogModel, invalidate, showPending } from "../paste/pasteDialog";
-import { Asks } from "./controls";
-import { Exit, Failure, IoFrame, IoPort, Where, label, settingsOf } from "./io";
-import { TermError, exitCodeText } from "./term";
+import { Asks } from "../../../../controller/controls";
+import { Exit, Failure, IoFrame, IoPort, Where, label, settingsOf } from "../../../../controller/io";
+import { TermError, exitCodeText } from "../../../../controller/term";
 
 const HOLD_RECHECK_MS = 100;
 const AUTOSCROLL_MS = 15;

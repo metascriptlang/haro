@@ -1,9 +1,9 @@
-import { KeyAction, KeyEvent, modsOf } from "../../../../keys/keys";
-import { selected } from "../../../../input/pointer";
+import { KeyAction, KeyEvent, modsOf } from "../keys/keys";
+import { selected } from "../input/pointer";
 import { Term, releaseHeldKey, sendKey } from "./term";
 import { Controls, holding } from "./controls";
 import { closeKey, keyDown, keyUp } from "./keyboard";
-import { Warning } from "../../../../input/paste";
+import { Warning } from "../input/paste";
 import {
 	ALT,
 	BindAction,
@@ -14,7 +14,7 @@ import {
 	SHIFT,
 	SUPER,
 	Screen,
-} from "../../../../input/bindings";
+} from "../input/bindings";
 import {
 	Sink,
 	at,

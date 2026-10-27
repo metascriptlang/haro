@@ -1,7 +1,7 @@
-import { KeyEvent, modsMask } from "../../../../keys/keys";
-import { Reply, replyTo, replyToRead, warningFor, Warning } from "../../../../input/paste";
-import { clear, copyText } from "../../../../input/pointer";
-import { answerClipboard, modes } from "../../../../vt/vt";
+import { KeyEvent, modsMask } from "../keys/keys";
+import { Reply, replyTo, replyToRead, warningFor, Warning } from "../input/paste";
+import { clear, copyText } from "../input/pointer";
+import { answerClipboard, modes } from "../vt/vt";
 import { PasteCheck, Term, TermError } from "./term";
 import { ClipRead, Controls, askRead, typed, vtOf } from "./controls";
 

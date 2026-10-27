@@ -31,7 +31,7 @@ import {
 	SECONDARY_BUTTON,
 	TITLE_STYLE,
 } from "../../../theme";
-import { Pending, PendingKind, pendingOf, samePending } from "../../../pending";
+import { Pending, PendingKind, pendingOf, samePending } from "../../../../controller/pending";
 import { Button } from "../../ui/button";
 import { CellMetrics, CellText } from "../../ui/cellText";
 import { ModalLayer } from "../../layout/modalLayer";

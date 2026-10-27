@@ -1,4 +1,4 @@
-import { Mark } from "./mark";
+import { Mark } from "../controller/mark";
 
 export struct Tally {
 	refreshes: int32;

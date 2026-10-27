@@ -1,4 +1,4 @@
-import { changeStamp } from "std/fs";
+import { changeStamp, ensureDir, writeFile } from "std/fs";
 import { Config, defaults } from "../config/config";
 import { Loaded, empty, load } from "../config/source";
 import { resourcePath } from "../../../ion/src/index";
@@ -79,4 +79,46 @@ test "a config file that disappears keeps the last config and says so once" {
 	assert w.loaded.config.fontSize == 20;
 	w.poll(handler);
 	assert calls == 1;
+}
+
+test "a changed config file is handed over, and one with an error keeps the last config until it is fixed" {
+	const dir = `${cwd()}/out/watchedConfig`;
+	assert ensureDir(dir).ok;
+	const path = `${dir}/config.ms`;
+	const head = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = `;
+	assert writeFile(path, `${head}{ fontSize: 13 };\n`).ok;
+	const w = ConfigWatch.forFile(path);
+	w.readConfig();
+	assert w.error == "";
+	assert w.loaded.config.fontSize == 13;
+	let calls = 0;
+	let handed: Config | null = null;
+	let said = "";
+	const handler = (c: Config | null, error: string): void => {
+		calls++;
+		handed = c;
+		said = error;
+	};
+	w.poll(handler);
+	assert calls == 0;
+	assert writeFile(path, `${head}{ fontSize: 150 };\n`).ok;
+	w.poll(handler);
+	assert calls == 1;
+	const changed = handed;
+	assert changed !== null;
+	if (changed !== null) { assert changed.fontSize == 150; }
+	assert writeFile(path, `${head}{ fontSiz: 13 };\n`).ok;
+	w.poll(handler);
+	assert calls == 2;
+	assert handed === null;
+	assert said.includes("fontSiz");
+	assert w.loaded.config.fontSize == 150;
+	w.poll(handler);
+	assert calls == 2;
+	assert writeFile(path, `${head}{ fontSize: 21 };\n`).ok;
+	w.poll(handler);
+	assert calls == 3;
+	const fixed = handed;
+	assert fixed !== null;
+	if (fixed !== null) { assert fixed.fontSize == 21; }
 }

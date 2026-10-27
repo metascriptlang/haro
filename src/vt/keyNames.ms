@@ -1,6 +1,5 @@
 import { GhosttyKey } from "../../vendor/ghostty/include/ghostty/vt.h";
 
-// Key tables stay in vt.ms until card 2026-09-30-c-import-type-not-shared-across-modules.md
 export function keyOf(name: string): GhosttyKey {
 	return match (name) {
 		"Backquote" => GhosttyKey.GHOSTTY_KEY_BACKQUOTE,

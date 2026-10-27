@@ -227,30 +227,30 @@ test "a modifier mask outside the KeyMod bits is refused" {
 	assert modsOf(1023).has(KeyMod.SuperRight);
 }
 
-function event(action: KeyAction, key: string, mods: BitSet<KeyMod>): KeyEvent {
+export function keyEvent(action: KeyAction, key: string, mods: BitSet<KeyMod>): KeyEvent {
 	return { action: action, key: key, mods: mods, consumedMods: NO_MODS, unshifted: 0, text: "" };
 }
 
 test "the key still held is the last one pressed, until its release leaves only the modifiers held with it" {
 	const empty = NO_MODS;
 	const ctrl = empty.incl(KeyMod.Ctrl);
-	const a = event(KeyAction.Press, "KeyA", ctrl);
+	const a = keyEvent(KeyAction.Press, "KeyA", ctrl);
 	const held = heldAfter(null, a);
 	assert held !== null && held.key == "KeyA";
-	const left = heldAfter(held, event(KeyAction.Release, "KeyA", ctrl));
+	const left = heldAfter(held, keyEvent(KeyAction.Release, "KeyA", ctrl));
 	assert left !== null && left.key == "" && left.mods == ctrl;
-	assert heldAfter(held, event(KeyAction.Release, "KeyA", empty)) === null;
-	assert heldAfter(null, event(KeyAction.Release, "KeyA", ctrl)) === null;
+	assert heldAfter(held, keyEvent(KeyAction.Release, "KeyA", empty)) === null;
+	assert heldAfter(null, keyEvent(KeyAction.Release, "KeyA", ctrl)) === null;
 }
 
 test "a focus loss releases the held key, then each held modifier on both sides" {
 	const ctrlShift = KeyMod.Shift | KeyMod.Ctrl;
-	const sent = releasesOf(event(KeyAction.Press, "KeyA", ctrlShift))
+	const sent = releasesOf(keyEvent(KeyAction.Press, "KeyA", ctrlShift))
 		.map((e: KeyEvent): string => `${e.key}:${modsMask(e.mods)}`).join(" ");
 	assert sent == "KeyA:3 ShiftRight:2 ShiftLeft:2 ControlRight:0 ControlLeft:0";
 	const shift = ctrlShift.excl(KeyMod.Ctrl);
-	const own = releasesOf(event(KeyAction.Press, "ShiftLeft", shift)).map((e: KeyEvent): string => e.key).join(" ");
+	const own = releasesOf(keyEvent(KeyAction.Press, "ShiftLeft", shift)).map((e: KeyEvent): string => e.key).join(" ");
 	assert own == "ShiftLeft ShiftRight";
-	const plain = releasesOf(event(KeyAction.Press, "KeyA", NO_MODS));
+	const plain = releasesOf(keyEvent(KeyAction.Press, "KeyA", NO_MODS));
 	assert plain.length == 1 && plain[0].action == KeyAction.Release;
 }

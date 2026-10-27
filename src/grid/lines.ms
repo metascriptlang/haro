@@ -231,7 +231,6 @@ test "a plain row is one run over its text, without the blank cells after it" {
 }
 
 test "each styled stretch is its own run" {
-	const red: Rgb = { r: 255, g: 0, b: 0 };
 	const line = firstLine("\x1b[1;38;2;255;0;0mA\x1b[0mb", 10, 0);
 	assert line !== null;
 	if (line !== null) {
@@ -239,7 +238,7 @@ test "each styled stretch is its own run" {
 		assert line.runs.length == 2;
 		assert line.runs[0].units == 1;
 		assert line.runs[0].flags.has(CellFlag.Bold);
-		assert line.runs[0].fg == red;
+		assert line.runs[0].fg == RED;
 		assert line.runs[1].units == 1;
 		assert !line.runs[1].flags.has(CellFlag.Bold);
 		assert line.cursorCell == 0;
@@ -281,14 +280,13 @@ test "a concealed wide cell is two blank cells of width 1" {
 }
 
 test "an erased line keeps its background as a run" {
-	const red: Rgb = { r: 255, g: 0, b: 0 };
 	const line = firstLine("\x1b[48;2;255;0;0m\x1b[K", 10, -1);
 	assert line !== null;
 	if (line !== null) {
 		assert line.text == "          ";
 		assert line.runs.length == 1;
 		assert line.runs[0].units == 10;
-		assert line.runs[0].bg == red;
+		assert line.runs[0].bg == RED;
 	}
 }
 
@@ -408,7 +406,7 @@ test "a lit block cursor draws its cell in the cursor colour, its text in the ce
 	if (line !== null) {
 		assert line.runs.length == 3;
 		assert line.runs[1].units == 1;
-		assert line.runs[1].bg == red;
+		assert line.runs[1].bg == RED;
 		assert line.runs[1].fg == line.runs[0].bg;
 		assert line.runs[2].bg == line.runs[0].bg;
 		assert line.cursorInk !== null;
@@ -420,7 +418,7 @@ test "a lit cursor past the end of the text still draws its cell, and an unlit o
 	assert lit !== null;
 	if (lit !== null) {
 		assert lit.text == "ab   ";
-		assert lit.runs[lit.runs.length - 1].bg == red;
+		assert lit.runs[lit.runs.length - 1].bg == RED;
 		assert lit.runs[lit.runs.length - 1].units == 1;
 	}
 	const unlit = firstLine("ab", 10, 4);
@@ -434,7 +432,7 @@ test "a lit cursor on either cell of a wide character inks the whole character" 
 		assert line !== null;
 		if (line !== null) {
 			assert line.runs[0].units == 1;
-			assert line.runs[0].bg == red;
+			assert line.runs[0].bg == RED;
 			assert line.runs[1].bg != RED;
 			assert line.widths.join("") == "2001";
 		}
@@ -482,7 +480,7 @@ test "the cursor's ink wins over the selection on its cell" {
 	assert line !== null;
 	if (line !== null) {
 		assert line.runs.length == 3;
-		assert line.runs[1].bg == red;
+		assert line.runs[1].bg == RED;
 		assert line.runs[0].bg == line.runs[2].bg && line.runs[0].bg != RED;
 	}
 }

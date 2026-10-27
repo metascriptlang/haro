@@ -4,21 +4,13 @@ import {
 	MouseGeometry,
 	MouseInput,
 	Vt,
+	geometryOf,
 	mouseReport,
 	writeText,
 } from "./vt";
 import { ascii, withVt } from "./vtRig";
 
-const GEOMETRY: MouseGeometry = {
-	cellWidth: 10,
-	cellHeight: 20,
-	width: 200,
-	height: 80,
-	padLeft: 0,
-	padTop: 0,
-	padRight: 0,
-	padBottom: 0,
-};
+const GEOMETRY = geometryOf(10, 20, 200, 80);
 
 function mouseBytes(
 	this vt: Vt,

@@ -55,6 +55,7 @@ export {
 	modes,
 } from "./cursorModes";
 export {
+	geometryOf,
 	mouseReport,
 } from "./mouseReport";
 export {

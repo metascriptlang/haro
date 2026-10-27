@@ -69,6 +69,22 @@ test "a resize of a live console succeeds" {
 	});
 }
 
+test "the table holds sixteen ptys with distinct ids and refuses a seventeenth" {
+	let held: Vec<NativePty> = [];
+	let ids = new Set<int32>();
+	for (let i = 0; i < 16; i++) {
+		const opened = NativePty.open(QUIET_FOR_3S, 80, 24);
+		assert opened.ok;
+		if (opened.ok) {
+			held.push(opened.value);
+			ids.add(opened.value.id);
+		}
+	}
+	assert ids.size == 16;
+	assert !NativePty.open(QUIET_FOR_3S, 80, 24).ok;
+	for (const p of held) { p.close(); }
+}
+
 test "a command that cannot start is an error" {
 	const opened = NativePty.open(MISSING_PROGRAM, 80, 24);
 	assert !opened.ok;

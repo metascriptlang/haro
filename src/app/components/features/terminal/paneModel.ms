@@ -10,7 +10,7 @@ import { familyFont } from "../../../../../../neon/src/platform/void/host";
 import { spriteCellFor } from "../../../../../../void/src/void2d/font";
 import { gridSize } from "../../../../grid/size";
 import { CellInk } from "../../../../grid/lines";
-import { MouseGeometry } from "../../../../vt/vt";
+import { MouseGeometry, geometryOf } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
 import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
 import { FrameRows } from "../../../../controller/rows";
@@ -177,16 +177,7 @@ export function open(
 		grid: null,
 		holdTimer: -1,
 		scrollTimer: -1,
-		mouseGeometry: {
-			cellWidth: 1,
-			cellHeight: 1,
-			width: 1,
-			height: 1,
-			padLeft: 0,
-			padTop: 0,
-			padRight: 0,
-			padBottom: 0,
-		},
+		mouseGeometry: geometryOf(1, 1, 1, 1),
 		layoutWidth: 0,
 		layoutHeight: 0,
 	};

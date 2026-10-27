@@ -1,9 +1,9 @@
 import { MouseButton } from "./mouseButton";
-import { KeyAction, KeyEvent, KeyMod, NO_MODS } from "../keys/keys";
+import { KeyAction, KeyEvent, KeyMod, NO_MODS, keyEvent } from "../keys/keys";
 import { Spot } from "../input/pointer";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
-import { atBottom, scrollOffset } from "../vt/vt";
+import { atBottom, geometryOf, scrollOffset } from "../vt/vt";
 import { Term, TermError, openTerm } from "./term";
 import { Controls, Hit, takeAsks } from "./controls";
 import { clipboardText } from "./clipboard";
@@ -101,14 +101,7 @@ export function settled(
 }
 
 export function key(code: string, mods: BitSet<KeyMod>): KeyEvent {
-	return {
-		action: KeyAction.Press,
-		key: code,
-		mods: mods,
-		consumedMods: NO_MODS,
-		unshifted: 0,
-		text: "",
-	};
+	return keyEvent(KeyAction.Press, code, mods);
 }
 
 export function lines(n: int32): string {
@@ -148,16 +141,7 @@ export function hitWith(col: int32, row: int32, mods: BitSet<KeyMod>): Hit {
 		y: row as float64 * 16,
 		scale: 1,
 		mods: mods,
-		cell: {
-			cellWidth: 8,
-			cellHeight: 16,
-			width: 160,
-			height: 80,
-			padLeft: 0,
-			padTop: 0,
-			padRight: 0,
-			padBottom: 0,
-		},
+		cell: geometryOf(8, 16, 160, 80),
 	};
 }
 

@@ -1,8 +1,9 @@
 import {
 	KeyAction,
 	KeyEvent,
-	KeyMod,
+	NO_MODS,
 	heldAfter,
+	keyEvent,
 	releasesOf,
 	withoutAltGr,
 } from "../keys/keys";
@@ -306,14 +307,7 @@ export function sendKey(this t: Term, typed: KeyEvent): Result<int32, TermError>
 export function tapKey(this t: Term, code: string): Result<int32, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(0); }
-	const press: KeyEvent = {
-		action: KeyAction.Press,
-		key: code,
-		mods: 0 as BitSet<KeyMod>,
-		consumedMods: 0 as BitSet<KeyMod>,
-		unshifted: 0,
-		text: "",
-	};
+	const press = keyEvent(KeyAction.Press, code, NO_MODS);
 	const pressed = try t.sendKeyEvent(s, press);
 	const released = try t.sendKeyEvent(s, { ...press, action: KeyAction.Release });
 	return Result.ok(pressed + released);

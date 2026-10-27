@@ -3,6 +3,7 @@ import {
 	KeyEvent,
 	KeyMod,
 	OptionAsAlt,
+	keyEvent,
 } from "../keys/keys";
 import {
 	Keys,
@@ -17,14 +18,7 @@ import {
 import { ascii, withVt } from "./vtRig";
 
 function press(key: string, text: string, unshifted: uint32, mods: BitSet<KeyMod>): KeyEvent {
-	return {
-		action: KeyAction.Press,
-		key: key,
-		mods: mods,
-		consumedMods: 0 as BitSet<KeyMod>,
-		unshifted: unshifted,
-		text: text,
-	};
+	return { ...keyEvent(KeyAction.Press, key, mods), unshifted: unshifted, text: text };
 }
 
 function encoded(this k: Keys, vt: Vt, e: KeyEvent): string {

@@ -3,6 +3,8 @@
 
 import { NeonNode } from "../../../neon/src/render/node";
 import { requestFrame } from "../../../neon/src/animation/frame";
+import { onSettled } from "../../../neon/src/core/effect";
+import { Cleanup } from "../../../neon/src/core/types";
 import {
 	runWindow, DesktopOptions, desktopOptions, setOptionAsAlt, setWindowTitle, OptionAsAlt as OptionSides,
 } from "../../../neon/src/platform/ion/window";
@@ -177,7 +179,11 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 			},
 			onConfig: (handler: (change: ConfigChange) => void): void => {
 				if (config.error != "") {
-					handler({ outcome: ConfigOutcome.Refused, error: config.error });
+					const error = config.error;
+					onSettled((): Cleanup | null => {
+						handler({ outcome: ConfigOutcome.Refused, error: error });
+						return null;
+					});
 				}
 				config.watchConfig((c: Config | null, error: string): void => {
 					if (c === null) {

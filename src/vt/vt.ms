@@ -1997,10 +1997,6 @@ export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtErro
 		Unit.Word => {
 			const word = try vt.wordAt(at);
 			if (word !== null) { return Result.ok(word.range); }
-			if (at.col > 0) {
-				const head = try vt.wordAt({ row: at.row, col: at.col - 1 });
-				if (head !== null) { return Result.ok(head.range); }
-			}
 			return Result.ok(here);
 		},
 	};
@@ -3055,22 +3051,23 @@ test "a double click picks the word under the pointer and a triple click the log
 	});
 }
 
-test "a click on the second half of a wide character picks that character" {
+test "a double click on either half of a wide character picks the whole word, and a blank cell after a word picks only itself" {
 	assert withVt(10, 4, (vt: Vt): void => {
 		vt.writeText("中文 x");
 		assert vt.update().ok;
-		const first = vt.unitAt(Unit.Word, at(0, 1));
-		assert first.ok;
-		if (first.ok) {
-			assert first.value.start == at(0, 0);
-			assert vt.selectionSet({ range: first.value, block: false }).ok;
-			assert shown(vt.selectedText()) == "中";
+		for (const col of [0, 1, 2, 3]) {
+			const word = vt.unitAt(Unit.Word, at(0, col));
+			assert word.ok;
+			if (word.ok) {
+				assert word.value.start == at(0, 0);
+				assert vt.selectionSet({ range: word.value, block: false }).ok;
+				assert shown(vt.selectedText()) == "中文";
+			}
 		}
-		const second = vt.unitAt(Unit.Word, at(0, 3));
-		assert second.ok;
-		if (second.ok) {
-			assert vt.selectionSet({ range: second.value, block: false }).ok;
-			assert shown(vt.selectedText()) == "文";
+		const blank = vt.unitAt(Unit.Word, at(0, 6));
+		assert blank.ok;
+		if (blank.ok) {
+			assert blank.value.start == at(0, 6) && blank.value.end == at(0, 6);
 		}
 	});
 }

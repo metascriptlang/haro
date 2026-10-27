@@ -48,6 +48,7 @@ export enum TermError {
 	WriteFailed,
 	PasteUnsafe,
 	PasteEncodeFailed,
+	PasteModeReadFailed,
 	FrameLookFailed,
 	EventsFailed,
 	FocusFailed,
@@ -350,6 +351,7 @@ export function sendPaste(
 		return Result.err(match (bytes.error) {
 			PasteError.Unsafe => TermError.PasteUnsafe,
 			PasteError.EncodeFailed => TermError.PasteEncodeFailed,
+			PasteError.ModeReadFailed => TermError.PasteModeReadFailed,
 		});
 	}
 	return sendBytes(s, bytes.value);

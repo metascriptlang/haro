@@ -16,6 +16,7 @@ export enum VtError {
 export enum PasteError {
 	Unsafe,
 	EncodeFailed,
+	ModeReadFailed,
 }
 
 export struct MouseCodec {

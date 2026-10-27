@@ -49,8 +49,36 @@ export function settingsOf(c: Config): Settings {
 	};
 }
 
+export enum Where {
+	Settings,
+	Fit,
+	Font,
+	Key,
+	Text,
+	Typed,
+	Focus,
+	Press,
+	Move,
+	Release,
+	Wheel,
+	Autoscroll,
+	CloseKey,
+	Paste,
+	Clipboard,
+	Output,
+	Selection,
+	Cursor,
+}
+
+export function label(this w: Where): string {
+	return match (w) {
+		Where.CloseKey => "close key",
+		_ => w.toString().toLowerCase(),
+	};
+}
+
 export struct Failure {
-	what: string;
+	where: Where;
 	error: TermError;
 	started: boolean;
 }
@@ -111,12 +139,12 @@ export function started(this io: Io): boolean {
 	return io.term.session !== null;
 }
 
-function fail(this io: Io, what: string, error: TermError): void {
-	io.failures.push({ what: what, error: error, started: io.started() });
+function fail(this io: Io, where: Where, error: TermError): void {
+	io.failures.push({ where: where, error: error, started: io.started() });
 }
 
-function check(this io: Io, what: string, r: Result<boolean, TermError>): void {
-	if (!r.ok) { io.fail(what, r.error); }
+function check(this io: Io, where: Where, r: Result<boolean, TermError>): void {
+	if (!r.ok) { io.fail(where, r.error); }
 }
 
 function apply(this io: Io): void {
@@ -127,7 +155,7 @@ function apply(this io: Io): void {
 	if (!vt.setDefaultColors(settings.foreground, settings.background).ok ||
 		!vt.setPalette(settings.palette).ok ||
 		!vt.setScrollback(settings.scrollback).ok) {
-		io.fail("settings", TermError.SettingsRefused);
+		io.fail(Where.Settings, TermError.SettingsRefused);
 	}
 }
 
@@ -142,42 +170,42 @@ export function fit(this io: Io, cols: int32, rows: int32, cellWidth: int32, cel
 	const started = io.term.session !== null;
 	const fitted = io.controls.refit(io.term, cols, rows, cellWidth, cellHeight);
 	if (!fitted.ok) {
-		io.fail("fit", fitted.error);
+		io.fail(Where.Fit, fitted.error);
 		return;
 	}
 	if (!started) { io.apply(); }
 }
 
-function input(this io: Io, sent: Result<int32, TermError>, what: string, time: float64): void {
+function input(this io: Io, sent: Result<int32, TermError>, where: Where, time: float64): void {
 	if (!sent.ok) {
-		io.fail(what, sent.error);
+		io.fail(where, sent.error);
 		return;
 	}
 	if (sent.value == 0) { return; }
 	if (io.keyAt < 0) { io.keyAt = time; }
-	io.check("typed", io.controls.typed(io.term));
+	io.check(Where.Typed, io.controls.typed(io.term));
 }
 
 export function key(this io: Io, k: KeyEvent, time: float64): void {
 	if (io.controls.ended) { return; }
 	const handled = io.controls.keyDown(io.term, k);
 	if (!handled.ok) {
-		io.fail("key", handled.error);
+		io.fail(Where.Key, handled.error);
 		return;
 	}
 	if (handled.value) { return; }
-	io.input(io.term.sendKey(k), "key", time);
+	io.input(io.term.sendKey(k), Where.Key, time);
 }
 
 export function keyReleased(this io: Io, k: KeyEvent): void {
 	if (io.controls.keyUp(k)) { return; }
 	const sent = io.term.sendKey(k);
-	if (!sent.ok) { io.fail("key", sent.error); }
+	if (!sent.ok) { io.fail(Where.Key, sent.error); }
 }
 
 export function text(this io: Io, typed: string, time: float64): void {
 	if (io.controls.holding()) { return; }
-	io.input(io.term.sendText(typed), "text", time);
+	io.input(io.term.sendText(typed), Where.Text, time);
 }
 
 export function focus(this io: Io, gained: boolean): void {
@@ -185,34 +213,34 @@ export function focus(this io: Io, gained: boolean): void {
 	if (!gained) {
 		io.controls.endDrag();
 		const released = io.term.releaseHeldKey();
-		if (!released.ok) { io.fail("focus", released.error); }
+		if (!released.ok) { io.fail(Where.Focus, released.error); }
 	}
 	const sent = io.term.sendFocus(gained);
-	if (!sent.ok) { io.fail("focus", sent.error); }
+	if (!sent.ok) { io.fail(Where.Focus, sent.error); }
 }
 
 export function press(this io: Io, button: MouseButton, h: Hit, time: float64): void {
-	io.check("press", io.controls.pointerDown(io.term, button, h, time));
+	io.check(Where.Press, io.controls.pointerDown(io.term, button, h, time));
 }
 
 export function move(this io: Io, h: Hit, pressed: boolean): void {
-	io.check("move", io.controls.pointerMove(io.term, h, pressed));
+	io.check(Where.Move, io.controls.pointerMove(io.term, h, pressed));
 }
 
 export function release(this io: Io, button: MouseButton, h: Hit): void {
-	io.check("release", io.controls.pointerUp(io.term, button, h));
+	io.check(Where.Release, io.controls.pointerUp(io.term, button, h));
 }
 
 export function wheel(this io: Io, notches: float64, h: Hit): void {
-	io.check("wheel", io.controls.roll(io.term, notches, h));
+	io.check(Where.Wheel, io.controls.roll(io.term, notches, h));
 }
 
 export function autoscroll(this io: Io): void {
-	io.check("autoscroll", io.controls.autoscrollTick(io.term));
+	io.check(Where.Autoscroll, io.controls.autoscrollTick(io.term));
 }
 
 export function closeKey(this io: Io): void {
-	io.check("close key", io.controls.closeKey(io.term));
+	io.check(Where.CloseKey, io.controls.closeKey(io.term));
 }
 
 export function confirmDialog(this io: Io): void {
@@ -220,7 +248,7 @@ export function confirmDialog(this io: Io): void {
 		io.controls.answerClose(Reply.Confirm);
 		return;
 	}
-	io.check("paste", io.controls.confirm(io.term));
+	io.check(Where.Paste, io.controls.confirm(io.term));
 }
 
 export function cancelDialog(this io: Io): void {
@@ -228,16 +256,16 @@ export function cancelDialog(this io: Io): void {
 		io.controls.answerClose(Reply.Cancel);
 		return;
 	}
-	io.check("clipboard", io.controls.cancel(io.term));
+	io.check(Where.Clipboard, io.controls.cancel(io.term));
 }
 
 export function pasted(this io: Io, clipboard: string): void {
-	io.check("clipboard", io.controls.clipboardText(io.term, clipboard));
+	io.check(Where.Clipboard, io.controls.clipboardText(io.term, clipboard));
 }
 
 export function drain(this io: Io): void {
 	const drained = io.term.drain();
-	if (!drained.ok) { io.fail("output", drained.error); }
+	if (!drained.ok) { io.fail(Where.Output, drained.error); }
 }
 
 export function shutdown(this io: Io): void {
@@ -247,7 +275,7 @@ export function shutdown(this io: Io): void {
 export function relight(this io: Io, ink: CellInk | null): FrameRows {
 	const relit = io.term.inkCursor(ink);
 	if (!relit.ok) {
-		io.fail("cursor", relit.error);
+		io.fail(Where.Cursor, relit.error);
 		return FrameRows.none();
 	}
 	return relit.value;
@@ -270,7 +298,7 @@ export function frame(this io: Io): IoFrame {
 	let again = false;
 	let exit: Exit | null = null;
 	if (!pumped.ok) {
-		io.fail("output", pumped.error);
+		io.fail(Where.Output, pumped.error);
 	} else {
 		const asked = pumped.value.asked;
 		const held = pumped.value.held;
@@ -281,7 +309,7 @@ export function frame(this io: Io): IoFrame {
 		if (!held && vt !== null) {
 			const dropped = io.controls.syncSelection(vt);
 			if (!dropped.ok) {
-				io.fail("selection", dropped.error);
+				io.fail(Where.Selection, dropped.error);
 			} else {
 				again = dropped.value;
 			}

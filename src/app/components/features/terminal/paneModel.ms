@@ -27,7 +27,7 @@ import { PreeditModel, createPreedit } from "../../content/preedit";
 import { NoticeModel, noticeCols, showNotice } from "../notice/notice";
 import { PasteDialogModel, invalidate, showPending } from "../paste/pasteDialog";
 import { Asks } from "./controls";
-import { Exit, Failure, IoFrame, IoPort, settingsOf } from "./io";
+import { Exit, Failure, IoFrame, IoPort, Where, label, settingsOf } from "./io";
 import { TermError, exitCodeText } from "./term";
 
 const HOLD_RECHECK_MS = 100;
@@ -191,8 +191,8 @@ export function createPane(
 	};
 }
 
-export function failed(this m: PaneModel, what: string, error: string): void {
-	m.failedAs(m.shellStarted, what, error);
+export function failed(this m: PaneModel, where: Where, error: string): void {
+	m.failedAs(m.shellStarted, where, error);
 }
 
 function failureText(error: TermError): string {
@@ -203,15 +203,15 @@ function failureText(error: TermError): string {
 }
 
 function reported(this m: PaneModel, f: Failure): void {
-	if (f.what == "fit" && f.error == TermError.PtyOpenFailed) {
+	if (f.where == Where.Fit && f.error == TermError.PtyOpenFailed) {
 		m.notify("the shell did not start: check command in config.ms, or --shell");
 		return;
 	}
-	m.failedAs(f.started, f.what, failureText(f.error));
+	m.failedAs(f.started, f.where, failureText(f.error));
 }
 
-function failedAs(this m: PaneModel, started: boolean, what: string, error: string): void {
-	const message = `${what}: ${error}`;
+function failedAs(this m: PaneModel, started: boolean, where: Where, error: string): void {
+	const message = `${where.label()}: ${error}`;
 	if (!started) {
 		m.report.fail(message);
 		return;
@@ -393,7 +393,7 @@ export function laidOut(this m: PaneModel, e: NeonEvent): void {
 function fitLayout(this m: PaneModel): void {
 	const font = familyFont(m.metrics.fontFamily(), 400, false);
 	if (!font.ok) {
-		m.failed("font", `family "${m.metrics.fontFamily()}" has no face: ${font.error.toString()}`);
+		m.failed(Where.Font, `family "${m.metrics.fontFamily()}" has no face: ${font.error.toString()}`);
 		return;
 	}
 	const ratio = PixelRatio.get();
@@ -404,7 +404,7 @@ function fitLayout(this m: PaneModel): void {
 	const heightPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutHeight) as int32;
 	const size = gridSize(widthPx, heightPx, cellPx, rowPx);
 	if (!size.ok) {
-		m.failed("fit", `cell ${cellPx}x${rowPx} px is not a grid size`);
+		m.failed(Where.Fit, `cell ${cellPx}x${rowPx} px is not a grid size`);
 		return;
 	}
 	const cols = size.value[0];

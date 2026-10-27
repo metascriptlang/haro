@@ -9,7 +9,7 @@ import { createPasteDialog } from "../paste/pasteDialog";
 import { Stats, empty } from "../../../stats";
 import { Desktop, PaneModel, Report, Timing, createPane, failed, refresh } from "./paneModel";
 import { cancelDialog, confirmDialog } from "./paneEvents";
-import { Io, open, port } from "./io";
+import { Io, Where, open, port } from "./io";
 import { Term, TermError, openTerm, shutdown } from "./term";
 import { View, fitRows, open, text } from "../../../frame";
 import { holding } from "./controls";
@@ -136,8 +136,8 @@ test "an internal failure while the shell runs is a notice logged once, and the 
 		const calls = noCalls();
 		const m = paneOf(t, calls);
 		m.refresh();
-		m.failed("key", "EncodeFailed");
-		m.failed("key", "EncodeFailed");
+		m.failed(Where.Key, "EncodeFailed");
+		m.failed(Where.Key, "EncodeFailed");
 		assert calls.fatal == "";
 		assert calls.noted == "key: EncodeFailed\n";
 		assert m.notice.text.endsWith("key: EncodeFailed");
@@ -153,7 +153,7 @@ test "an internal failure before the shell started is fatal" {
 	if (opened.ok) {
 		const calls = noCalls();
 		const m = paneOf(opened.value, calls);
-		m.failed("fit", "SessionStartFailed");
+		m.failed(Where.Fit, "SessionStartFailed");
 		assert calls.fatal == "fit: SessionStartFailed";
 		assert calls.noted == "";
 		opened.value.shutdown();

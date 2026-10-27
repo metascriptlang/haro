@@ -69,14 +69,15 @@ function decorationOf(this run: LineRun): TextDecorationLine {
 	return "none";
 }
 
-// A match here widens its arms to string: compiler card
-// 2026-10-08-match-arms-of-string-literals-widen-to-string
 function lineStyleOf(underline: Underline): TextDecorationStyle {
-	if (underline == Underline.Double) { return "double"; }
-	if (underline == Underline.Curly) { return "wavy"; }
-	if (underline == Underline.Dotted) { return "dotted"; }
-	if (underline == Underline.Dashed) { return "dashed"; }
-	return "solid";
+	return match (underline) {
+		Underline.None => "solid",
+		Underline.Single => "solid",
+		Underline.Double => "double",
+		Underline.Curly => "wavy",
+		Underline.Dotted => "dotted",
+		Underline.Dashed => "dashed",
+	};
 }
 
 const PLAIN_BG: uint64 = (1 as uint64) << 24;

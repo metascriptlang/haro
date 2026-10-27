@@ -101,13 +101,13 @@ function titleOr(title: string): string {
 	return title == "" ? APP_TITLE : title;
 }
 
-// A match here widens its arms to string: compiler card
-// 2026-10-08-match-arms-of-string-literals-widen-to-string
 function sidesOf(option: OptionAsAlt): OptionSides {
-	if (option == OptionAsAlt.Left) { return "left"; }
-	if (option == OptionAsAlt.Right) { return "right"; }
-	if (option == OptionAsAlt.Both) { return "both"; }
-	return "neither";
+	return match (option) {
+		OptionAsAlt.Left => "left",
+		OptionAsAlt.Right => "right",
+		OptionAsAlt.Both => "both",
+		OptionAsAlt.Neither => "neither",
+	};
 }
 
 function flagValue(flag: string): string | null {

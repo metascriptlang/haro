@@ -69,7 +69,7 @@ when (macos) {
 	}
 
 	// macOS aborts a process outside an app bundle that asks for its notification centre, and Ion's
-	// notify does not check: .inbox/ion/2026-10-25-notify-aborts-a-process-outside-an-app-bundle.md
+	// notify does not check: Ion card 2026-10-25-notify-aborts-a-process-outside-an-app-bundle
 	function notificationsReachable(): boolean {
 		return resourcePath() != "";
 	}
@@ -99,7 +99,8 @@ function titleOr(title: string): string {
 	return title == "" ? APP_TITLE : title;
 }
 
-// A match here widens its arms to string: .inbox/compiler/2026-10-08-match-arms-of-string-literals-widen-to-string.md
+// A match here widens its arms to string: compiler card
+// 2026-10-08-match-arms-of-string-literals-widen-to-string
 function sidesOf(option: OptionAsAlt): OptionSides {
 	if (option == OptionAsAlt.Left) { return "left"; }
 	if (option == OptionAsAlt.Right) { return "right"; }

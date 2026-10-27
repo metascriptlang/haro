@@ -30,7 +30,7 @@ import {
 } from "../vendor/ghostty/include/ghostty/vt.h";
 
 // The header's const uint8_t* imports as a cstring, so the bytes go through this declaration:
-// .inbox/compiler/2026-09-26-c-import-uint8-pointer-is-cstring.md
+// compiler card 2026-09-26-c-import-uint8-pointer-is-cstring
 extern function writeBytes(
 	t: GhosttyTerminal,
 	b: Readonly<Span<uint8>>,

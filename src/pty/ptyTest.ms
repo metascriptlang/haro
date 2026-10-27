@@ -1,6 +1,6 @@
 import { PtyError } from "./transport";
 import { NativePty, busy, close, exitCode, exitSignal, open, read, resize, spawn, toPty, wait, write } from "./pty";
-import { normalize, remove, writeFile } from "std/fs";
+import { ensureDir, normalize, remove, removeAll, writeFile } from "std/fs";
 import { tmpDir } from "std/os";
 import { drainText, withPty } from "./ptyRig";
 
@@ -85,9 +85,22 @@ test "the table holds sixteen ptys with distinct ids and refuses a seventeenth" 
 	for (const p of held) { p.close(); }
 }
 
-test "a command that cannot start is an error" {
-	const opened = NativePty.open(MISSING_PROGRAM, 80, 24);
-	assert !opened.ok;
+when (windows) {
+	test "a command that cannot start is an error" {
+		const opened = NativePty.open(MISSING_PROGRAM, 80, 24);
+		assert !opened.ok;
+	}
+} else {
+	test "a command the shell cannot find shows the shell's reason and exits 127" {
+		assert withPty(MISSING_PROGRAM, (p: NativePty): void => {
+			assert p.toPty().drainText(4096).includes(MISSING_PROGRAM);
+			assert p.exitCode() === 127;
+		});
+	}
+}
+
+test "an empty command is an error" {
+	assert !NativePty.open("  ", 80, 24).ok;
 }
 
 test "a native pty starts its command in the directory it is given" {
@@ -266,6 +279,20 @@ when (!windows) {
 			assert out.includes("(30, 100, 900, 540)");
 			p.close();
 		}
+	}
+
+	test "a command line means what it means to the shell, run in the start directory" {
+		const dir = `${normalize(tmpDir())}/haroStartDir${getpid()}`;
+		assert ensureDir(dir).ok;
+		assert writeFile(`${dir}/only.md`, "").ok;
+		const spawned = NativePty.spawn("cd . && echo got *.md ${HARO_UNSET_VAR:-fallback} end", 80, 24, dir);
+		assert spawned.ok;
+		if (spawned.ok) {
+			const out = spawned.value.drainText(4096);
+			assert out.includes("got only.md fallback end");
+			spawned.value.close();
+		}
+		assert removeAll(dir).ok;
 	}
 
 	test "a shell that exits ends the stream, though a job in its own session still writes" {

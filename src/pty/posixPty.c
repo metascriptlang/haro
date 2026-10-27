@@ -11,7 +11,6 @@
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
-#include <wordexp.h>
 #ifdef __APPLE__
 #include <util.h>
 #else
@@ -304,19 +303,14 @@ static int openIn(
 	int id, const char* commandLine, const char* cwd, const char* langEntry,
 	int cols, int rows, int widthPx, int heightPx
 ) {
-	wordexp_t words;
-	int parsed = wordexp(commandLine, &words, WRDE_NOCMD);
-	if (parsed != 0) {
-		if (parsed == WRDE_NOSPACE) wordfree(&words);
-		return -1;
-	}
+	if (commandLine[strspn(commandLine, " \t\n")] == '\0') return -1;
+	char* argv[] = { "/bin/sh", "-c", (char*)commandLine, NULL };
 	char* pwd = NULL;
-	char** env = words.we_wordc == 0 ? NULL : childEnv(cwd, langEntry, &pwd);
+	char** env = childEnv(cwd, langEntry, &pwd);
 	int failed[2];
 	if (env == NULL || pipe(failed) != 0) {
 		free(env);
 		free(pwd);
-		wordfree(&words);
 		return -1;
 	}
 	closeOnExec(failed[0]);
@@ -328,11 +322,10 @@ static int openIn(
 	int fdLimit = getrlimit(RLIMIT_NOFILE, &files) == 0 && files.rlim_cur < CHILD_FD_SCAN_MAX
 		? (int)files.rlim_cur : CHILD_FD_SCAN_MAX;
 	pid_t pid = forkpty(&master, NULL, NULL, &size);
-	if (pid == 0) execChild(words.we_wordv, env, cwd, failed[1], fdLimit);
+	if (pid == 0) execChild(argv, env, cwd, failed[1], fdLimit);
 	if (pid > 0) closeOnExec(master);
 	free(env);
 	free(pwd);
-	wordfree(&words);
 	close(failed[1]);
 	if (pid < 0) {
 		close(failed[0]);

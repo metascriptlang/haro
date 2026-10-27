@@ -1,4 +1,5 @@
 import { flush } from "../../../../../../neon/src/core/runtime";
+import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
 import { Config, defaults } from "../../../../config/config";
 import { Pty, PtyError } from "../../../../pty/transport";
 import { Replay } from "../../../../pty/replay";
@@ -11,7 +12,7 @@ import { closeKey } from "./keyboard";
 import { Term, TermError, openTerm, shutdown } from "./term";
 import { View, fitRows, open, text } from "../../../frame";
 import { holding } from "./controls";
-import { Sink, key, onFresh, onTerm } from "./terminalRig";
+import { Sink, onFresh, onTerm } from "./terminalRig";
 
 interface Calls {
 	fatal: string;
@@ -47,6 +48,18 @@ function paneOf(t: Term, calls: Calls): PaneModel {
 	const view = View.open();
 	view.fitRows(t.shown.length as int32);
 	return createPane(t, view, hostFor(calls), defaults(), createNotice(), createPasteDialog());
+}
+
+function pressed(code: string): NeonEvent {
+	const e = neonEvent("keydown");
+	e.code = code;
+	return e;
+}
+
+function lifted(code: string): NeonEvent {
+	const e = neonEvent("keyup");
+	e.code = code;
+	return e;
 }
 
 test "a program's title reaches the window" {
@@ -164,10 +177,10 @@ test "a shell killed by a signal keeps the window and names the signal; a key cl
 		assert calls.exits == "";
 		assert m.notice.text == "the shell was killed by signal 9, press any key to close";
 		assert m.view.text(0) == "last output";
-		m.keyed(key("ShiftLeft", 0));
-		m.keyed(key("MetaRight", 0));
+		m.keyed(pressed("ShiftLeft"));
+		m.keyed(pressed("MetaRight"));
 		assert calls.exits == "";
-		m.keyed(key("KeyA", 0));
+		m.keyed(pressed("KeyA"));
 		assert calls.exits == "137 ";
 	}).ok;
 }
@@ -194,7 +207,7 @@ test "a shell that fails as it starts keeps its own notice and also closes on a 
 		assert m.notice.text.startsWith("the shell exited with code 127 as it started: check command in config.ms");
 		assert m.notice.text.endsWith("press any key to close");
 		assert calls.exits == "";
-		m.keyed(key("Enter", 0));
+		m.keyed(pressed("Enter"));
 		assert calls.exits == "127 ";
 	}).ok;
 }
@@ -210,7 +223,7 @@ test "a dead shell takes no typed text, key release or focus change, and keeps i
 	assert afterExit(137, 9, 1000, (m: PaneModel, calls: Calls): void => {
 		const text = m.notice.text;
 		m.focusChanged(false);
-		m.keyReleased(key("KeyA", 0));
+		m.keyReleased(lifted("KeyA"));
 		assert m.notice.text == text;
 		assert m.controls.holding();
 		assert calls.fatal == "";

@@ -1,5 +1,4 @@
-import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
-import { modsOf } from "../../../../keys/keys";
+import { KeyAction, KeyEvent, modsOf } from "../../../../keys/keys";
 import { Spot } from "../../../../input/pointer";
 import { Pty, PtyError } from "../../../../pty/transport";
 import { Replay } from "../../../../pty/replay";
@@ -100,11 +99,15 @@ export function settled(
 	return r;
 }
 
-export function key(code: string, mods: int32): NeonEvent {
-	const e = neonEvent("keydown");
-	e.code = code;
-	e.mods = mods;
-	return e;
+export function key(code: string, mods: int32): KeyEvent {
+	return {
+		action: KeyAction.Press,
+		key: code,
+		mods: modsOf(mods),
+		consumedMods: modsOf(0),
+		unshifted: 0,
+		text: "",
+	};
 }
 
 export function lines(n: int32): string {

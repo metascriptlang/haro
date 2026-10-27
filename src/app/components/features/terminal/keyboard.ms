@@ -1,5 +1,4 @@
-import { NeonEvent } from "../../../../../../neon/src/render/event";
-import { KeyMod, modsMask } from "../../../../keys/keys";
+import { KeyEvent, KeyMod, modsMask } from "../../../../keys/keys";
 import { Action, BindAction, Keybind, bindFor, resolve } from "../../../../input/bindings";
 import { ROWS_PER_NOTCH } from "../../../../input/wheel";
 import { Reply, replyToClose } from "../../../../input/paste";
@@ -12,7 +11,7 @@ import {
 	scrollPages,
 	scrollTop,
 } from "../../../../vt/vt";
-import { Term, TermError, busy, keyEventOf } from "./term";
+import { Term, TermError, busy, cooked } from "./term";
 import { Controls, holding, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";
 
@@ -68,24 +67,24 @@ export function answerClose(this c: Controls, reply: Reply): void {
 export function keyDown(
 	this c: Controls,
 	t: Term,
-	e: NeonEvent,
+	e: KeyEvent,
 ): Result<boolean, TermError> {
 	const handled = try c.controlKey(t, e);
-	c.consumedKey = handled ? e.code : "";
+	c.consumedKey = handled ? e.key : "";
 	return Result.ok(handled);
 }
 
-export function keyUp(this c: Controls, e: NeonEvent): boolean {
-	return c.holding() || e.code == c.consumedKey;
+export function keyUp(this c: Controls, e: KeyEvent): boolean {
+	return c.holding() || e.key == c.consumedKey;
 }
 
 function controlKey(
 	this c: Controls,
 	t: Term,
-	e: NeonEvent,
+	e: KeyEvent,
 ): Result<boolean, TermError> {
 	if (c.closing) {
-		c.answerClose(replyToClose(e.code, e.mods));
+		c.answerClose(replyToClose(e.key, modsMask(e.mods)));
 		return Result.ok(true);
 	}
 	if (c.holding()) { return c.answerHeld(t, e); }
@@ -93,11 +92,11 @@ function controlKey(
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
 	if (!alt.ok) { return Result.err(TermError.VtFailed); }
-	const mods = modsMask(keyEventOf(e).mods) as number;
-	if (try c.runKeybind(t, bindFor(c.keybinds, e.code, mods, alt.value))) {
+	const mods = modsMask(e.cooked().mods) as number;
+	if (try c.runKeybind(t, bindFor(c.keybinds, e.key, mods, alt.value))) {
 		return Result.ok(true);
 	}
-	const action = resolve(e.code, mods, alt.value);
+	const action = resolve(e.key, mods, alt.value);
 	match (action) {
 		Action.None => { return Result.ok(false); },
 		Action.Copy => { return c.copySelection(t); },

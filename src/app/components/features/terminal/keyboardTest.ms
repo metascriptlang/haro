@@ -1,4 +1,4 @@
-import { NeonEvent } from "../../../../../../neon/src/render/event";
+import { KeyAction, KeyEvent, modsOf } from "../../../../keys/keys";
 import { selected } from "../../../../input/pointer";
 import { Term, releaseHeldKey, sendKey } from "./term";
 import { Controls, holding } from "./controls";
@@ -207,9 +207,7 @@ test "a ctrl alt keybind leaves the character AltGr types on the same key to the
 			},
 		];
 		const clip = boardOf("");
-		const altGr = key("KeyQ", CTRL | ALT);
-		altGr.consumedMods = CTRL | ALT;
-		altGr.text = "@";
+		const altGr: KeyEvent = { ...key("KeyQ", CTRL | ALT), consumedMods: modsOf(CTRL | ALT), text: "@" };
 		assert !handled(settled(clip, c, t, c.keyDown(t, altGr)));
 		assert sink.sent == "";
 		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyQ", CTRL | ALT))));
@@ -217,11 +215,8 @@ test "a ctrl alt keybind leaves the character AltGr types on the same key to the
 	}).ok;
 }
 
-function released(code: string, unshifted: int32): NeonEvent {
-	const up = key(code, 0);
-	up.type = "keyup";
-	up.unshifted = unshifted;
-	return up;
+function released(code: string, unshifted: int32): KeyEvent {
+	return { ...key(code, 0), action: KeyAction.Release, unshifted: unshifted as uint32 };
 }
 
 test "a key release reaches a program only once it asks for event types" {
@@ -237,8 +232,7 @@ test "a key release reaches a program only once it asks for event types" {
 
 test "a focus loss releases the key still held, once, to a program that asks for event types" {
 	assert onTerm("\x1b[>3u", (t: Term, sink: Sink): void => {
-		const a = key("KeyA", 0);
-		a.unshifted = 0x61;
+		const a: KeyEvent = { ...key("KeyA", 0), unshifted: 0x61 };
 		assert t.sendKey(a).ok;
 		sink.sent = "";
 		assert t.releaseHeldKey().ok;
@@ -274,8 +268,7 @@ test "a keypad digit without NumLock is its navigation key on Windows, which alo
 			assert sink.sent == "8";
 		}
 		sink.sent = "";
-		const locked = key("Numpad8", NUM_LOCK);
-		locked.text = "8";
+		const locked: KeyEvent = { ...key("Numpad8", NUM_LOCK), text: "8" };
 		assert t.sendKey(locked).ok;
 		assert sink.sent == "8";
 	}).ok;

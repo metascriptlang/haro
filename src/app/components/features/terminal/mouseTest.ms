@@ -1,3 +1,4 @@
+import { KeyEvent } from "../../../../keys/keys";
 import { selected } from "../../../../input/pointer";
 import { View, fitRows, open, paint } from "../../../frame";
 import { bounds } from "../../../../select/select";
@@ -57,9 +58,7 @@ test "wheel arrows on the alternate screen tap each key and leave the held key t
 	}).ok;
 	assert onTerm("\x1b[?1049h\x1b[>3u", (letter: Term, letterSink: Sink): void => {
 		const c = Controls.open();
-		const a = key("KeyA", 0);
-		a.text = "a";
-		a.unshifted = 0x61;
+		const a: KeyEvent = { ...key("KeyA", 0), text: "a", unshifted: 0x61 };
 		assert letter.sendKey(a).ok;
 		assert c.roll(letter, -1, hitAt(0, 0)).ok;
 		letterSink.sent = "";

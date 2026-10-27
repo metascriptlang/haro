@@ -1,10 +1,8 @@
-import { NeonEvent } from "../../../../../../neon/src/render/event";
 import {
 	KeyAction,
 	KeyEvent,
 	KeyMod,
 	heldAfter,
-	modsOf,
 	releasesOf,
 	withNumLockApplied,
 	withoutAltGr,
@@ -273,15 +271,7 @@ function sendBuffered(this t: Term, s: Session, n: int32): Result<int32, TermErr
 	return sendBytes(s, t.buf[0..n]);
 }
 
-export function keyEventOf(e: NeonEvent): KeyEvent {
-	const key: KeyEvent = {
-		action: e.type == "keyup" ? KeyAction.Release : e.repeat ? KeyAction.Repeat : KeyAction.Press,
-		key: e.code,
-		mods: modsOf(e.mods),
-		consumedMods: modsOf(e.consumedMods),
-		unshifted: e.unshifted as uint32,
-		text: e.text,
-	};
+export function cooked(this key: KeyEvent): KeyEvent {
 	when (windows) {
 		return key.withoutAltGr().withNumLockApplied();
 	} else {
@@ -295,10 +285,10 @@ function sendKeyEvent(this t: Term, s: Session, key: KeyEvent): Result<int32, Te
 	return t.sendBuffered(s, encoded.value);
 }
 
-export function sendKey(this t: Term, e: NeonEvent): Result<int32, TermError> {
+export function sendKey(this t: Term, typed: KeyEvent): Result<int32, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(0); }
-	const key = keyEventOf(e);
+	const key = typed.cooked();
 	t.held = heldAfter(t.held, key);
 	return t.sendKeyEvent(s, key);
 }

@@ -3,7 +3,7 @@ import { PixelRatio } from "../../../../../../neon/src/api/pixelRatio";
 import { Spot, spotAt } from "../../../../input/pointer";
 import { Reply } from "../../../../input/paste";
 import { notchesOf } from "../../../../input/wheel";
-import { modifierKey, modsOf } from "../../../../keys/keys";
+import { KeyAction, KeyEvent, modifierKey, modsOf } from "../../../../keys/keys";
 import { noteKey, stats } from "../../../stats";
 import { focusCursor } from "../../content/cursor";
 import { Hit, holding, typed } from "./controls";
@@ -19,6 +19,17 @@ import {
 import { releaseHeldKey, sendFocus, sendKey, sendText } from "./term";
 
 const AUTOSCROLL_MS = 15;
+
+export function keyOf(e: NeonEvent): KeyEvent {
+	return {
+		action: e.type == "keyup" ? KeyAction.Release : e.repeat ? KeyAction.Repeat : KeyAction.Press,
+		key: e.code,
+		mods: modsOf(e.mods),
+		consumedMods: modsOf(e.consumedMods),
+		unshifted: e.unshifted as uint32,
+		text: e.text,
+	};
+}
 
 export function focusChanged(this m: PaneModel, gained: boolean): void {
 	m.cursor.focusCursor(gained);
@@ -47,7 +58,8 @@ export function keyed(this m: PaneModel, e: NeonEvent): void {
 		if (!modifierKey(e.code)) { m.host.exited(m.term.shellExitCode()); }
 		return;
 	}
-	const handled = m.controls.keyDown(m.term, e);
+	const k = keyOf(e);
+	const handled = m.controls.keyDown(m.term, k);
 	if (!handled.ok) {
 		m.failed("key", handled.error.toString());
 		return;
@@ -56,7 +68,7 @@ export function keyed(this m: PaneModel, e: NeonEvent): void {
 		m.scheduleRefresh();
 		return;
 	}
-	const sent = m.term.sendKey(e);
+	const sent = m.term.sendKey(k);
 	if (!sent.ok) {
 		m.failed("key", sent.error.toString());
 		return;
@@ -65,8 +77,9 @@ export function keyed(this m: PaneModel, e: NeonEvent): void {
 }
 
 export function keyReleased(this m: PaneModel, e: NeonEvent): void {
-	if (m.controls.keyUp(e)) { return; }
-	const sent = m.term.sendKey(e);
+	const k = keyOf(e);
+	if (m.controls.keyUp(k)) { return; }
+	const sent = m.term.sendKey(k);
 	if (!sent.ok) { m.failed("key", sent.error.toString()); }
 }
 

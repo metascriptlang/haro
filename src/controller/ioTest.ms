@@ -1,12 +1,13 @@
 import { Io, frame, key, open, text } from "./io";
 import { Term } from "./term";
+import { NO_MODS } from "../keys/keys";
 import { Sink, key as keyOf, onFresh } from "./terminalRig";
 
 test "a frame carries the time of the first input that reached the shell since the last frame, once" {
 	assert onFresh("", (t: Term, sink: Sink): void => {
 		const io = Io.open(t);
 		io.text("", 3);
-		io.key({ ...keyOf("KeyA", 0), unshifted: 0x61, text: "a" }, 5);
+		io.key({ ...keyOf("KeyA", NO_MODS), unshifted: 0x61, text: "a" }, 5);
 		io.text("b", 6);
 		assert sink.sent == "ab";
 		assert io.frame().keyAt == 5;

@@ -35,7 +35,7 @@ import {
 	relitRows,
 	text,
 } from "../../../frame";
-import { stats, mark } from "../../../stats";
+import { Mark } from "../../../stats";
 
 const BUFFER_BYTES = 65536;
 const DRAIN_LIMIT = 16;
@@ -84,6 +84,7 @@ export interface Term {
 	alive: boolean;
 	ended: boolean;
 	spawnedAt: number;
+	marks: Vec<Mark>;
 }
 
 export struct Frame {
@@ -139,6 +140,7 @@ export function openTerm(open: OpenPty): Result<Term, TermError> {
 		alive: true,
 		ended: false,
 		spawnedAt: -1,
+		marks: [],
 	});
 }
 
@@ -155,10 +157,10 @@ export function fit(
 ): Result<boolean, TermError> {
 	const s = t.session;
 	if (s === null) {
-		stats.mark("layout", Date.now());
+		t.marks.push({ name: "layout", at: Date.now() });
 		const pty = t.open(cols, rows, cellWidth, cellHeight);
 		if (!pty.ok) { return Result.err(TermError.PtyOpenFailed); }
-		stats.mark("spawned", Date.now());
+		t.marks.push({ name: "spawned", at: Date.now() });
 		t.spawnedAt = performance.now();
 		const started = Session.start(pty.value, cols, rows, cellWidth, cellHeight);
 		if (!started.ok) { return Result.err(TermError.SessionStartFailed); }

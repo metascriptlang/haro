@@ -1,7 +1,7 @@
 import { frameCounts } from "../../../neon/src/platform/ion/window";
 import { exit } from "std/process";
 import { Pace } from "./pace";
-import { Term, shutdown, sendText } from "./components/features/terminal/term";
+import { Io, shutdown, text as typed } from "./components/features/terminal/io";
 import { View, text } from "./frame";
 
 
@@ -19,20 +19,20 @@ function counts(label: string): void {
 	console.log(`smoke: ${label}: requested=${c[0]} drawn=${c[1]}`);
 }
 
-export function smokeReplay(t: Term, view: View): void {
+export function smokeReplay(io: Io, view: View): void {
 	setTimeout((): void => {
 		dump(view, "replayed");
 		counts("after the replay");
-		t.shutdown();
+		io.shutdown();
 		exit(0);
 	}, 3000);
 }
 
-export function smoke(t: Term, view: View): void {
+export function smoke(io: Io, view: View): void {
 	setTimeout((): void => { dump(view, "prompt"); counts("after the prompt"); }, 4000);
 	setTimeout((): void => {
-		const sent = t.sendText("1..200 | % { \"line $_\" }\r");
-		console.log(`smoke: sent 200 lines, ok=${sent.ok}`);
+		io.typed("1..200 | % { \"line $_\" }\r", performance.now());
+		console.log("smoke: sent 200 lines");
 	}, 4200);
 	setTimeout((): void => { dump(view, "after 200 lines"); }, 6500);
 	setTimeout((): void => { counts("idle begins"); }, 7000);
@@ -43,7 +43,7 @@ export function smoke(t: Term, view: View): void {
 	setTimeout((): void => {
 		dump(view, "after keys");
 		counts("end");
-		t.shutdown();
+		io.shutdown();
 		exit(0);
 	}, 42000);
 }
@@ -60,7 +60,7 @@ const FLOOD_LINES: int32 = 200000;
 const FLOOD_IDLE_TICKS: int32 = 3;
 const FLOOD_MAX_TICKS: int32 = 90;
 
-export function smokeFlood(t: Term, view: View, pace: Pace): void {
+export function smokeFlood(io: Io, view: View, pace: Pace): void {
 	let ticks = 0;
 	let doneAt = -1;
 	const report = (label: string): void => {
@@ -78,7 +78,7 @@ export function smokeFlood(t: Term, view: View, pace: Pace): void {
 		if (finished || ticks >= FLOOD_MAX_TICKS) {
 			console.log(`smoke: flood ${doneAt >= 0 ? "ended" : "did not end"} at tick ${doneAt}`);
 			dump(view, "after the flood");
-			t.shutdown();
+			io.shutdown();
 			exit(0);
 			return;
 		}
@@ -86,8 +86,8 @@ export function smokeFlood(t: Term, view: View, pace: Pace): void {
 	};
 	setTimeout((): void => {
 		report("before the flood");
-		const sent = t.sendText(`1..${FLOOD_LINES} | % { "line $_" }\r`);
-		console.log(`smoke: sent ${FLOOD_LINES} lines, ok=${sent.ok}`);
+		io.typed(`1..${FLOOD_LINES} | % { "line $_" }\r`, performance.now());
+		console.log(`smoke: sent ${FLOOD_LINES} lines`);
 		setTimeout(tick, 1000);
 	}, 4000);
 }

@@ -5,7 +5,7 @@ import { KeyEvent, OptionAsAlt } from "../../../../keys/keys";
 import { CellInk } from "../../../../grid/lines";
 import { Config } from "../../../../config/config";
 import { FrameRows } from "../../../frame";
-import { stats } from "../../../stats";
+import { Mark } from "../../../stats";
 import { Asks, Controls, Hit, holding, refit, takeAsks, typed } from "./controls";
 import { cancel, clipboardAsked, clipboardText, confirm } from "./clipboard";
 import { answerClose, closeKey, keyDown, keyUp } from "./keyboard";
@@ -15,6 +15,7 @@ import {
 	Term,
 	TermError,
 	exitedAbnormally,
+	drain,
 	inkCursor,
 	pumpFrame,
 	releaseHeldKey,
@@ -23,6 +24,7 @@ import {
 	sendText,
 	shellExitCode,
 	shellExitSignal,
+	shutdown,
 } from "./term";
 
 export struct Settings {
@@ -72,6 +74,8 @@ export struct IoFrame {
 	again: boolean;
 	started: boolean;
 	failures: Vec<Failure>;
+	keyAt: float64;
+	marks: Vec<Mark>;
 }
 
 export interface Io {
@@ -79,10 +83,11 @@ export interface Io {
 	controls: Controls;
 	settings: Settings | null;
 	failures: Vec<Failure>;
+	keyAt: float64;
 }
 
 export function open(this typeof Io, t: Term): Io {
-	return { term: t, controls: Controls.open(), settings: null, failures: [] };
+	return { term: t, controls: Controls.open(), settings: null, failures: [], keyAt: -1 };
 }
 
 export function started(this io: Io): boolean {
@@ -132,7 +137,7 @@ function input(this io: Io, sent: Result<int32, TermError>, what: string, time: 
 		return;
 	}
 	if (sent.value == 0) { return; }
-	stats.noteKey(time);
+	if (io.keyAt < 0) { io.keyAt = time; }
 	io.check("typed", io.controls.typed(io.term));
 }
 
@@ -213,6 +218,15 @@ export function pasted(this io: Io, clipboard: string): void {
 	io.check("clipboard", io.controls.clipboardText(io.term, clipboard));
 }
 
+export function drain(this io: Io): void {
+	const drained = io.term.drain();
+	if (!drained.ok) { io.fail("output", drained.error); }
+}
+
+export function shutdown(this io: Io): void {
+	io.term.shutdown();
+}
+
 export function relight(this io: Io, ink: CellInk | null): Result<FrameRows, TermError> {
 	return io.term.inkCursor(ink);
 }
@@ -252,6 +266,10 @@ export function frame(this io: Io): IoFrame {
 	const c = io.controls;
 	const failures = io.failures;
 	io.failures = [];
+	const keyAt = io.keyAt;
+	io.keyAt = -1;
+	const marks = io.term.marks;
+	io.term.marks = [];
 	return {
 		frame: frame,
 		asks: c.takeAsks(),
@@ -261,5 +279,7 @@ export function frame(this io: Io): IoFrame {
 		again: again,
 		started: io.started(),
 		failures: failures,
+		keyAt: keyAt,
+		marks: marks,
 	};
 }

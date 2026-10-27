@@ -23,7 +23,8 @@ import { OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
 import { ConfigWatch, forFile, readConfig, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
-import { Term, exitCodeText, openTerm, shutdown } from "./components/features/terminal/term";
+import { exitCodeText, openTerm } from "./components/features/terminal/term";
+import { Io, open, shutdown } from "./components/features/terminal/io";
 import { View, open } from "./frame";
 import { AppHost } from "./components/features/terminal/paneModel";
 
@@ -137,16 +138,14 @@ function inFrame(run: () => void): void {
 	});
 }
 
-function openWindow(t: Term, view: View, exited: (code: int32) => void): int32 {
+function openWindow(io: Io, view: View, exited: (code: int32) => void): int32 {
 	registerFallbacks();
 	const families = familyList(config.loaded.faces);
 	const host: AppHost = {
-		onWake: (handler: () => void, failed: (what: string, error: string) => void): void => {
+		onWake: (handler: () => void): void => {
 			onWake((): void => {
 				stats.noteWake(performance.now());
-				const drained = t.drain();
-				if (!drained.ok) { failed("output", drained.error.toString()); }
-				inFrame(handler);
+				handler();
 			});
 		},
 		schedule: inFrame,
@@ -160,7 +159,7 @@ function openWindow(t: Term, view: View, exited: (code: int32) => void): int32 {
 		openLink: (uri: string): void => { openExternal(uri); },
 		close: (): void => {
 			note("Close Window or a keybind closed the window");
-			t.shutdown();
+			io.shutdown();
 			exit(0);
 		},
 		onCloseKey: (handler: () => void): void => {
@@ -190,9 +189,9 @@ function openWindow(t: Term, view: View, exited: (code: int32) => void): int32 {
 		font: families[0],
 		fontFamily: families.join(", "),
 	};
-	const code = runWindow(opts, (): NeonNode => App(t, view, host, config.loaded.config));
+	const code = runWindow(opts, (): NeonNode => App(io, view, host, config.loaded.config));
 	note("the window closed");
-	t.shutdown();
+	io.shutdown();
 	return code;
 }
 
@@ -210,14 +209,14 @@ function runShell(shell: string): int32 {
 		fail(`open: ${opened.error.toString()}`);
 		return 1;
 	}
-	const t = opened.value;
+	const io = Io.open(opened.value);
 	const view = View.open();
 	appWireWake();
-	if (hasFlag("--smoke")) { smoke(t, view); }
-	if (hasFlag("--flood")) { smokeFlood(t, view, pace); }
-	return openWindow(t, view, (code: int32): void => {
+	if (hasFlag("--smoke")) { smoke(io, view); }
+	if (hasFlag("--flood")) { smokeFlood(io, view, pace); }
+	return openWindow(io, view, (code: int32): void => {
 		note(`the shell exited with code ${exitCodeText(code)}`);
-		t.shutdown();
+		io.shutdown();
 		exit(0);
 	});
 }
@@ -236,10 +235,10 @@ function runReplay(path: string): int32 {
 		fail(`open: ${opened.error.toString()}`);
 		return 1;
 	}
-	const t = opened.value;
+	const io = Io.open(opened.value);
 	const view = View.open();
-	if (hasFlag("--smoke")) { smokeReplay(t, view); }
-	return openWindow(t, view, (code: int32): void => {
+	if (hasFlag("--smoke")) { smokeReplay(io, view); }
+	return openWindow(io, view, (code: int32): void => {
 		console.log(`haro: the recording ended with code ${exitCodeText(code)}`);
 	});
 }

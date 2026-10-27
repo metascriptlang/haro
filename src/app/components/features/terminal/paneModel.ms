@@ -13,7 +13,7 @@ import { CellInk } from "../../../../grid/lines";
 import { MouseGeometry } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
 import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
-import { stats } from "../../../stats";
+import { mark, noteKey, stats } from "../../../stats";
 import { CellMetrics } from "../../ui/cellText";
 import {
 	CursorModel,
@@ -47,7 +47,7 @@ const AUTOSCROLL_MS = 15;
 const RESTART_NOTICE = "config.ms: command and workingDirectory apply when Haro restarts";
 
 export interface AppHost {
-	onWake: (handler: () => void, failed: (what: string, error: string) => void) => void;
+	onWake: (handler: () => void) => void;
 	schedule: (run: () => void) => void;
 	exited: (code: int32) => void;
 	fail: (message: string) => void;
@@ -249,6 +249,8 @@ export function refresh(this m: PaneModel): void {
 	const got = m.io.frame();
 	m.shellStarted = got.started;
 	for (const failure of got.failures) { m.reported(failure); }
+	for (const launch of got.marks) { stats.mark(launch.name, launch.at); }
+	if (got.keyAt >= 0) { stats.noteKey(got.keyAt); }
 	const f = got.frame;
 	if (f !== null) {
 		const copied = f.copied;
@@ -350,8 +352,9 @@ export function connectHost(this m: PaneModel): void {
 		m.reconfigure(c, family, error);
 	});
 	m.host.onCloseKey((): void => { m.closeKeyPressed(); });
-	m.host.onWake((): void => { m.woke(); }, (what: string, error: string): void => {
-		m.failed(what, error);
+	m.host.onWake((): void => {
+		m.io.drain();
+		m.host.schedule((): void => { m.woke(); });
 	});
 	createEffect((): number => PixelRatio.get(), (ratio: number, was: number | null): Cleanup | null => {
 		if (was !== null && m.layoutWidth > 0) { m.fitLayout(); }

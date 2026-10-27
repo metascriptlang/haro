@@ -29,7 +29,7 @@ function noCalls(): Calls {
 
 function hostFor(calls: Calls): AppHost {
 	return {
-		onWake: (handler: () => void, failed: (what: string, error: string) => void): void => {},
+		onWake: (handler: () => void): void => {},
 		schedule: (run: () => void): void => {},
 		exited: (code: int32): void => { calls.exits += `${code} `; },
 		fail: (message: string): void => { calls.fatal = message; },

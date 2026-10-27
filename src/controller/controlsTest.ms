@@ -6,7 +6,10 @@ import { Pasted, cancel, clipboardAsked, confirm, normalized, paste } from "./cl
 import { keyDown } from "./keyboard";
 import { pointerDown, roll } from "./mouse";
 import { Warning } from "../input/paste";
-import { CLIPBOARD_MODS, CTRL, SHIFT } from "../input/bindings";
+import { CLIPBOARD_MODS } from "../input/bindings";
+import { KeyMod, NO_MODS, modSet } from "../keys/keys";
+const CTRL = modSet(KeyMod.Ctrl);
+const SHIFT = modSet(KeyMod.Shift);
 import {
 	Sink,
 	at,
@@ -58,7 +61,7 @@ test "bracketed paste keeps line breaks, and an end marker or a large text still
 		const held = c.held;
 		assert held !== null;
 		if (held !== null) { assert held.warning == Warning.EndMarker; }
-		assert handled(settled(boardOf(""), c, a, c.keyDown(a, key("Enter", 0))));
+		assert handled(settled(boardOf(""), c, a, c.keyDown(a, key("Enter", NO_MODS))));
 		assert framed.sent == "\x1b[200~one\ntwo\n\x1b[201~\x1b[200~evil [201~rm\x1b[201~";
 		let big = "";
 		for (let i = 0; i < 6000; i++) { big += "z"; }
@@ -113,9 +116,9 @@ test "a clipboard read waits for an answer: escape or enter deny it, ctrl enter 
 		assert c.holding();
 		assert c.reading == "secret";
 		assert deny.sent == "";
-		assert handled(settled(clip, c, a, c.keyDown(a, key("KeyY", 0))));
+		assert handled(settled(clip, c, a, c.keyDown(a, key("KeyY", NO_MODS))));
 		assert c.holding();
-		assert handled(settled(clip, c, a, c.keyDown(a, key("Enter", 0))));
+		assert handled(settled(clip, c, a, c.keyDown(a, key("Enter", NO_MODS))));
 		assert !c.holding();
 		assert deny.sent == "\x1b]52;c;\x1b\\";
 	}).ok;

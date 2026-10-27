@@ -1,5 +1,5 @@
 import { MouseButton } from "./mouseButton";
-import { KeyAction, KeyEvent, modsOf } from "../keys/keys";
+import { KeyAction, KeyEvent, KeyMod, NO_MODS } from "../keys/keys";
 import { Spot } from "../input/pointer";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
@@ -100,12 +100,12 @@ export function settled(
 	return r;
 }
 
-export function key(code: string, mods: int32): KeyEvent {
+export function key(code: string, mods: BitSet<KeyMod>): KeyEvent {
 	return {
 		action: KeyAction.Press,
 		key: code,
-		mods: modsOf(mods),
-		consumedMods: modsOf(0),
+		mods: mods,
+		consumedMods: NO_MODS,
 		unshifted: 0,
 		text: "",
 	};
@@ -138,16 +138,16 @@ export function handled(r: Result<boolean, TermError>): boolean {
 }
 
 export function hitAt(col: int32, row: int32): Hit {
-	return hitWith(col, row, 0);
+	return hitWith(col, row, NO_MODS);
 }
 
-export function hitWith(col: int32, row: int32, mods: int32): Hit {
+export function hitWith(col: int32, row: int32, mods: BitSet<KeyMod>): Hit {
 	return {
 		at: at(col, row),
 		x: col as float64 * 8,
 		y: row as float64 * 16,
 		scale: 1,
-		mods: modsOf(mods),
+		mods: mods,
 		cell: {
 			cellWidth: 8,
 			cellHeight: 16,

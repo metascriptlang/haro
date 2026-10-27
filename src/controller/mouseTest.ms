@@ -17,7 +17,10 @@ import {
 	roll,
 	syncSelection,
 } from "./mouse";
-import { CLIPBOARD_MODS, CTRL, SHIFT } from "../input/bindings";
+import { CLIPBOARD_MODS } from "../input/bindings";
+import { KeyMod, NO_MODS, modSet } from "../keys/keys";
+const CTRL = modSet(KeyMod.Ctrl);
+const SHIFT = modSet(KeyMod.Shift);
 import {
 	Sink,
 	at,
@@ -61,7 +64,7 @@ test "wheel arrows on the alternate screen tap each key and leave the held key t
 	}).ok;
 	assert onTerm("\x1b[?1049h\x1b[>3u", (letter: Term, letterSink: Sink): void => {
 		const c = Controls.open();
-		const a: KeyEvent = { ...key("KeyA", 0), text: "a", unshifted: 0x61 };
+		const a: KeyEvent = { ...key("KeyA", NO_MODS), text: "a", unshifted: 0x61 };
 		assert letter.sendKey(a).ok;
 		assert c.roll(letter, -1, hitAt(0, 0)).ok;
 		letterSink.sent = "";
@@ -169,7 +172,7 @@ test "a ctrl click on an http link opens it, on a link to a program or on text i
 		assert board.opened == "";
 		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(12, 0, CTRL), 10000)));
 		assert board.opened == "";
-		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(1, 0, 0), 20000)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(1, 0, NO_MODS), 20000)));
 		assert board.opened == "";
 	}, 30, 5).ok;
 }

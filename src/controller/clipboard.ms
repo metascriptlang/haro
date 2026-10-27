@@ -1,4 +1,4 @@
-import { KeyEvent, modsMask } from "../keys/keys";
+import { KeyEvent } from "../keys/keys";
 import { Reply, replyTo, replyToRead, warningFor, Warning } from "../input/paste";
 import { clear, copyText } from "../input/pointer";
 import { answerClipboard, modes } from "../vt/vt";
@@ -99,7 +99,7 @@ export function cancel(this c: Controls, t: Term): Result<boolean, TermError> {
 }
 
 export function answerHeld(this c: Controls, t: Term, e: KeyEvent): Result<boolean, TermError> {
-	const mods = modsMask(e.mods);
+	const mods = e.mods;
 	const reply = c.held !== null ? replyTo(e.key, mods) : replyToRead(e.key, mods);
 	match (reply) {
 		Reply.Confirm => { const _sent = try c.confirm(t); },

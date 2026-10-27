@@ -1,20 +1,15 @@
-import { KeyAction, KeyEvent, modsOf } from "../keys/keys";
+import { KeyAction, KeyEvent, KeyMod, NO_MODS, modSet, modsMask } from "../keys/keys";
+const ALT = modSet(KeyMod.Alt);
+const CTRL = modSet(KeyMod.Ctrl);
+const NUM_LOCK = modSet(KeyMod.NumLock);
+const SHIFT = modSet(KeyMod.Shift);
+const SUPER = modSet(KeyMod.Super);
 import { selected } from "../input/pointer";
 import { Term, releaseHeldKey, sendKey } from "./term";
 import { Controls, holding } from "./controls";
 import { closeKey, keyDown, keyUp } from "./keyboard";
 import { Warning } from "../input/paste";
-import {
-	ALT,
-	BindAction,
-	CLIPBOARD_MODS,
-	CTRL,
-	Keybind,
-	NUM_LOCK,
-	SHIFT,
-	SUPER,
-	Screen,
-} from "../input/bindings";
+import { BindAction, CLIPBOARD_MODS, Keybind, Screen } from "../input/bindings";
 import {
 	Sink,
 	at,
@@ -48,8 +43,8 @@ test "ctrl shift page, arrow, home and end keys move the viewport and say they d
 		assert offsetOf(t) == 5;
 		assert handled(settled(clip, c, t, c.keyDown(t, key("End", CTRL | SHIFT))));
 		assert atBottomOf(t);
-		assert !handled(settled(clip, c, t, c.keyDown(t, key("ArrowUp", 0))));
-		assert !handled(settled(clip, c, t, c.keyDown(t, key("PageUp", 0))));
+		assert !handled(settled(clip, c, t, c.keyDown(t, key("ArrowUp", NO_MODS))));
+		assert !handled(settled(clip, c, t, c.keyDown(t, key("PageUp", NO_MODS))));
 		assert sink.sent == "";
 	}).ok;
 }
@@ -68,9 +63,9 @@ test "the copy chord, and enter on windows, copy the selection to the clipboard 
 		assert !c.pointer.selected();
 		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyC", CLIPBOARD_MODS))));
 		when (windows) {
-			assert !handled(settled(clip, c, t, c.keyDown(t, key("Enter", 0))));
+			assert !handled(settled(clip, c, t, c.keyDown(t, key("Enter", NO_MODS))));
 			assert drag(c, t, clip, at(6, 0), at(9, 0));
-			assert handled(settled(clip, c, t, c.keyDown(t, key("Enter", 0))));
+			assert handled(settled(clip, c, t, c.keyDown(t, key("Enter", NO_MODS))));
 			assert board.copied == "beta";
 		}
 		when (!macos) {
@@ -112,7 +107,7 @@ test "a paste with a line break waits for an answer and sends nothing meanwhile"
 			assert held.text == "one\ntwo";
 		}
 		assert sink.sent == "";
-		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyA", 0))));
+		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyA", NO_MODS))));
 		assert handled(settled(clip, c, t, c.keyDown(t, key("ArrowUp", CTRL | SHIFT))));
 		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyC", CLIPBOARD_MODS))));
 		assert sink.sent == "";
@@ -125,7 +120,7 @@ test "enter confirms a held paste and it goes out through the paste encoding" {
 		const c = Controls.open();
 		const clip = boardOf("one\r\ntwo");
 		assert handled(settled(clip, c, a, c.keyDown(a, key("KeyV", CLIPBOARD_MODS))));
-		assert handled(settled(clip, c, a, c.keyDown(a, key("Enter", 0))));
+		assert handled(settled(clip, c, a, c.keyDown(a, key("Enter", NO_MODS))));
 		assert !c.holding();
 		assert plain.sent == "one\rtwo";
 	}).ok;
@@ -143,10 +138,10 @@ test "escape drops a held paste and the next key reaches the shell again" {
 		const c = Controls.open();
 		const clip = boardOf("one\r\ntwo");
 		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyV", CLIPBOARD_MODS))));
-		assert handled(settled(clip, c, t, c.keyDown(t, key("Escape", 0))));
+		assert handled(settled(clip, c, t, c.keyDown(t, key("Escape", NO_MODS))));
 		assert !c.holding();
 		assert sink.sent == "";
-		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyA", 0))));
+		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyA", NO_MODS))));
 	}).ok;
 }
 
@@ -170,14 +165,14 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 		c.keybinds = [
 			{
 				code: "Enter",
-				mods: SHIFT,
+				mods: modsMask(SHIFT),
 				text: "\x1b[13;2u",
 				action: BindAction.SendText,
 				screen: Screen.Any,
 			},
 			{
 				code: "KeyC",
-				mods: CTRL | SHIFT,
+				mods: modsMask(CTRL | SHIFT),
 				text: "c",
 				action: BindAction.SendText,
 				screen: Screen.Any,
@@ -200,14 +195,14 @@ test "a ctrl alt keybind leaves the character AltGr types on the same key to the
 		c.keybinds = [
 			{
 				code: "KeyQ",
-				mods: CTRL | ALT,
+				mods: modsMask(CTRL | ALT),
 				text: "x",
 				action: BindAction.SendText,
 				screen: Screen.Any,
 			},
 		];
 		const clip = boardOf("");
-		const altGr: KeyEvent = { ...key("KeyQ", CTRL | ALT), consumedMods: modsOf(CTRL | ALT), text: "@" };
+		const altGr: KeyEvent = { ...key("KeyQ", CTRL | ALT), consumedMods: CTRL | ALT, text: "@" };
 		assert !handled(settled(clip, c, t, c.keyDown(t, altGr)));
 		assert sink.sent == "";
 		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyQ", CTRL | ALT))));
@@ -216,7 +211,7 @@ test "a ctrl alt keybind leaves the character AltGr types on the same key to the
 }
 
 function released(code: string, unshifted: int32): KeyEvent {
-	return { ...key(code, 0), action: KeyAction.Release, unshifted: unshifted as uint32 };
+	return { ...key(code, NO_MODS), action: KeyAction.Release, unshifted: unshifted as uint32 };
 }
 
 test "a key release reaches a program only once it asks for event types" {
@@ -232,7 +227,7 @@ test "a key release reaches a program only once it asks for event types" {
 
 test "a focus loss releases the key still held, once, to a program that asks for event types" {
 	assert onTerm("\x1b[>3u", (t: Term, sink: Sink): void => {
-		const a: KeyEvent = { ...key("KeyA", 0), unshifted: 0x61 };
+		const a: KeyEvent = { ...key("KeyA", NO_MODS), unshifted: 0x61 };
 		assert t.sendKey(a).ok;
 		sink.sent = "";
 		assert t.releaseHeldKey().ok;
@@ -254,14 +249,14 @@ test "the release of a key a control consumed is consumed too, and any other goe
 		assert handled(settled(clip, c, t, c.keyDown(t, key("PageUp", CTRL | SHIFT))));
 		assert c.keyUp(released("PageUp", 0));
 		assert !c.keyUp(released("KeyA", 0x61));
-		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyA", 0))));
+		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyA", NO_MODS))));
 		assert !c.keyUp(released("PageUp", 0));
 	}).ok;
 }
 
 test "a keypad digit without NumLock is its navigation key on Windows, which alone reports NumLock" {
 	assert onTerm("ready", (t: Term, sink: Sink): void => {
-		assert t.sendKey(key("Numpad8", 0)).ok;
+		assert t.sendKey(key("Numpad8", NO_MODS)).ok;
 		when (windows) {
 			assert sink.sent == "\x1b[A";
 		} else {
@@ -278,14 +273,14 @@ test "a keybind with a mode sends to a full-screen program and closes the window
 	const binds: Vec<Keybind> = [
 		{
 			code: "KeyW",
-			mods: SUPER,
+			mods: modsMask(SUPER),
 			text: "\x1b[119;9u",
 			action: BindAction.SendText,
 			screen: Screen.Alternate,
 		},
 		{
 			code: "KeyW",
-			mods: SUPER,
+			mods: modsMask(SUPER),
 			text: "",
 			action: BindAction.CloseWindow,
 			screen: Screen.Primary,
@@ -317,13 +312,13 @@ test "closing while a program runs asks first: escape keeps the window and enter
 		assert c.closing;
 		assert c.holding();
 		assert board.closed == 0;
-		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyX", 0))));
-		assert handled(settled(clip, c, t, c.keyDown(t, key("Escape", 0))));
+		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyX", NO_MODS))));
+		assert handled(settled(clip, c, t, c.keyDown(t, key("Escape", NO_MODS))));
 		assert !c.closing;
 		assert board.closed == 0;
 		assert sink.sent == "";
 		assert handled(settled(clip, c, t, c.closeKey(t)));
-		assert handled(settled(clip, c, t, c.keyDown(t, key("Enter", 0))));
+		assert handled(settled(clip, c, t, c.keyDown(t, key("Enter", NO_MODS))));
 		assert !c.closing;
 		assert board.closed == 1;
 		sink.busy = false;
@@ -337,7 +332,7 @@ test "a close_window keybind asks first while a program runs, like the menu" {
 	const binds: Vec<Keybind> = [
 		{
 			code: "KeyW",
-			mods: SUPER,
+			mods: modsMask(SUPER),
 			text: "",
 			action: BindAction.CloseWindow,
 			screen: Screen.Any,
@@ -352,7 +347,7 @@ test "a close_window keybind asks first while a program runs, like the menu" {
 		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyW", SUPER))));
 		assert c.closing;
 		assert board.closed == 0;
-		assert handled(settled(clip, c, t, c.keyDown(t, key("Enter", 0))));
+		assert handled(settled(clip, c, t, c.keyDown(t, key("Enter", NO_MODS))));
 		assert board.closed == 1;
 	}).ok;
 }
@@ -361,7 +356,7 @@ test "close window from the menu runs a super w keybind for this screen and othe
 	const binds: Vec<Keybind> = [
 		{
 			code: "KeyW",
-			mods: SUPER,
+			mods: modsMask(SUPER),
 			text: "\x1b[119;9u",
 			action: BindAction.SendText,
 			screen: Screen.Alternate,

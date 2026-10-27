@@ -1,6 +1,6 @@
 import { LineRun } from "../grid/lines";
 import { Style } from "../../../neon/src/render/style";
-import { Rgb, Underline } from "../vt/vt";
+import { CellFlag, Rgb, Underline } from "../vt/vt";
 import { cssHex, defaultIndexed, rgb } from "./palette";
 import { Screen } from "./screen";
 
@@ -66,7 +66,7 @@ test "SGR 39 and 49 return to the terminal's defaults, 0 clears everything" {
 		assert fg.run.fg == fg.defaultFg;
 		assert bg.run.bg == bg.defaultBg;
 		assert all.run.fg == all.defaultFg && all.run.bg == all.defaultBg;
-		assert !all.run.bold && !all.run.italic && !all.run.strikethrough;
+		assert !all.run.flags.has(CellFlag.Bold) && !all.run.flags.has(CellFlag.Italic) && !all.run.flags.has(CellFlag.Strikethrough);
 		assert all.run.underline == Underline.None;
 	}
 }
@@ -104,10 +104,10 @@ test "bold, italic and strikethrough set and reset on their own codes" {
 	const noStrike = look("1;3;9;29");
 	assert on !== null && noBold !== null && noItalic !== null && noStrike !== null;
 	if (on !== null && noBold !== null && noItalic !== null && noStrike !== null) {
-		assert on.run.bold && on.run.italic && on.run.strikethrough;
-		assert !noBold.run.bold && noBold.run.italic && noBold.run.strikethrough;
-		assert noItalic.run.bold && !noItalic.run.italic && noItalic.run.strikethrough;
-		assert noStrike.run.bold && noStrike.run.italic && !noStrike.run.strikethrough;
+		assert on.run.flags.has(CellFlag.Bold) && on.run.flags.has(CellFlag.Italic) && on.run.flags.has(CellFlag.Strikethrough);
+		assert !noBold.run.flags.has(CellFlag.Bold) && noBold.run.flags.has(CellFlag.Italic) && noBold.run.flags.has(CellFlag.Strikethrough);
+		assert noItalic.run.flags.has(CellFlag.Bold) && !noItalic.run.flags.has(CellFlag.Italic) && noItalic.run.flags.has(CellFlag.Strikethrough);
+		assert noStrike.run.flags.has(CellFlag.Bold) && noStrike.run.flags.has(CellFlag.Italic) && !noStrike.run.flags.has(CellFlag.Strikethrough);
 		assert on.style.fontWeight == "bold" && on.style.fontStyle == "italic";
 		assert on.style.textDecorationLine == "line-through";
 		assert noBold.style.fontWeight == "normal";
@@ -157,8 +157,8 @@ test "an SGR parameter with too many colons is dropped and the next one still ap
 	const colour = look("38:2:0:1:2:3:4;1");
 	assert l !== null && colour !== null;
 	if (l !== null && colour !== null) {
-		assert l.run.underline == Underline.None && l.run.bold;
-		assert colour.run.fg == colour.defaultFg && colour.run.bold;
+		assert l.run.underline == Underline.None && l.run.flags.has(CellFlag.Bold);
+		assert colour.run.fg == colour.defaultFg && colour.run.flags.has(CellFlag.Bold);
 	}
 }
 
@@ -188,7 +188,7 @@ test "faint blends the foreground half way into the background" {
 test "SGR 22 clears faint along with bold" {
 	const l = look("2;22");
 	assert l !== null;
-	if (l !== null) { assert l.run.fg == l.defaultFg && !l.run.bold; }
+	if (l !== null) { assert l.run.fg == l.defaultFg && !l.run.flags.has(CellFlag.Bold); }
 }
 
 test "a background equal to the terminal's is left to the window, any other is a span background" {

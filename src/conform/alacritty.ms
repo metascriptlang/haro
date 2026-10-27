@@ -1,6 +1,6 @@
 import { readFile } from "std/fs";
 import { LineRun } from "../grid/lines";
-import { Rgb, Underline } from "../vt/vt";
+import { CellFlag, Rgb, Underline } from "../vt/vt";
 import { DEFAULT_BG, DEFAULT_FG, fromCssHex, indexed, palettePrelude } from "./palette";
 import { Screen, runsText } from "./screen";
 
@@ -62,7 +62,15 @@ function underlineOf(flags: string): Underline {
 
 function sameLook(a: LineRun, b: LineRun): boolean {
 	return a.fg == b.fg && a.bg == b.bg && a.underline == b.underline &&
-		a.bold == b.bold && a.italic == b.italic && a.strikethrough == b.strikethrough;
+		a.flags == b.flags;
+}
+
+function flagsOf(flags: string): BitSet<CellFlag> {
+	let out = 0 as BitSet<CellFlag>;
+	if (flags.includes("B")) { out = out.incl(CellFlag.Bold); }
+	if (flags.includes("I")) { out = out.incl(CellFlag.Italic); }
+	if (flags.includes("S")) { out = out.incl(CellFlag.Strikethrough); }
+	return out;
 }
 
 function merged(runs: Vec<LineRun>): Vec<LineRun> {
@@ -93,9 +101,7 @@ function expectedRuns(line: string, own: boolean): Vec<LineRun> {
 			bg: inverse ? fg : bg,
 			underline: underlineOf(flags),
 			underlineColor: null,
-			bold: flags.includes("B"),
-			italic: flags.includes("I"),
-			strikethrough: flags.includes("S"),
+			flags: flagsOf(flags),
 		});
 	}
 	return merged(runs);
@@ -108,7 +114,7 @@ function withoutTrailingEmpty(runs: Vec<LineRun>, textUnits: int32): Vec<LineRun
 	while (total > textUnits && out.length > 0) {
 		const last = out[out.length - 1];
 		const styled = last.bg != DEFAULT_BG || last.underline != Underline.None ||
-			last.strikethrough;
+			last.flags.has(CellFlag.Strikethrough);
 		if (styled) { break; }
 		const cut = Math.min(last.units, total - textUnits);
 		total -= cut;

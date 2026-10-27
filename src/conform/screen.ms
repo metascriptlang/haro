@@ -3,7 +3,7 @@ import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { RowSlot, Styles, applyFrame, empty, fitGrid } from "../app/frame";
 import { SELECTION, Shown, fitShown } from "../controller/rows";
 import { LineRun, cellOnRow, line } from "../grid/lines";
-import { Cursor, Vt } from "../vt/vt";
+import { CellFlag, Cursor, Vt } from "../vt/vt";
 
 export interface Screen {
 	vt: Vt;
@@ -139,7 +139,7 @@ export function history(this s: Screen): Result<Vec<string>, ScreenError> {
 function runText(r: LineRun): string {
 	const fg = `${r.fg.r},${r.fg.g},${r.fg.b}`;
 	const bg = `${r.bg.r},${r.bg.g},${r.bg.b}`;
-	const look = `${r.bold ? "B" : ""}${r.italic ? "I" : ""}${r.strikethrough ? "S" : ""}`;
+	const look = `${r.flags.has(CellFlag.Bold) ? "B" : ""}${r.flags.has(CellFlag.Italic) ? "I" : ""}${r.flags.has(CellFlag.Strikethrough) ? "S" : ""}`;
 	const lineColor = r.underlineColor;
 	const ul = lineColor === null ? "" : `@${lineColor.r},${lineColor.g},${lineColor.b}`;
 	return `${r.units}:${fg}/${bg}/u${r.underline as int32}${ul}${look}`;

@@ -1,4 +1,4 @@
-import { KeyEvent, KeyMod, modsMask } from "../keys/keys";
+import { KeyEvent, KeyMod } from "../keys/keys";
 import { Action, BindAction, Keybind, bindFor, resolve } from "../input/bindings";
 import { ROWS_PER_NOTCH } from "../input/wheel";
 import { Reply, replyToClose } from "../input/paste";
@@ -38,7 +38,7 @@ export function closeKey(this c: Controls, t: Term): Result<boolean, TermError> 
 	if (vt !== null) {
 		const alt = vt.alternateScreen();
 		if (!alt.ok) { return Result.err(TermError.VtFailed); }
-		const bind = bindFor(c.keybinds, "KeyW", SUPER_ONLY as uint16, alt.value);
+		const bind = bindFor(c.keybinds, "KeyW", SUPER_ONLY, alt.value);
 		if (try c.runKeybind(t, bind)) { return Result.ok(true); }
 	}
 	c.closeWindow(t);
@@ -84,7 +84,7 @@ function controlKey(
 	e: KeyEvent,
 ): Result<boolean, TermError> {
 	if (c.closing) {
-		c.answerClose(replyToClose(e.key, modsMask(e.mods)));
+		c.answerClose(replyToClose(e.key, e.mods));
 		return Result.ok(true);
 	}
 	if (c.holding()) { return c.answerHeld(t, e); }
@@ -92,7 +92,7 @@ function controlKey(
 	if (vt === null) { return Result.ok(false); }
 	const alt = vt.alternateScreen();
 	if (!alt.ok) { return Result.err(TermError.VtFailed); }
-	const mods = modsMask(e.cooked().mods) as number;
+	const mods = e.cooked().mods;
 	if (try c.runKeybind(t, bindFor(c.keybinds, e.key, mods, alt.value))) {
 		return Result.ok(true);
 	}

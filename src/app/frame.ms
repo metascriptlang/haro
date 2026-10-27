@@ -3,7 +3,7 @@ import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style } from "../../../neon/src/render/style";
 import { CellInk, GridLine, LineRun } from "../grid/lines";
 import { Marked } from "../select/select";
-import { Cursor, Rgb, Underline, Vt } from "../vt/vt";
+import { CellFlag, Cursor, Rgb, Underline, Vt } from "../vt/vt";
 import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "../controller/rows";
 
 export interface RowSlot {
@@ -58,9 +58,9 @@ type Decoration = "none" | "underline" | "line-through" | "underline line-throug
 
 function decorationOf(run: LineRun): Decoration {
 	const under = run.underline != Underline.None;
-	if (under && run.strikethrough) { return "underline line-through"; }
+	if (under && run.flags.has(CellFlag.Strikethrough)) { return "underline line-through"; }
 	if (under) { return "underline"; }
-	if (run.strikethrough) { return "line-through"; }
+	if (run.flags.has(CellFlag.Strikethrough)) { return "line-through"; }
 	return "none";
 }
 
@@ -70,16 +70,15 @@ function rgbBits(c: Rgb): uint64 {
 	return ((c.r as uint64) << 16) | ((c.g as uint64) << 8) | (c.b as uint64);
 }
 
+const FLAGS_BITS: uint64 = 9;
+
 function lookBits(run: LineRun): uint64 {
 	const under: uint64 = match (run.underline) {
 		Underline.None => 0,
 		Underline.Curly => 2,
 		_ => 1,
 	};
-	const strike = (run.strikethrough ? 1 : 0) as uint64;
-	const bold = (run.bold ? 1 : 0) as uint64;
-	const italic = (run.italic ? 1 : 0) as uint64;
-	return (under << 3) | (strike << 2) | (bold << 1) | italic;
+	return (under << FLAGS_BITS) | ((run.flags as uint32) as uint64);
 }
 
 function styleOf(styles: Styles, run: LineRun, background: Rgb): Style {
@@ -87,15 +86,15 @@ function styleOf(styles: Styles, run: LineRun, background: Rgb): Style {
 	const tint = run.underlineColor;
 	const tinted = tint !== null && run.underline != Underline.None;
 	const bgBits = plain ? PLAIN_BG : rgbBits(run.bg);
-	const look = (bgBits << 29) | (rgbBits(run.fg) << 5) | lookBits(run);
+	const look = (bgBits << 33) | (rgbBits(run.fg) << 9) | lookBits(run);
 	const key = tinted ? `${look}${hexOf(tint!)}` : "";
 	const known = tinted ? recall(styles.tinted, styles.olderTinted, key) : recall(styles.looks, styles.olderLooks, look);
 	if (known !== undefined) { return known; }
 	const fg = hexOf(run.fg);
 	const bg = plain ? "" : hexOf(run.bg);
 	const decoration = decorationOf(run);
-	const weight: "bold" | "normal" = run.bold ? "bold" : "normal";
-	const slant: "italic" | "normal" = run.italic ? "italic" : "normal";
+	const weight: "bold" | "normal" = run.flags.has(CellFlag.Bold) ? "bold" : "normal";
+	const slant: "italic" | "normal" = run.flags.has(CellFlag.Italic) ? "italic" : "normal";
 	const line: "wavy" | "solid" = run.underline == Underline.Curly ? "wavy" : "solid";
 	const lineColor = tinted ? hexOf(tint!) : "";
 	const style: Style = {
@@ -207,7 +206,7 @@ const RED: Rgb = { r: 255, g: 0, b: 0 };
 function run(units: int32, fg: Rgb, bg: Rgb, underline: Underline): LineRun {
 	return {
 		units: units, fg: fg, bg: bg, underline: underline, underlineColor: null,
-		bold: false, italic: false, strikethrough: false,
+		flags: 0 as BitSet<CellFlag>,
 	};
 }
 

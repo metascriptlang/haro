@@ -77,8 +77,7 @@ export enum BindAction {
 
 export struct Keybind {
 	code: string;
-	// modsMask of the chord; BitSet<KeyMod> once the compiler accepts a BitSet inside an actor argument (card: a-bitset-or-a-moved-match-union-is-refused-as-an-actor-argument)
-	mods: uint16;
+	mods: BitSet<KeyMod>;
 	text: string;
 	action: BindAction;
 	screen: Screen;
@@ -147,7 +146,7 @@ export function keybind(
 		}
 	}
 	if (code === null) { return Result.err(`"${keys}" names no key`); }
-	return Result.ok({ code: code, mods: modsMask(mods), text: text, action: action, screen: screen });
+	return Result.ok({ code: code, mods: mods, text: text, action: action, screen: screen });
 }
 
 function appliesOn(screen: Screen, altScreen: boolean): boolean {
@@ -160,9 +159,9 @@ export function bindFor(
 	mods: BitSet<KeyMod>,
 	altScreen: boolean,
 ): Keybind | null {
-	const held = modsMask(chordOf(mods));
+	const held = chordOf(mods);
 	for (const b of binds) {
-		if (b.code == code && b.mods == held && appliesOn(b.screen, altScreen)) { return b; }
+		if (b.code == code && b.mods == held && appliesOn(b.screen, altScreen)) { return { ...b }; }
 	}
 	return null;
 }
@@ -263,7 +262,7 @@ test "a key with no binding resolves to nothing" {
 function bound(keys: string): string {
 	const b = keybind(keys, "x", BindAction.SendText, Screen.Any);
 	if (!b.ok) { return b.error; }
-	return `${b.value.code} ${b.value.mods}`;
+	return `${b.value.code} ${modsMask(b.value.mods)}`;
 }
 
 test "a keybind names its modifiers and one key, joined by plus signs" {
@@ -288,10 +287,10 @@ test "a keybind that is not a trigger is refused by name" {
 
 test "a keybind's text answers exactly its chord, side and lock bits aside" {
 	const binds: Vec<Keybind> = [
-		{ code: "Enter", mods: modsMask(SHIFT), text: "a", action: BindAction.SendText, screen: Screen.Any },
+		{ code: "Enter", mods: SHIFT, text: "a", action: BindAction.SendText, screen: Screen.Any },
 		{
 			code: "KeyH",
-			mods: modsMask(CTRL | SHIFT),
+			mods: CTRL | SHIFT,
 			text: "b",
 			action: BindAction.SendText,
 			screen: Screen.Any,
@@ -308,14 +307,14 @@ test "a keybind for one screen answers only on that screen" {
 	const binds: Vec<Keybind> = [
 		{
 			code: "KeyW",
-			mods: modsMask(SUPER),
+			mods: SUPER,
 			text: "\x1b[119;9u",
 			action: BindAction.SendText,
 			screen: Screen.Alternate,
 		},
 		{
 			code: "KeyW",
-			mods: modsMask(SUPER),
+			mods: SUPER,
 			text: "",
 			action: BindAction.CloseWindow,
 			screen: Screen.Primary,

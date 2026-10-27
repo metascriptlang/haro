@@ -1,4 +1,4 @@
-import { KeyAction, KeyEvent, KeyMod, NO_MODS, modSet, modsMask } from "../keys/keys";
+import { KeyAction, KeyEvent, KeyMod, NO_MODS, modSet } from "../keys/keys";
 const ALT = modSet(KeyMod.Alt);
 const CTRL = modSet(KeyMod.Ctrl);
 const NUM_LOCK = modSet(KeyMod.NumLock);
@@ -165,14 +165,14 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 		c.keybinds = [
 			{
 				code: "Enter",
-				mods: modsMask(SHIFT),
+				mods: SHIFT,
 				text: "\x1b[13;2u",
 				action: BindAction.SendText,
 				screen: Screen.Any,
 			},
 			{
 				code: "KeyC",
-				mods: modsMask(CTRL | SHIFT),
+				mods: CTRL | SHIFT,
 				text: "c",
 				action: BindAction.SendText,
 				screen: Screen.Any,
@@ -195,7 +195,7 @@ test "a ctrl alt keybind leaves the character AltGr types on the same key to the
 		c.keybinds = [
 			{
 				code: "KeyQ",
-				mods: modsMask(CTRL | ALT),
+				mods: CTRL | ALT,
 				text: "x",
 				action: BindAction.SendText,
 				screen: Screen.Any,
@@ -273,14 +273,14 @@ test "a keybind with a mode sends to a full-screen program and closes the window
 	const binds: Vec<Keybind> = [
 		{
 			code: "KeyW",
-			mods: modsMask(SUPER),
+			mods: SUPER,
 			text: "\x1b[119;9u",
 			action: BindAction.SendText,
 			screen: Screen.Alternate,
 		},
 		{
 			code: "KeyW",
-			mods: modsMask(SUPER),
+			mods: SUPER,
 			text: "",
 			action: BindAction.CloseWindow,
 			screen: Screen.Primary,
@@ -332,7 +332,7 @@ test "a close_window keybind asks first while a program runs, like the menu" {
 	const binds: Vec<Keybind> = [
 		{
 			code: "KeyW",
-			mods: modsMask(SUPER),
+			mods: SUPER,
 			text: "",
 			action: BindAction.CloseWindow,
 			screen: Screen.Any,
@@ -356,7 +356,7 @@ test "close window from the menu runs a super w keybind for this screen and othe
 	const binds: Vec<Keybind> = [
 		{
 			code: "KeyW",
-			mods: modsMask(SUPER),
+			mods: SUPER,
 			text: "\x1b[119;9u",
 			action: BindAction.SendText,
 			screen: Screen.Alternate,

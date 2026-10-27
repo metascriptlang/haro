@@ -2,7 +2,7 @@ import { JSON, JsonKind, JsonValue } from "std/core/json";
 import { isAbsolute } from "std/fs/path";
 import { Rgb, SCROLLBACK_LINES } from "../vt/vt";
 import { BindAction, Keybind, Screen, keybind } from "../input/bindings";
-import { OptionAsAlt } from "../keys/keys";
+import { KeyMod, OptionAsAlt, modSet } from "../keys/keys";
 
 export enum StartKind {
 	Inherit,
@@ -322,7 +322,7 @@ test "the fields a config gives replace the defaults" {
 	assert c.value.palette.length == 2;
 	assert c.value.palette[1] == red;
 	assert c.value.keybinds[0].code == "Enter";
-	assert c.value.keybinds[0].mods == 1;
+	assert c.value.keybinds[0].mods == modSet(KeyMod.Shift);
 	assert c.value.keybinds[0].text == "\x1b[13;2u";
 	assert c.value.keybinds[0].screen == Screen.Any;
 }

@@ -210,14 +210,22 @@ function sameLook(a: Look, b: Look): boolean {
 		a.style.fontStyle == b.style.fontStyle;
 }
 
-test "known gap: blink and overline do not reach the span" {
+test "known gap: blink does not reach the span" {
 	const plain = look("0");
 	const blink = look("5");
+	assert plain !== null && blink !== null;
+	if (plain !== null && blink !== null) { assert sameLook(blink, plain); }
+}
+
+test "SGR 53 overlines the span, alone and beside an underline, and 55 ends it" {
 	const over = look("53");
-	assert plain !== null && blink !== null && over !== null;
-	if (plain !== null && blink !== null && over !== null) {
-		assert sameLook(blink, plain);
-		assert sameLook(over, plain);
+	const both = look("4;53");
+	const ended = look("53;55");
+	assert over !== null && both !== null && ended !== null;
+	if (over !== null && both !== null && ended !== null) {
+		assert over.style.textDecorationLine == "overline";
+		assert both.style.textDecorationLine == "underline overline";
+		assert ended.style.textDecorationLine == "none";
 	}
 }
 

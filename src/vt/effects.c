@@ -39,10 +39,6 @@ static const GhosttyAllocator heapAllocator = { &heapCtx, &heapVtable };
 const GhosttyAllocator* vtAllocator(void) {
 	return &heapAllocator;
 }
-#else
-const GhosttyAllocator* vtAllocator(void) {
-	return NULL;
-}
 #endif
 
 /* msc has no integer as wide as size_t on every target (32 bits on wasm32) for a callback's

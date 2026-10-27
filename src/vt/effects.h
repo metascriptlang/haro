@@ -4,7 +4,9 @@
 #include <stdint.h>
 #include <ghostty/vt.h>
 
+#ifdef __EMSCRIPTEN__
 const GhosttyAllocator* vtAllocator(void);
+#endif
 int vtEffectsWire(GhosttyTerminal terminal, void* effects);
 
 /* Defined in vtEffects.ms, which includes this header, so a signature that drifts fails the C compile. */

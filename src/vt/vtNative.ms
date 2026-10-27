@@ -57,7 +57,11 @@ export struct Colors256 { c: GhosttyColorRgb[256]; }
 
 export extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<Span<uint8>>): void
 	from "ghostty_terminal_vt_write";
-export extern function vtAllocator(): Ptr<GhosttyAllocator>;
+when (emcc) {
+	export extern function vtAllocator(): Ptr<GhosttyAllocator>;
+} else {
+	export function vtAllocator(): Ptr<GhosttyAllocator> | null { return null; }
+}
 export extern function vtEffectsWire(terminal: GhosttyTerminal, effects: Ptr<void> | null): int32;
 export extern function terminalGet<T>(
 	terminal: GhosttyTerminal,

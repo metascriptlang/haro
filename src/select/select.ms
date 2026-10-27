@@ -87,11 +87,16 @@ export function rebased(this sel: Selection, now: Marked | null): Selection | nu
 		if (shift == 0) { return sel; }
 		return { ...sel, origin: sel.origin.shiftedBy(shift), focus: sel.focus.shiftedBy(shift) };
 	}
-	return { ...sel, unit: Unit.Cell, origin: pointRange(now.range.start), focus: pointRange(now.range.end) };
+	return {
+		...sel,
+		unit: Unit.Cell,
+		origin: now.range.start.pointRange(),
+		focus: now.range.end.pointRange(),
+	};
 }
 
-function pointRange(at: Point): Range {
-	return { start: at, end: at };
+function pointRange(this point: Point): Range {
+	return { start: point, end: point };
 }
 
 function at(row: int32, col: int32): Point {
@@ -103,7 +108,7 @@ function range(r0: int32, c0: int32, r1: int32, c1: int32): Range {
 }
 
 test "a press with no drag selects nothing for a cell and the unit for a word" {
-	const cell = Selection.press(Unit.Cell, pointRange(at(3, 4)), false);
+	const cell = Selection.press(Unit.Cell, at(3, 4).pointRange(), false);
 	assert cell.collapsed();
 	const word = Selection.press(Unit.Word, range(3, 4, 3, 8), false);
 	assert !word.collapsed();
@@ -111,8 +116,8 @@ test "a press with no drag selects nothing for a cell and the unit for a word" {
 }
 
 test "a drag backwards normalises to reading order" {
-	const sel = Selection.press(Unit.Cell, pointRange(at(10, 5)), false)
-		.drag(pointRange(at(8, 20)));
+	const sel = Selection.press(Unit.Cell, at(10, 5).pointRange(), false)
+		.drag(at(8, 20).pointRange());
 	assert !sel.collapsed();
 	assert sel.bounds() == range(8, 20, 10, 5);
 }
@@ -126,14 +131,14 @@ test "a drag after a word press keeps the whole word in either direction" {
 }
 
 test "a block selection keeps the same columns on every row whichever corner it was dragged from" {
-	const sel = Selection.press(Unit.Cell, pointRange(at(6, 12)), true).drag(pointRange(at(4, 3)));
+	const sel = Selection.press(Unit.Cell, at(6, 12).pointRange(), true).drag(at(4, 3).pointRange());
 	assert sel.bounds() == range(4, 3, 6, 12);
 	assert sel.marked().block;
 }
 
 test "a rebase follows the terminal's shift and drops a selection the terminal lost" {
-	const sel = Selection.press(Unit.Cell, pointRange(at(10, 2)), false)
-		.drag(pointRange(at(12, 4)));
+	const sel = Selection.press(Unit.Cell, at(10, 2).pointRange(), false)
+		.drag(at(12, 4).pointRange());
 	const was = sel.bounds();
 	const kept = sel.rebased({ range: range(10, 2, 12, 4), block: false });
 	assert kept !== null;

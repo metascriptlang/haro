@@ -1,15 +1,14 @@
 # Haro — vision
 
 A terminal emulator written in MetaScript, named after the robot that rides beside the pilot in
-Gundam 00. It was called Terminator until 2026-10-15; a Linux terminal emulator already owns that
-name. It gets its VT from **libghostty-vt**, draws its pixels with **void2d**, and runs in an
+Gundam 00. It gets its VT from **libghostty-vt**, draws its pixels with **void2d**, and runs in an
 **Ion** window, on Windows, macOS and Linux with the same pixels everywhere.
 
 It is a **Neon app whose only child is one `<Void>` filling the window**, the shape Neon's
 `docs/VISION.md` gives a game: Ion → Neon → Void. The chrome (tabs, splits, settings, command
 palette) is Neon `Text`/`View` inside that Void area, so it is void2d too. The grid is Neon JSX as
 well: a `ForList` (`src/app/components/features/terminal/terminalPane.ms`) over a `createList` of
-row slots (`src/app/components/features/terminal/term.ms`), each row one `<Text>` on the cell grid.
+row slots (`src/app/frame.ms`), each row one `CellText` on the cell grid.
 There is no webview.
 
 ## Why it exists
@@ -38,8 +37,8 @@ PTY bursts into one write per frame) would be terminal-only code instead of Neon
 
 When Haro hits a defect in void2d, Ion or the MetaScript compiler, the fix goes into that
 project, and Haro waits for it. It never works around the defect in its own code. A workaround
-here would hide exactly what this project exists to exercise. Haro builds against released
-dependencies only.
+here would hide exactly what this project exists to exercise. Haro imports void2d, Neon and Ion
+from sibling checkouts by relative path, so the upstream fix reaches it when the checkout moves.
 
 ## The stack
 
@@ -54,23 +53,6 @@ dependencies only.
 Ion hands out a surface and input events and never draws. The glue between them is not
 Haro's. Void drives a surface that its host hands it, and Neon binds an Ion window to a
 `<Void>` root. Haro is their first consumer on the desktop.
-
-## What the first window needed
-
-Measured 2026-09-23 against ion `32bb557`, void `0167080` and neon `6dd27ac`:
-
-1. ~~**Void: a Windows embed driver.**~~ Landed at void `d003ce8`: host views (`voidViewCreate` /
-   `voidViewResize` / `voidViewFrame`, `voidViewSwapChain` for Ion's
-   `renderSurfaceAttachSwapChain`). One device is shared per process and each view has its own
-   surface, on Windows, iOS and Android. `void/docs/EMBED.md` holds the model and its proofs, and
-   `void/examples/ionViews.ms` drives two views in one Ion window.
-2. ~~**Neon: a desktop entry.**~~ Landed at neon `8f85cb3`: `runWindow` in
-   `neon/src/platform/ion/window.ms`, example `neon/examples/voidWindow.ms`.
-3. ~~**Ion: a frame clock.**~~ Landed at ion `44001f8`..`3f90df1`: a frame policy per surface,
-   measured in `ion/docs/WINDOW-CONTENT.md` "Frame clock".
-
-Haro's own core landed without them: ConPTY, libghostty-vt, query replies and a cell reader,
-with its measurements in `docs/CORE.md`.
 
 ## libghostty-vt — only the parts we need
 
@@ -120,7 +102,8 @@ palette, panels), but Haro keeps a small core and exposes it, and those
 features are written against that surface as user code and plugins rather than built into Haro.
 
 The surface is the `haro` package (`assets/haro/index.ms`), and `~/.config/haro/config.ms` is
-written against it:
+written against it. Only `config` exists today; the hooks, host routines and plugins below are
+planned:
 
 - `export const config: HaroConfig`: the settings, checked by msc against the type before Haro
   reads them: a config table, but typed.
@@ -154,7 +137,7 @@ per output line during a flood.
 Haro has evaluated `config.ms` in-process since 2026-10-20 (`src/config/source.ms` `evaluate`).
 Measured that day on macOS, msc `8205756f8`: the release binary went from 6.3 MB to 21.2 MB, and
 an evaluation takes about 0.4 s. An evaluation leaves about 66 MB live after Haro drops the
-interpreter (`~/metascript/.inbox/compiler/2026-10-20-evalmodule-keeps-its-heap-after-the-host-drops-the-interpreter.md`).
+interpreter, which is a compiler card: `evalModule` keeps its heap after the host drops it.
 Haro still needs MetaScript installed at `~/.metascript`, as it needed `msc` before; shipping
 the std inside Haro.app is not done.
 
@@ -172,8 +155,7 @@ the std inside Haro.app is not done.
 
 ### What the embed path waits on
 
-Each of these is a compiler change, tracked in `~/metascript/.inbox/compiler/`:
-- structs and arrays crossing `callRoutine`;
+One compiler change: structs and arrays crossing `callRoutine`.
 
 ## Platforms
 
@@ -184,5 +166,6 @@ Each of these is a compiler change, tracked in `~/metascript/.inbox/compiler/`:
 
 ## Open
 
-- **A web build.** void2d already builds for WebGPU and WebGL2, and libghostty-vt has a wasm
-  target. Not a goal yet.
+- **A web build.** void2d already builds for WebGPU and WebGL2, and `probe/web` runs Haro's `Vt`
+  under node on libghostty-vt built for wasm (`docs/CORE.md` "libghostty-vt"). The Haro window as
+  a web app is not a goal yet.

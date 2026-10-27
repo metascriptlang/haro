@@ -15,7 +15,8 @@ export struct LineRun {
 	flags: BitSet<CellFlag>;
 }
 
-const RUN_FLAGS: BitSet<CellFlag> = CellFlag.Bold | CellFlag.Italic | CellFlag.Strikethrough;
+const LINE_FLAGS: BitSet<CellFlag> = CellFlag.Strikethrough | CellFlag.Overline;
+const RUN_FLAGS: BitSet<CellFlag> = LINE_FLAGS | CellFlag.Bold | CellFlag.Italic;
 
 export struct CellInk {
 	fg: Rgb | null;
@@ -107,7 +108,7 @@ function breaksShapingBefore(this row: Row, i: int32, cursorCell: int32): boolea
 function isEmpty(this cell: Cell, background: Rgb): boolean {
 	const run = cell.lineRun();
 	return (cell.cp == 0 || cell.cp == 0x20) && cell.extra == 0 && run.bg == background &&
-		run.underline == Underline.None && !run.flags.has(CellFlag.Strikethrough);
+		run.underline == Underline.None && run.flags.isDisjointFrom(LINE_FLAGS);
 }
 
 export function cellOnRow(this cursor: Cursor | null, y: int32): int32 {
@@ -161,7 +162,7 @@ export function line(
 			const hidden: LineRun = {
 				...run,
 				underline: Underline.None,
-				flags: run.flags.excl(CellFlag.Strikethrough),
+				flags: run.flags.difference(LINE_FLAGS),
 			};
 			pushUnits(runs, hidden, blank.length as int32, split);
 			continue;
@@ -483,4 +484,22 @@ test "the cursor's ink wins over the selection on its cell" {
 		assert line.runs[1].bg == RED;
 		assert line.runs[0].bg == line.runs[2].bg && line.runs[0].bg != RED;
 	}
+}
+
+test "an overline is part of the run, and it keeps a trailing blank on the line" {
+	const line = firstLine("\x1b[53mx \x1b[0my", 10, -1);
+	assert line !== null;
+	if (line !== null) {
+		assert line.runs[0].flags.has(CellFlag.Overline);
+		assert !line.runs[1].flags.has(CellFlag.Overline);
+	}
+	const trailing = firstLine("x\x1b[53m  \x1b[0m", 10, -1);
+	assert trailing !== null;
+	if (trailing !== null) { assert trailing.text == "x  "; }
+}
+
+test "a hidden cell draws no overline" {
+	const line = firstLine("\x1b[8;53mx\x1b[0m", 10, -1);
+	assert line !== null;
+	if (line !== null) { assert !line.runs[0].flags.has(CellFlag.Overline); }
 }

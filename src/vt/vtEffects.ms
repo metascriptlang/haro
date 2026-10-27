@@ -195,9 +195,10 @@ function desktopNotification(
 	effects: Ptr<void>,
 	notification: GhosttyTerminalDesktopNotification,
 ): void {
+	const hasBody = notification.size >= sizeof GhosttyTerminalDesktopNotification;
 	effectsAt(effects).events.notification = {
 		title: wellFormedPrefix(notification.title, NOTIFICATION_TITLE_BYTES),
-		body: wellFormedPrefix(notification.body, NOTIFICATION_BODY_BYTES),
+		body: hasBody ? wellFormedPrefix(notification.body, NOTIFICATION_BODY_BYTES) : "",
 	};
 }
 

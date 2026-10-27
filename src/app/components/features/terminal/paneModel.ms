@@ -214,17 +214,18 @@ function failedAs(this m: PaneModel, started: boolean, where: Where, error: stri
 	m.notify(text);
 }
 
-function copyToClipboard(text: string): void {
+function copyToClipboard(this m: PaneModel, text: string): void {
 	try {
 		Clipboard.setString(text);
 	} catch (e) {
-		console.log(`haro: copy failed: ${e}`);
+		m.report.note(`copy failed: ${e}`);
+		m.notify(`Haro could not copy to the clipboard: ${e}`);
 	}
 }
 
 function answerAsks(this m: PaneModel, asks: Asks): void {
 	const copy = asks.copy;
-	if (copy !== null) { copyToClipboard(copy); }
+	if (copy !== null) { m.copyToClipboard(copy); }
 	for (const uri of asks.opens) { m.desktop.openLink(uri); }
 	for (let i = 0; i < asks.reads; i++) {
 		Clipboard.getString().then((text: string): void => {
@@ -269,7 +270,7 @@ function applied(this m: PaneModel, got: IoFrame): void {
 	const f = got.frame;
 	if (f !== null) {
 		const copied = f.copied;
-		if (copied !== null) { copyToClipboard(copied); }
+		if (copied !== null) { m.copyToClipboard(copied); }
 		const title = f.title;
 		if (title !== null) { m.desktop.setTitle(title); }
 		const notification = f.notification;

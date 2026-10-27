@@ -374,6 +374,19 @@ test "a program's clipboard write reaches the system clipboard" {
 	}).ok;
 }
 
+test "a clipboard write the OS refuses is told to the user" {
+	assert onFresh("\x1b]52;c;aGk=\x07", (t: Term, sink: Sink): void => {
+		const m = paneOf(t, noCalls());
+		installClipboardServices({
+			getClipboard: async (): Promise<string> => "",
+			setClipboard: (text: string): void => { throw new Error("refused"); },
+		});
+		m.refresh();
+		installClipboardServices(null);
+		assert m.notice.text.startsWith("Haro could not copy to the clipboard");
+	}).ok;
+}
+
 test "a clipboard read the program asks for goes to the system clipboard, once per ask" {
 	assert onFresh("\x1b]52;c;?\x07", (t: Term, sink: Sink): void => {
 		const board: Board = { copied: [], offer: "x", reads: 0 };

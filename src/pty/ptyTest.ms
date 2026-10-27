@@ -2,7 +2,7 @@ import { PtyError } from "./transport";
 import { NativePty, busy, close, exitCode, exitSignal, open, read, resize, spawn, toPty, wait, write } from "./pty";
 import { normalize, remove, writeFile } from "std/fs";
 import { tmpDir } from "std/os";
-import { drainText } from "./ptyRig";
+import { drainText, withPty } from "./ptyRig";
 
 @include("unistd.h");
 
@@ -37,51 +37,36 @@ function quietWaitMs(this p: NativePty, timeoutMs: int32): Result<float64, PtyEr
 }
 
 test "a child's output reaches read and its exit ends the stream" {
-	const opened = NativePty.open(ECHO_HELLO, 80, 24);
-	assert opened.ok;
-	if (opened.ok) {
-		const p = opened.value;
+	assert withPty(ECHO_HELLO, (p: NativePty): void => {
 		const text = p.toPty().drainText(4096);
 		assert text.includes("hello");
 		assert p.exitCode() === 0;
-		p.close();
-	}
+	});
 }
 
 test "a wait returns as soon as the child writes" {
-	const opened = NativePty.open(ECHO_HELLO, 80, 24);
-	assert opened.ok;
-	if (opened.ok) {
-		const p = opened.value;
+	assert withPty(ECHO_HELLO, (p: NativePty): void => {
 		const start: float64 = performance.now();
 		const ready = p.wait(10000);
 		assert ready.ok;
 		if (ready.ok) { assert ready.value; }
 		assert performance.now() - start < 5000;
-		p.close();
-	}
+	});
 }
 
 test "a wait on a quiet child sleeps until its timeout" {
-	const opened = NativePty.open(QUIET_FOR_3S, 80, 24);
-	assert opened.ok;
-	if (opened.ok) {
-		const p = opened.value;
+	assert withPty(QUIET_FOR_3S, (p: NativePty): void => {
 		const waited = p.quietWaitMs(300);
 		assert waited.ok;
 		if (waited.ok) { assert waited.value >= 250; }
 		assert p.exitCode() === null;
-		p.close();
-	}
+	});
 }
 
 test "a resize of a live console succeeds" {
-	const opened = NativePty.open(QUIET_FOR_3S, 80, 24);
-	assert opened.ok;
-	if (opened.ok) {
-		assert opened.value.resize(120, 40).ok;
-		opened.value.close();
-	}
+	assert withPty(QUIET_FOR_3S, (p: NativePty): void => {
+		assert p.resize(120, 40).ok;
+	});
 }
 
 test "a command that cannot start is an error" {
@@ -149,15 +134,11 @@ when (!windows) {
 	}
 
 	test "a shell that has exited is not busy, and reports its exit code" {
-		const opened = NativePty.open("sh -c 'exit 3'", 80, 24);
-		assert opened.ok;
-		if (opened.ok) {
-			const p = opened.value;
+		assert withPty("sh -c 'exit 3'", (p: NativePty): void => {
 			const _text = p.toPty().drainText(4096);
 			assert p.exitCode() === 3;
 			assert !p.busy();
-			p.close();
-		}
+		});
 	}
 
 	function endOf(command: string): string {
@@ -185,36 +166,25 @@ when (!windows) {
 	}
 
 	test "a shell is busy while a job it runs holds the terminal, and idle back at its own read" {
-		const opened = NativePty.open("sh -c 'set -m; sleep 2; read line'", 80, 24);
-		assert opened.ok;
-		if (opened.ok) {
-			const p = opened.value;
+		assert withPty("sh -c 'set -m; sleep 2; read line'", (p: NativePty): void => {
 			assert p.becomesBusy(true, 5000);
 			assert p.becomesBusy(false, 5000);
-			p.close();
-		}
+		});
 	}
 
 	test "a program a shell without job control runs stays in the shell's group and is not busy" {
-		const opened = NativePty.open("sh -c 'echo go; sleep 2; read line'", 80, 24);
-		assert opened.ok;
-		if (opened.ok) {
-			const p = opened.value;
+		assert withPty("sh -c 'echo go; sleep 2; read line'", (p: NativePty): void => {
 			assert p.readLine().includes("go");
 			assert !p.becomesBusy(true, 1000);
-			p.close();
-		}
+		});
 	}
 
 	test "the child is told the terminal is Haro, not the one Haro was started from" {
 		assert env.set("TERM_PROGRAM", "OtherTerminal");
 		assert env.set("TERM_SESSION_ID", "w0t0");
-		const opened = NativePty.open("sh -c 'echo \"[$TERM_PROGRAM|$TERM_SESSION_ID|$TERM]\"'", 80, 24);
-		assert opened.ok;
-		if (opened.ok) {
-			assert opened.value.toPty().drainText(4096).includes("[Haro||xterm-256color]");
-			opened.value.close();
-		}
+		assert withPty("sh -c 'echo \"[$TERM_PROGRAM|$TERM_SESSION_ID|$TERM]\"'", (p: NativePty): void => {
+			assert p.toPty().drainText(4096).includes("[Haro||xterm-256color]");
+		});
 		assert env.get("TERM_PROGRAM") == "OtherTerminal";
 	}
 
@@ -267,38 +237,28 @@ when (!windows) {
 		let ticks = "";
 		for (let i = 0; i < 300; i++) { ticks += " x"; }
 		const job = `setsid sh -c "for t in${ticks}; do echo spam; sleep 0.01; done"`;
-		const opened = NativePty.open(`sh -c '${job} & sleep 0.2; echo done'`, 80, 24);
-		assert opened.ok;
-		if (opened.ok) {
+		assert withPty(`sh -c '${job} & sleep 0.2; echo done'`, (p: NativePty): void => {
 			const start: float64 = performance.now();
-			assert opened.value.toPty().drainText(4096).includes("done");
+			assert p.toPty().drainText(4096).includes("done");
 			assert performance.now() - start < 2500;
-			assert opened.value.exitCode() === 0;
-			opened.value.close();
-		}
+			assert p.exitCode() === 0;
+		});
 	}
 }
 
 when (windows) {
 	test "a resize after the child exited is refused, since its console is already closed" {
-		const opened = NativePty.open(ECHO_HELLO, 80, 24);
-		assert opened.ok;
-		if (opened.ok) {
-			const p = opened.value;
+		assert withPty(ECHO_HELLO, (p: NativePty): void => {
 			assert p.toPty().drainText(4096).includes("hello");
 			assert p.exitCode() === 0;
 			assert !p.resize(100, 30).ok;
-			p.close();
-		}
+		});
 	}
 
 	test "environment variables in the command line are expanded, as Windows shortcuts do" {
-		const opened = NativePty.open("%SystemRoot%\\System32\\cmd.exe /c echo hello", 80, 24);
-		assert opened.ok;
-		if (opened.ok) {
-			assert opened.value.toPty().drainText(4096).includes("hello");
-			opened.value.close();
-		}
+		assert withPty("%SystemRoot%\\System32\\cmd.exe /c echo hello", (p: NativePty): void => {
+			assert p.toPty().drainText(4096).includes("hello");
+		});
 	}
 }
 
@@ -324,29 +284,21 @@ test "a resize through the Pty interface reaches a live native pty" {
 }
 
 test "a write to a child that does not read its input returns at once" {
-	const opened = NativePty.open(QUIET_FOR_3S, 80, 24);
-	assert opened.ok;
-	if (opened.ok) {
-		const p = opened.value;
+	assert withPty(QUIET_FOR_3S, (p: NativePty): void => {
 		let chunk: Vec<uint8> = new Array(1048576);
 		for (let i = 0; i < chunk.length; i++) { chunk[i] = "a".code + (i % 26) as uint8; }
 		const start: float64 = performance.now();
 		for (let i = 0; i < 4; i++) { assert p.write(chunk).ok; }
 		assert performance.now() - start < 200;
-		p.close();
-	}
+	});
 }
 
 test "a line written to the child reaches it" {
-	const opened = NativePty.open(ECHO_LINE_READ, 80, 24);
-	assert opened.ok;
-	if (opened.ok) {
-		const p = opened.value;
+	assert withPty(ECHO_LINE_READ, (p: NativePty): void => {
 		let line: Vec<uint8> = [0x68, 0x69, 0x0D];
 		assert p.write(line).ok;
 		assert p.toPty().drainText(4096).includes("[hi]");
-		p.close();
-	}
+	});
 }
 
 struct LineCheck {
@@ -412,10 +364,7 @@ test "output past the read buffer's limit arrives whole and in order while the a
 	for (let i = 0; i < count; i++) { text += `line L${i}.\r\n`; }
 	text += "end";
 	assert writeFile(path, text).ok;
-	const opened = NativePty.open(printFile(path), 80, 24);
-	assert opened.ok;
-	if (opened.ok) {
-		const p = opened.value;
+	assert withPty(printFile(path), (p: NativePty): void => {
 		const late: float64 = performance.now();
 		while (performance.now() - late < 1500) {}
 		let buf: Vec<uint8> = new Array(65536);
@@ -432,7 +381,6 @@ test "output past the read buffer's limit arrives whole and in order while the a
 		const readLimit = 4 << 20;
 		assert check.byteCount > readLimit;
 		assert check.linesInOrder == count;
-		p.close();
-	}
+	});
 	const _gone = remove(path);
 }

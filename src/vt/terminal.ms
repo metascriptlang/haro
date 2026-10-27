@@ -40,6 +40,7 @@ import {
 	MODE_CURSOR_BLINKING,
 	MODE_GRAPHEME_CLUSTER,
 	MODE_SYNC_OUTPUT,
+	checked,
 	ghosttyColor,
 	gridRefLink,
 	ok,
@@ -90,9 +91,8 @@ function applyColors(terminal: GhosttyTerminal, fg: Rgb, bg: Rgb): Result<void, 
 	let b = ghosttyColor(bg);
 	const fgOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND;
 	const bgOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND;
-	if (!ok(terminalSet(terminal, fgOption, f)) || !ok(terminalSet(terminal, bgOption, b))) {
-		return Result.err(VtError.WriteFailed);
-	}
+	try checked(terminalSet(terminal, fgOption, f), VtError.WriteFailed);
+	try checked(terminalSet(terminal, bgOption, b), VtError.WriteFailed);
 	return Result.ok(null);
 }
 
@@ -101,18 +101,14 @@ function applyBlinkDefault(terminal: GhosttyTerminal, on: boolean): Result<void,
 	let mode: GhosttyTerminalModeConfig = { mode: MODE_CURSOR_BLINKING, value: on };
 	let blink = on;
 	const blinkOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK;
-	if (!ok(terminalSet(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode))
-		|| !ok(terminalSet(terminal, blinkOption, blink))) {
-		return Result.err(VtError.WriteFailed);
-	}
+	try checked(terminalSet(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode), VtError.WriteFailed);
+	try checked(terminalSet(terminal, blinkOption, blink), VtError.WriteFailed);
 	return Result.ok(null);
 }
 
 function applyGraphemeWidth(terminal: GhosttyTerminal): Result<void, VtError> {
 	let mode: GhosttyTerminalModeConfig = { mode: MODE_GRAPHEME_CLUSTER, value: true };
-	if (!ok(terminalSet(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE_DEFAULT, mode))) {
-		return Result.err(VtError.WriteFailed);
-	}
+	try checked(terminalSet(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE_DEFAULT, mode), VtError.WriteFailed);
 	return Result.ok(null);
 }
 
@@ -121,17 +117,14 @@ function applyScrollback(terminal: GhosttyTerminal, lines: int64): Result<void, 
 	let kept = lines as uint64;
 	const bytesOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES;
 	const linesOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES;
-	if (!ok(terminalSet(terminal, bytesOption, bytes)) || !ok(terminalSet(terminal, linesOption, kept))) {
-		return Result.err(VtError.WriteFailed);
-	}
+	try checked(terminalSet(terminal, bytesOption, bytes), VtError.WriteFailed);
+	try checked(terminalSet(terminal, linesOption, kept), VtError.WriteFailed);
 	return Result.ok(null);
 }
 
 export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtError> {
 	let terminal: GhosttyTerminal;
-	if (!ok(ghostty_terminal_new(vtAllocator(), terminal, cols as uint16, rows as uint16))) {
-		return Result.err(VtError.CreateFailed);
-	}
+	try checked(ghostty_terminal_new(vtAllocator(), terminal, cols as uint16, rows as uint16), VtError.CreateFailed);
 	let state: GhosttyRenderState;
 	let iterator: GhosttyRenderStateRowIterator;
 	let cells: GhosttyRenderStateRowCells;
@@ -194,7 +187,7 @@ function terminalString(
 	key: GhosttyTerminalData,
 ): Result<string, VtError> {
 	let text: GhosttyString;
-	if (!ok(terminalGet(terminal, key, text))) { return Result.err(VtError.ReadFailed); }
+	try checked(terminalGet(terminal, key, text), VtError.ReadFailed);
 	let bytes: Vec<uint8> = [];
 	for (let i = 0; i < (text.len as int32); i++) { bytes.push(text.ptr[i]); }
 	return Result.ok(bytes[0..bytes.length].asString());
@@ -206,9 +199,7 @@ export function title(this vt: Vt): Result<string, VtError> {
 
 export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, VtError> {
 	let at: GhosttyGridRef;
-	if (!ok(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, x, y, at))) {
-		return Result.err(VtError.ReadFailed);
-	}
+	try checked(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, x, y, at), VtError.ReadFailed);
 	let buf: Vec<uint8> = new Array(256);
 	let len: uint64 = 0;
 	let r = gridRefLink(at, buf, len);
@@ -216,7 +207,7 @@ export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, V
 		buf = new Array(len as int32);
 		r = gridRefLink(at, buf, len);
 	}
-	if (!ok(r)) { return Result.err(VtError.ReadFailed); }
+	try checked(r, VtError.ReadFailed);
 	if (len == 0) { return Result.ok(null); }
 	const uri: string | null = buf[0..(len as int32)].asString();
 	return Result.ok(uri);
@@ -240,7 +231,7 @@ export function resize(
 		cellWidth as uint32,
 		cellHeight as uint32,
 	);
-	if (!ok(r)) { return Result.err(VtError.ResizeFailed); }
+	try checked(r, VtError.ResizeFailed);
 	vt.painted.rows = [];
 	vt.painted.palette = null;
 	return Result.ok(null);
@@ -261,7 +252,7 @@ export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<voi
 	for (let i = 0; i < colors.length; i++) {
 		palette.c[i] = ghosttyColor(colors[i]);
 	}
-	if (!ok(terminalSet(vt.terminal, option, palette))) { return Result.err(VtError.WriteFailed); }
+	try checked(terminalSet(vt.terminal, option, palette), VtError.WriteFailed);
 	vt.painted.rows = [];
 	return Result.ok(null);
 }
@@ -273,9 +264,7 @@ export function setScrollback(this vt: Vt, lines: int64): Result<void, VtError> 
 export function setPullScrollback(this vt: Vt, pull: boolean): Result<void, VtError> {
 	let on = pull;
 	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_RESIZE_PULL_SCROLLBACK;
-	if (!ok(terminalSet(vt.terminal, option, on))) {
-		return Result.err(VtError.WriteFailed);
-	}
+	try checked(terminalSet(vt.terminal, option, on), VtError.WriteFailed);
 	return Result.ok(null);
 }
 
@@ -315,21 +304,15 @@ export function holdLimit(this vt: Vt, ms: int64): void {
 
 export function update(this vt: Vt): Result<void, VtError> {
 	if (vt.holding()) { return Result.ok(null); }
-	if (!ok(ghostty_render_state_update(vt.state, vt.terminal))) {
-		return Result.err(VtError.UpdateFailed);
-	}
+	try checked(ghostty_render_state_update(vt.state, vt.terminal), VtError.UpdateFailed);
 	return Result.ok(null);
 }
 
 export function size(this vt: Vt): Result<[int32, int32], VtError> {
 	let cols: uint16 = 0;
 	let rows: uint16 = 0;
-	if (
-		!ok(stateGet(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLS, cols)) ||
-		!ok(stateGet(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROWS, rows))
-	) {
-		return Result.err(VtError.ReadFailed);
-	}
+	try checked(stateGet(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLS, cols), VtError.ReadFailed);
+	try checked(stateGet(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROWS, rows), VtError.ReadFailed);
 	return Result.ok([cols as int32, rows as int32]);
 }
 

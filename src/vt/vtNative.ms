@@ -247,6 +247,11 @@ export function ok(r: GhosttyResult): boolean {
 	return r == GhosttyResult.GHOSTTY_SUCCESS;
 }
 
+export function checked(r: GhosttyResult, fail: VtError): Result<void, VtError> {
+	if (ok(r)) { return Result.ok(null); }
+	return Result.err(fail);
+}
+
 export function pushAll<T>(ref out: Vec<T>, from: Readonly<Span<T>>): void {
 	for (const x of from) { out.push(x); }
 }
@@ -262,9 +267,7 @@ export const MODE_WIN32_INPUT: uint16 = 9001;
 
 export function modeOn(terminal: GhosttyTerminal, mode: uint16): Result<boolean, VtError> {
 	let m: GhosttyTerminalModeConfig = { mode: mode, value: false };
-	if (!ok(terminalGet(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MODE, m))) {
-		return Result.err(VtError.ReadFailed);
-	}
+	try checked(terminalGet(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MODE, m), VtError.ReadFailed);
 	return Result.ok(m.value);
 }
 

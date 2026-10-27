@@ -21,7 +21,7 @@ import {
 } from "../select/select";
 import { Vt } from "./terminal";
 import {
-	ok,
+	checked,
 	pointOf,
 	selectLine,
 	selectWord,
@@ -38,16 +38,14 @@ function screenRef(terminal: GhosttyTerminal, at: Point): Result<GhosttyGridRef,
 	let gridRef: GhosttyGridRef;
 	const screen = GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN;
 	const r = vtGridRef(terminal, screen, at.col, at.row, gridRef);
-	if (!ok(r)) { return Result.err(VtError.SelectFailed); }
+	try checked(r, VtError.SelectFailed);
 	return Result.ok(gridRef);
 }
 
 function screenPoint(terminal: GhosttyTerminal, gridRef: GhosttyGridRef): Result<Point, VtError> {
 	let at = gridRef;
 	let c: GhosttyPointCoordinate;
-	if (!ok(pointOf(terminal, at, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, c))) {
-		return Result.err(VtError.SelectFailed);
-	}
+	try checked(pointOf(terminal, at, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, c), VtError.SelectFailed);
 	return Result.ok({ row: c.y as int32, col: c.x as int32 });
 }
 
@@ -55,9 +53,7 @@ function markedOf(terminal: GhosttyTerminal, selection: GhosttySelection): Resul
 	let given = selection;
 	let ordered: GhosttySelection = { size: sizeof GhosttySelection };
 	const forward = GhosttySelectionOrder.GHOSTTY_SELECTION_ORDER_FORWARD;
-	if (!ok(selectionOrdered(terminal, given, forward, ordered))) {
-		return Result.err(VtError.SelectFailed);
-	}
+	try checked(selectionOrdered(terminal, given, forward, ordered), VtError.SelectFailed);
 	const start = try screenPoint(terminal, ordered.start);
 	const end = try screenPoint(terminal, ordered.end);
 	return Result.ok({ range: { start: start, end: end }, block: selection.rectangle });
@@ -69,7 +65,7 @@ function markedFound(
 	selection: GhosttySelection,
 ): Result<Marked | null, VtError> {
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
-	if (!ok(r)) { return Result.err(VtError.SelectFailed); }
+	try checked(r, VtError.SelectFailed);
 	const m: Marked | null = try markedOf(terminal, selection);
 	return Result.ok(m);
 }
@@ -82,9 +78,7 @@ export function selectionSet(this vt: Vt, m: Marked): Result<void, VtError> {
 		rectangle: m.block,
 	};
 	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SELECTION;
-	if (!ok(terminalSet(vt.terminal, option, selection))) {
-		return Result.err(VtError.SelectFailed);
-	}
+	try checked(terminalSet(vt.terminal, option, selection), VtError.SelectFailed);
 	return Result.ok(null);
 }
 
@@ -150,7 +144,7 @@ export function selectedText(this vt: Vt): Result<string | null, VtError> {
 		r = selectionFormat(vt.terminal, options, buf, written);
 	}
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
-	if (!ok(r)) { return Result.err(VtError.ReadFailed); }
+	try checked(r, VtError.ReadFailed);
 	const text: string | null = buf[0..(written as int32)].asString();
 	return Result.ok(text);
 }

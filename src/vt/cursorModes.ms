@@ -17,10 +17,10 @@ import {
 	MODE_DECCKM,
 	MODE_FOCUS_EVENT,
 	MODE_WIN32_INPUT,
+	checked,
 	focusEncode,
 	gridRefCell,
 	modeOn,
-	ok,
 	stateGet,
 	terminalGet,
 	vtGridRef,
@@ -30,7 +30,7 @@ import { VtError } from "./vtTypes";
 function mouseTracking(terminal: GhosttyTerminal): Result<boolean, VtError> {
 	let tracking = false;
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING;
-	if (!ok(terminalGet(terminal, key, tracking))) { return Result.err(VtError.ReadFailed); }
+	try checked(terminalGet(terminal, key, tracking), VtError.ReadFailed);
 	return Result.ok(tracking);
 }
 
@@ -43,20 +43,17 @@ export struct Cursor {
 export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	const hasKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE;
 	let hasValue = false;
-	if (!ok(stateGet(vt.state, hasKey, hasValue))) {
-		return Result.err(VtError.ReadFailed);
-	}
+	try checked(stateGet(vt.state, hasKey, hasValue), VtError.ReadFailed);
 	if (!hasValue) { return Result.ok(null); }
 	let x: uint16 = 0;
 	let y: uint16 = 0;
 	const xKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X;
 	const yKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y;
-	if (!ok(stateGet(vt.state, xKey, x)) || !ok(stateGet(vt.state, yKey, y))) {
-		return Result.err(VtError.ReadFailed);
-	}
+	try checked(stateGet(vt.state, xKey, x), VtError.ReadFailed);
+	try checked(stateGet(vt.state, yKey, y), VtError.ReadFailed);
 	let tail = false;
 	const tailKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_WIDE_TAIL;
-	if (!ok(stateGet(vt.state, tailKey, tail))) { return Result.err(VtError.ReadFailed); }
+	try checked(stateGet(vt.state, tailKey, tail), VtError.ReadFailed);
 	if (tail) {
 		const onTail: Cursor | null = { x: (x as int32) - 1, y: y as int32, wide: true };
 		return Result.ok(onTail);
@@ -64,10 +61,8 @@ export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	let under: GhosttyGridRef;
 	let cell: GhosttyCell = 0;
 	const viewport = GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT;
-	if (!ok(vtGridRef(vt.terminal, viewport, x as int32, y as int32, under))
-		|| !ok(gridRefCell(under, cell))) {
-		return Result.err(VtError.ReadFailed);
-	}
+	try checked(vtGridRef(vt.terminal, viewport, x as int32, y as int32, under), VtError.ReadFailed);
+	try checked(gridRefCell(under, cell), VtError.ReadFailed);
 	const width = try widthOf(cell);
 	const at: Cursor | null = {
 		x: x as int32,
@@ -97,11 +92,9 @@ export function cursorLook(this vt: Vt): Result<CursorLook, VtError> {
 	const visibleKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VISIBLE;
 	const styleKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VISUAL_STYLE;
 	const blinkingKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_BLINKING;
-	if (!ok(stateGet(vt.state, visibleKey, visible))
-		|| !ok(stateGet(vt.state, styleKey, style))
-		|| !ok(stateGet(vt.state, blinkingKey, blinking))) {
-		return Result.err(VtError.ReadFailed);
-	}
+	try checked(stateGet(vt.state, visibleKey, visible), VtError.ReadFailed);
+	try checked(stateGet(vt.state, styleKey, style), VtError.ReadFailed);
+	try checked(stateGet(vt.state, blinkingKey, blinking), VtError.ReadFailed);
 	return Result.ok({ visible: visible, shape: try shapeOf(style), blinking: blinking });
 }
 
@@ -150,6 +143,6 @@ export function focusReport(
 		? GhosttyFocusEvent.GHOSTTY_FOCUS_GAINED
 		: GhosttyFocusEvent.GHOSTTY_FOCUS_LOST;
 	let written: uint64 = 0;
-	if (!ok(focusEncode(event, buf, written))) { return Result.err(VtError.ReadFailed); }
+	try checked(focusEncode(event, buf, written), VtError.ReadFailed);
 	return Result.ok(written as int32);
 }

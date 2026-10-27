@@ -15,6 +15,7 @@ import {
 import { modsMask } from "../keys/keys";
 import { Vt } from "./terminal";
 import {
+	checked,
 	mouseEncode,
 	mouseSetButton,
 	mouseSetMods,
@@ -44,9 +45,7 @@ function open(this m: Mouse): Result<MouseCodec, VtError> {
 	if (known !== null) { return Result.ok(known); }
 	let encoder: GhosttyMouseEncoder;
 	let event: GhosttyMouseEvent;
-	if (!ok(ghostty_mouse_encoder_new(vtAllocator(), encoder))) {
-		return Result.err(VtError.ReadFailed);
-	}
+	try checked(ghostty_mouse_encoder_new(vtAllocator(), encoder), VtError.ReadFailed);
 	if (!ok(ghostty_mouse_event_new(vtAllocator(), event))) {
 		ghostty_mouse_encoder_free(encoder);
 		return Result.err(VtError.ReadFailed);
@@ -103,6 +102,6 @@ export function mouseReport(
 	mouseSetMods(event, modsMask(input.mods));
 	ghostty_mouse_event_set_position(event, { x: input.x, y: input.y });
 	let written: uint64 = 0;
-	if (!ok(mouseEncode(encoder, event, buf, written))) { return Result.err(VtError.ReadFailed); }
+	try checked(mouseEncode(encoder, event, buf, written), VtError.ReadFailed);
 	return Result.ok(written as int32);
 }

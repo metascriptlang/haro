@@ -14,8 +14,8 @@ import {
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { Vt } from "./terminal";
 import {
+	checked,
 	gridRefRow,
-	ok,
 	rowPrompt,
 	terminalGet,
 	vtGridRef,
@@ -27,7 +27,7 @@ import { VtError } from "./vtTypes";
 function scrollbar(this vt: Vt): Result<GhosttyTerminalScrollbar, VtError> {
 	let bar: GhosttyTerminalScrollbar;
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
-	if (!ok(terminalGet(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
+	try checked(terminalGet(vt.terminal, key, bar), VtError.ReadFailed);
 	return Result.ok(bar);
 }
 
@@ -39,7 +39,7 @@ export function scrollOffset(this vt: Vt): Result<int32, VtError> {
 export function alternateScreen(this vt: Vt): Result<boolean, VtError> {
 	let screen = GhosttyTerminalScreen.GHOSTTY_TERMINAL_SCREEN_PRIMARY;
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN;
-	if (!ok(terminalGet(vt.terminal, key, screen))) { return Result.err(VtError.ReadFailed); }
+	try checked(terminalGet(vt.terminal, key, screen), VtError.ReadFailed);
 	return Result.ok(screen == GhosttyTerminalScreen.GHOSTTY_TERMINAL_SCREEN_ALTERNATE);
 }
 
@@ -48,13 +48,13 @@ export function anchoredRow(this vt: Vt): Result<int32 | null, VtError> {
 	const screen = GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN;
 	const r = ghostty_tracked_grid_ref_point(vt.anchor, screen, at);
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
-	if (!ok(r)) { return Result.err(VtError.ReadFailed); }
+	try checked(r, VtError.ReadFailed);
 	const row: int32 | null = at.y as int32;
 	return Result.ok(row);
 }
 
 export function anchorTop(this vt: Vt): Result<void, VtError> {
-	if (!ok(vtTopAnchor(vt.anchor, vt.terminal))) { return Result.err(VtError.ReadFailed); }
+	try checked(vtTopAnchor(vt.anchor, vt.terminal), VtError.ReadFailed);
 	return Result.ok(null);
 }
 
@@ -82,11 +82,9 @@ export function jumpToPrompt(this vt: Vt, toward: PromptJump): Result<boolean, V
 		let at: GhosttyGridRef;
 		let row: GhosttyRow = 0;
 		let prompt = GhosttyRowSemanticPrompt.GHOSTTY_ROW_SEMANTIC_NONE;
-		if (!ok(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, 0, y as int32, at))
-			|| !ok(gridRefRow(at, row))
-			|| !ok(rowPrompt(row, GhosttyRowData.GHOSTTY_ROW_DATA_SEMANTIC_PROMPT, prompt))) {
-			return Result.err(VtError.ReadFailed);
-		}
+		try checked(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, 0, y as int32, at), VtError.ReadFailed);
+		try checked(gridRefRow(at, row), VtError.ReadFailed);
+		try checked(rowPrompt(row, GhosttyRowData.GHOSTTY_ROW_DATA_SEMANTIC_PROMPT, prompt), VtError.ReadFailed);
 		if (prompt == GhosttyRowSemanticPrompt.GHOSTTY_ROW_SEMANTIC_PROMPT) {
 			vtScroll(vt.terminal, GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_ROW, y);
 			return Result.ok(true);

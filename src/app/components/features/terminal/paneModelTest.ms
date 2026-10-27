@@ -176,6 +176,7 @@ function afterExit(
 	lateMs: float64,
 	body: (m: PaneModel, calls: Calls, io: Io) => void,
 ): Result<void, TermError> {
+	let at: float64 = 0;
 	const t = try openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
 		const base = Replay.ofText("last output").toPty();
 		return Result.ok({
@@ -183,10 +184,10 @@ function afterExit(
 			exitCode: (): int32 | null => { return code; },
 			exitSignal: (): int32 => { return signal; },
 		});
-	});
+	}, (): float64 => { return at; });
 	defer t.shutdown();
 	const _fit = try t.fit(20, 3);
-	t.spawnedAt -= lateMs;
+	at = lateMs;
 	const calls = noCalls();
 	const io = Io.open(t);
 	const m = paneWith(io, calls);

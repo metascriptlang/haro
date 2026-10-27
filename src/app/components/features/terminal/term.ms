@@ -4,7 +4,6 @@ import {
 	KeyMod,
 	heldAfter,
 	releasesOf,
-	withNumLockApplied,
 	withoutAltGr,
 } from "../../../../keys/keys";
 import { Pty, PtyError } from "../../../../pty/transport";
@@ -60,6 +59,7 @@ export type OpenPty = (
 
 export interface Term {
 	open: OpenPty;
+	now: () => float64;
 	session: Session | null;
 	keys: Keys;
 	held: KeyEvent | null;
@@ -110,12 +110,16 @@ function idleFrame(more: boolean, ended: boolean): Frame {
 	};
 }
 
-export function openTerm(open: OpenPty): Result<Term, TermError> {
+export function openTerm(
+	open: OpenPty,
+	now: () => float64 = (): float64 => performance.now(),
+): Result<Term, TermError> {
 	const keys = Keys.openKeys();
 	if (!keys.ok) { return Result.err(TermError.KeysOpenFailed); }
 	const buf: Vec<uint8> = new Array(BUFFER_BYTES);
 	return Result.ok({
 		open: open,
+		now: now,
 		session: null,
 		keys: keys.value,
 		held: null,
@@ -150,7 +154,7 @@ export function fit(
 		const pty = t.open(cols, rows, cellWidth, cellHeight);
 		if (!pty.ok) { return Result.err(TermError.PtyOpenFailed); }
 		t.marks.push({ name: "spawned", at: Date.now() });
-		t.spawnedAt = performance.now();
+		t.spawnedAt = t.now();
 		const started = Session.start(pty.value, cols, rows, cellWidth, cellHeight);
 		if (!started.ok) { return Result.err(TermError.SessionStartFailed); }
 		t.session = started.value;
@@ -390,7 +394,7 @@ export function busy(this t: Term): boolean {
 export const ABNORMAL_EXIT_MS: number = 250;
 
 export function exitedAbnormally(this t: Term): boolean {
-	return t.shellExitCode() != 0 && performance.now() - t.spawnedAt <= ABNORMAL_EXIT_MS;
+	return t.shellExitCode() != 0 && t.now() - t.spawnedAt <= ABNORMAL_EXIT_MS;
 }
 
 export function shellExitCode(this t: Term): int32 {
@@ -453,15 +457,16 @@ function exitingWith(code: int32): Pty {
 
 test "a shell that fails as it starts ended abnormally; a clean or a late exit did not" {
 	for (const code of [1, 0]) {
+		let at: float64 = 0;
 		const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
 			return Result.ok(exitingWith(code));
-		});
+		}, (): float64 => { return at; });
 		assert opened.ok;
 		if (opened.ok) {
 			const t = opened.value;
 			assert t.fit(20, 3).ok;
 			assert t.exitedAbnormally() == (code != 0);
-			t.spawnedAt -= ABNORMAL_EXIT_MS + 1;
+			at += ABNORMAL_EXIT_MS + 1;
 			assert !t.exitedAbnormally();
 			t.shutdown();
 		}

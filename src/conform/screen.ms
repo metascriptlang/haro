@@ -1,7 +1,7 @@
 import { createList, List } from "../../../neon/src/core/list";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
-import { RowSlot, Shown, Styles, applyFrame, empty, fitGrid, fitShown } from "../app/frame";
-import { SELECTION } from "../app/theme";
+import { RowSlot, Styles, applyFrame, empty, fitGrid } from "../app/frame";
+import { SELECTION, Shown, fitShown } from "../app/rows";
 import { LineRun, cellOnRow, line } from "../grid/lines";
 import { Cursor, Vt } from "../vt/vt";
 

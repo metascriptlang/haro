@@ -6,8 +6,6 @@ import { Marked } from "../select/select";
 import { Cursor, Rgb, Underline, Vt } from "../vt/vt";
 import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "./rows";
 
-export { Shown, fitShown } from "./rows";
-
 export interface RowSlot {
 	line: GridLine;
 	spans: TextSpan[];

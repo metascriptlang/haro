@@ -27,8 +27,8 @@ import {
 	selectWord,
 	selectionFormat,
 	selectionOrdered,
-	setSelection,
-	terminalSelection,
+	terminalGet,
+	terminalSet,
 	unset,
 	vtGridRef,
 } from "./vtNative";
@@ -82,7 +82,7 @@ export function selectionSet(this vt: Vt, m: Marked): Result<void, VtError> {
 		rectangle: m.block,
 	};
 	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SELECTION;
-	if (!ok(setSelection(vt.terminal, option, selection))) {
+	if (!ok(terminalSet(vt.terminal, option, selection))) {
 		return Result.err(VtError.SelectFailed);
 	}
 	return Result.ok(null);
@@ -95,7 +95,7 @@ export function selectionClear(this vt: Vt): void {
 export function selection(this vt: Vt): Result<Marked | null, VtError> {
 	let selection: GhosttySelection = { size: sizeof GhosttySelection };
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SELECTION;
-	const r = terminalSelection(vt.terminal, key, selection);
+	const r = terminalGet(vt.terminal, key, selection);
 	return markedFound(vt.terminal, r, selection);
 }
 

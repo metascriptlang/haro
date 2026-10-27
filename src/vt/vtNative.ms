@@ -23,36 +23,29 @@ import {
 	GhosttyKeyEvent,
 	GhosttyMouseEncoder,
 	GhosttyMouseEncoderOption,
-	GhosttyMouseEncoderSize,
 	GhosttyMouseEvent,
 	GhosttyOptionAsAlt,
 	GhosttyPoint,
 	GhosttyPointCoordinate,
 	GhosttyPointTag,
 	GhosttyRenderState,
-	GhosttyRenderStateCursorVisualStyle,
 	GhosttyRenderStateData,
 	GhosttyRenderStateRowCells,
 	GhosttyRenderStateRowCellsData,
 	GhosttyRenderStateRowData,
 	GhosttyRenderStateRowIterator,
-	GhosttyRenderStateRowSelection,
 	GhosttyResult,
 	GhosttyRow,
 	GhosttyRowData,
 	GhosttyRowSemanticPrompt,
 	GhosttySelection,
 	GhosttySelectionOrder,
-	GhosttyString,
-	GhosttyStyle,
 	GhosttyTerminal,
 	GhosttyTerminalData,
 	GhosttyTerminalModeConfig,
 	GhosttyTerminalOption,
-	GhosttyTerminalScreen,
 	GhosttyTerminalScrollViewport,
 	GhosttyTerminalScrollViewportTag,
-	GhosttyTerminalScrollbar,
 	GhosttyTerminalSelectLineOptions,
 	GhosttyTerminalSelectWordOptions,
 	GhosttyTerminalSelectionFormatOptions,
@@ -66,15 +59,35 @@ export extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<S
 	from "ghostty_terminal_vt_write";
 export extern function vtAllocator(): Ptr<GhosttyAllocator>;
 export extern function vtEffectsWire(terminal: GhosttyTerminal, effects: Ptr<void> | null): int32;
-export extern function mouseSetFlag(
+export extern function terminalGet<T>(
+	terminal: GhosttyTerminal,
+	key: GhosttyTerminalData,
+	out value: T,
+): GhosttyResult from "ghostty_terminal_get";
+export extern function terminalSet<T>(
+	terminal: GhosttyTerminal,
+	option: GhosttyTerminalOption,
+	ref value: T,
+): GhosttyResult from "ghostty_terminal_set";
+export extern function stateGet<T>(
+	s: GhosttyRenderState,
+	key: GhosttyRenderStateData,
+	out value: T,
+): GhosttyResult from "ghostty_render_state_get";
+export extern function cellsGet<T>(
+	cells: GhosttyRenderStateRowCells,
+	key: GhosttyRenderStateRowCellsData,
+	out value: T,
+): GhosttyResult from "ghostty_render_state_row_cells_get";
+export extern function rowGet<T>(
+	it: GhosttyRenderStateRowIterator,
+	key: GhosttyRenderStateRowData,
+	ref value: T,
+): GhosttyResult from "ghostty_render_state_row_get";
+export extern function mouseSetOption<T>(
 	encoder: GhosttyMouseEncoder,
 	option: GhosttyMouseEncoderOption,
-	ref value: boolean,
-): void from "ghostty_mouse_encoder_setopt";
-export extern function mouseSetSize(
-	encoder: GhosttyMouseEncoder,
-	option: GhosttyMouseEncoderOption,
-	ref size: GhosttyMouseEncoderSize,
+	ref value: T,
 ): void from "ghostty_mouse_encoder_setopt";
 export extern function mouseSetButton(event: GhosttyMouseEvent, button: int32): void
 	from "ghostty_mouse_event_set_button";
@@ -86,11 +99,6 @@ export extern function mouseEncode(
 	buf: Span<uint8>,
 	out written: uint64,
 ): GhosttyResult from "ghostty_mouse_encoder_encode";
-export extern function terminalText(
-	terminal: GhosttyTerminal,
-	key: GhosttyTerminalData,
-	out text: GhosttyString,
-): GhosttyResult from "ghostty_terminal_get";
 extern function gridRefTrack(
 	terminal: GhosttyTerminal,
 	point: GhosttyPoint,
@@ -101,66 +109,6 @@ extern function trackedGridRefSet(
 	terminal: GhosttyTerminal,
 	point: GhosttyPoint,
 ): GhosttyResult from "ghostty_tracked_grid_ref_set";
-export extern function terminalScrollbar(
-	terminal: GhosttyTerminal,
-	key: GhosttyTerminalData,
-	out scrollbar: GhosttyTerminalScrollbar,
-): GhosttyResult from "ghostty_terminal_get";
-export extern function terminalScreen(
-	terminal: GhosttyTerminal,
-	key: GhosttyTerminalData,
-	out screen: GhosttyTerminalScreen,
-): GhosttyResult from "ghostty_terminal_get";
-export extern function terminalFlag(
-	terminal: GhosttyTerminal,
-	key: GhosttyTerminalData,
-	out value: boolean,
-): GhosttyResult from "ghostty_terminal_get";
-export extern function terminalU16(
-	terminal: GhosttyTerminal,
-	key: GhosttyTerminalData,
-	out value: uint16,
-): GhosttyResult from "ghostty_terminal_get";
-export extern function terminalU32(
-	terminal: GhosttyTerminal,
-	key: GhosttyTerminalData,
-	out value: uint32,
-): GhosttyResult from "ghostty_terminal_get";
-extern function terminalMode(
-	terminal: GhosttyTerminal,
-	key: GhosttyTerminalData,
-	ref mode: GhosttyTerminalModeConfig,
-): GhosttyResult from "ghostty_terminal_get";
-export extern function terminalColors(
-	terminal: GhosttyTerminal,
-	key: GhosttyTerminalData,
-	out colors: Colors256,
-): GhosttyResult from "ghostty_terminal_get";
-export extern function setColor(
-	terminal: GhosttyTerminal,
-	option: GhosttyTerminalOption,
-	ref color: GhosttyColorRgb,
-): GhosttyResult from "ghostty_terminal_set";
-export extern function setColors(
-	terminal: GhosttyTerminal,
-	option: GhosttyTerminalOption,
-	ref colors: Colors256,
-): GhosttyResult from "ghostty_terminal_set";
-export extern function setSize(
-	terminal: GhosttyTerminal,
-	option: GhosttyTerminalOption,
-	ref value: uint64,
-): GhosttyResult from "ghostty_terminal_set";
-export extern function setFlag(
-	terminal: GhosttyTerminal,
-	option: GhosttyTerminalOption,
-	ref value: boolean,
-): GhosttyResult from "ghostty_terminal_set";
-export extern function setMode(
-	terminal: GhosttyTerminal,
-	option: GhosttyTerminalOption,
-	ref mode: GhosttyTerminalModeConfig,
-): GhosttyResult from "ghostty_terminal_set";
 export extern function unset(
 	terminal: GhosttyTerminal,
 	option: GhosttyTerminalOption,
@@ -187,75 +135,10 @@ export extern function encoderEncode(
 	out written: uint64,
 ): GhosttyResult from "ghostty_key_encoder_encode";
 
-export extern function stateRowIterator(
-	s: GhosttyRenderState,
-	key: GhosttyRenderStateData,
-	out it: GhosttyRenderStateRowIterator,
-): GhosttyResult from "ghostty_render_state_get";
-export extern function rowCells(
-	it: GhosttyRenderStateRowIterator,
-	key: GhosttyRenderStateRowData,
-	out cells: GhosttyRenderStateRowCells,
-): GhosttyResult from "ghostty_render_state_row_get";
-export extern function rowSelection(
-	it: GhosttyRenderStateRowIterator,
-	key: GhosttyRenderStateRowData,
-	ref selection: GhosttyRenderStateRowSelection,
-): GhosttyResult from "ghostty_render_state_row_get";
-export extern function cellGraphemeCount(
-	cells: GhosttyRenderStateRowCells,
-	key: GhosttyRenderStateRowCellsData,
-	out count: uint32,
-): GhosttyResult from "ghostty_render_state_row_cells_get";
 export extern function cellGraphemesInto(
 	cells: GhosttyRenderStateRowCells,
 	key: GhosttyRenderStateRowCellsData,
 	buf: Ptr<uint32>,
-): GhosttyResult from "ghostty_render_state_row_cells_get";
-export extern function stateColor(
-	s: GhosttyRenderState,
-	key: GhosttyRenderStateData,
-	out color: GhosttyColorRgb,
-): GhosttyResult from "ghostty_render_state_get";
-export extern function stateFlag(
-	s: GhosttyRenderState,
-	key: GhosttyRenderStateData,
-	out value: boolean,
-): GhosttyResult from "ghostty_render_state_get";
-export extern function stateU16(
-	s: GhosttyRenderState,
-	key: GhosttyRenderStateData,
-	out value: uint16,
-): GhosttyResult from "ghostty_render_state_get";
-export extern function stateCursorStyle(
-	s: GhosttyRenderState,
-	key: GhosttyRenderStateData,
-	out style: GhosttyRenderStateCursorVisualStyle,
-): GhosttyResult from "ghostty_render_state_get";
-export extern function stateColors(
-	s: GhosttyRenderState,
-	key: GhosttyRenderStateData,
-	out colors: Colors256,
-): GhosttyResult from "ghostty_render_state_get";
-export extern function cellColor(
-	cells: GhosttyRenderStateRowCells,
-	key: GhosttyRenderStateRowCellsData,
-	out color: GhosttyColorRgb,
-): GhosttyResult from "ghostty_render_state_row_cells_get";
-export extern function cellHasStyling(
-	cells: GhosttyRenderStateRowCells,
-	key: GhosttyRenderStateRowCellsData,
-	out styled: boolean,
-): GhosttyResult from "ghostty_render_state_row_cells_get";
-export extern function cellStyle(
-	cells: GhosttyRenderStateRowCells,
-	key: GhosttyRenderStateRowCellsData,
-	out style: GhosttyStyle,
-): GhosttyResult from "ghostty_render_state_row_cells_get";
-export extern function cellRaw(
-	cells: GhosttyRenderStateRowCells,
-	key: GhosttyRenderStateRowCellsData,
-	out raw: GhosttyCell,
 ): GhosttyResult from "ghostty_render_state_row_cells_get";
 export extern function cellWide(
 	raw: GhosttyCell,
@@ -330,16 +213,6 @@ export extern function pointOf(
 	tag: GhosttyPointTag,
 	out at: GhosttyPointCoordinate,
 ): GhosttyResult from "ghostty_terminal_point_from_grid_ref";
-export extern function terminalSelection(
-	terminal: GhosttyTerminal,
-	key: GhosttyTerminalData,
-	ref selection: GhosttySelection,
-): GhosttyResult from "ghostty_terminal_get";
-export extern function setSelection(
-	terminal: GhosttyTerminal,
-	option: GhosttyTerminalOption,
-	ref selection: GhosttySelection,
-): GhosttyResult from "ghostty_terminal_set";
 export extern function selectionOrdered(
 	terminal: GhosttyTerminal,
 	ref selection: GhosttySelection,
@@ -389,7 +262,7 @@ export const MODE_WIN32_INPUT: uint16 = 9001;
 
 export function modeOn(terminal: GhosttyTerminal, mode: uint16): Result<boolean, VtError> {
 	let m: GhosttyTerminalModeConfig = { mode: mode, value: false };
-	if (!ok(terminalMode(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MODE, m))) {
+	if (!ok(terminalGet(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MODE, m))) {
 		return Result.err(VtError.ReadFailed);
 	}
 	return Result.ok(m.value);

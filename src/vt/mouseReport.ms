@@ -17,9 +17,8 @@ import { Vt } from "./terminal";
 import {
 	mouseEncode,
 	mouseSetButton,
-	mouseSetFlag,
 	mouseSetMods,
-	mouseSetSize,
+	mouseSetOption,
 	ok,
 	vtAllocator,
 } from "./vtNative";
@@ -54,7 +53,7 @@ function open(this m: Mouse): Result<MouseCodec, VtError> {
 	}
 	let track = true;
 	const trackOption = GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL;
-	mouseSetFlag(encoder, trackOption, track);
+	mouseSetOption(encoder, trackOption, track);
 	const codec: MouseCodec = { encoder: encoder, event: event };
 	m.codec = codec;
 	return Result.ok(codec);
@@ -89,12 +88,12 @@ export function mouseReport(
 			padding_right: geometry.padRight as uint32,
 			padding_left: geometry.padLeft as uint32,
 		};
-		mouseSetSize(encoder, GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_SIZE, size);
+		mouseSetOption(encoder, GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_SIZE, size);
 		m.geometry = geometry;
 	}
 	let pressed = anyPressed;
 	const pressedOption = GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED;
-	mouseSetFlag(encoder, pressedOption, pressed);
+	mouseSetOption(encoder, pressedOption, pressed);
 	ghostty_mouse_event_set_action(event, mouseActionOf(input.action));
 	if (input.button == 0) {
 		ghostty_mouse_event_clear_button(event);

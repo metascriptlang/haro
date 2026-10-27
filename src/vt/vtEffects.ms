@@ -16,8 +16,7 @@ import {
 	GHOSTTY_DA_FEATURE_CLIPBOARD,
 	ok,
 	pushAll,
-	terminalU16,
-	terminalU32,
+	terminalGet,
 	vtEffectsWire,
 } from "./vtNative";
 import { VtError } from "./vtTypes";
@@ -121,10 +120,10 @@ function sizeReport(terminal: GhosttyTerminal, effects: Ptr<void>, out size: Gho
 	let rows: uint16 = 0;
 	let width: uint32 = 0;
 	let height: uint32 = 0;
-	const read = ok(terminalU16(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_COLS, cols)) &&
-		ok(terminalU16(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_ROWS, rows)) &&
-		ok(terminalU32(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_WIDTH_PX, width)) &&
-		ok(terminalU32(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_HEIGHT_PX, height)) &&
+	const read = ok(terminalGet(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_COLS, cols)) &&
+		ok(terminalGet(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_ROWS, rows)) &&
+		ok(terminalGet(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_WIDTH_PX, width)) &&
+		ok(terminalGet(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_HEIGHT_PX, height)) &&
 		cols > 0 && rows > 0;
 	size = {
 		rows: rows,

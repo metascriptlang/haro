@@ -21,10 +21,8 @@ import {
 	gridRefCell,
 	modeOn,
 	ok,
-	stateCursorStyle,
-	stateFlag,
-	stateU16,
-	terminalFlag,
+	stateGet,
+	terminalGet,
 	vtGridRef,
 } from "./vtNative";
 import { VtError } from "./vtTypes";
@@ -32,7 +30,7 @@ import { VtError } from "./vtTypes";
 function mouseTracking(terminal: GhosttyTerminal): Result<boolean, VtError> {
 	let tracking = false;
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING;
-	if (!ok(terminalFlag(terminal, key, tracking))) { return Result.err(VtError.ReadFailed); }
+	if (!ok(terminalGet(terminal, key, tracking))) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(tracking);
 }
 
@@ -45,7 +43,7 @@ export struct Cursor {
 export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	const hasKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE;
 	let hasValue = false;
-	if (!ok(stateFlag(vt.state, hasKey, hasValue))) {
+	if (!ok(stateGet(vt.state, hasKey, hasValue))) {
 		return Result.err(VtError.ReadFailed);
 	}
 	if (!hasValue) { return Result.ok(null); }
@@ -53,12 +51,12 @@ export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	let y: uint16 = 0;
 	const xKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X;
 	const yKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y;
-	if (!ok(stateU16(vt.state, xKey, x)) || !ok(stateU16(vt.state, yKey, y))) {
+	if (!ok(stateGet(vt.state, xKey, x)) || !ok(stateGet(vt.state, yKey, y))) {
 		return Result.err(VtError.ReadFailed);
 	}
 	let tail = false;
 	const tailKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_WIDE_TAIL;
-	if (!ok(stateFlag(vt.state, tailKey, tail))) { return Result.err(VtError.ReadFailed); }
+	if (!ok(stateGet(vt.state, tailKey, tail))) { return Result.err(VtError.ReadFailed); }
 	if (tail) {
 		const onTail: Cursor | null = { x: (x as int32) - 1, y: y as int32, wide: true };
 		return Result.ok(onTail);
@@ -99,9 +97,9 @@ export function cursorLook(this vt: Vt): Result<CursorLook, VtError> {
 	const visibleKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VISIBLE;
 	const styleKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VISUAL_STYLE;
 	const blinkingKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_BLINKING;
-	if (!ok(stateFlag(vt.state, visibleKey, visible))
-		|| !ok(stateCursorStyle(vt.state, styleKey, style))
-		|| !ok(stateFlag(vt.state, blinkingKey, blinking))) {
+	if (!ok(stateGet(vt.state, visibleKey, visible))
+		|| !ok(stateGet(vt.state, styleKey, style))
+		|| !ok(stateGet(vt.state, blinkingKey, blinking))) {
 		return Result.err(VtError.ReadFailed);
 	}
 	return Result.ok({ visible: visible, shape: try shapeOf(style), blinking: blinking });

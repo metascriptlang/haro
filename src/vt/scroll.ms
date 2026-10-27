@@ -17,8 +17,7 @@ import {
 	gridRefRow,
 	ok,
 	rowPrompt,
-	terminalScreen,
-	terminalScrollbar,
+	terminalGet,
 	vtGridRef,
 	vtScroll,
 	vtTopAnchor,
@@ -28,7 +27,7 @@ import { VtError } from "./vtTypes";
 function scrollbar(this vt: Vt): Result<GhosttyTerminalScrollbar, VtError> {
 	let bar: GhosttyTerminalScrollbar;
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SCROLLBAR;
-	if (!ok(terminalScrollbar(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
+	if (!ok(terminalGet(vt.terminal, key, bar))) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(bar);
 }
 
@@ -40,7 +39,7 @@ export function scrollOffset(this vt: Vt): Result<int32, VtError> {
 export function alternateScreen(this vt: Vt): Result<boolean, VtError> {
 	let screen = GhosttyTerminalScreen.GHOSTTY_TERMINAL_SCREEN_PRIMARY;
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN;
-	if (!ok(terminalScreen(vt.terminal, key, screen))) { return Result.err(VtError.ReadFailed); }
+	if (!ok(terminalGet(vt.terminal, key, screen))) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(screen == GhosttyTerminalScreen.GHOSTTY_TERMINAL_SCREEN_ALTERNATE);
 }
 

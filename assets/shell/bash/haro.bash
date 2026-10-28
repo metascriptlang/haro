@@ -1,18 +1,3 @@
-if [ -n "${HARO_BASH_LOGIN-}" ]; then
-	unset HARO_BASH_LOGIN
-	if [ -r /etc/profile ]; then . /etc/profile; fi
-	if [ -r ~/.bash_profile ]; then
-		. ~/.bash_profile
-	elif [ -r ~/.bash_login ]; then
-		. ~/.bash_login
-	elif [ -r ~/.profile ]; then
-		. ~/.profile
-	fi
-else
-	unset HARO_BASH_LOGIN
-	if [ -r ~/.bashrc ]; then . ~/.bashrc; fi
-fi
-
 _haro_url() {
 	local LC_ALL=C text=$1 out= c code hex i
 	for (( i = 0; i < ${#text}; i++ )); do
@@ -45,25 +30,35 @@ _haro_prompt() {
 	return $_haro_status
 }
 
+_haro_newest() {
+	local entry
+	entry=$(HISTTIMEFORMAT= builtin history 1)
+	entry=${entry#"${entry%%[! ]*}"}
+	_haro_number=${entry%%[!0-9]*}
+	entry=${entry#"$_haro_number"}
+	_haro_entry=${entry#"${entry%%[!* ]*}"}
+}
+
 _haro_ready() {
+	if [ -z "${_haro_history+set}" ]; then
+		_haro_newest
+		_haro_history=$_haro_number
+	fi
 	_haro_at_prompt=1
 	return $_haro_status
 }
 
 _haro_preexec() {
 	[ -n "${_haro_at_prompt-}" ] && [ -z "${COMP_LINE-}" ] || return
-	_haro_at_prompt=
-	local entry number
-	entry=$(HISTTIMEFORMAT= builtin history 1)
-	entry=${entry#"${entry%%[! ]*}"}
-	number=${entry%%[!0-9]*}
-	entry=${entry#"$number"}
-	entry=${entry#"${entry%%[!* ]*}"}
-	if [ -z "$number" ] || [ "$number" = "${_haro_history-}" ]; then
-		entry=$BASH_COMMAND
+	_haro_newest
+	if [ "$BASH_COMMAND" = _haro_prompt ]; then
+		[ -n "$_haro_number" ] && [ "$_haro_number" != "$_haro_history" ] || return
+	elif [ -z "$_haro_number" ] || [ "$_haro_number" = "$_haro_history" ]; then
+		_haro_entry=$BASH_COMMAND
 	fi
-	_haro_history=$number
-	_haro_url "$entry"
+	_haro_at_prompt=
+	_haro_history=$_haro_number
+	_haro_url "$_haro_entry"
 	builtin printf '\033]133;C;cmdline_url=%s\007' "$_haro_reply"
 	_haro_ran=1
 }

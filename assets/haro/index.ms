@@ -47,6 +47,32 @@ export extern function notify(title: string, body: string): void from "haro.noti
 export extern function decorate(d: Decoration): int32 from "haro.decorate";
 export extern function undecorate(id: int32): void from "haro.undecorate";
 
+export interface Annotation {
+	at: Anchor;
+	text: string;
+	foreground?: string;
+	background?: string;
+}
+
+export extern function annotate(a: Annotation): int32 from "haro.annotate";
+export extern function unannotate(id: int32): void from "haro.unannotate";
+
+const FAILED_BACKGROUND = "#3a1c24";
+
+function tookText(durationMs?: number): string {
+	if (durationMs === undefined) { return ""; }
+	const tenths = Math.round(durationMs / 100) as int32;
+	return ` · ${Math.floor(tenths / 10)}.${tenths % 10}s`;
+}
+
+export function markFailed(e: CommandDone): void {
+	const code = e.exitCode;
+	const prompt = e.prompt;
+	if (code === undefined || code == 0 || prompt === undefined) { return; }
+	decorate({ from: prompt, to: e.end, background: FAILED_BACKGROUND });
+	annotate({ at: prompt, text: `exit ${code}${tookText(e.durationMs)}` });
+}
+
 export interface HaroConfig {
 	fontFamily?: string[];
 	fontSize?: number;

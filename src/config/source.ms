@@ -7,7 +7,7 @@ import { changeStamp, ensureDir, exists, readFile, writeFile } from "std/fs";
 import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
 import { CommandDone, Rgb } from "../vt/vt";
-import { RowTint } from "../grid/lines";
+import { RowNote, RowTint } from "../grid/lines";
 import { Faces, installedFaces } from "./fonts";
 import {
 	HookPane,
@@ -361,6 +361,8 @@ const UNHEARD: HookPane = {
 	notify: (title: string, body: string): void => {},
 	decorate: (from: int32, to: int32, tint: RowTint): int32 => -1,
 	undecorate: (id: int32): void => {},
+	annotate: (at: int32, note: RowNote): int32 => -1,
+	unannotate: (id: int32): void => {},
 };
 
 interface Heard {
@@ -376,6 +378,12 @@ function paneHeard(heard: Heard): HookPane {
 			return 40 + (heard.said.length as int32);
 		},
 		undecorate: (id: int32): void => { heard.said.push(`undecorate ${id}`); },
+		annotate: (at: int32, note: RowNote): int32 => {
+			const colours = `${tintText(note.fg)} ${tintText(note.bg)}`;
+			heard.said.push(`annotate ${at} ${note.text} ${colours}`);
+			return 40 + (heard.said.length as int32);
+		},
+		unannotate: (id: int32): void => { heard.said.push(`unannotate ${id}`); },
 	};
 }
 
@@ -453,4 +461,57 @@ test "an onCommandDone that decorates reaches the pane with its anchors and colo
 	if (!outside.ok) {
 		assert outside.error.includes("called decorate outside a hook"), outside.error;
 	}
+}
+
+function hooksOf(name: string, source: string): Result<Hooks | null, string> {
+	const dir = `${cwd()}/out/${name}`;
+	const path = `${dir}/config.ms`;
+	if (!ensureDir(dir).ok || !writeFile(path, source).ok) {
+		return Result.err(`cannot write ${path}`);
+	}
+	const hooked = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
+	if (!hooked.ok) { return Result.err(hooked.error); }
+	return Result.ok(hooked.value.hooks);
+}
+
+test "an onCommandDone that annotates reaches the pane with its anchor, text and colours" {
+	const got = hooksOf("annotateConfig",
+		`import { HaroConfig, annotate, unannotate } from "haro";\n\n` +
+		`export const config: HaroConfig = {\n` +
+		`\tonCommandDone: (e) => {\n` +
+		`\t\tconst id = annotate({ at: e.end, text: e.command, foreground: "#00ff00" });\n` +
+		`\t\tif (e.exitCode == 0) { unannotate(id); }\n` +
+		`\t},\n};\n`);
+	assert got.ok, got.ok ? "" : got.error;
+	const hooks = got.ok ? got.value : null;
+	assert hooks !== null;
+	if (hooks === null) { return; }
+	const heard: Heard = { said: [] };
+	assert hooks.commandDone(paneHeard(heard), { ...ran(0, "make", null), end: 5 }).ok;
+	assert heard.said.join("|") == "annotate 5 make 0,255,0 -|unannotate 41", heard.said.join("|");
+	const refused = hooks.commandDone(paneHeard(heard), { ...ran(1, "a\tb", null), end: 6 });
+	assert !refused.ok;
+	if (!refused.ok) {
+		const expected = `annotate's text "a\\tb" holds a control character`;
+		assert refused.error == `onCommandDone in config.ms failed: ${expected}`, refused.error;
+	}
+}
+
+test "markFailed from the haro package tints a failed block and notes its exit code and duration" {
+	const got = hooksOf("markFailedConfig",
+		`import { HaroConfig, markFailed } from "haro";\n\n` +
+		`export const config: HaroConfig = { onCommandDone: (e) => { markFailed(e); } };\n`);
+	assert got.ok, got.ok ? "" : got.error;
+	const hooks = got.ok ? got.value : null;
+	assert hooks !== null;
+	if (hooks === null) { return; }
+	const heard: Heard = { said: [] };
+	const failed: CommandDone = { ...ran(2, "make", 1300), prompt: 3, output: 4, end: 5 };
+	assert hooks.commandDone(paneHeard(heard), failed).ok;
+	assert hooks.commandDone(paneHeard(heard), { ...failed, exitCode: 0 }).ok;
+	assert hooks.commandDone(paneHeard(heard), { ...failed, durationMs: null, prompt: 7 }).ok;
+	assert hooks.commandDone(paneHeard(heard), { ...failed, prompt: null }).ok;
+	assert heard.said.join("|") ==
+		"decorate 3..5 58,28,36 -|annotate 3 exit 2 · 1.3s - -|" +
+		"decorate 7..5 58,28,36 -|annotate 7 exit 2 - -", heard.said.join("|");
 }

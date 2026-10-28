@@ -1,6 +1,6 @@
 import { KeyEvent, KeyAction, KeyMod } from "../keys/keys";
 import { CommandDone, Rgb } from "../vt/vt";
-import { RowTint } from "../grid/lines";
+import { RowNote, RowTint } from "../grid/lines";
 import { rgbOf } from "./config";
 import {
 	Interpreter,
@@ -34,6 +34,8 @@ export interface HookPane {
 	notify: (title: string, body: string) => void;
 	decorate: (from: int32, to: int32, tint: RowTint) => int32;
 	undecorate: (id: int32) => void;
+	annotate: (at: int32, note: RowNote) => int32;
+	unannotate: (id: int32) => void;
 }
 
 interface Running {
@@ -69,10 +71,14 @@ function anchorField(d: RaiserHostValue, name: string): int32 | null {
 	return v.kind == RaiserValueKind.Int ? v.intVal as int32 : null;
 }
 
-function colourField(d: RaiserHostValue, name: string): Result<Rgb | null, string> {
+function colourField(
+	d: RaiserHostValue,
+	routine: string,
+	name: string,
+): Result<Rgb | null, string> {
 	const v = d.field(name);
 	if (v.root.kind == RaiserValueKind.Nil) { return Result.ok(null); }
-	const key = `decorate's ${name}`;
+	const key = `${routine}'s ${name}`;
 	if (v.root.kind != RaiserValueKind.String) {
 		return Result.err(`${key} must be a #rrggbb string`);
 	}
@@ -88,18 +94,62 @@ function askedOf(d: RaiserHostValue): Result<Asked, string> {
 			"decorate needs from and to anchors, taken from onPrompt or onCommandDone",
 		);
 	}
-	const bg = try colourField(d, "background");
-	const fg = try colourField(d, "foreground");
+	const bg = try colourField(d, "decorate", "background");
+	const fg = try colourField(d, "decorate", "foreground");
 	return Result.ok({ from: from, to: to, tint: { fg: fg, bg: bg } });
+}
+
+function isControl(unit: int32): boolean {
+	return unit < 0x20 || (unit >= 0x7F && unit < 0xA0);
+}
+
+function noteText(d: RaiserHostValue): Result<string, string> {
+	const v = d.field("text");
+	if (v.root.kind != RaiserValueKind.String) { return Result.err("annotate needs a text string"); }
+	const text = v.text();
+	for (let i = 0; i < text.length; i++) {
+		if (isControl(text.charCodeAt(i) as int32)) {
+			return Result.err(`annotate's text ${JSON.stringify(text)} holds a control character`);
+		}
+	}
+	return Result.ok(text);
+}
+
+struct Noted {
+	at: int32;
+	note: RowNote;
+}
+
+function notedOf(d: RaiserHostValue): Result<Noted, string> {
+	const at = anchorField(d, "at");
+	if (at === null) {
+		return Result.err("annotate needs an at anchor, taken from onPrompt or onCommandDone");
+	}
+	const text = try noteText(d);
+	const fg = try colourField(d, "annotate", "foreground");
+	const bg = try colourField(d, "annotate", "background");
+	return Result.ok({ at: at, note: { text: text, fg: fg, bg: bg } });
+}
+
+function refuse(error: string): RaiserValue {
+	if (running.refused == "") { running.refused = error; }
+	return boxInt(NO_DECORATION);
 }
 
 function decorated(pane: HookPane, d: RaiserHostValue): RaiserValue {
 	const asked = askedOf(d);
-	if (!asked.ok) {
-		if (running.refused == "") { running.refused = asked.error; }
-		return boxInt(NO_DECORATION);
-	}
+	if (!asked.ok) { return refuse(asked.error); }
 	return boxInt(pane.decorate(asked.value.from, asked.value.to, asked.value.tint));
+}
+
+function annotated(pane: HookPane, d: RaiserHostValue): RaiserValue {
+	const noted = notedOf(d);
+	if (!noted.ok) { return refuse(noted.error); }
+	return boxInt(pane.annotate(noted.value.at, noted.value.note));
+}
+
+function idOf(arg: RaiserValue): int32 {
+	return arg.kind == RaiserValueKind.Int ? arg.intVal as int32 : NO_DECORATION;
 }
 
 export function implementRoutines(): void {
@@ -125,9 +175,21 @@ export function implementRoutines(): void {
 		return onPane("decorate", refused, (pane: HookPane): RaiserValue => decorated(pane, d));
 	});
 	implementRoutine("haro.undecorate", (args: RaiserValue[]): RaiserValue => {
-		const id = args[0].kind == RaiserValueKind.Int ? args[0].intVal as int32 : NO_DECORATION;
+		const id = idOf(args[0]);
 		return onPane("undecorate", boxVoid(), (pane: HookPane): RaiserValue => {
 			pane.undecorate(id);
+			return boxVoid();
+		});
+	});
+	implementRoutine("haro.annotate", (args: RaiserValue[]): RaiserValue => {
+		const d = unboxValue(args[0]);
+		const refused = boxInt(NO_DECORATION);
+		return onPane("annotate", refused, (pane: HookPane): RaiserValue => annotated(pane, d));
+	});
+	implementRoutine("haro.unannotate", (args: RaiserValue[]): RaiserValue => {
+		const id = idOf(args[0]);
+		return onPane("unannotate", boxVoid(), (pane: HookPane): RaiserValue => {
+			pane.unannotate(id);
 			return boxVoid();
 		});
 	});

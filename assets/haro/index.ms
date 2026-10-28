@@ -20,6 +20,12 @@ export interface KeyAnswer {
 	send?: string;
 }
 
+export interface CommandDone {
+	exitCode?: number;
+	command: string;
+	durationMs?: number;
+}
+
 export interface HaroConfig {
 	fontFamily?: string[];
 	fontSize?: number;
@@ -33,6 +39,8 @@ export interface HaroConfig {
 	keybinds?: Keybind[];
 	optionAsAlt?: "neither" | "left" | "right" | "both";
 	onKey?: (e: KeyPress) => KeyAnswer;
+	onPrompt?: () => void;
+	onCommandDone?: (e: CommandDone) => void;
 }
 
 export const saigonNight = {

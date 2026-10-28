@@ -8,7 +8,7 @@ import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
 import { Rgb } from "../vt/vt";
 import { Faces, installedFaces } from "./fonts";
-import { Hooks, answerKey } from "./hooks";
+import { Hooks, answerKey, commandDone, prompted } from "./hooks";
 import { KeyAction, KeyMod, NO_MODS, keyEvent, modSet } from "../keys/keys";
 import {
 	callRoutine,
@@ -57,16 +57,27 @@ interface Evaluated {
 
 function runnerOf(importPath: string): string {
 	return `import { config as written } from ${JSON.stringify(importPath)};\n` +
-		`import { HaroConfig, KeyAnswer, KeyPress } from "haro";\n` +
+		`import { CommandDone, HaroConfig, KeyAnswer, KeyPress } from "haro";\n` +
 		"const config: HaroConfig = written;\n" +
 		"export function configJson(): string {\n" +
-		"\tconst { onKey: _onKey, ...settings } = config;\n" +
+		"\tconst { onKey: _onKey, onPrompt: _onPrompt, onCommandDone: _onCommandDone, ...settings } = config;\n" +
 		"\treturn JSON.stringify(settings);\n" +
 		"}\n" +
-		"export function hooked(): boolean { return config.onKey !== undefined; }\n" +
+		"export function hooked(): boolean {\n" +
+		"\treturn config.onKey !== undefined || config.onPrompt !== undefined ||\n" +
+		"\t\tconfig.onCommandDone !== undefined;\n" +
+		"}\n" +
 		"export function onKey(e: KeyPress): KeyAnswer {\n" +
 		"\tconst hook = config.onKey;\n" +
 		"\treturn hook === undefined ? { handled: false } : hook(e);\n" +
+		"}\n" +
+		"export function onPrompt(): void {\n" +
+		"\tconst hook = config.onPrompt;\n" +
+		"\tif (hook !== undefined) { hook(); }\n" +
+		"}\n" +
+		"export function onCommandDone(e: CommandDone): void {\n" +
+		"\tconst hook = config.onCommandDone;\n" +
+		"\tif (hook !== undefined) { hook(e); }\n" +
 		"}\n";
 }
 
@@ -95,7 +106,12 @@ function evaluate(path: string, dir: string, api: string, metascript: string): R
 	const json = try callRoutine(interp, try selectRoutine(interp, "configJson"), []);
 	const hooked = try callRoutine(interp, try selectRoutine(interp, "hooked"), []);
 	const hooks: Hooks | null = unboxBool(hooked.root)
-		? { interp: interp, onKey: try selectRoutine(interp, "onKey") }
+		? {
+			interp: interp,
+			onKey: try selectRoutine(interp, "onKey"),
+			onPrompt: try selectRoutine(interp, "onPrompt"),
+			onCommandDone: try selectRoutine(interp, "onCommandDone"),
+		}
 		: null;
 	return Result.ok({ json: json.text(), hooks: hooks });
 }
@@ -288,4 +304,32 @@ test "an onKey in config.ms answers the keys it handles and lets the rest throug
 	assert writeFile(path, `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = { fontSize: 13 };\n`).ok;
 	const plain = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
 	assert plain.ok && plain.value.hooks === null;
+}
+
+test "an onCommandDone in config.ms gets the exit code, command and duration, and a throw is its error" {
+	const dir = `${cwd()}/out/shellHookConfig`;
+	assert ensureDir(dir).ok;
+	const path = `${dir}/config.ms`;
+	const config = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = {\n` +
+		`\tfontSize: 13,\n` +
+		`\tonPrompt: () => {},\n` +
+		`\tonCommandDone: (e) => {\n` +
+		`\t\tif (e.exitCode === undefined) { throw new Error(\`no code for \${e.command}\`); }\n` +
+		`\t\tif (e.exitCode != 0) { throw new Error(\`\${e.command} \${e.exitCode} \${e.durationMs}\`); }\n` +
+		`\t},\n};\n`;
+	assert writeFile(path, config).ok;
+	const hooked = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
+	assert hooked.ok, hooked.ok ? "" : hooked.error;
+	if (!hooked.ok) { return; }
+	const c = parse(hooked.value.json);
+	assert c.ok && c.value.fontSize == 13;
+	const hooks = hooked.value.hooks;
+	assert hooks !== null;
+	if (hooks === null) { return; }
+	assert hooks.prompted().ok;
+	assert hooks.commandDone({ exitCode: 0, command: "make", durationMs: 12.5 }).ok;
+	const failed = hooks.commandDone({ exitCode: 2, command: "make", durationMs: 12.5 });
+	assert !failed.ok && failed.error.includes("make 2 12.5"), failed.ok ? "" : failed.error;
+	const unknown = hooks.commandDone({ exitCode: null, command: "", durationMs: null });
+	assert !unknown.ok && unknown.error.includes("no code for"), unknown.ok ? "" : unknown.error;
 }

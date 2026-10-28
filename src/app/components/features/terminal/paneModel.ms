@@ -9,7 +9,7 @@ import { ViewHandle } from "../../../../../../neon/src/components/primitives";
 import { familyFont } from "../../../../../../neon/src/platform/void/host";
 import { spriteCellFor } from "../../../../../../void/src/void2d/font";
 import { gridSize } from "../../../../grid/size";
-import { CellInk } from "../../../../grid/lines";
+import { CellInk, RowTint } from "../../../../grid/lines";
 import { CommandDone, MouseGeometry, ShellMark, ShellStep, geometryOf } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
 import { HookPane, KeyAnswer } from "../../../../config/hooks";
@@ -69,7 +69,7 @@ export interface KeyHook {
 }
 
 export interface ShellHook {
-	prompted: (pane: HookPane) => Result<void, string>;
+	prompted: (pane: HookPane, at: int32) => Result<void, string>;
 	commandDone: (pane: HookPane, done: CommandDone) => Result<void, string>;
 }
 
@@ -124,6 +124,7 @@ export interface PaneModel {
 	grid: ViewHandle | null;
 	holdTimer: number;
 	scrollTimer: number;
+	decorations: int32;
 	mouseGeometry: MouseGeometry;
 	layoutWidth: number;
 	layoutHeight: number;
@@ -196,6 +197,7 @@ export function open(
 		grid: null,
 		holdTimer: -1,
 		scrollTimer: -1,
+		decorations: 0,
 		mouseGeometry: geometryOf(1, 1, 1, 1),
 		layoutWidth: 0,
 		layoutHeight: 0,
@@ -331,7 +333,7 @@ function applied(this m: PaneModel, got: IoFrame): void {
 function marked(this m: PaneModel, mark: ShellMark): void {
 	const ran = mark.step === ShellStep.CommandDone
 		? m.shellHook.commandDone(m.hookPane(), mark.done)
-		: m.shellHook.prompted(m.hookPane());
+		: m.shellHook.prompted(m.hookPane(), mark.at);
 	if (!ran.ok) { m.notify(ran.error); }
 }
 
@@ -339,6 +341,17 @@ export function hookPane(this m: PaneModel): HookPane {
 	return {
 		send: (text: string): void => { m.io.text(text, m.timing.clock()); },
 		notify: (title: string, body: string): void => { m.desktop.notify(title, body); },
+		decorate: (from: int32, to: int32, tint: RowTint): int32 => {
+			m.decorations += 1;
+			const id = m.decorations;
+			m.io.decorate({ id: id, from: from, to: to, tint: tint });
+			m.scheduleRefresh();
+			return id;
+		},
+		undecorate: (id: int32): void => {
+			m.io.undecorate(id);
+			m.scheduleRefresh();
+		},
 	};
 }
 

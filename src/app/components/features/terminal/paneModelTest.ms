@@ -3,6 +3,7 @@ import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
 import { installClipboardServices } from "../../../../../../neon/src/api/clipboardServices";
 import { Config, defaults } from "../../../../config/config";
 import { CommandDone, writeText } from "../../../../vt/vt";
+import { RowTint } from "../../../../grid/lines";
 import { open, NoticeModel } from "../notice/notice";
 import { open, PasteDialogModel } from "../paste/pasteDialog";
 import { Stats, empty } from "../../../stats";
@@ -72,7 +73,7 @@ const NO_HOOK: KeyHook = {
 };
 
 const NO_SHELL_HOOK: ShellHook = {
-	prompted: (pane: HookPane): Result<void, string> => Result.ok(null),
+	prompted: (pane: HookPane, at: int32): Result<void, string> => Result.ok(null),
 	commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => Result.ok(null),
 };
 
@@ -541,7 +542,7 @@ test "a shell's marks call the config's onCommandDone and onPrompt in order, and
 	assert onFresh("\x1b]133;C\x07\x1b]133;D;1\x07\x1b]133;A\x07", (t: Term, sink: Sink): void => {
 		const heard: Written = { sent: [] };
 		const hook: ShellHook = {
-			prompted: (pane: HookPane): Result<void, string> => {
+			prompted: (pane: HookPane, at: int32): Result<void, string> => {
 				heard.sent.push("prompt");
 				return Result.err("onPrompt in config.ms failed: boom");
 			},
@@ -566,7 +567,7 @@ test "a hook's send writes to its pane's shell and its notify reaches the deskto
 		},
 	};
 	const shellHook: ShellHook = {
-		prompted: (pane: HookPane): Result<void, string> => Result.ok(null),
+		prompted: (pane: HookPane, at: int32): Result<void, string> => Result.ok(null),
 		commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => {
 			pane.send(`exit ${done.exitCode ?? -1}`);
 			pane.notify("done", `exit ${done.exitCode ?? -1}`);
@@ -581,5 +582,32 @@ test "a hook's send writes to its pane's shell and its notify reaches the deskto
 		m.keyed(pressed("Enter"));
 		assert w.sent.join("|") == "exit 3|from onKey|\r", w.sent.join("|");
 		assert calls.notified == "done|exit 3\n", calls.notified;
+	}).ok;
+}
+
+test "a command-done mark whose hook decorates posts the decoration to the shell and schedules a refresh" {
+	const ran = "\x1b]133;A\x07$ false\r\n\x1b]133;C\x07oops\r\n\x1b]133;D;1\x07\x1b]133;A\x07$ ";
+	assert onFresh(ran, (t: Term, sink: Sink): void => {
+		let ids: Vec<int32> = [];
+		const hook: ShellHook = {
+			prompted: (pane: HookPane, at: int32): Result<void, string> => Result.ok(null),
+			commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => {
+				const prompt = done.prompt;
+				const tint: RowTint = { fg: null, bg: { r: 58, g: 28, b: 36 } };
+				if (prompt !== null) { ids.push(pane.decorate(prompt, done.end, tint)); }
+				return Result.ok(null);
+			},
+		};
+		const scheduled: Scheduled = { runs: [] };
+		const io = Io.open(t);
+		const m = paneWith(io, noCalls(), timingCounting(scheduled), NO_HOOK, hook);
+		m.refresh();
+		assert ids.length == 1 && ids[0] == 1;
+		assert t.decor.decorations.length == 1;
+		assert t.decor.decorations[0].id == 1;
+		assert scheduled.runs.length >= 1;
+		for (const run of scheduled.runs) { run(); }
+		assert m.view.grid.at(0).line.runs[0].bg.r == 58;
+		assert m.view.grid.at(2).line.runs[0].bg.r != 58;
 	}).ok;
 }

@@ -171,9 +171,9 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 			},
 		},
 		shellHook: {
-			prompted: (pane: HookPane): Result<void, string> => {
+			prompted: (pane: HookPane, at: int32): Result<void, string> => {
 				const hooks = config.loaded.hooks;
-				return hooks === null ? Result.ok(null) : hooks.prompted(pane);
+				return hooks === null ? Result.ok(null) : hooks.prompted(pane, at);
 			},
 			commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => {
 				const hooks = config.loaded.hooks;

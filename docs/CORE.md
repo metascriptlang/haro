@@ -141,12 +141,18 @@ named directly or as `$SHELL`, `${SHELL}` or `${SHELL:-default}`, followed by no
 - zsh: `ZDOTDIR` points at Haro's `.zshenv`, which puts back the user's `ZDOTDIR` (or unsets it)
   before anything else, so zsh reads the user's `.zshenv`, `.zprofile`, `.zshrc` and `.zlogin`
   from their usual place. Hooks are `precmd` and `preexec`.
-- bash: started with `--rcfile`; that file reads `/etc/profile` and the first of
-  `~/.bash_profile`, `~/.bash_login`, `~/.profile` when a login shell was asked for, else
-  `~/.bashrc`. Bash then is not a login shell (`shopt login_shell` is off, `logout` refuses and
-  `~/.bash_logout` is not read). C needs the DEBUG trap and is skipped when the user's files
-  already set one; its command line is the newest history entry, or the first simple command when
-  history did not record the line.
+- bash: Haro first asks the shell its version (`-c 'echo ${BASH_VERSINFO[0]}'`, bounded at 500 ms;
+  4 to 9 ms measured for bash 3.2 and 5.3); a bash that does not answer runs untouched. From
+  bash 4 on, the flags stay as given and `--posix` is added, so bash reads only `$ENV`, which is
+  Haro's script: it turns posix mode off, puts back the user's `ENV`, and reads `/etc/profile`
+  and the first of `~/.bash_profile`, `~/.bash_login`, `~/.profile` for a login shell, else
+  `/etc/bash.bashrc` and `~/.bashrc`; the shell stays a login shell. Bash 3.2 ignores `$ENV`
+  there, so it starts as given with `PROMPT_COMMAND` set to load Haro's script at the first
+  prompt, which then puts back the user's chain. A 3.2 whose startup files assign
+  `PROMPT_COMMAND` without keeping the old value gets no marks. C needs the DEBUG trap and is
+  skipped when the user's files already set one; its command line is the newest history entry,
+  or the first simple command when history did not record the line. Bash 3.2 runs no DEBUG trap
+  for a line that starts with a subshell, so that line's C arrives just before its D.
 - fish: Haro's directory is put first in `XDG_DATA_DIRS` and its `vendor_conf.d` script puts the
   user's value back; fish 4 and later mark the prompt itself, so the script marks only for older
   fish.

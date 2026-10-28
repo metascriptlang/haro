@@ -7,6 +7,7 @@ when (emcc) {
 } else {
 	@link("../../out/ghostty/libghostty-vt.a");
 }
+@include("stdlib.h");
 @include("./effects.h");
 @compile("./effects.c");
 
@@ -60,7 +61,51 @@ export struct Colors256 { c: GhosttyColorRgb[256]; }
 export extern function vtWriteBytes(terminal: GhosttyTerminal, bytes: Readonly<Span<uint8>>): void
 	from "ghostty_terminal_vt_write";
 when (emcc) {
-	export extern function vtAllocator(): Ptr<GhosttyAllocator>;
+	import { GhosttyAllocatorVtable, uintptr_t } from "../../vendor/ghostty/include/ghostty/vt.h";
+
+	extern function posixMemalign(ref memory: Ptr<void> | null, align: size_t, len: size_t): int32 from "posix_memalign";
+	extern function cFree(memory: Ptr<void> | null): void from "free";
+
+	const MAX_LOG2_ALIGN: uint8 = 4;
+	const POINTER_BYTES = sizeof Ptr<void> as size_t;
+
+	function heapAlloc(ctx: Ptr<void> | null, len: size_t, log2Align: uint8, returnAddress: uintptr_t): Ptr<void> | null {
+		if (log2Align > MAX_LOG2_ALIGN) { return null; }
+		const align = (1 as size_t) << (log2Align as size_t);
+		let memory: Ptr<void> | null = null;
+		return posixMemalign(memory, align < POINTER_BYTES ? POINTER_BYTES : align, len) == 0 ? memory : null;
+	}
+
+	function heapResize(
+		ctx: Ptr<void> | null,
+		memory: Ptr<void> | null,
+		len: size_t,
+		log2Align: uint8,
+		newLen: size_t,
+		returnAddress: uintptr_t,
+	): boolean {
+		return false;
+	}
+
+	function heapRemap(
+		ctx: Ptr<void> | null,
+		memory: Ptr<void> | null,
+		len: size_t,
+		log2Align: uint8,
+		newLen: size_t,
+		returnAddress: uintptr_t,
+	): Ptr<void> | null {
+		return null;
+	}
+
+	function heapFree(ctx: Ptr<void> | null, memory: Ptr<void> | null, len: size_t, log2Align: uint8, returnAddress: uintptr_t): void {
+		cFree(memory);
+	}
+
+	let heapVtable: GhosttyAllocatorVtable = { alloc: heapAlloc, resize: heapResize, remap: heapRemap, free: heapFree };
+	let heapAllocator: GhosttyAllocator = { vtable: heapVtable as Ptr<GhosttyAllocatorVtable> };
+
+	export function vtAllocator(): Ptr<GhosttyAllocator> { return heapAllocator as Ptr<GhosttyAllocator>; }
 } else {
 	export function vtAllocator(): Ptr<GhosttyAllocator> | null { return null; }
 }

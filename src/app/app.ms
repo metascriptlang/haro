@@ -26,6 +26,7 @@ export function App(
 		host.desktop,
 		host.report,
 		host.timing,
+		host.keyHook,
 		host.fontFamily,
 		started,
 		notice,

@@ -11,6 +11,7 @@ import {
 	ConfigOutcome,
 	Desktop,
 	HostEvents,
+	KeyHook,
 	PaneModel,
 	Report,
 	Timing,
@@ -19,6 +20,8 @@ import {
 	failed,
 	refresh,
 } from "./paneModel";
+import { KeyAnswer, UNHANDLED } from "../../../../config/hooks";
+import { KeyEvent } from "../../../../keys/keys";
 import { cancelDialog, confirmDialog } from "./paneEvents";
 import { Io, Where, open, port } from "../../../../controller/io";
 import { Term, TermError } from "../../../../controller/term";
@@ -63,7 +66,9 @@ function timingAt(now: float64): Timing {
 	return { clock: (): float64 => now, schedule: (run: () => void): void => {} };
 }
 
-function paneWith(io: Io, calls: Calls, timing: Timing = timingAt(0)): PaneModel {
+const NO_HOOK: KeyHook = { answer: (k: KeyEvent): Result<KeyAnswer, string> => Result.ok(UNHANDLED) };
+
+function paneWith(io: Io, calls: Calls, timing: Timing = timingAt(0), keyHook: KeyHook = NO_HOOK): PaneModel {
 	const view = View.open();
 	view.fitRows(io.term.shown.length as int32);
 	return PaneModel.open(
@@ -72,6 +77,7 @@ function paneWith(io: Io, calls: Calls, timing: Timing = timingAt(0)): PaneModel
 		desktopFor(calls),
 		reportFor(calls),
 		timing,
+		keyHook,
 		"",
 		defaults(),
 		NoticeModel.open(),
@@ -154,6 +160,7 @@ test "an applied frame is stamped by the host's clock into the stats the pane wa
 			desktopFor(calls),
 			reportFor(calls),
 			timingAt(15.5),
+			NO_HOOK,
 			"",
 			defaults(),
 			NoticeModel.open(),
@@ -464,5 +471,52 @@ test "a key the program has no room for is a notice that says the input was drop
 		m.refresh();
 		assert calls.fatal == "";
 		assert m.notice.text == "the program has not read the last 16 MB sent to it, so this input was dropped";
+	}).ok;
+}
+
+interface Written {
+	sent: Vec<string>;
+}
+
+function writtenBy(w: Written): Pty {
+	return {
+		...Replay.ofText("ready").toPty(),
+		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
+			w.sent.push(data.asString());
+			return Result.ok(null);
+		},
+		exitCode: (): int32 | null => { return null; },
+	};
+}
+
+test "a key the config's onKey handles sends its text instead, and the keys it leaves pass through" {
+	const w: Written = { sent: [] };
+	const hook: KeyHook = {
+		answer: (k: KeyEvent): Result<KeyAnswer, string> => {
+			return Result.ok(k.key == "KeyK" ? { handled: true, send: "hooked" } : UNHANDLED);
+		},
+	};
+	assert onPty(writtenBy(w), (): float64 => 0, 80, 24, (t: Term): void => {
+		const m = paneWith(Io.open(t), noCalls(), timingAt(0), hook);
+		m.refresh();
+		m.keyed(pressed("KeyK"));
+		m.keyed(pressed("Enter"));
+		m.refresh();
+		assert w.sent.join("|") == "hooked|\r", w.sent.join("|");
+	}).ok;
+}
+
+test "an onKey that fails is a notice, and the key still reaches the program" {
+	const w: Written = { sent: [] };
+	const hook: KeyHook = {
+		answer: (k: KeyEvent): Result<KeyAnswer, string> => Result.err("onKey in config.ms failed: boom"),
+	};
+	assert onPty(writtenBy(w), (): float64 => 0, 80, 24, (t: Term): void => {
+		const m = paneWith(Io.open(t), noCalls(), timingAt(0), hook);
+		m.refresh();
+		m.keyed(pressed("Enter"));
+		m.refresh();
+		assert m.notice.text == "onKey in config.ms failed: boom";
+		assert w.sent.join("|") == "\r", w.sent.join("|");
 	}).ok;
 }

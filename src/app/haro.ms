@@ -16,8 +16,9 @@ import { Stats, empty, mark, noteWake } from "./stats";
 import { logStatsEverySecond } from "./statsLog";
 import { familyList, registerFallbacks } from "./fonts";
 import { Config } from "../config/config";
-import { OptionAsAlt } from "../keys/keys";
+import { KeyEvent, OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
+import { KeyAnswer, UNHANDLED, answerKey } from "../config/hooks";
 import { ConfigWatch, forFile, readConfig, startIn, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { exitCodeText } from "../controller/term";
@@ -162,6 +163,12 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 		},
 		report: { note: note, fail: fail },
 		timing: { clock: (): float64 => performance.now(), schedule: inFrame },
+		keyHook: {
+			answer: (k: KeyEvent): Result<KeyAnswer, string> => {
+				const hooks = config.loaded.hooks;
+				return hooks === null ? Result.ok(UNHANDLED) : hooks.answerKey(k);
+			},
+		},
 		events: {
 			onWake: (handler: () => void): void => {
 				onWake((): void => {

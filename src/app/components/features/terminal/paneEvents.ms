@@ -6,7 +6,7 @@ import { KeyAction, KeyEvent, modifierKey, modsOf } from "../../../../keys/keys"
 import { focusCursor } from "../../content/cursor";
 import { buttonOf } from "../../../../controller/mouseButton";
 import { Hit } from "../../../../controller/controls";
-import { PaneModel, refresh, scheduleRefresh } from "./paneModel";
+import { PaneModel, notify, refresh, scheduleRefresh } from "./paneModel";
 
 export function keyOf(e: NeonEvent): KeyEvent {
 	return {
@@ -31,7 +31,16 @@ export function keyed(this m: PaneModel, e: NeonEvent): void {
 		if (!modifierKey(e.code)) { m.desktop.exited(ended.code); }
 		return;
 	}
-	m.io.key(keyOf(e), m.timing.clock());
+	const k = keyOf(e);
+	const answer = m.keyHook.answer(k);
+	if (!answer.ok) {
+		m.notify(answer.error);
+	} else if (answer.value.handled) {
+		if (answer.value.send != "") { m.io.text(answer.value.send, m.timing.clock()); }
+		m.scheduleRefresh();
+		return;
+	}
+	m.io.key(k, m.timing.clock());
 	m.scheduleRefresh();
 }
 

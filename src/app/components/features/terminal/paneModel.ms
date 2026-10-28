@@ -12,6 +12,8 @@ import { gridSize } from "../../../../grid/size";
 import { CellInk } from "../../../../grid/lines";
 import { MouseGeometry, geometryOf } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
+import { KeyAnswer } from "../../../../config/hooks";
+import { KeyEvent } from "../../../../keys/keys";
 import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
 import { FrameRows } from "../../../../controller/rows";
 import { Stats, mark, noteApplied, noteKey } from "../../../stats";
@@ -62,6 +64,10 @@ export struct ConfigChange = match (outcome: ConfigOutcome) {
 	ConfigOutcome.Refused => { error: string },
 };
 
+export interface KeyHook {
+	answer: (k: KeyEvent) => Result<KeyAnswer, string>;
+}
+
 export interface HostEvents {
 	onWake: (handler: () => void) => void;
 	onCloseKey: (handler: () => void) => void;
@@ -72,6 +78,7 @@ export interface AppHost {
 	desktop: Desktop;
 	report: Report;
 	timing: Timing;
+	keyHook: KeyHook;
 	events: HostEvents;
 	fontFamily: string;
 }
@@ -82,6 +89,7 @@ export interface PaneModel {
 	desktop: Desktop;
 	report: Report;
 	timing: Timing;
+	keyHook: KeyHook;
 	stats: Stats;
 	started: Config;
 	shellStarted: boolean;
@@ -121,6 +129,7 @@ export function open(
 	desktop: Desktop,
 	report: Report,
 	timing: Timing,
+	keyHook: KeyHook,
 	fontFamily: string,
 	started: Config,
 	notice: NoticeModel,
@@ -148,6 +157,7 @@ export function open(
 		desktop: desktop,
 		report: report,
 		timing: timing,
+		keyHook: keyHook,
 		stats: stats,
 		started: started,
 		shellStarted: false,
@@ -327,7 +337,7 @@ function shellEnded(this m: PaneModel, exit: Exit): void {
 	m.desktop.exited(exit.code);
 }
 
-function notify(this m: PaneModel, text: string): void {
+export function notify(this m: PaneModel, text: string): void {
 	const cols = noticeCols(m.viewWidth(), m.padding(), m.metrics.cellWidth());
 	m.notice.showNotice(text, cols);
 }

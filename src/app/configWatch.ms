@@ -3,12 +3,16 @@ import { Config, StartKind, defaults } from "../config/config";
 import { Loaded, empty, load } from "../config/source";
 import { resourcePath } from "../../../ion/src/index";
 import { cwd } from "std/process";
+import { homeDir } from "std/os";
 
 // Polled until compiler card 2026-09-26-await-on-fs-watch-never-resumes lets a watch resume in an Ion window
 const CONFIG_POLL_MS = 1000;
 const API = resourcePath() == ""
 	? `${cwd().replaceAll("\\", "/")}/assets/haro`
 	: `${resourcePath().replaceAll("\\", "/")}/assets/haro`;
+const METASCRIPT = resourcePath() == ""
+	? `${homeDir().replaceAll("\\", "/")}/.metascript`
+	: `${resourcePath().replaceAll("\\", "/")}/metascript`;
 
 export interface ConfigWatch {
 	file: string;
@@ -21,7 +25,7 @@ export function forFile(this typeof ConfigWatch, file: string): ConfigWatch {
 }
 
 function reload(this w: ConfigWatch): Result<Config, string> {
-	const got = try load(w.file, API);
+	const got = try load(w.file, API, METASCRIPT);
 	w.loaded = got;
 	return Result.ok(got.config);
 }

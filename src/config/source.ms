@@ -46,7 +46,7 @@ function packagesOf(api: string): string {
 		"export default config;\n";
 }
 
-function evaluate(path: string, dir: string, api: string): Result<string, string> {
+function evaluate(path: string, dir: string, api: string, metascript: string): Result<string, string> {
 	const target = relative(dir, path);
 	const importPath = target.startsWith(".") || isAbsolute(target) ? target : `./${target}`;
 	const runner = `import { config } from ${JSON.stringify(importPath)};\n` +
@@ -58,9 +58,9 @@ function evaluate(path: string, dir: string, api: string): Result<string, string
 	if (!exists(beside) && !writeFile(beside, packagesOf(api)).ok) {
 		return Result.err(`cannot write ${beside}`);
 	}
-	const made = createInterpreter(`${homeDir().replaceAll("\\", "/")}/.metascript`, [dirname(api)]);
+	const made = createInterpreter(metascript, [dirname(api)]);
 	if (!made.ok) {
-		return Result.err(`running config.ms needs MetaScript installed: ${made.error}`);
+		return Result.err(`running config.ms needs MetaScript's std: ${made.error}`);
 	}
 	const interp = made.value;
 	const ran = evalModule(interp, `${dir}/evaluate.ms`);
@@ -126,7 +126,7 @@ function decodeCache(lines: string[], stamp: string): Loaded | null {
 	return { config: c.value, faces: faces, stamp: stamp, notice: "" };
 }
 
-export function load(path: string, api: string): Result<Loaded, string> {
+export function load(path: string, api: string, metascript: string): Result<Loaded, string> {
 	const stamp = changeStamp(path);
 	if (stamp == "") { return Result.ok(Loaded.empty()); }
 	const dir = cacheDir();
@@ -137,12 +137,24 @@ export function load(path: string, api: string): Result<Loaded, string> {
 		if (hit !== null) { return Result.ok(hit); }
 	}
 	if (!ensureDir(dir).ok) { return Result.err(`cannot create ${dir}`); }
-	const json = try evaluate(path, dir, api);
+	const json = try evaluate(path, dir, api, metascript);
 	const config = try parse(json);
 	const fonts = fontsFound(config.fontFamily);
 	const uncached = fonts.notice == "" && !writeFile(cacheFile, encodeCache(stamp, json, fonts.faces)).ok;
 	const notice = uncached ? `cannot write ${cacheFile}, so the config is read again next start` : fonts.notice;
 	return Result.ok({ config: config, faces: fonts.faces, stamp: stamp, notice: notice });
+}
+
+const INSTALLED = `${homeDir().replaceAll("\\", "/")}/.metascript`;
+
+test "a config is evaluated against the std it is given, and a missing one is named" {
+	const dir = `${cwd()}/out/rootedConfig`;
+	assert ensureDir(dir).ok;
+	const path = `${dir}/config.ms`;
+	assert writeFile(path, `export const config = { fontSize: 13 };\n`).ok;
+	const missing = evaluate(path, dir, `${cwd()}/assets/haro`, `${dir}/noStd`);
+	assert !missing.ok;
+	if (!missing.ok) { assert missing.error.includes(`${dir}/noStd/std/core/system/index.ms`), missing.error; }
 }
 
 test "a cached record gives back each family's faces in order" {
@@ -189,7 +201,7 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 	const body = `{ fontSize: 13, keybinds: [{ keys: "super+w", text: "x", mode: "alt" }, ` +
 		`{ keys: "super+q", action: "close_window", mode: "~alt" }] };\n`;
 	assert writeFile(path, `${head}${body}`).ok;
-	const typed = evaluate(path, dir, api);
+	const typed = evaluate(path, dir, api, INSTALLED);
 	assert typed.ok;
 	if (typed.ok) {
 		const c = parse(typed.value);
@@ -197,14 +209,14 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 	}
 	assert exists(`${dir}/build.ms`);
 	assert writeFile(path, `${head}{ fontSiz: 13 };\n`).ok;
-	const misspelt = evaluate(path, dir, api);
+	const misspelt = evaluate(path, dir, api, INSTALLED);
 	assert !misspelt.ok;
 	if (!misspelt.ok) {
 		assert misspelt.error.includes("/config.ms:3:");
 		assert misspelt.error.includes("'fontSiz' does not exist in type 'HaroConfig'");
 	}
 	assert writeFile(path, `${head}{ keybinds: [{ keys: "a", text: "x", mode: "Alt" }] };\n`).ok;
-	const wrongMode = evaluate(path, dir, api);
+	const wrongMode = evaluate(path, dir, api, INSTALLED);
 	assert !wrongMode.ok;
 	if (!wrongMode.ok) { assert wrongMode.error.includes("/config.ms:3:"), wrongMode.error; }
 }
@@ -215,7 +227,7 @@ test "a config spreads saigonNight from the haro package and keeps its own field
 	const path = `${dir}/config.ms`;
 	const config = `import { HaroConfig, saigonNight } from "haro";\n\nexport const config: HaroConfig = { ...saigonNight, fontSize: 13 };\n`;
 	assert writeFile(path, config).ok;
-	const themed = evaluate(path, dir, `${cwd()}/assets/haro`);
+	const themed = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
 	assert themed.ok;
 	if (themed.ok) {
 		const c = parse(themed.value);

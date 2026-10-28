@@ -22,6 +22,7 @@ import {
 	MouseInput,
 	PasteError,
 	Palette,
+	ShellMark,
 } from "../vt/vt";
 import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "./rows";
 import { Mark } from "./mark";
@@ -99,6 +100,7 @@ export struct Frame {
 	bells: int32;
 	title: string | null;
 	notification: DesktopNotification | null;
+	shell: Vec<ShellMark>;
 }
 
 const HIDDEN: CursorLook = { visible: false, shape: CursorShape.Block, blinking: false };
@@ -117,6 +119,7 @@ function idleFrame(more: boolean, ended: boolean): Frame {
 		bells: 0,
 		title: null,
 		notification: null,
+		shell: [],
 	};
 }
 
@@ -241,6 +244,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 			bells: events.bells,
 			title: title,
 			notification: events.notification,
+			shell: events.shell,
 		});
 	}
 	const planned = t.shown.planRows(vt, t.cursorInk);
@@ -261,6 +265,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		bells: events.bells,
 		title: title,
 		notification: events.notification,
+		shell: events.shell,
 	});
 }
 

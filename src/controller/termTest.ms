@@ -1,5 +1,5 @@
 import { KeyMod } from "../keys/keys";
-import { MouseAction, MouseInput, geometryOf } from "../vt/vt";
+import { MouseAction, MouseInput, ShellStep, geometryOf } from "../vt/vt";
 import { View, fitRows, open, paint, text } from "../app/frame";
 import { Term, TermError } from "./term";
 import { Sink, onFresh, onPty, onTerm, onUnfit } from "./terminalRig";
@@ -35,8 +35,9 @@ test "a frame under synchronized output is not applied until the hold ends" {
 	}).ok;
 }
 
-test "a frame carries what the program asked of the host: a clipboard write, bells, a title, a notification" {
-	const asked = "\x1b]52;c;aGk=\x07\x07\x07\x1b]2;build done\x07\x1b]9;tests passed\x07";
+test "a frame carries what the program asked of the host: a clipboard write, bells, a title, a notification, shell marks" {
+	const asked = "\x1b]52;c;aGk=\x07\x07\x07\x1b]2;build done\x07\x1b]9;tests passed\x07" +
+		"\x1b]133;D;0\x07\x1b]133;A\x07";
 	assert onFresh(asked, (t: Term, sink: Sink): void => {
 		const frame = t.pumpFrame();
 		assert frame.ok;
@@ -47,6 +48,8 @@ test "a frame carries what the program asked of the host: a clipboard write, bel
 			const notification = frame.value.notification;
 			assert notification !== null;
 			if (notification !== null) { assert notification.body == "tests passed"; }
+			assert frame.value.shell.length == 2;
+			assert frame.value.shell[1].step === ShellStep.Prompt;
 			assert !frame.value.asked;
 		}
 		const next = t.pumpFrame();
@@ -56,6 +59,7 @@ test "a frame carries what the program asked of the host: a clipboard write, bel
 			assert next.value.bells == 0;
 			assert next.value.title === null;
 			assert next.value.notification === null;
+			assert next.value.shell.length == 0;
 		}
 	}).ok;
 }

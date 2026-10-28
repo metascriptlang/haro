@@ -145,11 +145,11 @@ export const NOTIFICATION_BODY_BYTES = 1024;
 const REPLACEMENT_CHARACTER = "\u{fffd}";
 const LONGEST_UTF8_BYTES = 4;
 
-export function byteAt(text: GhosttyString, at: int32): int32 {
+export function byteAt(text: Readonly<GhosttyString>, at: int32): int32 {
 	return text.ptr[at] as int32;
 }
 
-function wellFormedLength(text: GhosttyString, at: int32, end: int32): int32 {
+function wellFormedLength(text: Readonly<GhosttyString>, at: int32, end: int32): int32 {
 	const lead = byteAt(text, at);
 	if (lead < 0x80) { return 1; }
 	let width = 0;
@@ -168,7 +168,7 @@ function wellFormedLength(text: GhosttyString, at: int32, end: int32): int32 {
 	return width;
 }
 
-function wellFormedPrefix(text: GhosttyString, maxBytes: int32): string {
+function wellFormedPrefix(text: Readonly<GhosttyString>, maxBytes: int32): string {
 	const scan = maxBytes + LONGEST_UTF8_BYTES;
 	const end = text.len < (scan as uint64) ? text.len as int32 : scan;
 	const replacement = REPLACEMENT_CHARACTER.asBytes();
@@ -192,9 +192,9 @@ function wellFormedPrefix(text: GhosttyString, maxBytes: int32): string {
 function desktopNotification(
 	terminal: GhosttyTerminal,
 	effects: Ptr<void>,
-	notification: GhosttyTerminalDesktopNotification,
+	notification: Readonly<Ptr<GhosttyTerminalDesktopNotification>>,
 ): void {
-	const hasBody = notification.size >= sizeof GhosttyTerminalDesktopNotification;
+	const hasBody = notification.size >= (sizeof GhosttyTerminalDesktopNotification as size_t);
 	effectsAt(effects).events.notification = {
 		title: wellFormedPrefix(notification.title, NOTIFICATION_TITLE_BYTES),
 		body: hasBody ? wellFormedPrefix(notification.body, NOTIFICATION_BODY_BYTES) : "",

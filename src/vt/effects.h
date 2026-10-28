@@ -21,6 +21,6 @@ void haroVtClipboardWritten(void* effects, uint8_t* text, int64_t n);
 int64_t haroVtRepliesLength(void* effects);
 void haroVtClipboardRead(void* effects, int64_t mark);
 GhosttyString haroVtXtversion(GhosttyTerminal terminal, void* effects);
-void haroVtDesktopNotification(GhosttyTerminal terminal, void* effects, const GhosttyTerminalDesktopNotification* notification);
+void haroVtDesktopNotification(GhosttyTerminal terminal, void* effects, GhosttyTerminalDesktopNotification* notification);
 
 #endif

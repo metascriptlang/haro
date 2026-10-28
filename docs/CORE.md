@@ -130,6 +130,28 @@ a repaint. `probe/scrollRef.ms` (80x24, msc `9cf5708c`, tree
   load. The machine was at 54-100 % CPU, so nvim's own response (key to first output) was not
   comparable between runs and is not restated.
 
+## Shell integration
+
+A zsh, bash or fish that Haro starts emits OSC 133 (A at the prompt, B after it, C with
+`cmdline_url` before a command, D with its exit status) and OSC 7 with no setup by the user,
+from the scripts in `assets/shell`. Haro recognises the shell only when `command` is one program,
+named directly or as `$SHELL`, `${SHELL}` or `${SHELL:-default}`, followed by nothing but `-l`,
+`--login` or `-i`; any other command runs untouched, and `shellIntegration: false` turns it off.
+
+- zsh: `ZDOTDIR` points at Haro's `.zshenv`, which puts back the user's `ZDOTDIR` (or unsets it)
+  before anything else, so zsh reads the user's `.zshenv`, `.zprofile`, `.zshrc` and `.zlogin`
+  from their usual place. Hooks are `precmd` and `preexec`.
+- bash: started with `--rcfile`; that file reads `/etc/profile` and the first of
+  `~/.bash_profile`, `~/.bash_login`, `~/.profile` when a login shell was asked for, else
+  `~/.bashrc`. Bash then is not a login shell (`shopt login_shell` is off, `logout` refuses and
+  `~/.bash_logout` is not read). C needs the DEBUG trap and is skipped when the user's files
+  already set one; its command line is the newest history entry, or the first simple command when
+  history did not record the line.
+- fish: Haro's directory is put first in `XDG_DATA_DIRS` and its `vendor_conf.d` script puts the
+  user's value back; fish 4 and later mark the prompt itself, so the script marks only for older
+  fish.
+- On Windows nothing is injected.
+
 ## First window, smoke-run
 
 `src/app/haro.ms --smoke` (tree `c120ef45157c565615ff1a9e380849230844608e`, msc `b267cdb1`, neon

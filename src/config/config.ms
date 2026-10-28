@@ -26,6 +26,7 @@ export struct Config {
 	fontSize: float64;
 	padding: float64;
 	command: string;
+	shellIntegration: boolean;
 	workingDirectory: StartDir | null;
 	scrollback: int64;
 	foreground: Rgb;
@@ -63,6 +64,7 @@ export function defaults(): Config {
 		fontSize: DEFAULT_FONT_SIZE,
 		padding: 0,
 		command: DEFAULT_COMMAND,
+		shellIntegration: true,
 		workingDirectory: null,
 		scrollback: SCROLLBACK_LINES,
 		foreground: { r: 204, g: 204, b: 204 },
@@ -243,6 +245,10 @@ export function parse(json: string): Result<Config, string> {
 				}
 			},
 			"command" => { c.command = try readString(v, key); },
+			"shellIntegration" => {
+				if (v.kind != JsonKind.Bool) { return Result.err(`${key} must be true or false`); }
+				c.shellIntegration = v.boolVal;
+			},
 			"workingDirectory" => {
 				const text = try readString(v, key);
 				const dir = startDirOf(text);
@@ -297,6 +303,7 @@ test "an empty config keeps every default" {
 	assert c.value.fontPx() == 14;
 	assert c.value.padding == 0;
 	assert c.value.command == DEFAULT_COMMAND;
+	assert c.value.shellIntegration;
 	assert c.value.scrollback == SCROLLBACK_LINES;
 	assert c.value.palette.length == 0;
 	assert c.value.keybinds.length == 0;
@@ -306,6 +313,7 @@ test "an empty config keeps every default" {
 test "the fields a config gives replace the defaults" {
 	const c = parse(
 		`{"fontFamily":"Operator Saigon","fontSize":10.8,"padding":6,"command":"cmd.exe",` +
+			`"shellIntegration":false,` +
 			`"scrollback":50000,"background":"#1a1b26","foreground":"#A9B1D6",` +
 			`"palette":["#32344a","#f7768e"],` +
 			`"keybinds":[{"keys":"shift+enter","text":"\\u001b[13;2u"}]}`,
@@ -316,6 +324,7 @@ test "the fields a config gives replace the defaults" {
 	assert c.value.fontSize == 10.8;
 	assert c.value.padding == 6;
 	assert c.value.command == "cmd.exe";
+	assert !c.value.shellIntegration;
 	assert c.value.scrollback == 50000;
 	const background: Rgb = { r: 26, g: 27, b: 38 };
 	const foreground: Rgb = { r: 169, g: 177, b: 214 };
@@ -376,6 +385,7 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"fontFamily":["Operator Saigon",12]}`) == "fontFamily[1] must be a string";
 	assert refusal(`{"fontsize":10}`) == `unknown config field "fontsize"`;
 	assert refusal(`{"fontSize":"10"}`) == "fontSize must be a number";
+	assert refusal(`{"shellIntegration":"no"}`) == "shellIntegration must be true or false";
 	assert refusal(`{"fontSize":0}`) == "fontSize 0 must be from 1 to 255 points";
 	assert refusal(`{"fontSize":0.5}`) == "fontSize 0.5 must be from 1 to 255 points";
 	assert refusal(`{"fontSize":256}`) == "fontSize 256 must be from 1 to 255 points";

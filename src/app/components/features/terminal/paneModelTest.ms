@@ -425,7 +425,7 @@ test "a clipboard read the program asks for goes to the system clipboard, once p
 	}).ok;
 }
 
-test "a config change applies live except a command or directory, which asks for a restart" {
+test "a config change applies live except the shell it starts, which asks for a restart" {
 	assert onFresh("", (t: Term, sink: Sink): void => {
 		const m = paneOf(t, noCalls());
 		const host: Host = { config: null, closeKey: null, wake: null };
@@ -438,8 +438,12 @@ test "a config change applies live except a command or directory, which asks for
 			assert m.notice.text == "";
 			flush();
 			assert m.background() == hexOf({ r: 1, g: 2, b: 3 });
+			const restart = "config.ms: command, workingDirectory and shellIntegration apply " +
+				"when Haro restarts";
 			onConfig(loaded({ ...defaults(), command: "other" }));
-			assert m.notice.text == "config.ms: command and workingDirectory apply when Haro restarts";
+			assert m.notice.text == restart;
+			onConfig(loaded({ ...defaults(), shellIntegration: false }));
+			assert m.notice.text == restart;
 			onConfig(loaded(defaults(), "bad key"));
 			assert m.notice.text == "config.ms: bad key";
 			onConfig({ outcome: ConfigOutcome.Refused, error: "syntax error" });

@@ -78,6 +78,7 @@ export interface HaroConfig {
 	fontSize?: number;
 	padding?: number;
 	command?: string;
+	shellIntegration?: boolean;
 	workingDirectory?: string;
 	scrollback?: int32;
 	foreground?: string;

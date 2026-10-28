@@ -34,7 +34,7 @@ import { TermError, exitCodeText } from "../../../../controller/term";
 
 const HOLD_RECHECK_MS = 100;
 const AUTOSCROLL_MS = 15;
-const RESTART_NOTICE = "config.ms: command and workingDirectory apply when Haro restarts";
+const RESTART_NOTICE = "config.ms: command, workingDirectory and shellIntegration apply when Haro restarts";
 
 export interface Desktop {
 	setTitle: (title: string) => void;
@@ -392,7 +392,8 @@ export function notify(this m: PaneModel, text: string): void {
 
 function restartNeeded(now: Config, started: Config): boolean {
 	return now.command != started.command ||
-		now.workingDirectory != started.workingDirectory;
+		now.workingDirectory != started.workingDirectory ||
+		now.shellIntegration != started.shellIntegration;
 }
 
 function reconfigure(this m: PaneModel, change: ConfigChange): void {

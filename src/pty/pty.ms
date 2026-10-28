@@ -10,7 +10,7 @@ when (linux) {
 
 import { isDir } from "std/fs";
 import { langEntry } from "./locale";
-import { ShellLaunch, launchOf } from "./shellIntegration";
+import { ShellLaunch, bashMajorOf, launchOf } from "./shellIntegration";
 import { Pty, PtyError } from "./transport";
 
 extern function ptyOpen(
@@ -53,7 +53,7 @@ function launchIn(commandLine: string, shellScripts: string | null): ShellLaunch
 	when (!windows) {
 		if (shellScripts !== null) {
 			const inherited = (name: string): string => { return env.get(name); };
-			return launchOf(commandLine, shellScripts, inherited);
+			return launchOf(commandLine, shellScripts, inherited, bashMajorOf);
 		}
 	}
 	return { commandLine: commandLine, env: [] };

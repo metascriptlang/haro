@@ -3,7 +3,8 @@ import { Vt, pwd, takeEvents, takeReplies, write as feed } from "../vt/vt";
 import { ShellMark, ShellStep } from "../vt/vtEffects";
 import { withVt } from "../vt/vtRig";
 import { cwd, env } from "std/process";
-import { ensureDir, removeAll, writeFile } from "std/fs";
+import { ensureDir, isFile, removeAll, writeFile } from "std/fs";
+import { bashMajorOf } from "./shellIntegration";
 import { tmpDir } from "std/os";
 
 const SCRIPTS = `${cwd()}/assets/shell`;
@@ -68,6 +69,7 @@ function run(
 	scripts: string | null,
 	typed: string,
 	done: (s: Seen) => boolean,
+	ready: string = "\x1b]133;A",
 ): Run {
 	let got: Run = { opened: false, reached: false, seen: { marks: [], text: "" }, pwd: "" };
 	const _vt = withVt(80, 24, (vt: Vt): void => {
@@ -76,17 +78,38 @@ function run(
 		got.opened = true;
 		const p = opened.value;
 		defer p.close();
-		const first = (s: Seen): boolean => scripts === null || prompts(s) == 1;
+		const first = (s: Seen): boolean => s.text.includes(ready) || prompts(s) == 1;
 		if (!pumpUntil(p, vt, got.seen, first) || !p.write(typed.asBytes()).ok) { return; }
 		got.reached = pumpUntil(p, vt, got.seen, done);
 		const dir = vt.pwd();
 		if (dir.ok) { got.pwd = dir.value; }
-		const _left = p.write("exit\r".asBytes());
+		if (p.write("exit\r".asBytes()).ok) {
+			const _ended = pumpUntil(p, vt, got.seen, (s: Seen): boolean => false);
+		}
 	});
 	return got;
 }
 
 function promptAgain(s: Seen): boolean { return prompts(s) >= 2; }
+
+function promptAfterDone(s: Seen): boolean {
+	const last = s.marks.length - 1;
+	return last > 0 && s.marks[last].step === ShellStep.Prompt &&
+		s.marks[last - 1].step === ShellStep.CommandDone;
+}
+
+function times(text: string, part: string): int32 {
+	return text.split(part).length - 1;
+}
+
+const BASH3 = "/bin/bash";
+const BASH5 = "/opt/homebrew/bin/bash";
+
+function bashes(): Vec<string> {
+	let found: Vec<string> = [BASH3];
+	if (isFile(BASH5)) { found.push(BASH5); }
+	return found;
+}
 
 function inHome(home: string, zdotdir: string, body: () => Run): Run {
 	const inheritedHome = env.get("HOME");
@@ -116,32 +139,65 @@ test "a zsh under Haro marks its prompt and a failed command, and still loads th
 	assert got.pwd.startsWith("file://") && got.pwd.endsWith(cwd());
 }
 
-test "a bash login shell under Haro marks a failed command and still reads the login files" {
-	const home = homeWith([".bash_profile", "echo \"profile:$((40 + 2))\"\n"]);
-	const got = inHome(home, "", (): Run => {
-		return run("/bin/bash -l", SCRIPTS, "sh -c 'exit 3'\r", promptAgain);
-	});
-	assert got.reached;
-	assert finished(got.seen).join("|") == "3 sh -c 'exit 3'";
-	assert got.seen.text.includes("profile:42");
-	assert got.pwd.startsWith("file://") && got.pwd.endsWith(cwd());
+test "a bash login shell stays a login shell, reads its profile once and marks a command" {
+	for (const bash of bashes()) {
+		const home = homeWith([
+			".bash_profile", "echo \"profile:$((40 + 2)):$(shopt -q login_shell && echo on)\"\n",
+		]);
+		const got = inHome(home, "", (): Run => {
+			return run(`${bash} -l`, SCRIPTS, "\r(exit 3)\r", promptAfterDone);
+		});
+		assert got.reached;
+		assert finished(got.seen).join("|") == "3 (exit 3)";
+		assert times(got.seen.text, "profile:42:on") == 1;
+		assert got.pwd.startsWith("file://") && got.pwd.endsWith(cwd());
+	}
 }
 
 test "an interactive bash under Haro reads the user's bashrc and names a subshell command" {
-	const home = homeWith([".bashrc", "echo \"bashrc:$((40 + 2))\"\n"]);
+	for (const bash of bashes()) {
+		const home = homeWith([".bashrc", "echo \"bashrc:$((40 + 2))\"\n"]);
+		const got = inHome(home, "", (): Run => {
+			return run(bash, SCRIPTS, "sh -c 'exit 3'\r", promptAfterDone);
+		});
+		assert got.reached;
+		assert finished(got.seen).join("|") == "3 sh -c 'exit 3'";
+		assert times(got.seen.text, "bashrc:42") == 1;
+	}
+}
+
+test "a bash 3 whose bashrc replaces PROMPT_COMMAND loses the marks" {
+	const home = homeWith([".bashrc", "PROMPT_COMMAND=true\necho \"bashrc:$((40 + 2))\"\n"]);
 	const got = inHome(home, "", (): Run => {
-		return run("/bin/bash", SCRIPTS, "(exit 3)\r", promptAgain);
+		const typed = "(exit 3); echo \"after:$((40 + 2))\"\r";
+		const after = (s: Seen): boolean => s.text.includes("after:42");
+		return run(BASH3, SCRIPTS, typed, after, "bashrc:42");
 	});
 	assert got.reached;
-	assert finished(got.seen).join("|") == "3 (exit 3)";
 	assert got.seen.text.includes("bashrc:42");
+	assert got.seen.marks.length == 0;
+}
+
+test "the bash version probe answers within its bound" {
+	for (const bash of bashes()) {
+		let slowest: float64 = 0;
+		for (let i = 0; i < 5; i++) {
+			const start: float64 = performance.now();
+			const major = bashMajorOf(bash);
+			slowest = Math.max(slowest, performance.now() - start);
+			assert major !== null && major >= 3;
+		}
+		console.log(`bash version probe: ${bash} slowest of 5 in ${Math.round(slowest)} ms`);
+		assert slowest < 500;
+	}
 }
 
 test "a shell started with integration off emits no marks" {
 	const home = homeWith(["zdot/.zshrc", "print \"rc:$((40 + 2))\"\n"]);
 	const got = inHome(home, `${home}/zdot`, (): Run => {
 		const typed = "(exit 3); echo \"after:$((40 + 2))\"\r";
-		return run("/bin/zsh -l", null, typed, (s: Seen): boolean => s.text.includes("after:42"));
+		const after = (s: Seen): boolean => s.text.includes("after:42");
+		return run("/bin/zsh -l", null, typed, after, "rc:42");
 	});
 	assert got.reached;
 	assert got.seen.text.includes("rc:42");

@@ -1,6 +1,3 @@
-@include("./wake.h");
-@compile("./wake.c");
-
 import { NeonNode } from "../../../neon/src/render/node";
 import { requestFrame } from "../../../neon/src/animation/frame";
 import { onSettled } from "../../../neon/src/core/effect";
@@ -9,6 +6,7 @@ import {
 	runWindow, DesktopOptions, desktopOptions, setOptionAsAlt, setWindowTitle, OptionAsAlt as OptionSides,
 } from "../../../neon/src/platform/ion/window";
 import { listen, notify, onWake, openExternal } from "../../../ion/src/index";
+import { ionWakeLoop } from "../../../ion/src/platform/bridge.h";
 import { argv, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
 import { homeDir } from "std/os";
@@ -25,13 +23,12 @@ import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { exitCodeText } from "../controller/term";
 import { Shell, closeThen, closed, opened, portOf } from "../controller/shell";
 import { View, open } from "./frame";
+import { ptySetWake } from "../pty/nativePty.h";
 import {
 	AppHost,
 	ConfigChange,
 	ConfigOutcome,
 } from "./components/features/terminal/paneModel";
-
-extern function appWireWake(): void;
 
 const CLOSE_WINDOW = "close_window";
 const APP_TITLE = "Haro";
@@ -229,7 +226,7 @@ async function runShell(command: string): Promise<int32> {
 	const shell = new Shell({ command: command, cwd: cwd, recording: null });
 	await started(shell);
 	const view = View.open();
-	appWireWake();
+	ptySetWake(ionWakeLoop);
 	if (hasFlag("--smoke")) { smoke(portOf(shell), view, quitWith(shell)); }
 	if (hasFlag("--flood")) { smokeFlood(portOf(shell), view, pace, quitWith(shell)); }
 	return await openWindow(shell, view, (code: int32): void => {

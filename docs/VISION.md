@@ -150,13 +150,17 @@ MetaScript installed; an unbundled build reads the std from `~/.metascript`.
   first; this stays open.
 - **`haro.on("key", fn)` closures** for now. No closure crosses the embed boundary yet, so hooks
   are exported functions found by name. The closure form can be added on top later.
-- **Config as JSON for good.** It stays only until the embed API carries structs. Until then
-  the runner module's `configJson()` returns `JSON.stringify(config)`, and `src/config/config.ms` `parse` re-checks
-  what msc already checked.
+- **Reading the config as a struct.** The embed API carries structs since msc `218af1db41`,
+  but the config cache has to store the config as text, because an evaluation costs about 0.5 s
+  of every start (measured 2026-10-28: 495–630 ms cold, 0 ms from the cache). So the runner
+  module's `configJson()` returns `JSON.stringify(config)`, and `src/config/config.ms` `parse`
+  reads both that and the cache; reading the struct as well would be a second reader of the same
+  fields.
 
 ### What the embed path waits on
 
-One compiler change: structs and arrays crossing `callRoutine`.
+Nothing in the compiler: structs and arrays cross `callRoutine` both ways since msc `218af1db41`,
+so the hooks and host routines above are Haro's work.
 
 ## Platforms
 

@@ -3,7 +3,7 @@ import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
 import { installClipboardServices } from "../../../../../../neon/src/api/clipboardServices";
 import { Config, defaults } from "../../../../config/config";
 import { CommandDone, writeText } from "../../../../vt/vt";
-import { RowTint } from "../../../../grid/lines";
+import { RowNote, RowTint } from "../../../../grid/lines";
 import { open, NoticeModel } from "../notice/notice";
 import { open, PasteDialogModel } from "../paste/pasteDialog";
 import { Stats, empty } from "../../../stats";
@@ -609,5 +609,35 @@ test "a command-done mark whose hook decorates posts the decoration to the shell
 		for (const run of scheduled.runs) { run(); }
 		assert m.view.grid.at(0).line.runs[0].bg.r == 58;
 		assert m.view.grid.at(2).line.runs[0].bg.r != 58;
+	}).ok;
+}
+
+test "a command-done mark whose hook annotates posts the annotation to the shell and schedules a refresh" {
+	const ran = "\x1b]133;A\x07$ false\r\n\x1b]133;C\x07oops\r\n\x1b]133;D;1\x07\x1b]133;A\x07$ ";
+	assert onFresh(ran, (t: Term, sink: Sink): void => {
+		let ids: Vec<int32> = [];
+		const hook: ShellHook = {
+			prompted: (pane: HookPane, at: int32): Result<void, string> => Result.ok(null),
+			commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => {
+				const prompt = done.prompt;
+				const note: RowNote = { text: "exit 1", fg: null, bg: null };
+				if (prompt !== null) {
+					ids.push(pane.decorate(prompt, done.end, { fg: null, bg: null }));
+					ids.push(pane.annotate(prompt, note));
+				}
+				return Result.ok(null);
+			},
+		};
+		const scheduled: Scheduled = { runs: [] };
+		const io = Io.open(t);
+		const m = paneWith(io, noCalls(), timingCounting(scheduled), NO_HOOK, hook);
+		m.refresh();
+		assert ids.length == 2 && ids[0] == 1 && ids[1] == 2;
+		assert t.decor.annotations.length == 1;
+		assert t.decor.annotations[0].id == 2;
+		assert scheduled.runs.length >= 1;
+		for (const run of scheduled.runs) { run(); }
+		assert m.view.text(0).endsWith("exit 1"), m.view.text(0);
+		assert !m.view.text(1).includes("exit"), m.view.text(1);
 	}).ok;
 }

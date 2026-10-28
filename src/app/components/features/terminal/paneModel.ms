@@ -9,7 +9,7 @@ import { ViewHandle } from "../../../../../../neon/src/components/primitives";
 import { familyFont } from "../../../../../../neon/src/platform/void/host";
 import { spriteCellFor } from "../../../../../../void/src/void2d/font";
 import { gridSize } from "../../../../grid/size";
-import { CellInk, RowTint } from "../../../../grid/lines";
+import { CellInk, RowNote, RowTint } from "../../../../grid/lines";
 import { CommandDone, MouseGeometry, ShellMark, ShellStep, geometryOf } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
 import { HookPane, KeyAnswer } from "../../../../config/hooks";
@@ -350,6 +350,17 @@ export function hookPane(this m: PaneModel): HookPane {
 		},
 		undecorate: (id: int32): void => {
 			m.io.undecorate(id);
+			m.scheduleRefresh();
+		},
+		annotate: (at: int32, note: RowNote): int32 => {
+			m.decorations += 1;
+			const id = m.decorations;
+			m.io.annotate({ id: id, at: at, note: note });
+			m.scheduleRefresh();
+			return id;
+		},
+		unannotate: (id: int32): void => {
+			m.io.unannotate(id);
 			m.scheduleRefresh();
 		},
 	};

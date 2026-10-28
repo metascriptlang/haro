@@ -1,4 +1,11 @@
 import {
+	GhosttyClipboardLocation,
+	GhosttyClipboardRead,
+	GhosttyClipboardReadReply,
+	GhosttyClipboardReadResult,
+	GhosttyClipboardWrite,
+	GhosttyClipboardWriteReply,
+	GhosttyClipboardWriteResult,
 	GhosttyDeviceAttributes,
 	GhosttyRenderState,
 	GhosttySizeReportSize,
@@ -95,9 +102,29 @@ function renderHold(terminal: GhosttyTerminal, effects: Ptr<void>, held: boolean
 	e.heldSinceMs = performance.now();
 }
 
-@exportName("haroVtClipboardWritten")
-function clipboardWritten(effects: Ptr<void>, text: Readonly<Span<uint8>>): void {
-	effectsAt(effects).clipboard = text.asString();
+const PLAIN_TEXT = "text/plain";
+
+@exportName("haroVtClipboardWrite")
+function clipboardWrite(terminal: GhosttyTerminal, effects: Ptr<void>, write: Ptr<GhosttyClipboardWrite>): void {
+	let reply: GhosttyClipboardWriteReply = {
+		size: sizeof GhosttyClipboardWriteReply as size_t,
+		result: GhosttyClipboardWriteResult.GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED,
+	};
+	const text = plainText(write);
+	if (text !== null) {
+		effectsAt(effects).clipboard = text;
+		reply.result = GhosttyClipboardWriteResult.GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+	}
+	write.reply(write, reply as Ptr<GhosttyClipboardWriteReply>);
+}
+
+function plainText(write: Ptr<GhosttyClipboardWrite>): string | null {
+	if (write.location != GhosttyClipboardLocation.GHOSTTY_CLIPBOARD_LOCATION_STANDARD) { return null; }
+	if (write.contents_len == 0) { return ""; }
+	for (const c of write.contents[0..write.contents_len]) {
+		if (c.mime.ptr[0..c.mime.len].asString() == PLAIN_TEXT) { return c.data.ptr[0..c.data.len].asString(); }
+	}
+	return null;
 }
 
 const XTVERSION_NAME: cstring = "haro";
@@ -201,11 +228,6 @@ function desktopNotification(
 	};
 }
 
-@exportName("haroVtRepliesLength")
-function repliesLength(effects: Ptr<void>): int64 {
-	return effectsAt(effects).replies.length;
-}
-
 const OSC52_REPLY = "\x1b]52;";
 const SHORTEST_OSC52_REPLY = "\x1b]52;c;\x07".byteLength;
 
@@ -213,9 +235,18 @@ const SHORTEST_OSC52_REPLY = "\x1b]52;c;\x07".byteLength;
 // moves the empty reply written after mark (ESC ] 52 ; c ; and the program's terminator) into
 // readFrame, for answerClipboard to fill once the user decides.
 @exportName("haroVtClipboardRead")
-function clipboardRead(effects: Ptr<void>, mark: int64): void {
+function clipboardRead(terminal: GhosttyTerminal, effects: Ptr<void>, read: Ptr<GhosttyClipboardRead>): void {
+	let reply: GhosttyClipboardReadReply = {
+		size: sizeof GhosttyClipboardReadReply as size_t,
+		result: GhosttyClipboardReadResult.GHOSTTY_CLIPBOARD_READ_RESULT_DENIED,
+	};
 	const e = effectsAt(effects);
-	const from = mark as int32;
+	const mark = e.replies.length;
+	read.reply(read, reply as Ptr<GhosttyClipboardReadReply>);
+	if (read.location == GhosttyClipboardLocation.GHOSTTY_CLIPBOARD_LOCATION_STANDARD) { holdRead(e, mark); }
+}
+
+function holdRead(e: Effects, from: int32): void {
 	if (e.readFrame !== null || e.replies.length - from < SHORTEST_OSC52_REPLY) { return; }
 	const prefix = OSC52_REPLY.asBytes();
 	for (let i = 0; i < prefix.length; i++) {

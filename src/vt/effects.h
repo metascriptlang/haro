@@ -17,9 +17,8 @@ void haroVtPwdChanged(GhosttyTerminal terminal, void* effects);
 void haroVtRenderHold(GhosttyTerminal terminal, void* effects, bool held);
 bool haroVtDeviceAttributes(GhosttyTerminal terminal, void* effects, GhosttyDeviceAttributes* out);
 bool haroVtSize(GhosttyTerminal terminal, void* effects, GhosttySizeReportSize* out);
-void haroVtClipboardWritten(void* effects, uint8_t* text, int64_t n);
-int64_t haroVtRepliesLength(void* effects);
-void haroVtClipboardRead(void* effects, int64_t mark);
+void haroVtClipboardWrite(GhosttyTerminal terminal, void* effects, GhosttyClipboardWrite* write);
+void haroVtClipboardRead(GhosttyTerminal terminal, void* effects, GhosttyClipboardRead* read);
 GhosttyString haroVtXtversion(GhosttyTerminal terminal, void* effects);
 void haroVtDesktopNotification(GhosttyTerminal terminal, void* effects, GhosttyTerminalDesktopNotification* notification);
 

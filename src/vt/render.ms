@@ -29,6 +29,7 @@ import {
 	cellWide,
 	cellsGet,
 	checked,
+	graphemeWidth,
 	ok,
 	pushAll,
 	rgb,
@@ -308,6 +309,41 @@ export function dirtyRows(this vt: Vt): Result<Vec<Row>, VtError> {
 
 export function isUnicodeScalar(cp: uint32): boolean {
 	return cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF);
+}
+
+export struct Grapheme {
+	text: string;
+	cells: int32;
+}
+
+function codePoints(text: string): Vec<uint32> {
+	let cps: Vec<uint32> = [];
+	for (let i = 0; i < text.length; i++) {
+		const unit = text.charCodeAt(i) as uint32;
+		const low = i + 1 < text.length ? text.charCodeAt(i + 1) as uint32 : 0;
+		if (unit >= 0xD800 && unit < 0xDC00 && low >= 0xDC00 && low < 0xE000) {
+			cps.push(0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00));
+			i++;
+		} else {
+			cps.push(unit);
+		}
+	}
+	return cps;
+}
+
+export function graphemes(text: string): Vec<Grapheme> {
+	const cps = codePoints(text);
+	let out: Vec<Grapheme> = [];
+	let at = 0;
+	while (at < cps.length) {
+		let width: uint8 = 0;
+		const used = graphemeWidth(cps[at..cps.length as int32], width) as int32;
+		let cluster = "";
+		for (let k = at; k < at + used; k++) { cluster += fromCodePoint(cps[k] as number); }
+		out.push({ text: cluster, cells: width as int32 });
+		at += used;
+	}
+	return out;
 }
 
 export function text(this row: Row): Result<string, VtError> {

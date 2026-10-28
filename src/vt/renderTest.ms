@@ -4,7 +4,9 @@ import {
 	Underline,
 	Vt,
 	clean,
+	Grapheme,
 	dirtyRows,
+	graphemes,
 	lines,
 	linkAt,
 	rows,
@@ -251,4 +253,9 @@ test "only rows written since the last clean are dirty" {
 			assert dirty.value[0].cells[1].cp == 0x62;
 		}
 	});
+}
+
+test "text splits into graphemes with the cells the terminal gives each" {
+	const got = graphemes("e\u0301x·中🚀").map((g: Grapheme): string => `${g.text}:${g.cells}`);
+	assert got.join(" ") == "e\u0301:1 x:1 ·:1 中:2 🚀:2", got.join(" ");
 }

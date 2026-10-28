@@ -306,6 +306,10 @@ export extern function selectionFormat(
 	buf: Span<uint8>,
 	out written: size_t,
 ): GhosttyResult from "ghostty_terminal_selection_format_buf";
+export extern function graphemeWidth(
+	cps: Readonly<Span<uint32>>,
+	out width: uint8,
+): size_t from "ghostty_unicode_grapheme_width";
 export extern function pasteSafe(data: Readonly<Span<uint8>>): boolean from "ghostty_paste_is_safe";
 export extern function pasteEncode(
 	data: Span<uint8>,

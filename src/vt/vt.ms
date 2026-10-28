@@ -63,7 +63,9 @@ export {
 	mouseReport,
 } from "./mouseReport";
 export {
+	Grapheme,
 	dirtyRows,
+	graphemes,
 	isUnicodeScalar,
 	lines,
 	palette,

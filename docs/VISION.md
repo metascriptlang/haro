@@ -102,13 +102,18 @@ palette, panels), but Haro keeps a small core and exposes it, and those
 features are written against that surface as user code and plugins rather than built into Haro.
 
 The surface is the `haro` package (`assets/haro/index.ms`), and `~/.config/haro/config.ms` is
-written against it. Only `config` exists today; the hooks, host routines and plugins below are
-planned:
+written against it. `config` and its `onKey` hook exist today; the other hooks, host routines
+and plugins below are planned:
 
 - `export const config: HaroConfig`: the settings, checked by msc against the type before Haro
   reads them: a config table, but typed.
-- Exported hooks (`onKey`, `onPrompt`, `onCommandDone`, `onOutput`, …) receive events. Haro
-  already reads the OSC 133 prompt marks a block needs.
+- Hooks (`onKey`, `onPrompt`, `onCommandDone`, `onOutput`, …) are fields of `config`, so
+  `HaroConfig` checks them and a wrong one is an error on its line in `config.ms`. They receive
+  events. `onKey` gets each key pressed (`KeyPress`) and answers whether it handled it and
+  what text to send; it runs before keybinds. Haro already reads the OSC 133 prompt marks a
+  block needs.
+- A config with a hook keeps its interpreter for the life of the window, so it is evaluated at
+  every start (about 0.5 s) and is not cached; a config without one starts from the cache.
 - Host routines (`send`, `decorate`, `openFloat`, …) act on the terminal.
 - Plugins draw in **cells**: floating windows, decorations over a range of
   cells, and virtual text. Haro's own blocks are written as the first plugin, so the
@@ -148,12 +153,16 @@ MetaScript installed; an unbundled build reads the std from `~/.metascript`.
   to run Neon's component model inside Raiser and hand the nodes to the host to draw. That is a
   new mechanism in both Neon and the compiler, and it would grow the API into all of Neon. Cells
   first; this stays open.
-- **`haro.on("key", fn)` closures** for now. No closure crosses the embed boundary yet, so hooks
-  are exported functions found by name. The closure form can be added on top later.
+- **Hooks as exported functions** (`export function onKey`). Haro's runner module would have
+  to re-export whichever hooks `config.ms` exports without knowing which, and the embed API does
+  not find a re-exported function. A hook as a field of `config` needs no re-export and is
+  checked by `HaroConfig`.
+- **`haro.on("key", fn)` closures** for now. No closure crosses the embed boundary yet; a hook
+  field is called inside the interpreter by the runner's own `onKey`.
 - **Reading the config as a struct.** The embed API carries structs since msc `218af1db41`,
   but the config cache has to store the config as text, because an evaluation costs about 0.5 s
   of every start (measured 2026-10-28: 495–630 ms cold, 0 ms from the cache). So the runner
-  module's `configJson()` returns `JSON.stringify(config)`, and `src/config/config.ms` `parse`
+  module's `configJson()` returns the config without its hooks as JSON, and `src/config/config.ms` `parse`
   reads both that and the cache; reading the struct as well would be a second reader of the same
   fields.
 

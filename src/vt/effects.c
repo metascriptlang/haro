@@ -1,8 +1,8 @@
 #include "effects.h"
 
-/* The table stays in C because a .ms function reaches ghostty_terminal_set's const void* only through an
-   unchecked cast, while here each callback is checked against its prototype in effects.h. NULL effects
-   clears the callbacks. */
+/* The table stays in C because msc imports the write callback's const uint8_t* as a one-element borrow, so
+   that callback cannot be bound to its typedef in .ms: compiler card 2026-10-28-readonly-ptr-does-not-emit-const-in-c.
+   NULL effects clears the callbacks. */
 int vtEffectsWire(GhosttyTerminal terminal, void* effects) {
 	const struct { GhosttyTerminalOption option; const void* callback; } callbacks[] = {
 		{ GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*)haroVtWritePty },

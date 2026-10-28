@@ -102,11 +102,21 @@ static int stopping(Pty* p) {
 	return stop;
 }
 
+static int drainForExit(Pty* p, uint8_t* chunk, size_t cap) {
+	struct pollfd in = { p->master, POLLIN, 0 };
+	int ready = poll(&in, 1, EXIT_QUIET_MS);
+	if (ready < 0) return errno != EINTR;
+	if (ready == 0) return 0;
+	ssize_t got = read(p->master, chunk, cap);
+	return got == 0 || (got < 0 && errno != EINTR && errno != EAGAIN);
+}
+
 static void* readLoop(void* arg) {
 	Pty* p = arg;
 	uint8_t chunk[16384];
 	int top = p->master > p->stop[0] ? p->master : p->stop[0];
 	int64_t drainUntil = -1;
+	int ended = 0;
 	for (;;) {
 		fd_set fds;
 		FD_ZERO(&fds);
@@ -116,6 +126,7 @@ static void* readLoop(void* arg) {
 		int ready = select(top + 1, &fds, NULL, NULL, drainUntil < 0 ? NULL : &quiet);
 		if (ready < 0) {
 			if (errno == EINTR) continue;
+			ended = 1;
 			break;
 		}
 		if (ready == 0 || (drainUntil >= 0 && nowMs() > drainUntil)) break;
@@ -129,10 +140,19 @@ static void* readLoop(void* arg) {
 		}
 		ssize_t got = read(p->master, chunk, sizeof chunk);
 		if (got < 0 && (errno == EINTR || errno == EAGAIN)) continue;
-		if (got <= 0 || !append(p, chunk, got)) break;
+		ended = got <= 0;
+		if (ended || !append(p, chunk, got)) break;
 	}
 	pthread_mutex_lock(&p->lock);
-	while (!p->exited) pthread_cond_wait(&p->changed, &p->lock);
+	while (!p->exited) {
+		if (ended) {
+			pthread_cond_wait(&p->changed, &p->lock);
+			continue;
+		}
+		pthread_mutex_unlock(&p->lock);
+		ended = drainForExit(p, chunk, sizeof chunk);
+		pthread_mutex_lock(&p->lock);
+	}
 	p->closed = 1;
 	signalReady(p);
 	pthread_mutex_unlock(&p->lock);

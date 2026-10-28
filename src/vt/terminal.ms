@@ -26,6 +26,7 @@ import {
 	ghostty_terminal_new,
 	ghostty_terminal_resize,
 	ghostty_tracked_grid_ref_free,
+	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import {
 	Effects,
@@ -211,7 +212,7 @@ export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, V
 	let at: GhosttyGridRef;
 	try checked(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, x, y, at), VtError.ReadFailed);
 	let buf: Vec<uint8> = new Array(256);
-	let len: uint64 = 0;
+	let len: size_t = 0;
 	let r = gridRefLink(at, buf, len);
 	if (r == GhosttyResult.GHOSTTY_OUT_OF_SPACE) {
 		buf = new Array(len as int32);

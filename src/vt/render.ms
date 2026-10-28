@@ -17,6 +17,7 @@ import {
 	ghostty_render_state_row_cells_next,
 	ghostty_render_state_row_iterator_next,
 	ghostty_render_state_row_iterator_next_dirty,
+	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { fromCodePoint } from "std/core/string";
 import { CellWidth, RowSpan } from "../select/select";
@@ -220,7 +221,7 @@ function readCell(
 	if (facts.styled) {
 		const fgKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR;
 		fg = colorOr(cells, fgKey, colors.fg);
-		let style: GhosttyStyle = { size: sizeof GhosttyStyle };
+		let style: GhosttyStyle = { size: sizeof GhosttyStyle as size_t };
 		const styleKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE;
 		try checked(cellsGet(cells, styleKey, style), VtError.ReadFailed);
 		flags = styleFlags(style);
@@ -261,7 +262,7 @@ function readRow(
 }
 
 function selectedIn(iterator: GhosttyRenderStateRowIterator): Result<RowSpan | null, VtError> {
-	let picked: GhosttyRenderStateRowSelection = { size: sizeof GhosttyRenderStateRowSelection };
+	let picked: GhosttyRenderStateRowSelection = { size: sizeof GhosttyRenderStateRowSelection as size_t };
 	const key = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION;
 	const r = rowGet(iterator, key, picked);
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }

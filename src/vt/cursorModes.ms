@@ -7,6 +7,7 @@ import {
 	GhosttyRenderStateData,
 	GhosttyTerminal,
 	GhosttyTerminalData,
+	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { CellWidth } from "../select/select";
 import { widthOf } from "./render";
@@ -142,7 +143,7 @@ export function focusReport(
 	const event = gained
 		? GhosttyFocusEvent.GHOSTTY_FOCUS_GAINED
 		: GhosttyFocusEvent.GHOSTTY_FOCUS_LOST;
-	let written: uint64 = 0;
+	let written: size_t = 0;
 	try checked(focusEncode(event, buf, written), VtError.ReadFailed);
 	return Result.ok(written as int32);
 }

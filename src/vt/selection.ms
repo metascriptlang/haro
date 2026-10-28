@@ -12,6 +12,7 @@ import {
 	GhosttyTerminalSelectLineOptions,
 	GhosttyTerminalSelectWordOptions,
 	GhosttyTerminalSelectionFormatOptions,
+	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import {
 	Marked,
@@ -51,7 +52,7 @@ function screenPoint(terminal: GhosttyTerminal, gridRef: GhosttyGridRef): Result
 
 function markedOf(terminal: GhosttyTerminal, selection: GhosttySelection): Result<Marked, VtError> {
 	let given = selection;
-	let ordered: GhosttySelection = { size: sizeof GhosttySelection };
+	let ordered: GhosttySelection = { size: sizeof GhosttySelection as size_t };
 	const forward = GhosttySelectionOrder.GHOSTTY_SELECTION_ORDER_FORWARD;
 	try checked(selectionOrdered(terminal, given, forward, ordered), VtError.SelectFailed);
 	const start = try screenPoint(terminal, ordered.start);
@@ -72,7 +73,7 @@ function markedFound(
 
 export function selectionSet(this vt: Vt, m: Marked): Result<void, VtError> {
 	let selection: GhosttySelection = {
-		size: sizeof GhosttySelection,
+		size: sizeof GhosttySelection as size_t,
 		start: try screenRef(vt.terminal, m.range.start),
 		end: try screenRef(vt.terminal, m.range.end),
 		rectangle: m.block,
@@ -87,7 +88,7 @@ export function selectionClear(this vt: Vt): void {
 }
 
 export function selection(this vt: Vt): Result<Marked | null, VtError> {
-	let selection: GhosttySelection = { size: sizeof GhosttySelection };
+	let selection: GhosttySelection = { size: sizeof GhosttySelection as size_t };
 	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_SELECTION;
 	const r = terminalGet(vt.terminal, key, selection);
 	return markedFound(vt.terminal, r, selection);
@@ -95,20 +96,20 @@ export function selection(this vt: Vt): Result<Marked | null, VtError> {
 
 function wordAt(this vt: Vt, at: Point): Result<Marked | null, VtError> {
 	let options: GhosttyTerminalSelectWordOptions = {
-		size: sizeof GhosttyTerminalSelectWordOptions,
+		size: sizeof GhosttyTerminalSelectWordOptions as size_t,
 		ref: try screenRef(vt.terminal, at),
 	};
-	let selection: GhosttySelection = { size: sizeof GhosttySelection };
+	let selection: GhosttySelection = { size: sizeof GhosttySelection as size_t };
 	return markedFound(vt.terminal, selectWord(vt.terminal, options, selection), selection);
 }
 
 function lineAt(this vt: Vt, at: Point): Result<Marked | null, VtError> {
 	let options: GhosttyTerminalSelectLineOptions = {
-		size: sizeof GhosttyTerminalSelectLineOptions,
+		size: sizeof GhosttyTerminalSelectLineOptions as size_t,
 		ref: try screenRef(vt.terminal, at),
 		semantic_prompt_boundary: true,
 	};
-	let selection: GhosttySelection = { size: sizeof GhosttySelection };
+	let selection: GhosttySelection = { size: sizeof GhosttySelection as size_t };
 	return markedFound(vt.terminal, selectLine(vt.terminal, options, selection), selection);
 }
 
@@ -131,13 +132,13 @@ export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtErro
 
 export function selectedText(this vt: Vt): Result<string | null, VtError> {
 	const options: GhosttyTerminalSelectionFormatOptions = {
-		size: sizeof GhosttyTerminalSelectionFormatOptions,
+		size: sizeof GhosttyTerminalSelectionFormatOptions as size_t,
 		emit: GhosttyFormatterFormat.GHOSTTY_FORMATTER_FORMAT_PLAIN,
 		unwrap: true,
 		trim: true,
 	};
 	let buf: Vec<uint8> = new Array(4096);
-	let written: uint64 = 0;
+	let written: size_t = 0;
 	let r = selectionFormat(vt.terminal, options, buf, written);
 	if (r == GhosttyResult.GHOSTTY_OUT_OF_SPACE) {
 		buf = new Array(written as int32);

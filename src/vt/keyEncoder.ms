@@ -14,6 +14,7 @@ import {
 	ghostty_key_event_set_key,
 	ghostty_key_event_set_unshifted_codepoint,
 	ghostty_key_event_set_utf8,
+	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import {
 	KeyAction,
@@ -96,11 +97,11 @@ export function encode(
 	eventSetConsumedMods(k.event, modsMask(e.consumedMods));
 	ghostty_key_event_set_unshifted_codepoint(k.event, e.unshifted);
 	if (textSafe(e.text)) {
-		ghostty_key_event_set_utf8(k.event, e.text, e.text.byteLength as uint64);
+		ghostty_key_event_set_utf8(k.event, e.text, e.text.byteLength as size_t);
 	} else {
 		ghostty_key_event_set_utf8(k.event, "", 0);
 	}
-	let written: uint64 = 0;
+	let written: size_t = 0;
 	const r = encoderEncode(k.encoder, k.event, buf, written);
 	if (r == GhosttyResult.GHOSTTY_OUT_OF_SPACE) { return Result.err(KeysError.NoRoom); }
 	if (!ok(r)) { return Result.err(KeysError.EncodeFailed); }
@@ -126,7 +127,7 @@ export function pasteBytes(
 	if (unsafe && !allowUnsafe) { return Result.err(PasteError.Unsafe); }
 	let data: Vec<uint8> = [...text.asBytes()];
 	let out: Vec<uint8> = new Array(data.length + 16);
-	let written: uint64 = 0;
+	let written: size_t = 0;
 	if (!ok(pasteEncode(data, bracketed, out, written))) {
 		return Result.err(PasteError.EncodeFailed);
 	}

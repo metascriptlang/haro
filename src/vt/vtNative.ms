@@ -50,6 +50,8 @@ import {
 	GhosttyTerminalSelectWordOptions,
 	GhosttyTerminalSelectionFormatOptions,
 	GhosttyTrackedGridRef,
+	intptr_t,
+	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { Rgb, VtError } from "./vtTypes";
 
@@ -101,7 +103,7 @@ export extern function mouseEncode(
 	encoder: GhosttyMouseEncoder,
 	event: GhosttyMouseEvent,
 	buf: Span<uint8>,
-	out written: uint64,
+	out written: size_t,
 ): GhosttyResult from "ghostty_mouse_encoder_encode";
 extern function gridRefTrack(
 	terminal: GhosttyTerminal,
@@ -121,7 +123,7 @@ export extern function unset(
 export extern function focusEncode(
 	event: GhosttyFocusEvent,
 	buf: Span<uint8>,
-	out written: uint64,
+	out written: size_t,
 ): GhosttyResult from "ghostty_focus_encode";
 export extern function eventSetMods(event: GhosttyKeyEvent, mods: uint16): void
 	from "ghostty_key_event_set_mods";
@@ -136,7 +138,7 @@ export extern function encoderEncode(
 	encoder: GhosttyKeyEncoder,
 	event: GhosttyKeyEvent,
 	buf: Span<uint8>,
-	out written: uint64,
+	out written: size_t,
 ): GhosttyResult from "ghostty_key_encoder_encode";
 
 export extern function cellGraphemesInto(
@@ -146,10 +148,10 @@ export extern function cellGraphemesInto(
 ): GhosttyResult from "ghostty_render_state_row_cells_get";
 export extern function cellFacts(
 	raw: GhosttyCell,
-	count: uint64,
+	count: size_t,
 	keys: Ptr<GhosttyCellData>,
 	values: Ptr<Ptr<void>>,
-	written: Ptr<uint64> | null,
+	written: Ptr<size_t> | null,
 ): GhosttyResult from "ghostty_cell_get_multi";
 export extern function cellWide(
 	raw: GhosttyCell,
@@ -185,7 +187,7 @@ export function vtGridRef(
 	y: int32,
 	out gridRef: GhosttyGridRef,
 ): GhosttyResult {
-	gridRef = { size: sizeof GhosttyGridRef };
+	gridRef = { size: sizeof GhosttyGridRef as size_t };
 	if (x < 0 || y < 0) { return GhosttyResult.GHOSTTY_INVALID_VALUE; }
 	return terminalGridRef(terminal, pointAt(tag, x, y), gridRef);
 }
@@ -193,8 +195,8 @@ export function vtGridRef(
 export function vtScroll(terminal: GhosttyTerminal, tag: GhosttyTerminalScrollViewportTag, amount: int64): void {
 	let v: GhosttyTerminalScrollViewport = { tag: tag };
 	match (tag) {
-		GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_DELTA => { v.value.delta = amount; },
-		GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_ROW => { v.value.row = amount as uint64; },
+		GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_DELTA => { v.value.delta = amount as intptr_t; },
+		GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_ROW => { v.value.row = amount as size_t; },
 		_ => {},
 	}
 	scrollViewport(terminal, v);
@@ -210,7 +212,7 @@ export function vtTopAnchor(ref: GhosttyTrackedGridRef, terminal: GhosttyTermina
 export extern function gridRefLink(
 	ref gridRef: GhosttyGridRef,
 	buf: Span<uint8>,
-	out len: uint64,
+	out len: size_t,
 ): GhosttyResult from "ghostty_grid_ref_hyperlink_uri";
 export extern function gridRefCell(ref gridRef: GhosttyGridRef, out cell: GhosttyCell): GhosttyResult
 	from "ghostty_grid_ref_cell";
@@ -247,14 +249,14 @@ export extern function selectionFormat(
 	terminal: GhosttyTerminal,
 	options: GhosttyTerminalSelectionFormatOptions,
 	buf: Span<uint8>,
-	out written: uint64,
+	out written: size_t,
 ): GhosttyResult from "ghostty_terminal_selection_format_buf";
 export extern function pasteSafe(data: Readonly<Span<uint8>>): boolean from "ghostty_paste_is_safe";
 export extern function pasteEncode(
 	data: Span<uint8>,
 	bracketed: boolean,
 	buf: Span<uint8>,
-	out written: uint64,
+	out written: size_t,
 ): GhosttyResult from "ghostty_paste_encode";
 
 export function ok(r: GhosttyResult): boolean {

@@ -11,6 +11,7 @@ import {
 	ghostty_mouse_event_new,
 	ghostty_mouse_event_set_action,
 	ghostty_mouse_event_set_position,
+	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { modsMask } from "../keys/keys";
 import { Vt } from "./terminal";
@@ -90,7 +91,7 @@ export function mouseReport(
 	const known = m.geometry;
 	if (known === null || known != geometry) {
 		let size: GhosttyMouseEncoderSize = {
-			size: sizeof GhosttyMouseEncoderSize,
+			size: sizeof GhosttyMouseEncoderSize as size_t,
 			screen_width: geometry.width as uint32,
 			screen_height: geometry.height as uint32,
 			cell_width: geometry.cellWidth as uint32,
@@ -114,7 +115,7 @@ export function mouseReport(
 	}
 	mouseSetMods(event, modsMask(input.mods));
 	ghostty_mouse_event_set_position(event, { x: input.x, y: input.y });
-	let written: uint64 = 0;
+	let written: size_t = 0;
 	try checked(mouseEncode(encoder, event, buf, written), VtError.ReadFailed);
 	return Result.ok(written as int32);
 }

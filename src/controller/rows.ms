@@ -178,7 +178,8 @@ export function planRows(
 ): Result<Planned, FrameError> {
 	const planned = vt.plan();
 	if (!planned.ok) { return Result.err(FrameError.PlanFailed); }
-	if ((planned.value.kind != PlanKind.Idle || decor.stale) && !decor.retint(vt, shown.length as int32).ok) {
+	const moved = planned.value.kind != PlanKind.Idle;
+	if ((moved || decor.stale) && !decor.retint(vt, shown.length as int32).ok) {
 		return Result.err(FrameError.TintFailed);
 	}
 	const at = vt.cursor();
@@ -188,7 +189,8 @@ export function planRows(
 	for (let i = 0; i < p.scrolled; i++) { shown.push(shown.shift()); }
 	let rows: Vec<RowUpdate> = [];
 	for (const y of p.ys) {
-		const built = try rowOf(shown, vt.painted.rows[y], cursor, ink, p.colors.bg, decor.tintAt(y));
+		const tint = decor.tintAt(y);
+		const built = try rowOf(shown, vt.painted.rows[y], cursor, ink, p.colors.bg, tint);
 		rows.push(move built);
 	}
 	try relight(rows, shown, vt, cursor, ink, p.colors.bg, decor);

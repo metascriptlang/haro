@@ -130,7 +130,9 @@ function anchorCursor(this e: Effects, terminal: GhosttyTerminal): int32 {
 		ok(terminalGet(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_CURSOR_Y, y)) &&
 		ok(vtTrack(terminal, active, x as int32, y as int32, tracked));
 	if (!placed) { return id; }
-	if (e.anchors.length >= ANCHOR_CAP) { ghostty_tracked_grid_ref_free(e.anchors.shift().tracked); }
+	if (e.anchors.length >= ANCHOR_CAP) {
+		ghostty_tracked_grid_ref_free(e.anchors.shift().tracked);
+	}
 	e.anchors.push({ id: id, tracked: tracked });
 	return id;
 }

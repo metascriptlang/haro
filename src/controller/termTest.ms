@@ -1,5 +1,13 @@
 import { KeyMod } from "../keys/keys";
-import { MouseAction, MouseInput, Rgb, ShellMark, ShellStep, geometryOf, writeText } from "../vt/vt";
+import {
+	MouseAction,
+	MouseInput,
+	Rgb,
+	ShellMark,
+	ShellStep,
+	geometryOf,
+	writeText,
+} from "../vt/vt";
 import { View, fitRows, open, paint, text } from "../app/frame";
 import { Frame, Term, TermError, decorate, pumpFrame, undecorate } from "./term";
 import { RowUpdate } from "./rows";

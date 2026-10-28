@@ -242,7 +242,8 @@ function tintedLine(
 	const rows = vt.rows();
 	let found: GridLine | null = null;
 	if (marked && updated.ok && colors.ok && rows.ok) {
-		const line = rows.value[0].line(cursorCell, { fg: null, bg: RED }, SWAP, colors.value.bg, tint);
+		const cursorInk: CellInk = { fg: null, bg: RED };
+		const line = rows.value[0].line(cursorCell, cursorInk, SWAP, colors.value.bg, tint);
 		if (line.ok) { found = line.value; }
 	}
 	return found;

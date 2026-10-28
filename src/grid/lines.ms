@@ -23,6 +23,11 @@ export struct CellInk {
 	bg: Rgb | null;
 }
 
+export struct RowTint {
+	fg: Rgb | null;
+	bg: Rgb | null;
+}
+
 export struct GridLine {
 	text: string;
 	runs: Vec<LineRun>;
@@ -65,6 +70,10 @@ function lineRun(this cell: Cell): LineRun {
 
 function inked(this run: LineRun, ink: CellInk): LineRun {
 	return { ...run, fg: ink.fg ?? run.bg, bg: ink.bg ?? run.fg };
+}
+
+function tinted(this run: LineRun, tint: RowTint): LineRun {
+	return { ...run, fg: tint.fg ?? run.fg, bg: tint.bg ?? run.bg };
 }
 
 function covers(this selected: RowSpan | null, from: int32, to: int32): boolean {
@@ -121,6 +130,7 @@ export function line(
 	cursorInk: CellInk | null,
 	selection: CellInk,
 	background: Rgb,
+	tint: RowTint | null = null,
 ): Result<GridLine, GridError> {
 	let text = "";
 	let runs: Vec<LineRun> = [];
@@ -135,6 +145,7 @@ export function line(
 	while (end > 0 && row.cells[end - 1].isEmpty(background)) { end--; }
 	if (cursorInk !== null) { end = Math.max(end, Math.min(cursorAt + 1, count)); }
 	if (selected !== null) { end = Math.max(end, Math.min(selected.to + 1, count)); }
+	if (tint !== null && tint.bg !== null) { end = count; }
 	for (let i = 0; i < end; i++) {
 		const cell = row.cells[i];
 		const extra = cell.extra as int32;
@@ -143,6 +154,7 @@ export function line(
 		if (row.isWideSpacer(i)) { continue; }
 		const last = cell.flags.has(CellFlag.Wide) ? i + 1 : i;
 		let run = cell.lineRun();
+		if (tint !== null) { run = run.tinted(tint); }
 		if (i == cursorAt && cursorInk !== null) {
 			run = run.inked(cursorInk);
 		} else if (selected.covers(i, last)) {
@@ -207,6 +219,30 @@ function inkedLine(
 	let found: GridLine | null = null;
 	if (marked && updated.ok && colors.ok && rows.ok) {
 		const line = rows.value[0].line(cursorCell, cursorInk, SWAP, colors.value.bg);
+		if (line.ok) { found = line.value; }
+	}
+	return found;
+}
+
+function tintedLine(
+	text: string,
+	cols: int32,
+	cursorCell: int32,
+	selected: Marked | null,
+	tint: RowTint,
+): GridLine | null {
+	const created = Vt.create(cols, 2);
+	if (!created.ok) { return null; }
+	const vt = created.value;
+	defer vt.free();
+	vt.writeText(text);
+	const marked = selected === null || vt.selectionSet(selected).ok;
+	const updated = vt.update();
+	const colors = vt.palette();
+	const rows = vt.rows();
+	let found: GridLine | null = null;
+	if (marked && updated.ok && colors.ok && rows.ok) {
+		const line = rows.value[0].line(cursorCell, { fg: null, bg: RED }, SWAP, colors.value.bg, tint);
 		if (line.ok) { found = line.value; }
 	}
 	return found;
@@ -502,4 +538,34 @@ test "a hidden cell draws no overline" {
 	const line = firstLine("\x1b[8;53mx\x1b[0m", 10, -1);
 	assert line !== null;
 	if (line !== null) { assert !line.runs[0].flags.has(CellFlag.Overline); }
+}
+
+const TINT: Rgb = { r: 58, g: 28, b: 36 };
+const GREEN: Rgb = { r: 0, g: 255, b: 0 };
+
+test "a row tint colours every cell to the full width, beneath the cursor and the selection" {
+	const line = tintedLine("abcd", 8, 1, columns(2, 2), { fg: null, bg: TINT });
+	assert line !== null;
+	if (line !== null) {
+		assert line.text == "abcd    ";
+		assert line.runs.map((r: LineRun): string => `${r.units}`).join(",") == "1,1,1,5";
+		assert line.runs[0].bg == TINT && line.runs[3].bg == TINT;
+		assert line.runs[1].bg == RED;
+		assert line.runs[1].fg == TINT;
+		assert line.runs[2].fg == TINT;
+		assert line.runs[2].bg == line.runs[0].fg;
+	}
+}
+
+test "a row tint keeps a cell's own colour where it names none" {
+	const line = tintedLine("a\x1b[41mb\x1b[0m", 8, -1, null, { fg: GREEN, bg: null });
+	const plain = firstLine("a", 8, -1);
+	assert line !== null && plain !== null;
+	if (line !== null && plain !== null) {
+		assert line.text == "ab";
+		assert line.runs.length == 2;
+		assert line.runs[0].fg == GREEN && line.runs[1].fg == GREEN;
+		assert line.runs[0].bg == plain.runs[0].bg;
+		assert line.runs[1].bg != plain.runs[0].bg;
+	}
 }

@@ -41,13 +41,6 @@ const GhosttyAllocator* vtAllocator(void) {
 }
 #endif
 
-/* msc has no integer type as wide as size_t on every target (32 bits on wasm32) for a callback's
-   parameter; delete this shim when compiler card 2026-10-27-no-pointer-width-integer-type lands. */
-static void writePty(GhosttyTerminal terminal, void* userdata, const uint8_t* bytes, size_t n) {
-	(void)terminal;
-	haroVtWritePty(userdata, (uint8_t*)bytes, (int64_t)n);
-}
-
 /* msc reads a function-pointer field of a header struct as a closure and cannot call `reply`; move
    these two into vtEffects.ms when compiler card 2026-10-19-a-function-passed-to-a-c-function-pointer-fails-at-clang lands. */
 static void onClipboardWrite(GhosttyTerminal terminal, void* userdata, const GhosttyClipboardWrite* write) {
@@ -79,7 +72,7 @@ static void onClipboardRead(GhosttyTerminal terminal, void* userdata, const Ghos
 /* The table sits beside the C shims it registers. NULL effects clears the callbacks. */
 int vtEffectsWire(GhosttyTerminal terminal, void* effects) {
 	const struct { GhosttyTerminalOption option; const void* callback; } callbacks[] = {
-		{ GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*)writePty },
+		{ GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*)haroVtWritePty },
 		{ GHOSTTY_TERMINAL_OPT_BELL, (const void*)haroVtBell },
 		{ GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void*)haroVtTitleChanged },
 		{ GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*)haroVtPwdChanged },

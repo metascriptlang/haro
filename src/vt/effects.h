@@ -10,7 +10,7 @@ const GhosttyAllocator* vtAllocator(void);
 int vtEffectsWire(GhosttyTerminal terminal, void* effects);
 
 /* Defined in vtEffects.ms, which includes this header, so a signature that drifts fails the C compile. */
-void haroVtWritePty(void* effects, uint8_t* bytes, int64_t n);
+void haroVtWritePty(GhosttyTerminal terminal, void* effects, uint8_t* bytes, size_t n);
 void haroVtBell(GhosttyTerminal terminal, void* effects);
 void haroVtTitleChanged(GhosttyTerminal terminal, void* effects);
 void haroVtPwdChanged(GhosttyTerminal terminal, void* effects);

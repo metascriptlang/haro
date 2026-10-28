@@ -7,6 +7,7 @@ import {
 	GhosttyTerminalData,
 	GhosttyTerminalDesktopNotification,
 	ghostty_render_state_update,
+	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { Handle } from "std/ffi";
 import {
@@ -64,9 +65,8 @@ function effectsAt(p: Ptr<void>): Effects {
 }
 
 @exportName("haroVtWritePty")
-function writePty(effects: Ptr<void>, bytes: Readonly<Span<uint8>>): void {
-	const e = effectsAt(effects);
-	for (const b of bytes) { e.replies.push(b); }
+function writePty(terminal: GhosttyTerminal, effects: Ptr<void>, bytes: Readonly<Ptr<uint8>>, n: size_t): void {
+	pushAll(effectsAt(effects).replies, bytes[0..n]);
 }
 
 @exportName("haroVtBell")

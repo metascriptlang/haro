@@ -19,7 +19,7 @@ import { Config } from "../config/config";
 import { CommandDone } from "../vt/vt";
 import { KeyEvent, OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
-import { KeyAnswer, UNHANDLED, answerKey, commandDone, prompted } from "../config/hooks";
+import { HookPane, KeyAnswer, UNHANDLED, answerKey, commandDone, prompted } from "../config/hooks";
 import { ConfigWatch, forFile, readConfig, startIn, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { exitCodeText } from "../controller/term";
@@ -165,19 +165,19 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 		report: { note: note, fail: fail },
 		timing: { clock: (): float64 => performance.now(), schedule: inFrame },
 		keyHook: {
-			answer: (k: KeyEvent): Result<KeyAnswer, string> => {
+			answer: (pane: HookPane, k: KeyEvent): Result<KeyAnswer, string> => {
 				const hooks = config.loaded.hooks;
-				return hooks === null ? Result.ok(UNHANDLED) : hooks.answerKey(k);
+				return hooks === null ? Result.ok(UNHANDLED) : hooks.answerKey(pane, k);
 			},
 		},
 		shellHook: {
-			prompted: (): Result<void, string> => {
+			prompted: (pane: HookPane): Result<void, string> => {
 				const hooks = config.loaded.hooks;
-				return hooks === null ? Result.ok(null) : hooks.prompted();
+				return hooks === null ? Result.ok(null) : hooks.prompted(pane);
 			},
-			commandDone: (done: CommandDone): Result<void, string> => {
+			commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => {
 				const hooks = config.loaded.hooks;
-				return hooks === null ? Result.ok(null) : hooks.commandDone(done);
+				return hooks === null ? Result.ok(null) : hooks.commandDone(pane, done);
 			},
 		},
 		events: {

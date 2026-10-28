@@ -21,7 +21,7 @@ import {
 	failed,
 	refresh,
 } from "./paneModel";
-import { KeyAnswer, UNHANDLED } from "../../../../config/hooks";
+import { HookPane, KeyAnswer, UNHANDLED } from "../../../../config/hooks";
 import { KeyEvent } from "../../../../keys/keys";
 import { cancelDialog, confirmDialog } from "./paneEvents";
 import { Io, Where, open, port } from "../../../../controller/io";
@@ -67,11 +67,13 @@ function timingAt(now: float64): Timing {
 	return { clock: (): float64 => now, schedule: (run: () => void): void => {} };
 }
 
-const NO_HOOK: KeyHook = { answer: (k: KeyEvent): Result<KeyAnswer, string> => Result.ok(UNHANDLED) };
+const NO_HOOK: KeyHook = {
+	answer: (pane: HookPane, k: KeyEvent): Result<KeyAnswer, string> => Result.ok(UNHANDLED),
+};
 
 const NO_SHELL_HOOK: ShellHook = {
-	prompted: (): Result<void, string> => Result.ok(null),
-	commandDone: (done: CommandDone): Result<void, string> => Result.ok(null),
+	prompted: (pane: HookPane): Result<void, string> => Result.ok(null),
+	commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => Result.ok(null),
 };
 
 function paneWith(
@@ -492,9 +494,9 @@ interface Written {
 	sent: Vec<string>;
 }
 
-function writtenBy(w: Written): Pty {
+function writtenBy(w: Written, shown: string = "ready"): Pty {
 	return {
-		...Replay.ofText("ready").toPty(),
+		...Replay.ofText(shown).toPty(),
 		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
 			w.sent.push(data.asString());
 			return Result.ok(null);
@@ -506,7 +508,7 @@ function writtenBy(w: Written): Pty {
 test "a key the config's onKey handles sends its text instead, and the keys it leaves pass through" {
 	const w: Written = { sent: [] };
 	const hook: KeyHook = {
-		answer: (k: KeyEvent): Result<KeyAnswer, string> => {
+		answer: (pane: HookPane, k: KeyEvent): Result<KeyAnswer, string> => {
 			return Result.ok(k.key == "KeyK" ? { handled: true, send: "hooked" } : UNHANDLED);
 		},
 	};
@@ -523,7 +525,7 @@ test "a key the config's onKey handles sends its text instead, and the keys it l
 test "an onKey that fails is a notice, and the key still reaches the program" {
 	const w: Written = { sent: [] };
 	const hook: KeyHook = {
-		answer: (k: KeyEvent): Result<KeyAnswer, string> => Result.err("onKey in config.ms failed: boom"),
+		answer: (pane: HookPane, k: KeyEvent): Result<KeyAnswer, string> => Result.err("onKey in config.ms failed: boom"),
 	};
 	assert onPty(writtenBy(w), (): float64 => 0, 80, 24, (t: Term): void => {
 		const m = paneWith(Io.open(t), noCalls(), timingAt(0), hook);
@@ -539,11 +541,11 @@ test "a shell's marks call the config's onCommandDone and onPrompt in order, and
 	assert onFresh("\x1b]133;C\x07\x1b]133;D;1\x07\x1b]133;A\x07", (t: Term, sink: Sink): void => {
 		const heard: Written = { sent: [] };
 		const hook: ShellHook = {
-			prompted: (): Result<void, string> => {
+			prompted: (pane: HookPane): Result<void, string> => {
 				heard.sent.push("prompt");
 				return Result.err("onPrompt in config.ms failed: boom");
 			},
-			commandDone: (done: CommandDone): Result<void, string> => {
+			commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => {
 				heard.sent.push(`done ${done.exitCode ?? -1} ${done.durationMs !== null}`);
 				return Result.ok(null);
 			},
@@ -552,5 +554,32 @@ test "a shell's marks call the config's onCommandDone and onPrompt in order, and
 		m.refresh();
 		assert heard.sent.join("|") == "done 1 true|prompt", heard.sent.join("|");
 		assert m.notice.text == "onPrompt in config.ms failed: boom";
+	}).ok;
+}
+
+test "a hook's send writes to its pane's shell and its notify reaches the desktop" {
+	const w: Written = { sent: [] };
+	const keyHook: KeyHook = {
+		answer: (pane: HookPane, k: KeyEvent): Result<KeyAnswer, string> => {
+			pane.send("from onKey");
+			return Result.ok(UNHANDLED);
+		},
+	};
+	const shellHook: ShellHook = {
+		prompted: (pane: HookPane): Result<void, string> => Result.ok(null),
+		commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => {
+			pane.send(`exit ${done.exitCode ?? -1}`);
+			pane.notify("done", `exit ${done.exitCode ?? -1}`);
+			return Result.ok(null);
+		},
+	};
+	const marks = "\x1b]133;C\x07\x1b]133;D;3\x07";
+	assert onPty(writtenBy(w, marks), (): float64 => 0, 80, 24, (t: Term): void => {
+		const calls = noCalls();
+		const m = paneWith(Io.open(t), calls, timingAt(0), keyHook, shellHook);
+		m.refresh();
+		m.keyed(pressed("Enter"));
+		assert w.sent.join("|") == "exit 3|from onKey|\r", w.sent.join("|");
+		assert calls.notified == "done|exit 3\n", calls.notified;
 	}).ok;
 }

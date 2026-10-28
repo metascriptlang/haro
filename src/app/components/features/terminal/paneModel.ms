@@ -12,7 +12,7 @@ import { gridSize } from "../../../../grid/size";
 import { CellInk } from "../../../../grid/lines";
 import { CommandDone, MouseGeometry, ShellMark, ShellStep, geometryOf } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
-import { KeyAnswer } from "../../../../config/hooks";
+import { HookPane, KeyAnswer } from "../../../../config/hooks";
 import { KeyEvent } from "../../../../keys/keys";
 import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
 import { FrameRows } from "../../../../controller/rows";
@@ -65,12 +65,12 @@ export struct ConfigChange = match (outcome: ConfigOutcome) {
 };
 
 export interface KeyHook {
-	answer: (k: KeyEvent) => Result<KeyAnswer, string>;
+	answer: (pane: HookPane, k: KeyEvent) => Result<KeyAnswer, string>;
 }
 
 export interface ShellHook {
-	prompted: () => Result<void, string>;
-	commandDone: (done: CommandDone) => Result<void, string>;
+	prompted: (pane: HookPane) => Result<void, string>;
+	commandDone: (pane: HookPane, done: CommandDone) => Result<void, string>;
 }
 
 export interface HostEvents {
@@ -330,9 +330,16 @@ function applied(this m: PaneModel, got: IoFrame): void {
 
 function marked(this m: PaneModel, mark: ShellMark): void {
 	const ran = mark.step === ShellStep.CommandDone
-		? m.shellHook.commandDone(mark.done)
-		: m.shellHook.prompted();
+		? m.shellHook.commandDone(m.hookPane(), mark.done)
+		: m.shellHook.prompted(m.hookPane());
 	if (!ran.ok) { m.notify(ran.error); }
+}
+
+export function hookPane(this m: PaneModel): HookPane {
+	return {
+		send: (text: string): void => { m.io.text(text, m.timing.clock()); },
+		notify: (title: string, body: string): void => { m.desktop.notify(title, body); },
+	};
 }
 
 function painted(this m: PaneModel, rows: FrameRows): void {

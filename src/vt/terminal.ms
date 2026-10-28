@@ -35,6 +35,7 @@ import {
 	answerRead,
 	byteAt,
 	closeEffects,
+	freeAnchors,
 	openEffects,
 } from "./vtEffects";
 import {
@@ -335,6 +336,7 @@ export function clean(this vt: Vt): void {
 
 export function free(this vt: Vt): void {
 	ghostty_tracked_grid_ref_free(vt.anchor);
+	vt.effects.freeAnchors();
 	closeEffects(vt.terminal);
 	const codec = vt.mouse.codec;
 	if (codec !== null) {

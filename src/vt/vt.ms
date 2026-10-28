@@ -14,6 +14,7 @@ export {
 	VtError,
 } from "./vtTypes";
 export {
+	ANCHOR_CAP,
 	CommandDone,
 	DesktopNotification,
 	Effects,
@@ -72,6 +73,7 @@ export {
 export {
 	PromptJump,
 	alternateScreen,
+	anchorRow,
 	anchorTop,
 	anchoredRow,
 	atBottom,

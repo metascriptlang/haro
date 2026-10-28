@@ -1,14 +1,20 @@
 import {
+	ANCHOR_CAP,
 	Rgb,
 	Vt,
 	VtError,
+	anchorRow,
 	answerClipboard,
 	clipboardAsked,
 	create,
 	free,
 	palette,
+	lines,
 	pwd,
+	resize,
+	scrollTop,
 	setDefaultColors,
+	setScrollback,
 	takeClipboard,
 	takeEvents,
 	takeReplies,
@@ -24,7 +30,7 @@ import {
 	ShellStep,
 } from "./vtEffects";
 import { pushAll } from "./vtNative";
-import { ascii, withVt } from "./vtRig";
+import { ascii, linefeedLines, withVt } from "./vtRig";
 
 test "a cursor position query is answered with the cursor's place" {
 	assert withVt(20, 4, (vt: Vt): void => {
@@ -91,6 +97,77 @@ test "OSC 133 marks reach the host in order: a primary prompt, and a command don
 		vt.writeText("\x1b]133;D\x07");
 		assert stepsOf(vt.takeEvents().shell) == "done -1  false";
 		assert vt.takeEvents().shell.length == 0;
+	});
+}
+
+function promptAnchor(vt: Vt): int32 {
+	for (const m of vt.takeEvents().shell) {
+		if (m.step === ShellStep.Prompt) { return m.at; }
+	}
+	return -1;
+}
+
+function anchorText(vt: Vt, id: int32): string {
+	const row = vt.anchorRow(id);
+	if (!row.ok) { return "<failed>"; }
+	const y = row.value;
+	if (y === null) { return "<none>"; }
+	vt.scrollTop();
+	if (!vt.update().ok) { return "<update failed>"; }
+	const shown = vt.lines();
+	if (!shown.ok || y >= (shown.value.length as int32)) { return `${y}:<off screen>`; }
+	return `${y}:${shown.value[y]}`;
+}
+
+test "an OSC 133 anchor stays on its prompt through 100 scrolled lines and a narrowing resize" {
+	assert withVt(20, 8, (vt: Vt): void => {
+		vt.writeText("aaaaaaaaaaaaaaa\r\nbbbbbbbbbbbbbbb\r\n\x1b]133;A\x07$ ls");
+		const at = promptAnchor(vt);
+		assert anchorText(vt, at) == "2:$ ls";
+		vt.writeText(linefeedLines(100));
+		assert anchorText(vt, at) == "2:$ ls";
+		assert vt.resize(10, 8).ok;
+		assert anchorText(vt, at) == "4:$ ls";
+	});
+}
+
+test "a command's done mark carries anchors on its prompt, its output and the row after it" {
+	assert withVt(20, 6, (vt: Vt): void => {
+		vt.writeText("\x1b]133;A\x07$ make\r\n\x1b]133;C\x07ok\r\n\x1b]133;D;1\x07");
+		const marks = vt.takeEvents().shell;
+		assert marks.length == 2;
+		const done = marks[1];
+		assert done.step === ShellStep.CommandDone;
+		if (done.step === ShellStep.CommandDone) {
+			const prompt = done.done.prompt;
+			const output = done.done.output;
+			assert prompt !== null && output !== null;
+			if (prompt !== null && output !== null) {
+				assert anchorText(vt, prompt) == "0:$ make";
+				assert anchorText(vt, output) == "1:ok";
+			}
+			assert anchorText(vt, done.done.end) == "2:";
+		}
+	});
+}
+
+test "an anchor whose row left scrollback has no value, and the table drops it and keeps its cap" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		assert vt.setScrollback(10).ok;
+		vt.writeText("\x1b]133;A\x07$ ");
+		const pruned = promptAnchor(vt);
+		vt.writeText(linefeedLines(5000));
+		assert anchorText(vt, pruned) == "<none>";
+		vt.writeText("\x1b]133;A\x07".repeat(ANCHOR_CAP + 10));
+		const marks = vt.takeEvents().shell;
+		assert vt.effects.anchors.length == ANCHOR_CAP;
+		assert vt.effects.anchors[0].id != pruned;
+		const first = marks[0];
+		const last = marks[marks.length - 1];
+		if (first.step === ShellStep.Prompt && last.step === ShellStep.Prompt) {
+			assert anchorText(vt, first.at) == "<none>";
+			assert anchorText(vt, last.at) != "<none>";
+		}
 	});
 }
 

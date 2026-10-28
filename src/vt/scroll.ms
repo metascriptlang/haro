@@ -10,9 +10,11 @@ import {
 	GhosttyTerminalScreen,
 	GhosttyTerminalScrollViewportTag,
 	GhosttyTerminalScrollbar,
+	GhosttyTrackedGridRef,
 	ghostty_tracked_grid_ref_point,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { Vt } from "./terminal";
+import { anchorIndex } from "./vtEffects";
 import {
 	checked,
 	gridRefRow,
@@ -43,14 +45,24 @@ export function alternateScreen(this vt: Vt): Result<boolean, VtError> {
 	return Result.ok(screen == GhosttyTerminalScreen.GHOSTTY_TERMINAL_SCREEN_ALTERNATE);
 }
 
-export function anchoredRow(this vt: Vt): Result<int32 | null, VtError> {
+function screenRow(tracked: GhosttyTrackedGridRef): Result<int32 | null, VtError> {
 	let at: GhosttyPointCoordinate = { x: 0, y: 0 };
 	const screen = GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN;
-	const r = ghostty_tracked_grid_ref_point(vt.anchor, screen, at);
+	const r = ghostty_tracked_grid_ref_point(tracked, screen, at);
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
 	try checked(r, VtError.ReadFailed);
 	const row: int32 | null = at.y as int32;
 	return Result.ok(row);
+}
+
+export function anchoredRow(this vt: Vt): Result<int32 | null, VtError> {
+	return screenRow(vt.anchor);
+}
+
+export function anchorRow(this vt: Vt, id: int32): Result<int32 | null, VtError> {
+	const i = vt.effects.anchorIndex(id);
+	if (i < 0) { return Result.ok(null); }
+	return screenRow(vt.effects.anchors[i].tracked);
 }
 
 export function anchorTop(this vt: Vt): Result<void, VtError> {

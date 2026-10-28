@@ -6,7 +6,7 @@ import { homeDir } from "std/os";
 import { changeStamp, ensureDir, exists, readFile, writeFile } from "std/fs";
 import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
-import { Rgb } from "../vt/vt";
+import { CommandDone, Rgb } from "../vt/vt";
 import { Faces, installedFaces } from "./fonts";
 import {
 	HookPane,
@@ -337,11 +337,22 @@ test "an onCommandDone in config.ms gets the exit code, command and duration, an
 	assert hooks !== null;
 	if (hooks === null) { return; }
 	assert hooks.prompted(UNHEARD).ok;
-	assert hooks.commandDone(UNHEARD, { exitCode: 0, command: "make", durationMs: 12.5 }).ok;
-	const failed = hooks.commandDone(UNHEARD, { exitCode: 2, command: "make", durationMs: 12.5 });
+	assert hooks.commandDone(UNHEARD, ran(0, "make", 12.5)).ok;
+	const failed = hooks.commandDone(UNHEARD, ran(2, "make", 12.5));
 	assert !failed.ok && failed.error.includes("make 2 12.5"), failed.ok ? "" : failed.error;
-	const unknown = hooks.commandDone(UNHEARD, { exitCode: null, command: "", durationMs: null });
+	const unknown = hooks.commandDone(UNHEARD, ran(null, "", null));
 	assert !unknown.ok && unknown.error.includes("no code for"), unknown.ok ? "" : unknown.error;
+}
+
+function ran(exitCode: int32 | null, command: string, durationMs: float64 | null): CommandDone {
+	return {
+		exitCode: exitCode,
+		command: command,
+		durationMs: durationMs,
+		prompt: null,
+		output: null,
+		end: 0,
+	};
 }
 
 const UNHEARD: HookPane = {
@@ -377,7 +388,7 @@ test "an onCommandDone that calls send and notify reaches the pane it runs for, 
 	assert hooks !== null;
 	if (hooks === null) { return; }
 	const heard: Heard = { said: [] };
-	assert hooks.commandDone(paneHeard(heard), { exitCode: 2, command: "make", durationMs: 1.5 }).ok;
+	assert hooks.commandDone(paneHeard(heard), ran(2, "make", 1.5)).ok;
 	assert heard.said.join("|") == "send echo make\n|notify make|exit 2", heard.said.join("|");
 	assert calledOutsideHooks().ok;
 

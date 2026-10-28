@@ -247,8 +247,18 @@ export function vtScroll(terminal: GhosttyTerminal, tag: GhosttyTerminalScrollVi
 	scrollViewport(terminal, v);
 }
 
+export function vtTrack(
+	terminal: GhosttyTerminal,
+	tag: GhosttyPointTag,
+	x: int32,
+	y: int32,
+	out ref: GhosttyTrackedGridRef,
+): GhosttyResult {
+	return gridRefTrack(terminal, pointAt(tag, x, y), ref);
+}
+
 export function vtTopTrack(terminal: GhosttyTerminal, out ref: GhosttyTrackedGridRef): GhosttyResult {
-	return gridRefTrack(terminal, pointAt(GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, 0, 0), ref);
+	return vtTrack(terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, 0, 0, ref);
 }
 
 export function vtTopAnchor(ref: GhosttyTrackedGridRef, terminal: GhosttyTerminal): GhosttyResult {

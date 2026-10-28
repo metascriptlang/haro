@@ -7,6 +7,7 @@ import {
 	GhosttyClipboardWriteReply,
 	GhosttyClipboardWriteResult,
 	GhosttyDeviceAttributes,
+	GhosttyPointTag,
 	GhosttyRenderState,
 	GhosttySemanticPromptKind,
 	GhosttySemanticPromptPromptKind,
@@ -15,8 +16,12 @@ import {
 	GhosttyTerminal,
 	GhosttyTerminalData,
 	GhosttyTerminalDesktopNotification,
+	GhosttyTerminalScreen,
 	GhosttyTerminalSemanticPrompt,
+	GhosttyTrackedGridRef,
 	ghostty_render_state_update,
+	ghostty_tracked_grid_ref_free,
+	ghostty_tracked_grid_ref_has_value,
 	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { Handle } from "std/ffi";
@@ -29,6 +34,7 @@ import {
 	pushAll,
 	terminalGet,
 	vtEffectsWire,
+	vtTrack,
 } from "./vtNative";
 import { VtError } from "./vtTypes";
 
@@ -44,12 +50,24 @@ export interface Effects {
 	readFrame: Vec<uint8> | null;
 	readAsked: boolean;
 	running: Running | null;
+	promptAt: int32 | null;
+	anchors: Vec<TrackedAnchor>;
+	nextAnchor: int32;
 }
 
 struct Running {
 	command: string;
 	startedMs: float64;
+	prompt: int32 | null;
+	output: int32;
 }
+
+export struct TrackedAnchor {
+	id: int32;
+	tracked: GhosttyTrackedGridRef;
+}
+
+export const ANCHOR_CAP = 1024;
 
 export function openEffects(
 	terminal: GhosttyTerminal,
@@ -65,6 +83,9 @@ export function openEffects(
 		readFrame: null,
 		readAsked: false,
 		running: null,
+		promptAt: null,
+		anchors: [],
+		nextAnchor: 0,
 	};
 	if (vtEffectsWire(terminal, Handle.borrow(e).ptr) != 0) {
 		closeEffects(terminal);
@@ -75,6 +96,62 @@ export function openEffects(
 
 export function closeEffects(terminal: GhosttyTerminal): void {
 	const _cleared = vtEffectsWire(terminal, null);
+}
+
+function dropLostAnchors(this e: Effects): void {
+	let kept: Vec<TrackedAnchor> = [];
+	for (const a of e.anchors) {
+		if (ghostty_tracked_grid_ref_has_value(a.tracked)) {
+			kept.push(a);
+		} else {
+			ghostty_tracked_grid_ref_free(a.tracked);
+		}
+	}
+	e.anchors = kept;
+}
+
+function onPrimaryScreen(terminal: GhosttyTerminal): boolean {
+	let screen = GhosttyTerminalScreen.GHOSTTY_TERMINAL_SCREEN_ALTERNATE;
+	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN;
+	return ok(terminalGet(terminal, key, screen)) &&
+		screen == GhosttyTerminalScreen.GHOSTTY_TERMINAL_SCREEN_PRIMARY;
+}
+
+function anchorCursor(this e: Effects, terminal: GhosttyTerminal): int32 {
+	const id = e.nextAnchor;
+	e.nextAnchor += 1;
+	e.dropLostAnchors();
+	let x: uint16 = 0;
+	let y: uint16 = 0;
+	let tracked: GhosttyTrackedGridRef;
+	const active = GhosttyPointTag.GHOSTTY_POINT_TAG_ACTIVE;
+	const placed = onPrimaryScreen(terminal) &&
+		ok(terminalGet(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_CURSOR_X, x)) &&
+		ok(terminalGet(terminal, GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_CURSOR_Y, y)) &&
+		ok(vtTrack(terminal, active, x as int32, y as int32, tracked));
+	if (!placed) { return id; }
+	if (e.anchors.length >= ANCHOR_CAP) { ghostty_tracked_grid_ref_free(e.anchors.shift().tracked); }
+	e.anchors.push({ id: id, tracked: tracked });
+	return id;
+}
+
+export function anchorIndex(this e: Effects, id: int32): int32 {
+	let low = 0;
+	let high = e.anchors.length as int32;
+	while (low < high) {
+		const mid = (low + high) >> 1;
+		if (e.anchors[mid].id < id) {
+			low = mid + 1;
+		} else {
+			high = mid;
+		}
+	}
+	return low < (e.anchors.length as int32) && e.anchors[low].id == id ? low : -1;
+}
+
+export function freeAnchors(this e: Effects): void {
+	for (const a of e.anchors) { ghostty_tracked_grid_ref_free(a.tracked); }
+	e.anchors = [];
 }
 
 function effectsAt(p: Ptr<void>): Effects {
@@ -252,23 +329,33 @@ function semanticPrompt(
 		GhosttySemanticPromptKind.GHOSTTY_SEMANTIC_PROMPT_PROMPT_START => {
 			if (event.prompt_kind != primary) { return; }
 			e.running = null;
-			e.events.shell.push({ step: ShellStep.Prompt });
+			const at = e.anchorCursor(terminal);
+			e.promptAt = at;
+			e.events.shell.push({ step: ShellStep.Prompt, at: at });
 		},
 		GhosttySemanticPromptKind.GHOSTTY_SEMANTIC_PROMPT_OUTPUT_START => {
 			e.running = {
 				command: wellFormedPrefix(event.command, COMMAND_BYTES),
 				startedMs: performance.now(),
+				prompt: e.promptAt,
+				output: e.anchorCursor(terminal),
 			};
+			e.promptAt = null;
 		},
 		GhosttySemanticPromptKind.GHOSTTY_SEMANTIC_PROMPT_COMMAND_END => {
 			const running = e.running;
+			const prompt = running === null ? e.promptAt : running.prompt;
 			e.running = null;
+			e.promptAt = null;
 			e.events.shell.push({
 				step: ShellStep.CommandDone,
 				done: {
 					exitCode: event.has_exit_code ? event.exit_code : null,
 					command: running?.command ?? "",
 					durationMs: running === null ? null : performance.now() - running.startedMs,
+					prompt: prompt,
+					output: running === null ? null : running.output,
+					end: e.anchorCursor(terminal),
 				},
 			});
 		},
@@ -348,6 +435,9 @@ export struct CommandDone {
 	exitCode: int32 | null;
 	command: string;
 	durationMs: float64 | null;
+	prompt: int32 | null;
+	output: int32 | null;
+	end: int32;
 }
 
 export enum ShellStep {
@@ -356,7 +446,7 @@ export enum ShellStep {
 }
 
 export struct ShellMark = match (step: ShellStep) {
-	ShellStep.Prompt => {},
+	ShellStep.Prompt => { at: int32 },
 	ShellStep.CommandDone => { done: CommandDone },
 };
 

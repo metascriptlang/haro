@@ -16,9 +16,10 @@ import { Stats, empty, mark, noteWake } from "./stats";
 import { logStatsEverySecond } from "./statsLog";
 import { familyList, registerFallbacks } from "./fonts";
 import { Config } from "../config/config";
+import { CommandDone } from "../vt/vt";
 import { KeyEvent, OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
-import { KeyAnswer, UNHANDLED, answerKey } from "../config/hooks";
+import { KeyAnswer, UNHANDLED, answerKey, commandDone, prompted } from "../config/hooks";
 import { ConfigWatch, forFile, readConfig, startIn, watchConfig } from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { exitCodeText } from "../controller/term";
@@ -167,6 +168,16 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 			answer: (k: KeyEvent): Result<KeyAnswer, string> => {
 				const hooks = config.loaded.hooks;
 				return hooks === null ? Result.ok(UNHANDLED) : hooks.answerKey(k);
+			},
+		},
+		shellHook: {
+			prompted: (): Result<void, string> => {
+				const hooks = config.loaded.hooks;
+				return hooks === null ? Result.ok(null) : hooks.prompted();
+			},
+			commandDone: (done: CommandDone): Result<void, string> => {
+				const hooks = config.loaded.hooks;
+				return hooks === null ? Result.ok(null) : hooks.commandDone(done);
 			},
 		},
 		events: {

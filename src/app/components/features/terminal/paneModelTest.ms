@@ -2,7 +2,7 @@ import { flush } from "../../../../../../neon/src/core/runtime";
 import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
 import { installClipboardServices } from "../../../../../../neon/src/api/clipboardServices";
 import { Config, defaults } from "../../../../config/config";
-import { writeText } from "../../../../vt/vt";
+import { CommandDone, writeText } from "../../../../vt/vt";
 import { open, NoticeModel } from "../notice/notice";
 import { open, PasteDialogModel } from "../paste/pasteDialog";
 import { Stats, empty } from "../../../stats";
@@ -14,6 +14,7 @@ import {
 	KeyHook,
 	PaneModel,
 	Report,
+	ShellHook,
 	Timing,
 	connectHost,
 	open,
@@ -68,7 +69,18 @@ function timingAt(now: float64): Timing {
 
 const NO_HOOK: KeyHook = { answer: (k: KeyEvent): Result<KeyAnswer, string> => Result.ok(UNHANDLED) };
 
-function paneWith(io: Io, calls: Calls, timing: Timing = timingAt(0), keyHook: KeyHook = NO_HOOK): PaneModel {
+const NO_SHELL_HOOK: ShellHook = {
+	prompted: (): Result<void, string> => Result.ok(null),
+	commandDone: (done: CommandDone): Result<void, string> => Result.ok(null),
+};
+
+function paneWith(
+	io: Io,
+	calls: Calls,
+	timing: Timing = timingAt(0),
+	keyHook: KeyHook = NO_HOOK,
+	shellHook: ShellHook = NO_SHELL_HOOK,
+): PaneModel {
 	const view = View.open();
 	view.fitRows(io.term.shown.length as int32);
 	return PaneModel.open(
@@ -78,6 +90,7 @@ function paneWith(io: Io, calls: Calls, timing: Timing = timingAt(0), keyHook: K
 		reportFor(calls),
 		timing,
 		keyHook,
+		shellHook,
 		"",
 		defaults(),
 		NoticeModel.open(),
@@ -161,6 +174,7 @@ test "an applied frame is stamped by the host's clock into the stats the pane wa
 			reportFor(calls),
 			timingAt(15.5),
 			NO_HOOK,
+			NO_SHELL_HOOK,
 			"",
 			defaults(),
 			NoticeModel.open(),
@@ -518,5 +532,25 @@ test "an onKey that fails is a notice, and the key still reaches the program" {
 		m.refresh();
 		assert m.notice.text == "onKey in config.ms failed: boom";
 		assert w.sent.join("|") == "\r", w.sent.join("|");
+	}).ok;
+}
+
+test "a shell's marks call the config's onCommandDone and onPrompt in order, and a failing hook is a notice" {
+	assert onFresh("\x1b]133;C\x07\x1b]133;D;1\x07\x1b]133;A\x07", (t: Term, sink: Sink): void => {
+		const heard: Written = { sent: [] };
+		const hook: ShellHook = {
+			prompted: (): Result<void, string> => {
+				heard.sent.push("prompt");
+				return Result.err("onPrompt in config.ms failed: boom");
+			},
+			commandDone: (done: CommandDone): Result<void, string> => {
+				heard.sent.push(`done ${done.exitCode ?? -1} ${done.durationMs !== null}`);
+				return Result.ok(null);
+			},
+		};
+		const m = paneWith(Io.open(t), noCalls(), timingAt(0), NO_HOOK, hook);
+		m.refresh();
+		assert heard.sent.join("|") == "done 1 true|prompt", heard.sent.join("|");
+		assert m.notice.text == "onPrompt in config.ms failed: boom";
 	}).ok;
 }

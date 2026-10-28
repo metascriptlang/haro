@@ -10,7 +10,7 @@ import { familyFont } from "../../../../../../neon/src/platform/void/host";
 import { spriteCellFor } from "../../../../../../void/src/void2d/font";
 import { gridSize } from "../../../../grid/size";
 import { CellInk } from "../../../../grid/lines";
-import { MouseGeometry, geometryOf } from "../../../../vt/vt";
+import { CommandDone, MouseGeometry, ShellMark, ShellStep, geometryOf } from "../../../../vt/vt";
 import { Config, fontPx } from "../../../../config/config";
 import { KeyAnswer } from "../../../../config/hooks";
 import { KeyEvent } from "../../../../keys/keys";
@@ -68,6 +68,11 @@ export interface KeyHook {
 	answer: (k: KeyEvent) => Result<KeyAnswer, string>;
 }
 
+export interface ShellHook {
+	prompted: () => Result<void, string>;
+	commandDone: (done: CommandDone) => Result<void, string>;
+}
+
 export interface HostEvents {
 	onWake: (handler: () => void) => void;
 	onCloseKey: (handler: () => void) => void;
@@ -79,6 +84,7 @@ export interface AppHost {
 	report: Report;
 	timing: Timing;
 	keyHook: KeyHook;
+	shellHook: ShellHook;
 	events: HostEvents;
 	fontFamily: string;
 }
@@ -90,6 +96,7 @@ export interface PaneModel {
 	report: Report;
 	timing: Timing;
 	keyHook: KeyHook;
+	shellHook: ShellHook;
 	stats: Stats;
 	started: Config;
 	shellStarted: boolean;
@@ -130,6 +137,7 @@ export function open(
 	report: Report,
 	timing: Timing,
 	keyHook: KeyHook,
+	shellHook: ShellHook,
 	fontFamily: string,
 	started: Config,
 	notice: NoticeModel,
@@ -158,6 +166,7 @@ export function open(
 		report: report,
 		timing: timing,
 		keyHook: keyHook,
+		shellHook: shellHook,
 		stats: stats,
 		started: started,
 		shellStarted: false,
@@ -291,6 +300,7 @@ function applied(this m: PaneModel, got: IoFrame): void {
 		if (notification !== null && !m.cursor.focused) {
 			m.desktop.notify(notification.title, notification.body);
 		}
+		for (const mark of f.shell) { m.marked(mark); }
 		if (f.held) {
 			m.stats.tally.held += 1;
 			m.watchHold();
@@ -316,6 +326,13 @@ function applied(this m: PaneModel, got: IoFrame): void {
 	}
 	const exit = got.exit;
 	if (exit !== null) { m.shellEnded(exit); }
+}
+
+function marked(this m: PaneModel, mark: ShellMark): void {
+	const ran = mark.step === ShellStep.CommandDone
+		? m.shellHook.commandDone(mark.done)
+		: m.shellHook.prompted();
+	if (!ran.ok) { m.notify(ran.error); }
 }
 
 function painted(this m: PaneModel, rows: FrameRows): void {

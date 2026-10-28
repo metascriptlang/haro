@@ -16,6 +16,7 @@ int vtEffectsWire(GhosttyTerminal terminal, void* effects) {
 		{ GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, (const void*)haroVtDesktopNotification },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*)haroVtClipboardWrite },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ, (const void*)haroVtClipboardRead },
+		{ GHOSTTY_TERMINAL_OPT_SEMANTIC_PROMPT, (const void*)haroVtSemanticPrompt },
 	};
 	int failed = ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, effects) != GHOSTTY_SUCCESS;
 	for (size_t i = 0; i < sizeof callbacks / sizeof callbacks[0]; i++) {

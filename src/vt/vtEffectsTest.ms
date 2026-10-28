@@ -17,7 +17,12 @@ import {
 	write,
 	writeText,
 } from "./vt";
-import { NOTIFICATION_BODY_BYTES, NOTIFICATION_TITLE_BYTES } from "./vtEffects";
+import {
+	NOTIFICATION_BODY_BYTES,
+	NOTIFICATION_TITLE_BYTES,
+	ShellMark,
+	ShellStep,
+} from "./vtEffects";
 import { pushAll } from "./vtNative";
 import { ascii, withVt } from "./vtRig";
 
@@ -65,6 +70,27 @@ test "a desktop notification reaches the host once, by OSC 9 with a body and OSC
 			assert rxvt.body == "all green";
 		}
 		assert vt.takeEvents().notification === null;
+	});
+}
+
+function stepsOf(marks: Vec<ShellMark>): string {
+	return marks.map((m: ShellMark): string => {
+		if (m.step === ShellStep.Prompt) { return "prompt"; }
+		return `done ${m.done.exitCode ?? -1} ${m.done.command} ${m.done.durationMs !== null}`;
+	}).join("|");
+}
+
+test "OSC 133 marks reach the host in order: a primary prompt, and a command done with its exit code" {
+	assert withVt(40, 4, (vt: Vt): void => {
+		vt.writeText("\x1b]133;A\x07$ \x1b]133;P;k=r\x07\x1b]133;B\x07");
+		assert stepsOf(vt.takeEvents().shell) == "prompt";
+		vt.writeText("make test\r\n\x1b]133;C;cmdline_url=make%20test\x07ok\r\n\x1b]1");
+		assert stepsOf(vt.takeEvents().shell) == "";
+		vt.writeText("33;D;3\x07\x1b]133;A\x07$ ");
+		assert stepsOf(vt.takeEvents().shell) == "done 3 make test true|prompt";
+		vt.writeText("\x1b]133;D\x07");
+		assert stepsOf(vt.takeEvents().shell) == "done -1  false";
+		assert vt.takeEvents().shell.length == 0;
 	});
 }
 

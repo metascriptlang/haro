@@ -14,8 +14,11 @@ export {
 	VtError,
 } from "./vtTypes";
 export {
+	CommandDone,
 	DesktopNotification,
 	Effects,
+	ShellMark,
+	ShellStep,
 	VtEvents,
 } from "./vtEffects";
 export {

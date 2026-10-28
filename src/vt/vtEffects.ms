@@ -8,11 +8,14 @@ import {
 	GhosttyClipboardWriteResult,
 	GhosttyDeviceAttributes,
 	GhosttyRenderState,
+	GhosttySemanticPromptKind,
+	GhosttySemanticPromptPromptKind,
 	GhosttySizeReportSize,
 	GhosttyString,
 	GhosttyTerminal,
 	GhosttyTerminalData,
 	GhosttyTerminalDesktopNotification,
+	GhosttyTerminalSemanticPrompt,
 	ghostty_render_state_update,
 	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
@@ -40,6 +43,12 @@ export interface Effects {
 	clipboard: string | null;
 	readFrame: Vec<uint8> | null;
 	readAsked: boolean;
+	running: Running | null;
+}
+
+struct Running {
+	command: string;
+	startedMs: float64;
 }
 
 export function openEffects(
@@ -55,6 +64,7 @@ export function openEffects(
 		clipboard: null,
 		readFrame: null,
 		readAsked: false,
+		running: null,
 	};
 	if (vtEffectsWire(terminal, Handle.borrow(e).ptr) != 0) {
 		closeEffects(terminal);
@@ -228,6 +238,44 @@ function desktopNotification(
 	};
 }
 
+const COMMAND_BYTES = 4096;
+
+@exportName("haroVtSemanticPrompt")
+function semanticPrompt(
+	terminal: GhosttyTerminal,
+	effects: Ptr<void>,
+	event: Readonly<Ptr<GhosttyTerminalSemanticPrompt>>,
+): void {
+	const e = effectsAt(effects);
+	const primary = GhosttySemanticPromptPromptKind.GHOSTTY_SEMANTIC_PROMPT_PROMPT_PRIMARY;
+	match (event.kind) {
+		GhosttySemanticPromptKind.GHOSTTY_SEMANTIC_PROMPT_PROMPT_START => {
+			if (event.prompt_kind != primary) { return; }
+			e.running = null;
+			e.events.shell.push({ step: ShellStep.Prompt });
+		},
+		GhosttySemanticPromptKind.GHOSTTY_SEMANTIC_PROMPT_OUTPUT_START => {
+			e.running = {
+				command: wellFormedPrefix(event.command, COMMAND_BYTES),
+				startedMs: performance.now(),
+			};
+		},
+		GhosttySemanticPromptKind.GHOSTTY_SEMANTIC_PROMPT_COMMAND_END => {
+			const running = e.running;
+			e.running = null;
+			e.events.shell.push({
+				step: ShellStep.CommandDone,
+				done: {
+					exitCode: event.has_exit_code ? event.exit_code : null,
+					command: running?.command ?? "",
+					durationMs: running === null ? null : performance.now() - running.startedMs,
+				},
+			});
+		},
+		_ => {},
+	}
+}
+
 const OSC52_REPLY = "\x1b]52;";
 const SHORTEST_OSC52_REPLY = "\x1b]52;c;\x07".byteLength;
 
@@ -296,11 +344,34 @@ export struct DesktopNotification {
 	body: string;
 }
 
+export struct CommandDone {
+	exitCode: int32 | null;
+	command: string;
+	durationMs: float64 | null;
+}
+
+export enum ShellStep {
+	Prompt,
+	CommandDone,
+}
+
+export struct ShellMark = match (step: ShellStep) {
+	ShellStep.Prompt => {},
+	ShellStep.CommandDone => { done: CommandDone },
+};
+
 export struct VtEvents {
 	bells: int32;
 	titleChanged: boolean;
 	pwdChanged: boolean;
 	notification: DesktopNotification | null;
+	shell: Vec<ShellMark>;
 }
 
-export const NO_EVENTS: VtEvents = { bells: 0, titleChanged: false, pwdChanged: false, notification: null };
+export const NO_EVENTS: VtEvents = {
+	bells: 0,
+	titleChanged: false,
+	pwdChanged: false,
+	notification: null,
+	shell: [],
+};

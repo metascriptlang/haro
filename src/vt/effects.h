@@ -18,5 +18,6 @@ void haroVtClipboardWrite(GhosttyTerminal terminal, void* effects, GhosttyClipbo
 void haroVtClipboardRead(GhosttyTerminal terminal, void* effects, GhosttyClipboardRead* read);
 GhosttyString haroVtXtversion(GhosttyTerminal terminal, void* effects);
 void haroVtDesktopNotification(GhosttyTerminal terminal, void* effects, GhosttyTerminalDesktopNotification* notification);
+void haroVtSemanticPrompt(GhosttyTerminal terminal, void* effects, GhosttyTerminalSemanticPrompt* event);
 
 #endif

@@ -103,8 +103,8 @@ features are written against that surface as user code and plugins rather than b
 
 The surface is the `haro` package (`assets/haro/index.ms`), and `~/.config/haro/config.ms` is
 written against it. `config`, its `onKey`, `onPrompt` and `onCommandDone` hooks, and the host
-routines `send`, `notify`, `decorate` and `undecorate` exist today; the other hooks, routines and
-plugins below are planned:
+routines `send`, `notify`, `decorate`, `undecorate`, `annotate` and `unannotate` exist today, with
+the `markFailed` helper; the other hooks, routines and plugins below are planned:
 
 - `export const config: HaroConfig`: the settings, checked by msc against the type before Haro
   reads them: a config table, but typed.
@@ -125,8 +125,13 @@ plugins below are planned:
   `onCommandDone` anchors (`at`; `prompt`, `output`, `end`), places in the text that follow it
   through scroll, resize and scrollback and die when it is pruned, and `decorate({ from, to,
   background?, foreground? })` tints the whole rows from one anchor up to the next, on the
-  primary screen only; a colour that is not `#rrggbb` is the hook's error. Haro's own blocks are written as the first plugin, so the
-  surface is proven by a real consumer.
+  primary screen only; a colour that is not `#rrggbb` is the hook's error. Virtual text exists:
+  `annotate({ at, text, foreground?, background? })` draws text right-aligned on the anchor's row,
+  in the row's foreground drawn faint unless given colours, hidden where it would overlap the row's
+  own text, and never selected or copied, because it is not in the terminal's text. Haro's own
+  blocks are written as the first plugin, so the surface is proven by a real consumer: the
+  package's `markFailed(e)`, called from `onCommandDone`, tints a failed block and notes
+  `exit 2 · 1.3s` on its prompt row; it is off until a config calls it.
 
 ### It needs Raiser embedded in Haro
 

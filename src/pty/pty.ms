@@ -10,12 +10,13 @@ when (linux) {
 
 import { isDir } from "std/fs";
 import { langEntry } from "./locale";
+import { ShellLaunch, launchOf } from "./shellIntegration";
 import { Pty, PtyError } from "./transport";
 
 extern function ptyOpen(
 	commandLine: cstring,
 	cwd: cstring,
-	langEntry: cstring,
+	env: Readonly<Span<uint8>>,
 	cols: int32,
 	rows: int32,
 	widthPx: int32,
@@ -36,6 +37,8 @@ extern function ptyExitCode(id: int32): int32;
 extern function ptyClose(id: int32): void;
 
 when (!windows) {
+	import { env } from "std/process";
+
 	@include("unistd.h");
 
 	extern function ptyMaster(id: int32): int32;
@@ -46,6 +49,25 @@ when (!windows) {
 
 export struct NativePty { id: int32; }
 
+function launchIn(commandLine: string, shellScripts: string | null): ShellLaunch {
+	when (!windows) {
+		if (shellScripts !== null) {
+			const inherited = (name: string): string => { return env.get(name); };
+			return launchOf(commandLine, shellScripts, inherited);
+		}
+	}
+	return { commandLine: commandLine, env: [] };
+}
+
+function envBlock(entries: Vec<string>): Vec<uint8> {
+	let block: Vec<uint8> = [];
+	for (const entry of entries) {
+		for (const b of entry.asBytes()) { block.push(b); }
+		block.push(0);
+	}
+	return block;
+}
+
 export function open(
 	this typeof NativePty,
 	commandLine: string,
@@ -54,12 +76,16 @@ export function open(
 	cwd: string | null = null,
 	cellWidth: int32 = 0,
 	cellHeight: int32 = 0,
+	shellScripts: string | null = null,
 ): Result<NativePty, PtyError> {
 	const dir = cwd !== null && isDir(cwd) ? cwd : "";
+	let launch = launchIn(commandLine, shellScripts);
+	const lang = langEntry();
+	if (lang != "") { launch.env.push(lang); }
 	const id = ptyOpen(
-		commandLine,
+		launch.commandLine,
 		dir,
-		langEntry(),
+		envBlock(launch.env),
 		cols,
 		rows,
 		cols * cellWidth,
@@ -170,7 +196,16 @@ export function spawn(
 	cwd: string | null = null,
 	cellWidth: int32 = 0,
 	cellHeight: int32 = 0,
+	shellScripts: string | null = null,
 ): Result<Pty, PtyError> {
-	const opened = try NativePty.open(commandLine, cols, rows, cwd, cellWidth, cellHeight);
+	const opened = try NativePty.open(
+		commandLine,
+		cols,
+		rows,
+		cwd,
+		cellWidth,
+		cellHeight,
+		shellScripts,
+	);
 	return Result.ok(opened.toPty());
 }

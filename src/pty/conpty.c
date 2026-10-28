@@ -217,7 +217,7 @@ static wchar_t* expanded(wchar_t* text) {
 }
 
 static int openIn(
-	int id, const char* commandLine, const char* cwd, const char* langEntry,
+	int id, const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
 	int cols, int rows, int widthPx, int heightPx
 ) {
 	HANDLE inRead = NULL, inWrite = NULL, outRead = NULL, outWrite = NULL;
@@ -295,12 +295,12 @@ static int openIn(
 }
 
 int ptyOpen(
-	const char* commandLine, const char* cwd, const char* langEntry,
+	const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
 	int cols, int rows, int widthPx, int heightPx
 ) {
 	int id = claimSlot();
 	if (id < 0) return -1;
-	int opened = openIn(id, commandLine, cwd, langEntry, cols, rows, widthPx, heightPx);
+	int opened = openIn(id, commandLine, cwd, envBlock, envLen, cols, rows, widthPx, heightPx);
 	if (opened < 0) releaseSlot(id);
 	return opened;
 }

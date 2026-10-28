@@ -246,21 +246,47 @@ static const char* const REPLACED[] = {
 };
 static const char* const ADDED[] = { "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=Haro" };
 
-static int replaced(const char* entry, int newPwd, int newLang) {
+static size_t nameLength(const char* entry) {
+	const char* eq = strchr(entry, '=');
+	return eq ? (size_t)(eq - entry) : strlen(entry);
+}
+
+static int sameName(const char* a, const char* b) {
+	size_t n = nameLength(a);
+	return n == nameLength(b) && strncmp(a, b, n) == 0;
+}
+
+static int replaced(const char* entry, char* const* given, size_t givenCount, int newPwd) {
 	if (newPwd && strncmp(entry, "PWD=", 4) == 0) return 1;
-	if (newLang && strncmp(entry, "LANG=", 5) == 0) return 1;
 	for (size_t i = 0; i < COUNT(REPLACED); i++) {
 		if (strncmp(entry, REPLACED[i], strlen(REPLACED[i])) == 0) return 1;
+	}
+	for (size_t i = 0; i < givenCount; i++) {
+		if (sameName(entry, given[i])) return 1;
 	}
 	return 0;
 }
 
-static char** childEnv(const char* cwd, const char* langEntry, char** pwd) {
+static char** entriesOf(const uint8_t* block, int64_t len, size_t* count) {
+	*count = 0;
+	if (len > 0 && block[len - 1] != '\0') return NULL;
+	for (int64_t i = 0; i < len; i++) {
+		if (block[i] == '\0') (*count)++;
+	}
+	char** entries = malloc((*count + 1) * sizeof *entries);
+	if (entries == NULL) return NULL;
+	size_t n = 0;
+	for (int64_t at = 0; at < len; at += (int64_t)strlen((const char*)block + at) + 1) {
+		entries[n++] = (char*)block + at;
+	}
+	return entries;
+}
+
+static char** childEnv(const char* cwd, char* const* given, size_t givenCount, char** pwd) {
 	int newPwd = cwd[0] != '\0';
-	int newLang = langEntry[0] != '\0';
 	size_t count = 0;
 	while (environ[count] != NULL) count++;
-	char** env = malloc((count + COUNT(ADDED) + 3) * sizeof *env);
+	char** env = malloc((count + COUNT(ADDED) + givenCount + 2) * sizeof *env);
 	*pwd = newPwd ? malloc(strlen(cwd) + sizeof "PWD=") : NULL;
 	if (env == NULL || (newPwd && *pwd == NULL)) {
 		free(env);
@@ -269,10 +295,10 @@ static char** childEnv(const char* cwd, const char* langEntry, char** pwd) {
 	}
 	size_t n = 0;
 	for (size_t i = 0; i < count; i++) {
-		if (!replaced(environ[i], newPwd, newLang)) env[n++] = environ[i];
+		if (!replaced(environ[i], given, givenCount, newPwd)) env[n++] = environ[i];
 	}
 	for (size_t i = 0; i < COUNT(ADDED); i++) env[n++] = (char*)ADDED[i];
-	if (newLang) env[n++] = (char*)langEntry;
+	for (size_t i = 0; i < givenCount; i++) env[n++] = given[i];
 	if (newPwd) {
 		strcpy(*pwd, "PWD=");
 		strcat(*pwd, cwd);
@@ -311,13 +337,16 @@ static struct winsize winsizeOf(int cols, int rows, int widthPx, int heightPx) {
 }
 
 static int openIn(
-	int id, const char* commandLine, const char* cwd, const char* langEntry,
+	int id, const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
 	int cols, int rows, int widthPx, int heightPx
 ) {
 	if (commandLine[strspn(commandLine, " \t\n")] == '\0') return -1;
 	char* argv[] = { "/bin/sh", "-c", (char*)commandLine, NULL };
 	char* pwd = NULL;
-	char** env = childEnv(cwd, langEntry, &pwd);
+	size_t givenCount = 0;
+	char** given = entriesOf(envBlock, envLen, &givenCount);
+	char** env = given == NULL ? NULL : childEnv(cwd, given, givenCount, &pwd);
+	free(given);
 	int failed[2];
 	if (env == NULL || pipe(failed) != 0) {
 		free(env);
@@ -390,12 +419,12 @@ static int openIn(
 }
 
 int ptyOpen(
-	const char* commandLine, const char* cwd, const char* langEntry,
+	const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
 	int cols, int rows, int widthPx, int heightPx
 ) {
 	int id = claimSlot();
 	if (id < 0) return -1;
-	int opened = openIn(id, commandLine, cwd, langEntry, cols, rows, widthPx, heightPx);
+	int opened = openIn(id, commandLine, cwd, envBlock, envLen, cols, rows, widthPx, heightPx);
 	if (opened < 0) releaseSlot(id);
 	return opened;
 }

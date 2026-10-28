@@ -5,7 +5,7 @@
 
 void ptySetWake(void (*wake)(void));
 int ptyOpen(
-	const char* commandLine, const char* cwd, const char* langEntry,
+	const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
 	int cols, int rows, int widthPx, int heightPx
 );
 int64_t ptyRead(int id, uint8_t* buf, int64_t cap);

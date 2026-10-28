@@ -1,6 +1,6 @@
 import { PtyError } from "./transport";
 import { NativePty, busy, close, exitCode, exitSignal, open, read, resize, spawn, toPty, wait, write } from "./pty";
-import { ensureDir, normalize, remove, removeAll, writeFile } from "std/fs";
+import { ensureDir, exists, normalize, remove, removeAll, writeFile } from "std/fs";
 import { tmpDir } from "std/os";
 import { drainText, withPty } from "./ptyRig";
 
@@ -294,6 +294,69 @@ when (!windows) {
 			const start: float64 = performance.now();
 			p.close();
 			assert performance.now() - start < 3000;
+		}
+	}
+
+	function closeMs(this p: NativePty): float64 {
+		const start: float64 = performance.now();
+		p.close();
+		return performance.now() - start;
+	}
+
+	test "closing returns while the child writes to the terminal on its way out after hangup" {
+		const opened = NativePty.open("trap 'head -c 200000 /dev/zero; exit' HUP; while :; do sleep 0.1; done", 80, 24);
+		assert opened.ok;
+		if (opened.ok) {
+			const _quiet = opened.value.quietWaitMs(300);
+			assert opened.value.closeMs() < 3000;
+		}
+	}
+
+	function readUntil(this p: NativePty, wanted: string, withinMs: float64): boolean {
+		let buf: Vec<uint8> = new Array(4096);
+		let text = "";
+		const start: float64 = performance.now();
+		while (!text.includes(wanted) && performance.now() - start < withinMs) {
+			const ready = p.wait(100);
+			if (ready.ok && ready.value) {
+				const r = p.read(buf);
+				if (r.ok) { text += buf[0..r.value].asString(); }
+			}
+		}
+		return text.includes(wanted);
+	}
+
+	const BASH5 = "/opt/homebrew/bin/bash";
+
+	function bashCloseMs(flags: string, typed: string, waitForPrompt: boolean): float64 {
+		const home = `${normalize(tmpDir())}/haroBashHome${getpid()}`;
+		if (!ensureDir(home).ok) { return -1; }
+		const opened = NativePty.open(`HOME='${home}' ${BASH5} ${flags}`, 80, 24);
+		let took: float64 = -1;
+		if (opened.ok) {
+			const p = opened.value;
+			const prompted = p.readUntil("$ ", 5000);
+			let bytes: Vec<uint8> = [...typed.asBytes()];
+			const wrote = p.write(bytes).ok;
+			const settled = !waitForPrompt || p.readUntil("$ ", 5000);
+			const closed = p.closeMs();
+			took = prompted && wrote && settled ? closed : -1;
+		}
+		const _removed = removeAll(home);
+		return took;
+	}
+
+	test "closing returns right after exit is typed into a login shell" {
+		if (exists(BASH5)) {
+			const took = bashCloseMs("-l", "exit\r", false);
+			assert took >= 0 && took < 3000;
+		}
+	}
+
+	test "closing returns right after a shell finishes a command" {
+		if (exists(BASH5)) {
+			const took = bashCloseMs("", "sh -c 'exit 3'\r", true);
+			assert took >= 0 && took < 3000;
 		}
 	}
 

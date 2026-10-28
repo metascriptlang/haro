@@ -20,14 +20,32 @@ export interface KeyAnswer {
 	send?: string;
 }
 
+export type Anchor = int32;
+
+export interface Prompt {
+	at: Anchor;
+}
+
 export interface CommandDone {
 	exitCode?: number;
 	command: string;
 	durationMs?: number;
+	prompt?: Anchor;
+	output?: Anchor;
+	end: Anchor;
+}
+
+export interface Decoration {
+	from: Anchor;
+	to: Anchor;
+	background?: string;
+	foreground?: string;
 }
 
 export extern function send(text: string): void from "haro.send";
 export extern function notify(title: string, body: string): void from "haro.notify";
+export extern function decorate(d: Decoration): int32 from "haro.decorate";
+export extern function undecorate(id: int32): void from "haro.undecorate";
 
 export interface HaroConfig {
 	fontFamily?: string[];
@@ -42,7 +60,7 @@ export interface HaroConfig {
 	keybinds?: Keybind[];
 	optionAsAlt?: "neither" | "left" | "right" | "both";
 	onKey?: (e: KeyPress) => KeyAnswer;
-	onPrompt?: () => void;
+	onPrompt?: (e: Prompt) => void;
 	onCommandDone?: (e: CommandDone) => void;
 }
 

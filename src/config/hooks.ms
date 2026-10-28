@@ -1,5 +1,7 @@
 import { KeyEvent, KeyAction, KeyMod } from "../keys/keys";
-import { CommandDone } from "../vt/vt";
+import { CommandDone, Rgb } from "../vt/vt";
+import { RowTint } from "../grid/lines";
+import { rgbOf } from "./config";
 import {
 	Interpreter,
 	RaiserHostValue,
@@ -17,6 +19,7 @@ import {
 	implementRoutine,
 	unboxBool,
 	unboxString,
+	unboxValue,
 } from "../../../../.metascript/src/embed/index";
 
 export interface Hooks {
@@ -29,36 +32,104 @@ export interface Hooks {
 export interface HookPane {
 	send: (text: string) => void;
 	notify: (title: string, body: string) => void;
+	decorate: (from: int32, to: int32, tint: RowTint) => int32;
+	undecorate: (id: int32) => void;
 }
 
 interface Running {
 	pane: HookPane | null;
 	outside: string;
+	refused: string;
 }
 
-const running: Running = { pane: null, outside: "" };
+const running: Running = { pane: null, outside: "", refused: "" };
 
 // A call outside a hook is reported after evaluation, not raised at the call: compiler card 2026-10-28-embed-a-host-routine-cannot-raise-an-error-into-the-script.
-function onPane(name: string, act: (pane: HookPane) => void): RaiserValue {
+function onPane(
+	name: string,
+	outside: RaiserValue,
+	act: (pane: HookPane) => RaiserValue,
+): RaiserValue {
 	const pane = running.pane;
-	if (pane !== null) {
-		act(pane);
-	} else if (running.outside == "") {
-		running.outside = name;
+	if (pane !== null) { return act(pane); }
+	if (running.outside == "") { running.outside = name; }
+	return outside;
+}
+
+const NO_DECORATION = -1;
+
+struct Asked {
+	from: int32;
+	to: int32;
+	tint: RowTint;
+}
+
+function anchorField(d: RaiserHostValue, name: string): int32 | null {
+	const v = d.field(name).root;
+	return v.kind == RaiserValueKind.Int ? v.intVal as int32 : null;
+}
+
+function colourField(d: RaiserHostValue, name: string): Result<Rgb | null, string> {
+	const v = d.field(name);
+	if (v.root.kind == RaiserValueKind.Nil) { return Result.ok(null); }
+	const key = `decorate's ${name}`;
+	if (v.root.kind != RaiserValueKind.String) {
+		return Result.err(`${key} must be a #rrggbb string`);
 	}
-	return boxVoid();
+	const colour: Rgb | null = try rgbOf(v.text(), key);
+	return Result.ok(colour);
+}
+
+function askedOf(d: RaiserHostValue): Result<Asked, string> {
+	const from = anchorField(d, "from");
+	const to = anchorField(d, "to");
+	if (from === null || to === null) {
+		return Result.err(
+			"decorate needs from and to anchors, taken from onPrompt or onCommandDone",
+		);
+	}
+	const bg = try colourField(d, "background");
+	const fg = try colourField(d, "foreground");
+	return Result.ok({ from: from, to: to, tint: { fg: fg, bg: bg } });
+}
+
+function decorated(pane: HookPane, d: RaiserHostValue): RaiserValue {
+	const asked = askedOf(d);
+	if (!asked.ok) {
+		if (running.refused == "") { running.refused = asked.error; }
+		return boxInt(NO_DECORATION);
+	}
+	return boxInt(pane.decorate(asked.value.from, asked.value.to, asked.value.tint));
 }
 
 export function implementRoutines(): void {
 	running.outside = "";
 	implementRoutine("haro.send", (args: RaiserValue[]): RaiserValue => {
 		const text = unboxString(args[0]);
-		return onPane("send", (pane: HookPane): void => { pane.send(text); });
+		return onPane("send", boxVoid(), (pane: HookPane): RaiserValue => {
+			pane.send(text);
+			return boxVoid();
+		});
 	});
 	implementRoutine("haro.notify", (args: RaiserValue[]): RaiserValue => {
 		const title = unboxString(args[0]);
 		const body = unboxString(args[1]);
-		return onPane("notify", (pane: HookPane): void => { pane.notify(title, body); });
+		return onPane("notify", boxVoid(), (pane: HookPane): RaiserValue => {
+			pane.notify(title, body);
+			return boxVoid();
+		});
+	});
+	implementRoutine("haro.decorate", (args: RaiserValue[]): RaiserValue => {
+		const d = unboxValue(args[0]);
+		const refused = boxInt(NO_DECORATION);
+		return onPane("decorate", refused, (pane: HookPane): RaiserValue => decorated(pane, d));
+	});
+	implementRoutine("haro.undecorate", (args: RaiserValue[]): RaiserValue => {
+		const id = args[0].kind == RaiserValueKind.Int ? args[0].intVal as int32 : NO_DECORATION;
+		return onPane("undecorate", boxVoid(), (pane: HookPane): RaiserValue => {
+			pane.undecorate(id);
+			return boxVoid();
+		});
 	});
 }
 
@@ -79,8 +150,12 @@ function runFor(
 ): Result<RaiserHostValue, string> {
 	const outer = running.pane;
 	running.pane = pane;
+	running.refused = "";
 	const got = callRoutine(h.interp, routine, args);
 	running.pane = outer;
+	const refused = running.refused;
+	running.refused = "";
+	if (got.ok && refused != "") { return Result.err(refused); }
 	return got;
 }
 
@@ -119,12 +194,16 @@ export function answerKey(this h: Hooks, pane: HookPane, k: KeyEvent): Result<Ke
 	});
 }
 
-export function prompted(this h: Hooks, pane: HookPane): Result<void, string> {
-	const got = h.runFor(pane, h.onPrompt, []);
+function anchor(id: int32 | null): RaiserHostValue {
+	return hostValue(id === null ? boxVoid() : boxInt(id));
+}
+
+export function prompted(this h: Hooks, pane: HookPane, at: int32): Result<void, string> {
+	const got = h.runFor(pane, h.onPrompt, [hostObject(["at"], [anchor(at)])]);
 	return got.ok ? Result.ok(null) : Result.err(`onPrompt in config.ms failed: ${got.error}`);
 }
 
-const DONE_FIELDS = ["exitCode", "command", "durationMs"];
+const DONE_FIELDS = ["exitCode", "command", "durationMs", "prompt", "output", "end"];
 
 function doneOf(d: CommandDone): RaiserHostValue {
 	const exitCode = d.exitCode;
@@ -133,6 +212,9 @@ function doneOf(d: CommandDone): RaiserHostValue {
 		hostValue(exitCode === null ? boxVoid() : boxInt(exitCode)),
 		hostString(d.command),
 		hostValue(durationMs === null ? boxVoid() : boxFloat(durationMs)),
+		anchor(d.prompt),
+		anchor(d.output),
+		anchor(d.end),
 	]);
 }
 

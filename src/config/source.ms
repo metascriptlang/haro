@@ -7,6 +7,7 @@ import { changeStamp, ensureDir, exists, readFile, writeFile } from "std/fs";
 import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
 import { CommandDone, Rgb } from "../vt/vt";
+import { RowTint } from "../grid/lines";
 import { Faces, installedFaces } from "./fonts";
 import {
 	HookPane,
@@ -65,7 +66,7 @@ interface Evaluated {
 
 function runnerOf(importPath: string): string {
 	return `import { config as written } from ${JSON.stringify(importPath)};\n` +
-		`import { CommandDone, HaroConfig, KeyAnswer, KeyPress } from "haro";\n` +
+		`import { CommandDone, HaroConfig, KeyAnswer, KeyPress, Prompt } from "haro";\n` +
 		"const config: HaroConfig = written;\n" +
 		"export function configJson(): string {\n" +
 		"\tconst { onKey: _onKey, onPrompt: _onPrompt, onCommandDone: _onCommandDone, ...settings } = config;\n" +
@@ -79,9 +80,9 @@ function runnerOf(importPath: string): string {
 		"\tconst hook = config.onKey;\n" +
 		"\treturn hook === undefined ? { handled: false } : hook(e);\n" +
 		"}\n" +
-		"export function onPrompt(): void {\n" +
+		"export function onPrompt(e: Prompt): void {\n" +
 		"\tconst hook = config.onPrompt;\n" +
-		"\tif (hook !== undefined) { hook(); }\n" +
+		"\tif (hook !== undefined) { hook(e); }\n" +
 		"}\n" +
 		"export function onCommandDone(e: CommandDone): void {\n" +
 		"\tconst hook = config.onCommandDone;\n" +
@@ -336,7 +337,7 @@ test "an onCommandDone in config.ms gets the exit code, command and duration, an
 	const hooks = hooked.value.hooks;
 	assert hooks !== null;
 	if (hooks === null) { return; }
-	assert hooks.prompted(UNHEARD).ok;
+	assert hooks.prompted(UNHEARD, 0).ok;
 	assert hooks.commandDone(UNHEARD, ran(0, "make", 12.5)).ok;
 	const failed = hooks.commandDone(UNHEARD, ran(2, "make", 12.5));
 	assert !failed.ok && failed.error.includes("make 2 12.5"), failed.ok ? "" : failed.error;
@@ -358,6 +359,8 @@ function ran(exitCode: int32 | null, command: string, durationMs: float64 | null
 const UNHEARD: HookPane = {
 	send: (text: string): void => {},
 	notify: (title: string, body: string): void => {},
+	decorate: (from: int32, to: int32, tint: RowTint): int32 => -1,
+	undecorate: (id: int32): void => {},
 };
 
 interface Heard {
@@ -368,7 +371,16 @@ function paneHeard(heard: Heard): HookPane {
 	return {
 		send: (text: string): void => { heard.said.push(`send ${text}`); },
 		notify: (title: string, body: string): void => { heard.said.push(`notify ${title}|${body}`); },
+		decorate: (from: int32, to: int32, tint: RowTint): int32 => {
+			heard.said.push(`decorate ${from}..${to} ${tintText(tint.bg)} ${tintText(tint.fg)}`);
+			return 40 + (heard.said.length as int32);
+		},
+		undecorate: (id: int32): void => { heard.said.push(`undecorate ${id}`); },
 	};
+}
+
+function tintText(c: Rgb | null): string {
+	return c === null ? "-" : `${c.r},${c.g},${c.b}`;
 }
 
 test "an onCommandDone that calls send and notify reaches the pane it runs for, and a call outside a hook is the config's error" {
@@ -398,5 +410,47 @@ test "an onCommandDone that calls send and notify reaches the pane it runs for, 
 	if (!outside.ok) {
 		assert outside.error == "config.ms called send outside a hook, and send acts only on the pane a hook runs for",
 			outside.error;
+	}
+}
+
+test "an onCommandDone that decorates reaches the pane with its anchors and colours, and a bad colour is the hook's error" {
+	const dir = `${cwd()}/out/decorateConfig`;
+	assert ensureDir(dir).ok;
+	const path = `${dir}/config.ms`;
+	const head = `import { HaroConfig, decorate, undecorate } from "haro";\n\n`;
+	assert writeFile(path, `${head}let last = -1;\nexport const config: HaroConfig = {\n` +
+		`\tonPrompt: (e) => { if (last >= 0 && e.at > 100) { undecorate(last); } },\n` +
+		`\tonCommandDone: (e) => {\n` +
+		`\t\tif (e.prompt === undefined) { return; }\n` +
+		`\t\tconst background = e.exitCode == 2 ? "#3a1c24" : "red";\n` +
+		`\t\tlast = decorate({ from: e.prompt, to: e.end, background: background });\n` +
+		`\t\tdecorate({ from: e.end, to: e.end, foreground: "#00FF00" });\n` +
+		`\t},\n};\n`).ok;
+	const hooked = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
+	assert hooked.ok, hooked.ok ? "" : hooked.error;
+	if (!hooked.ok) { return; }
+	const hooks = hooked.value.hooks;
+	assert hooks !== null;
+	if (hooks === null) { return; }
+	const heard: Heard = { said: [] };
+	const done: CommandDone = { ...ran(2, "make", 1.5), prompt: 3, output: 4, end: 5 };
+	assert hooks.commandDone(paneHeard(heard), done).ok;
+	assert hooks.prompted(paneHeard(heard), 101).ok;
+	assert hooks.commandDone(paneHeard(heard), { ...ran(2, "make", 1.5), end: 9 }).ok;
+	assert heard.said.join("|") == "decorate 3..5 58,28,36 -|decorate 5..5 - 0,255,0|undecorate 41",
+		heard.said.join("|");
+	const refused = hooks.commandDone(paneHeard(heard), { ...done, exitCode: 1 });
+	assert !refused.ok;
+	if (!refused.ok) {
+		const expected = `decorate's background: "red" is not a #rrggbb colour`;
+		assert refused.error == `onCommandDone in config.ms failed: ${expected}`, refused.error;
+	}
+
+	const topLevel = `${head}decorate({ from: 0, to: 1 });\nexport const config: HaroConfig = {};\n`;
+	assert writeFile(path, topLevel).ok;
+	const outside = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
+	assert !outside.ok;
+	if (!outside.ok) {
+		assert outside.error.includes("called decorate outside a hook"), outside.error;
 	}
 }

@@ -106,7 +106,10 @@ function readString(v: JsonValue, key: string): Result<string, string> {
 }
 
 function readColor(v: JsonValue, key: string): Result<Rgb, string> {
-	const text = try readString(v, key);
+	return rgbOf(try readString(v, key), key);
+}
+
+export function rgbOf(text: string, key: string): Result<Rgb, string> {
 	const notColour = `${key}: "${text}" is not a #rrggbb colour`;
 	if (text.length != 7 || text[0] != "#") { return Result.err(notColour); }
 	const r = channelAt(text, 1);

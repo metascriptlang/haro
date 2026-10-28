@@ -20,7 +20,14 @@ import { CommandDone } from "../vt/vt";
 import { KeyEvent, OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
 import { HookPane, KeyAnswer, UNHANDLED, answerKey, commandDone, prompted } from "../config/hooks";
-import { ConfigWatch, forFile, readConfig, startIn, watchConfig } from "./configWatch";
+import {
+	ConfigWatch,
+	forFile,
+	readConfig,
+	shellScripts,
+	startIn,
+	watchConfig,
+} from "./configWatch";
 import { smoke, smokeFlood, smokeReplay } from "./smoke";
 import { exitCodeText } from "../controller/term";
 import { Shell, closeThen, closed, opened, portOf } from "../controller/shell";
@@ -241,7 +248,12 @@ async function started(shell: Shell): Promise<void> {
 
 async function runShell(command: string): Promise<int32> {
 	const cwd = config.startIn(probableCli(), homeDir());
-	const shell = new Shell({ command: command, cwd: cwd, recording: null });
+	const shell = new Shell({
+		command: command,
+		cwd: cwd,
+		recording: null,
+		shellScripts: config.shellScripts(),
+	});
 	await started(shell);
 	const view = View.open();
 	ptySetWake(ionWakeLoop);

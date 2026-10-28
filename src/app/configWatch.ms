@@ -7,9 +7,10 @@ import { homeDir } from "std/os";
 
 // Polled until compiler card 2026-09-26-await-on-fs-watch-never-resumes lets a watch resume in an Ion window
 const CONFIG_POLL_MS = 1000;
-const API = resourcePath() == ""
-	? `${cwd().replaceAll("\\", "/")}/assets/haro`
-	: `${resourcePath().replaceAll("\\", "/")}/assets/haro`;
+const ASSETS = resourcePath() == ""
+	? `${cwd().replaceAll("\\", "/")}/assets`
+	: `${resourcePath().replaceAll("\\", "/")}/assets`;
+const API = `${ASSETS}/haro`;
 const METASCRIPT = resourcePath() == ""
 	? `${homeDir().replaceAll("\\", "/")}/.metascript`
 	: `${resourcePath().replaceAll("\\", "/")}/metascript`;
@@ -63,6 +64,10 @@ export function startIn(this w: ConfigWatch, probableCli: boolean, home: string)
 	const skipped = `workingDirectory ${dir} does not exist, so the shell starts where Haro was started`;
 	w.error = w.error == "" ? skipped : `${w.error}; ${skipped}`;
 	return null;
+}
+
+export function shellScripts(this w: ConfigWatch): string | null {
+	return w.loaded.config.shellIntegration ? `${ASSETS}/shell` : null;
 }
 
 export function watchConfig(

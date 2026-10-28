@@ -42,6 +42,7 @@ export struct PtySpec {
 	command: string;
 	cwd: string | null;
 	recording: string | null;
+	shellScripts: string | null;
 }
 
 function openerOf(this spec: PtySpec): OpenPty {
@@ -54,8 +55,9 @@ function openerOf(this spec: PtySpec): OpenPty {
 	}
 	const command = spec.command;
 	const cwd = spec.cwd;
+	const scripts = spec.shellScripts;
 	return (cols: int32, rows: int32, cellWidth: int32, cellHeight: int32): Result<Pty, PtyError> => {
-		return NativePty.spawn(command, cols, rows, cwd, cellWidth, cellHeight);
+		return NativePty.spawn(command, cols, rows, cwd, cellWidth, cellHeight, scripts);
 	};
 }
 

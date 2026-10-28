@@ -179,6 +179,8 @@ export extern function encoderSetOptionAsAlt(
 	option: GhosttyKeyEncoderOption,
 	ref value: GhosttyOptionAsAlt,
 ): void from "ghostty_key_encoder_setopt";
+export extern function eventSetUtf8(event: GhosttyKeyEvent, utf8: Readonly<Span<uint8>>): void
+	from "ghostty_key_event_set_utf8";
 export extern function encoderEncode(
 	encoder: GhosttyKeyEncoder,
 	event: GhosttyKeyEvent,

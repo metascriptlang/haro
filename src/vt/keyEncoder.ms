@@ -13,7 +13,6 @@ import {
 	ghostty_key_event_set_action,
 	ghostty_key_event_set_key,
 	ghostty_key_event_set_unshifted_codepoint,
-	ghostty_key_event_set_utf8,
 	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import {
@@ -29,6 +28,7 @@ import {
 	MODE_BRACKETED_PASTE,
 	encoderEncode,
 	encoderSetOptionAsAlt,
+	eventSetUtf8,
 	eventSetConsumedMods,
 	eventSetMods,
 	modeOn,
@@ -96,11 +96,8 @@ export function encode(
 	eventSetMods(k.event, modsMask(e.mods));
 	eventSetConsumedMods(k.event, modsMask(e.consumedMods));
 	ghostty_key_event_set_unshifted_codepoint(k.event, e.unshifted);
-	if (textSafe(e.text)) {
-		ghostty_key_event_set_utf8(k.event, e.text, e.text.byteLength as size_t);
-	} else {
-		ghostty_key_event_set_utf8(k.event, "", 0);
-	}
+	const text: Vec<uint8> = textSafe(e.text) ? [...e.text.asBytes()] : [];
+	eventSetUtf8(k.event, text);
 	let written: size_t = 0;
 	const r = encoderEncode(k.encoder, k.event, buf, written);
 	if (r == GhosttyResult.GHOSTTY_OUT_OF_SPACE) { return Result.err(KeysError.NoRoom); }

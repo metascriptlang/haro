@@ -25,16 +25,19 @@ import {
 	ShellMark,
 } from "../vt/vt";
 import {
+	Annotation,
 	Decor,
 	Decoration,
 	FrameError,
 	FrameRows,
 	Shown,
+	annotate,
 	decorate,
 	empty,
 	fitShown,
 	planRows,
 	relitRows,
+	unannotate,
 	undecorate,
 } from "./rows";
 import { Mark } from "./mark";
@@ -300,6 +303,14 @@ export function decorate(this t: Term, d: Decoration): void {
 
 export function undecorate(this t: Term, id: int32): void {
 	t.decor.undecorate(id);
+}
+
+export function annotate(this t: Term, a: Annotation): void {
+	t.decor.annotate(a);
+}
+
+export function unannotate(this t: Term, id: int32): void {
+	t.decor.unannotate(id);
 }
 
 function sendBytes(this s: Session, bytes: Readonly<Span<uint8>>): Result<boolean, TermError> {

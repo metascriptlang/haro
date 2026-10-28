@@ -9,9 +9,32 @@ import {
 	writeText,
 } from "../vt/vt";
 import { View, fitRows, open, paint, text } from "../app/frame";
-import { Frame, Term, TermError, decorate, pumpFrame, undecorate } from "./term";
+import { RowNote } from "../grid/lines";
+import {
+	Frame,
+	Term,
+	TermError,
+	annotate,
+	decorate,
+	pumpFrame,
+	unannotate,
+	undecorate,
+} from "./term";
 import { RowUpdate } from "./rows";
-import { Sink, onFresh, onPty, onTerm, onUnfit } from "./terminalRig";
+import {
+	Sink,
+	boardOf,
+	drag,
+	handled,
+	onFresh,
+	onPty,
+	onTerm,
+	onUnfit,
+	settled,
+	spotAt,
+} from "./terminalRig";
+import { Controls, open } from "./controls";
+import { copySelection } from "./clipboard";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
 
@@ -251,5 +274,67 @@ test "a decoration tints its block's rows, moves up with them, and hides on the 
 		t.undecorate(1);
 		assert paintedYs(view, t.pumpFrame()) == "0";
 		assert tintedYs(view, 5) == "";
+	}).ok;
+}
+
+function notedYs(view: View, rows: int32): string {
+	let out: string[] = [];
+	for (let y = 0; y < rows; y++) {
+		if (view.text(y).endsWith("exit 1")) { out.push(`${y}`); }
+	}
+	return out.join(",");
+}
+
+const EXIT_NOTE: RowNote = { text: "exit 1", fg: null, bg: null };
+
+test "an annotation sits on its anchor's row, moves up with it, and hides on the alternate screen" {
+	const ran = "x\r\n" +
+		"\x1b]133;A\x07$ false\r\n\x1b]133;C\x07oops\r\n\x1b]133;D;1\x07\x1b]133;A\x07$ ";
+	assert onFresh(ran, (t: Term, sink: Sink): void => {
+		const view = View.open();
+		view.fitRows(5);
+		const first = t.pumpFrame();
+		assert first.ok;
+		if (!first.ok) { return; }
+		const rows = first.value.rows;
+		if (rows !== null) { view.paint(rows); }
+		const block = failedBlock(first.value.shell);
+		t.annotate({ id: 1, at: block[0], note: EXIT_NOTE });
+		assert paintedYs(view, t.pumpFrame()) == "1";
+		assert view.text(1) == "$ false       exit 1", view.text(1);
+		const s = t.session;
+		assert s !== null;
+		if (s === null) { return; }
+		s.vt.writeText("a\r\nb\r\nc");
+		assert !paintedYs(view, t.pumpFrame()).split(",").includes("0");
+		assert notedYs(view, 5) == "0";
+		s.vt.writeText("\x1b[?1049h");
+		paintedYs(view, t.pumpFrame());
+		assert notedYs(view, 5) == "";
+		s.vt.writeText("\x1b[?1049l");
+		paintedYs(view, t.pumpFrame());
+		assert notedYs(view, 5) == "0";
+		t.unannotate(1);
+		assert paintedYs(view, t.pumpFrame()) == "0";
+		assert notedYs(view, 5) == "";
+	}).ok;
+}
+
+test "copying a row that carries an annotation returns only the row's own text" {
+	const ran = "\x1b]133;A\x07$ false\r\n\x1b]133;C\x07oops\r\n\x1b]133;D;1\x07\x1b]133;A\x07$ ";
+	assert onFresh(ran, (t: Term, sink: Sink): void => {
+		const first = t.pumpFrame();
+		assert first.ok;
+		if (!first.ok) { return; }
+		t.annotate({ id: 1, at: failedBlock(first.value.shell)[0], note: EXIT_NOTE });
+		const view = View.open();
+		view.fitRows(5);
+		paintedYs(view, t.pumpFrame());
+		assert notedYs(view, 5) == "0";
+		const c = Controls.open();
+		const board = boardOf("");
+		assert drag(c, t, board, spotAt(0, 0), spotAt(19, 0));
+		assert handled(settled(board, c, t, c.copySelection(t)));
+		assert board.copied == "$ false", board.copied;
 	}).ok;
 }

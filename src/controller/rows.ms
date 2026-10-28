@@ -1,4 +1,4 @@
-import { CellInk, GridLine, RowTint, cellOnRow, line } from "../grid/lines";
+import { CellInk, GridLine, RowNote, RowTint, cellOnRow, line } from "../grid/lines";
 import { PlanKind, plan } from "../screen/plan";
 import {
 	Cursor,
@@ -28,6 +28,7 @@ export struct Shown {
 	cell: int32;
 	ink: CellInk | null;
 	tint: RowTint | null;
+	note: RowNote | null;
 }
 
 export struct Decoration {
@@ -37,16 +38,24 @@ export struct Decoration {
 	tint: RowTint;
 }
 
+export struct Annotation {
+	id: int32;
+	at: int32;
+	note: RowNote;
+}
+
 export const DECORATION_CAP = 256;
 
 export interface Decor {
 	decorations: Vec<Decoration>;
+	annotations: Vec<Annotation>;
 	tints: Vec<RowTint | null>;
+	notes: Vec<RowNote | null>;
 	stale: boolean;
 }
 
 export function empty(this typeof Decor): Decor {
-	return { decorations: [], tints: [], stale: false };
+	return { decorations: [], annotations: [], tints: [], notes: [], stale: false };
 }
 
 export function decorate(this d: Decor, decoration: Decoration): void {
@@ -64,8 +73,27 @@ export function undecorate(this d: Decor, id: int32): void {
 	d.stale = true;
 }
 
+export function annotate(this d: Decor, annotation: Annotation): void {
+	if (d.annotations.length >= DECORATION_CAP) { d.annotations.shift(); }
+	d.annotations.push(annotation);
+	d.stale = true;
+}
+
+export function unannotate(this d: Decor, id: int32): void {
+	let kept: Vec<Annotation> = [];
+	for (const x of d.annotations) {
+		if (x.id != id) { kept.push(x); }
+	}
+	d.annotations = kept;
+	d.stale = true;
+}
+
 function tintAt(this d: Decor, y: int32): RowTint | null {
 	return y < (d.tints.length as int32) ? d.tints[y] : null;
+}
+
+function noteAt(this d: Decor, y: int32): RowNote | null {
+	return y < (d.notes.length as int32) ? d.notes[y] : null;
 }
 
 function over(under: RowTint | null, tint: RowTint): RowTint {
@@ -76,11 +104,15 @@ function over(under: RowTint | null, tint: RowTint): RowTint {
 function retint(this d: Decor, vt: Vt, rows: int32): Result<void, VtError> {
 	d.stale = false;
 	d.tints = [];
-	if (d.decorations.length == 0) { return Result.ok(null); }
+	d.notes = [];
+	if (d.decorations.length == 0 && d.annotations.length == 0) { return Result.ok(null); }
 	if (try vt.alternateScreen()) { return Result.ok(null); }
 	const offset = try vt.scrollOffset();
 	let live: Vec<Decoration> = [];
-	for (let i = 0; i < rows; i++) { d.tints.push(null); }
+	for (let i = 0; i < rows; i++) {
+		d.tints.push(null);
+		d.notes.push(null);
+	}
 	for (const decoration of d.decorations) {
 		const from = try vt.anchorRow(decoration.from);
 		const to = try vt.anchorRow(decoration.to);
@@ -91,6 +123,15 @@ function retint(this d: Decor, vt: Vt, rows: int32): Result<void, VtError> {
 		}
 	}
 	d.decorations = live;
+	let noted: Vec<Annotation> = [];
+	for (const annotation of d.annotations) {
+		const at = try vt.anchorRow(annotation.at);
+		if (at === null) { continue; }
+		noted.push(annotation);
+		const y = at - offset;
+		if (y >= 0 && y < rows) { d.notes[y] = annotation.note; }
+	}
+	d.annotations = noted;
 	return Result.ok(null);
 }
 
@@ -110,7 +151,9 @@ export function none(this typeof FrameRows): FrameRows {
 }
 
 export function fitShown(this ref shown: Vec<Shown>, rows: int32): void {
-	while ((shown.length as int32) < rows) { shown.push({ cell: -1, ink: null, tint: null }); }
+	while ((shown.length as int32) < rows) {
+		shown.push({ cell: -1, ink: null, tint: null, note: null });
+	}
 	while ((shown.length as int32) > rows) { shown.pop(); }
 }
 
@@ -120,12 +163,14 @@ function rowOf(
 	cursor: Cursor | null,
 	ink: CellInk | null,
 	background: Rgb,
-	tint: RowTint | null,
+	decor: Decor,
 ): Result<RowUpdate, FrameError> {
 	const cell = cursor.cellOnRow(row.y);
-	const built = row.line(cell, ink.inkOn(cell), SELECTION, background, tint);
+	const tint = decor.tintAt(row.y);
+	const note = decor.noteAt(row.y);
+	const built = row.line(cell, ink.inkOn(cell), SELECTION, background, tint, note);
 	if (!built.ok) { return Result.err(FrameError.LineFailed); }
-	shown[row.y] = { cell: cell, ink: ink.inkOn(cell), tint: tint };
+	shown[row.y] = { cell: cell, ink: ink.inkOn(cell), tint: tint, note: note };
 	return Result.ok({ y: row.y, line: move built.value });
 }
 
@@ -141,9 +186,11 @@ function relight(
 	for (let i = 0; i < vt.painted.rows.length; i++) {
 		const y = vt.painted.rows[i].y;
 		const cell = cursor.cellOnRow(y);
-		const tint = decor.tintAt(y);
-		if (shown[y].cell != cell || shown[y].ink != ink.inkOn(cell) || shown[y].tint != tint) {
-			const built = try rowOf(shown, vt.painted.rows[i], cursor, ink, background, tint);
+		const was = shown[y];
+		const same = was.cell == cell && was.ink == ink.inkOn(cell) &&
+			was.tint == decor.tintAt(y) && was.note == decor.noteAt(y);
+		if (!same) {
+			const built = try rowOf(shown, vt.painted.rows[i], cursor, ink, background, decor);
 			out.push(move built);
 		}
 	}
@@ -189,8 +236,7 @@ export function planRows(
 	for (let i = 0; i < p.scrolled; i++) { shown.push(shown.shift()); }
 	let rows: Vec<RowUpdate> = [];
 	for (const y of p.ys) {
-		const tint = decor.tintAt(y);
-		const built = try rowOf(shown, vt.painted.rows[y], cursor, ink, p.colors.bg, tint);
+		const built = try rowOf(shown, vt.painted.rows[y], cursor, ink, p.colors.bg, decor);
 		rows.push(move built);
 	}
 	try relight(rows, shown, vt, cursor, ink, p.colors.bg, decor);

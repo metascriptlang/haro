@@ -3,6 +3,7 @@ import { CommandDone } from "../vt/vt";
 import {
 	Interpreter,
 	RaiserHostValue,
+	RaiserValue,
 	RaiserValueKind,
 	Routine,
 	boxBool,
@@ -13,7 +14,9 @@ import {
 	hostObject,
 	hostString,
 	hostValue,
+	implementRoutine,
 	unboxBool,
+	unboxString,
 } from "../../../../.metascript/src/embed/index";
 
 export interface Hooks {
@@ -21,6 +24,63 @@ export interface Hooks {
 	onKey: Routine;
 	onPrompt: Routine;
 	onCommandDone: Routine;
+}
+
+export interface HookPane {
+	send: (text: string) => void;
+	notify: (title: string, body: string) => void;
+}
+
+interface Running {
+	pane: HookPane | null;
+	outside: string;
+}
+
+const running: Running = { pane: null, outside: "" };
+
+function onPane(name: string, act: (pane: HookPane) => void): RaiserValue {
+	const pane = running.pane;
+	if (pane !== null) {
+		act(pane);
+	} else if (running.outside == "") {
+		running.outside = name;
+	}
+	return boxVoid();
+}
+
+export function implementRoutines(): void {
+	running.outside = "";
+	implementRoutine("haro.send", (args: RaiserValue[]): RaiserValue => {
+		const text = unboxString(args[0]);
+		return onPane("send", (pane: HookPane): void => { pane.send(text); });
+	});
+	implementRoutine("haro.notify", (args: RaiserValue[]): RaiserValue => {
+		const title = unboxString(args[0]);
+		const body = unboxString(args[1]);
+		return onPane("notify", (pane: HookPane): void => { pane.notify(title, body); });
+	});
+}
+
+export function calledOutsideHooks(): Result<void, string> {
+	const name = running.outside;
+	running.outside = "";
+	if (name == "") { return Result.ok(null); }
+	return Result.err(
+		`config.ms called ${name} outside a hook, and ${name} acts only on the pane a hook runs for`,
+	);
+}
+
+function runFor(
+	this h: Hooks,
+	pane: HookPane,
+	routine: Routine,
+	args: RaiserHostValue[],
+): Result<RaiserHostValue, string> {
+	const outer = running.pane;
+	running.pane = pane;
+	const got = callRoutine(h.interp, routine, args);
+	running.pane = outer;
+	return got;
 }
 
 export struct KeyAnswer {
@@ -48,8 +108,8 @@ function pressOf(k: KeyEvent): RaiserHostValue {
 	]);
 }
 
-export function answerKey(this h: Hooks, k: KeyEvent): Result<KeyAnswer, string> {
-	const got = callRoutine(h.interp, h.onKey, [pressOf(k)]);
+export function answerKey(this h: Hooks, pane: HookPane, k: KeyEvent): Result<KeyAnswer, string> {
+	const got = h.runFor(pane, h.onKey, [pressOf(k)]);
 	if (!got.ok) { return Result.err(`onKey in config.ms failed: ${got.error}`); }
 	const send = got.value.field("send");
 	return Result.ok({
@@ -58,8 +118,8 @@ export function answerKey(this h: Hooks, k: KeyEvent): Result<KeyAnswer, string>
 	});
 }
 
-export function prompted(this h: Hooks): Result<void, string> {
-	const got = callRoutine(h.interp, h.onPrompt, []);
+export function prompted(this h: Hooks, pane: HookPane): Result<void, string> {
+	const got = h.runFor(pane, h.onPrompt, []);
 	return got.ok ? Result.ok(null) : Result.err(`onPrompt in config.ms failed: ${got.error}`);
 }
 
@@ -75,7 +135,7 @@ function doneOf(d: CommandDone): RaiserHostValue {
 	]);
 }
 
-export function commandDone(this h: Hooks, d: CommandDone): Result<void, string> {
-	const got = callRoutine(h.interp, h.onCommandDone, [doneOf(d)]);
+export function commandDone(this h: Hooks, pane: HookPane, d: CommandDone): Result<void, string> {
+	const got = h.runFor(pane, h.onCommandDone, [doneOf(d)]);
 	return got.ok ? Result.ok(null) : Result.err(`onCommandDone in config.ms failed: ${got.error}`);
 }

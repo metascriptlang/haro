@@ -26,6 +26,9 @@ export interface CommandDone {
 	durationMs?: number;
 }
 
+export extern function send(text: string): void from "haro.send";
+export extern function notify(title: string, body: string): void from "haro.notify";
+
 export interface HaroConfig {
 	fontFamily?: string[];
 	fontSize?: number;

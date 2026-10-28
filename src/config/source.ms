@@ -8,7 +8,15 @@ import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
 import { Rgb } from "../vt/vt";
 import { Faces, installedFaces } from "./fonts";
-import { Hooks, answerKey, commandDone, prompted } from "./hooks";
+import {
+	HookPane,
+	Hooks,
+	answerKey,
+	calledOutsideHooks,
+	commandDone,
+	implementRoutines,
+	prompted,
+} from "./hooks";
 import { KeyAction, KeyMod, NO_MODS, keyEvent, modSet } from "../keys/keys";
 import {
 	callRoutine,
@@ -97,6 +105,7 @@ function evaluate(path: string, dir: string, api: string, metascript: string): R
 		return Result.err(`running config.ms needs MetaScript's std: ${made.error}`);
 	}
 	const interp = made.value;
+	implementRoutines();
 	const ran = evalModule(interp, `${dir}/evaluate.ms`);
 	if (!ran.ok) {
 		return Result.err(ran.error.map(
@@ -105,6 +114,7 @@ function evaluate(path: string, dir: string, api: string, metascript: string): R
 	}
 	const json = try callRoutine(interp, try selectRoutine(interp, "configJson"), []);
 	const hooked = try callRoutine(interp, try selectRoutine(interp, "hooked"), []);
+	try calledOutsideHooks();
 	const hooks: Hooks | null = unboxBool(hooked.root)
 		? {
 			interp: interp,
@@ -297,9 +307,9 @@ test "an onKey in config.ms answers the keys it handles and lets the rest throug
 	const hooks = hooked.value.hooks;
 	assert hooks !== null;
 	if (hooks === null) { return; }
-	const superK = hooks.answerKey(keyEvent(KeyAction.Press, "KeyK", modSet(KeyMod.Super)));
+	const superK = hooks.answerKey(UNHEARD, keyEvent(KeyAction.Press, "KeyK", modSet(KeyMod.Super)));
 	assert superK.ok && superK.value.handled && superK.value.send == "clear\n";
-	const plainK = hooks.answerKey(keyEvent(KeyAction.Press, "KeyK", NO_MODS));
+	const plainK = hooks.answerKey(UNHEARD, keyEvent(KeyAction.Press, "KeyK", NO_MODS));
 	assert plainK.ok && !plainK.value.handled && plainK.value.send == "";
 	assert writeFile(path, `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = { fontSize: 13 };\n`).ok;
 	const plain = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
@@ -326,10 +336,56 @@ test "an onCommandDone in config.ms gets the exit code, command and duration, an
 	const hooks = hooked.value.hooks;
 	assert hooks !== null;
 	if (hooks === null) { return; }
-	assert hooks.prompted().ok;
-	assert hooks.commandDone({ exitCode: 0, command: "make", durationMs: 12.5 }).ok;
-	const failed = hooks.commandDone({ exitCode: 2, command: "make", durationMs: 12.5 });
+	assert hooks.prompted(UNHEARD).ok;
+	assert hooks.commandDone(UNHEARD, { exitCode: 0, command: "make", durationMs: 12.5 }).ok;
+	const failed = hooks.commandDone(UNHEARD, { exitCode: 2, command: "make", durationMs: 12.5 });
 	assert !failed.ok && failed.error.includes("make 2 12.5"), failed.ok ? "" : failed.error;
-	const unknown = hooks.commandDone({ exitCode: null, command: "", durationMs: null });
+	const unknown = hooks.commandDone(UNHEARD, { exitCode: null, command: "", durationMs: null });
 	assert !unknown.ok && unknown.error.includes("no code for"), unknown.ok ? "" : unknown.error;
+}
+
+const UNHEARD: HookPane = {
+	send: (text: string): void => {},
+	notify: (title: string, body: string): void => {},
+};
+
+interface Heard {
+	said: Vec<string>;
+}
+
+function paneHeard(heard: Heard): HookPane {
+	return {
+		send: (text: string): void => { heard.said.push(`send ${text}`); },
+		notify: (title: string, body: string): void => { heard.said.push(`notify ${title}|${body}`); },
+	};
+}
+
+test "an onCommandDone that calls send and notify reaches the pane it runs for, and a call outside a hook is the config's error" {
+	const dir = `${cwd()}/out/routineConfig`;
+	assert ensureDir(dir).ok;
+	const path = `${dir}/config.ms`;
+	const head = `import { HaroConfig, notify, send } from "haro";\n\n`;
+	assert writeFile(path, `${head}export const config: HaroConfig = {\n` +
+		`\tonCommandDone: (e) => {\n` +
+		`\t\tsend(\`echo \${e.command}\\n\`);\n` +
+		`\t\tnotify(e.command, \`exit \${e.exitCode}\`);\n` +
+		`\t},\n};\n`).ok;
+	const hooked = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
+	assert hooked.ok, hooked.ok ? "" : hooked.error;
+	if (!hooked.ok) { return; }
+	const hooks = hooked.value.hooks;
+	assert hooks !== null;
+	if (hooks === null) { return; }
+	const heard: Heard = { said: [] };
+	assert hooks.commandDone(paneHeard(heard), { exitCode: 2, command: "make", durationMs: 1.5 }).ok;
+	assert heard.said.join("|") == "send echo make\n|notify make|exit 2", heard.said.join("|");
+	assert calledOutsideHooks().ok;
+
+	assert writeFile(path, `${head}send("ls\\n");\nexport const config: HaroConfig = { fontSize: 13 };\n`).ok;
+	const outside = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
+	assert !outside.ok;
+	if (!outside.ok) {
+		assert outside.error == "config.ms called send outside a hook, and send acts only on the pane a hook runs for",
+			outside.error;
+	}
 }

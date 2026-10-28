@@ -138,8 +138,9 @@ Haro has evaluated `config.ms` in-process since 2026-10-20 (`src/config/source.m
 Measured that day on macOS, msc `8205756f8`: the release binary went from 6.3 MB to 21.2 MB, and
 an evaluation takes about 0.4 s. An evaluation leaves about 66 MB live after Haro drops the
 interpreter, which is a compiler card: `evalModule` keeps its heap after the host drops it.
-Haro still needs MetaScript installed at `~/.metascript`, as it needed `msc` before; shipping
-the std inside Haro.app is not done.
+A bundled Haro.app evaluates the config against the std it carries in
+`Contents/Resources/metascript` (`scripts/buildApp.sh` copies it there), so it runs without
+MetaScript installed; an unbundled build reads the std from `~/.metascript`.
 
 ### Rejected, and why
 

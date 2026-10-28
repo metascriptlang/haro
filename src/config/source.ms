@@ -8,11 +8,14 @@ import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
 import { Rgb } from "../vt/vt";
 import { Faces, installedFaces } from "./fonts";
+import { Hooks, answerKey } from "./hooks";
+import { KeyAction, KeyMod, NO_MODS, keyEvent, modSet } from "../keys/keys";
 import {
 	callRoutine,
 	createInterpreter,
 	evalModule,
 	selectRoutine,
+	unboxBool,
 } from "../../../../.metascript/src/embed/index";
 
 export interface Loaded {
@@ -20,10 +23,11 @@ export interface Loaded {
 	faces: Vec<Faces>;
 	stamp: string;
 	notice: string;
+	hooks: Hooks | null;
 }
 
 export function empty(this typeof Loaded): Loaded {
-	return { config: defaults(), faces: [], stamp: "", notice: "" };
+	return { config: defaults(), faces: [], stamp: "", notice: "", hooks: null };
 }
 
 export function configPath(): string {
@@ -46,11 +50,30 @@ function packagesOf(api: string): string {
 		"export default config;\n";
 }
 
-function evaluate(path: string, dir: string, api: string, metascript: string): Result<string, string> {
+interface Evaluated {
+	json: string;
+	hooks: Hooks | null;
+}
+
+function runnerOf(importPath: string): string {
+	return `import { config as written } from ${JSON.stringify(importPath)};\n` +
+		`import { HaroConfig, KeyAnswer, KeyPress } from "haro";\n` +
+		"const config: HaroConfig = written;\n" +
+		"export function configJson(): string {\n" +
+		"\tconst { onKey: _onKey, ...settings } = config;\n" +
+		"\treturn JSON.stringify(settings);\n" +
+		"}\n" +
+		"export function hooked(): boolean { return config.onKey !== undefined; }\n" +
+		"export function onKey(e: KeyPress): KeyAnswer {\n" +
+		"\tconst hook = config.onKey;\n" +
+		"\treturn hook === undefined ? { handled: false } : hook(e);\n" +
+		"}\n";
+}
+
+function evaluate(path: string, dir: string, api: string, metascript: string): Result<Evaluated, string> {
 	const target = relative(dir, path);
 	const importPath = target.startsWith(".") || isAbsolute(target) ? target : `./${target}`;
-	const runner = `import { config } from ${JSON.stringify(importPath)};\n` +
-		"export function configJson(): string { return JSON.stringify(config); }\n";
+	const runner = runnerOf(importPath);
 	if (!writeFile(`${dir}/evaluate.ms`, runner).ok) {
 		return Result.err(`cannot write ${dir}/evaluate.ms`);
 	}
@@ -69,9 +92,12 @@ function evaluate(path: string, dir: string, api: string, metascript: string): R
 			(d) => `${d.file}${d.line > 0 ? `:${d.line}:${d.column}` : ""}: ${d.message}`,
 		).join("\n"));
 	}
-	const routine = try selectRoutine(interp, "configJson");
-	const got = try callRoutine(interp, routine, []);
-	return Result.ok(got.text());
+	const json = try callRoutine(interp, try selectRoutine(interp, "configJson"), []);
+	const hooked = try callRoutine(interp, try selectRoutine(interp, "hooked"), []);
+	const hooks: Hooks | null = unboxBool(hooked.root)
+		? { interp: interp, onKey: try selectRoutine(interp, "onKey") }
+		: null;
+	return Result.ok({ json: json.text(), hooks: hooks });
 }
 
 interface FontsFound {
@@ -123,7 +149,7 @@ function decodeCache(lines: string[], stamp: string): Loaded | null {
 			boldItalic: pathOrNull(lines[at + 3]),
 		});
 	}
-	return { config: c.value, faces: faces, stamp: stamp, notice: "" };
+	return { config: c.value, faces: faces, stamp: stamp, notice: "", hooks: null };
 }
 
 export function load(path: string, api: string, metascript: string): Result<Loaded, string> {
@@ -137,12 +163,13 @@ export function load(path: string, api: string, metascript: string): Result<Load
 		if (hit !== null) { return Result.ok(hit); }
 	}
 	if (!ensureDir(dir).ok) { return Result.err(`cannot create ${dir}`); }
-	const json = try evaluate(path, dir, api, metascript);
-	const config = try parse(json);
+	const evaluated = try evaluate(path, dir, api, metascript);
+	const config = try parse(evaluated.json);
 	const fonts = fontsFound(config.fontFamily);
-	const uncached = fonts.notice == "" && !writeFile(cacheFile, encodeCache(stamp, json, fonts.faces)).ok;
+	const cacheable = fonts.notice == "" && evaluated.hooks === null;
+	const uncached = cacheable && !writeFile(cacheFile, encodeCache(stamp, evaluated.json, fonts.faces)).ok;
 	const notice = uncached ? `cannot write ${cacheFile}, so the config is read again next start` : fonts.notice;
-	return Result.ok({ config: config, faces: fonts.faces, stamp: stamp, notice: notice });
+	return Result.ok({ config: config, faces: fonts.faces, stamp: stamp, notice: notice, hooks: evaluated.hooks });
 }
 
 const INSTALLED = `${homeDir().replaceAll("\\", "/")}/.metascript`;
@@ -204,7 +231,7 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 	const typed = evaluate(path, dir, api, INSTALLED);
 	assert typed.ok;
 	if (typed.ok) {
-		const c = parse(typed.value);
+		const c = parse(typed.value.json);
 		assert c.ok && c.value.fontSize == 13 && c.value.keybinds.length == 2;
 	}
 	assert exists(`${dir}/build.ms`);
@@ -230,10 +257,35 @@ test "a config spreads saigonNight from the haro package and keeps its own field
 	const themed = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
 	assert themed.ok;
 	if (themed.ok) {
-		const c = parse(themed.value);
+		const c = parse(themed.value.json);
 		const background: Rgb = { r: 22, g: 22, b: 30 };
 		const brightWhite: Rgb = { r: 172, g: 176, b: 208 };
 		assert c.ok && c.value.fontSize == 13 && c.value.background == background;
 		assert c.ok && c.value.palette.length == 16 && c.value.palette[15] == brightWhite;
 	}
+}
+
+test "an onKey in config.ms answers the keys it handles and lets the rest through" {
+	const dir = `${cwd()}/out/hookedConfig`;
+	assert ensureDir(dir).ok;
+	const path = `${dir}/config.ms`;
+	const config = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = {\n` +
+		`\tfontSize: 13,\n` +
+		`\tonKey: (e) => e.code == "KeyK" && e.super ? { handled: true, send: "clear\\n" } : { handled: false },\n};\n`;
+	assert writeFile(path, config).ok;
+	const hooked = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
+	assert hooked.ok, hooked.ok ? "" : hooked.error;
+	if (!hooked.ok) { return; }
+	const c = parse(hooked.value.json);
+	assert c.ok && c.value.fontSize == 13;
+	const hooks = hooked.value.hooks;
+	assert hooks !== null;
+	if (hooks === null) { return; }
+	const superK = hooks.answerKey(keyEvent(KeyAction.Press, "KeyK", modSet(KeyMod.Super)));
+	assert superK.ok && superK.value.handled && superK.value.send == "clear\n";
+	const plainK = hooks.answerKey(keyEvent(KeyAction.Press, "KeyK", NO_MODS));
+	assert plainK.ok && !plainK.value.handled && plainK.value.send == "";
+	assert writeFile(path, `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = { fontSize: 13 };\n`).ok;
+	const plain = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
+	assert plain.ok && plain.value.hooks === null;
 }

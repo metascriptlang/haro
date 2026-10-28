@@ -5,6 +5,21 @@ export interface Keybind {
 	mode?: "alt" | "~alt";
 }
 
+export interface KeyPress {
+	code: string;
+	text: string;
+	shift: boolean;
+	ctrl: boolean;
+	alt: boolean;
+	super: boolean;
+	repeat: boolean;
+}
+
+export interface KeyAnswer {
+	handled: boolean;
+	send?: string;
+}
+
 export interface HaroConfig {
 	fontFamily?: string[];
 	fontSize?: number;
@@ -17,6 +32,7 @@ export interface HaroConfig {
 	palette?: string[];
 	keybinds?: Keybind[];
 	optionAsAlt?: "neither" | "left" | "right" | "both";
+	onKey?: (e: KeyPress) => KeyAnswer;
 }
 
 export const saigonNight = {

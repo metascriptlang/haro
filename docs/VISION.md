@@ -102,8 +102,8 @@ palette, panels), but Haro keeps a small core and exposes it, and those
 features are written against that surface as user code and plugins rather than built into Haro.
 
 The surface is the `haro` package (`assets/haro/index.ms`), and `~/.config/haro/config.ms` is
-written against it. `config` and its `onKey`, `onPrompt` and `onCommandDone` hooks exist today;
-the other hooks, host routines and plugins below are planned:
+written against it. `config`, its `onKey`, `onPrompt` and `onCommandDone` hooks, and the host
+routines `send` and `notify` exist today; the other hooks, routines and plugins below are planned:
 
 - `export const config: HaroConfig`: the settings, checked by msc against the type before Haro
   reads them: a config table, but typed.
@@ -116,7 +116,9 @@ the other hooks, host routines and plugins below are planned:
   nothing yet. A hook that throws becomes a notice and the terminal carries on.
 - A config with a hook keeps its interpreter for the life of the window, so it is evaluated at
   every start (about 0.5 s) and is not cached; a config without one starts from the cache.
-- Host routines (`send`, `decorate`, `openFloat`, …) act on the terminal.
+- Host routines (`send`, `notify`, `decorate`, `openFloat`, …) act on the terminal. A hook
+  calls them on the pane it runs for: `send` writes text to that pane's shell, `notify` shows a
+  desktop notification. A call outside a hook, at the top level of `config.ms`, refuses the config.
 - Plugins draw in **cells**: floating windows, decorations over a range of
   cells, and virtual text. Haro's own blocks are written as the first plugin, so the
   surface is proven by a real consumer.

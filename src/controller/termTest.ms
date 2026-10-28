@@ -1,7 +1,8 @@
 import { KeyMod } from "../keys/keys";
-import { MouseAction, MouseInput, ShellStep, geometryOf } from "../vt/vt";
+import { MouseAction, MouseInput, Rgb, ShellMark, ShellStep, geometryOf, writeText } from "../vt/vt";
 import { View, fitRows, open, paint, text } from "../app/frame";
-import { Term, TermError } from "./term";
+import { Frame, Term, TermError, decorate, pumpFrame, undecorate } from "./term";
+import { RowUpdate } from "./rows";
 import { Sink, onFresh, onPty, onTerm, onUnfit } from "./terminalRig";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
@@ -183,5 +184,64 @@ test "input the program has not read past its limit is refused as backlogged, no
 		const sent = t.sendText("x");
 		assert !sent.ok;
 		if (!sent.ok) { assert sent.error == TermError.InputBacklogged; }
+	}).ok;
+}
+
+const TINT: Rgb = { r: 58, g: 28, b: 36 };
+
+function tintedYs(view: View, rows: int32): string {
+	let out: string[] = [];
+	for (let y = 0; y < rows; y++) {
+		const runs = view.grid.at(y).line.runs;
+		if (runs.length > 0 && runs[0].bg == TINT) { out.push(`${y}`); }
+	}
+	return out.join(",");
+}
+
+function paintedYs(view: View, frame: Result<Frame, TermError>): string {
+	if (!frame.ok) { return "<failed>"; }
+	const rows = frame.value.rows;
+	if (rows === null) { return "<held>"; }
+	view.paint(rows);
+	return rows.rows.map((r: RowUpdate): string => `${r.y}`).join(",");
+}
+
+function failedBlock(marks: Readonly<Span<ShellMark>>): [int32, int32] {
+	for (const m of marks) {
+		if (m.step === ShellStep.CommandDone) { return [m.done.prompt ?? -1, m.done.end]; }
+	}
+	return [-1, -1];
+}
+
+test "a decoration tints its block's rows, moves up with them, and hides on the alternate screen" {
+	const ran = "\x1b]133;A\x07$ false\r\n\x1b]133;C\x07oops\r\n\x1b]133;D;1\x07\x1b]133;A\x07$ ";
+	assert onFresh(ran, (t: Term, sink: Sink): void => {
+		const view = View.open();
+		view.fitRows(5);
+		const first = t.pumpFrame();
+		assert first.ok;
+		if (!first.ok) { return; }
+		const rows = first.value.rows;
+		if (rows !== null) { view.paint(rows); }
+		const block = failedBlock(first.value.shell);
+		t.decorate({ id: 1, from: block[0], to: block[1], tint: { fg: null, bg: TINT } });
+		assert paintedYs(view, t.pumpFrame()) == "0,1";
+		assert tintedYs(view, 5) == "0,1";
+		const s = t.session;
+		assert s !== null;
+		if (s === null) { return; }
+		s.vt.writeText("a\r\nb\r\nc\r\nd");
+		assert !paintedYs(view, t.pumpFrame()).split(",").includes("0");
+		assert view.text(0) == "oops";
+		assert tintedYs(view, 5) == "0";
+		s.vt.writeText("\x1b[?1049h");
+		paintedYs(view, t.pumpFrame());
+		assert tintedYs(view, 5) == "";
+		s.vt.writeText("\x1b[?1049l");
+		paintedYs(view, t.pumpFrame());
+		assert tintedYs(view, 5) == "0";
+		t.undecorate(1);
+		assert paintedYs(view, t.pumpFrame()) == "0";
+		assert tintedYs(view, 5) == "";
 	}).ok;
 }

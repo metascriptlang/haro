@@ -24,7 +24,19 @@ import {
 	Palette,
 	ShellMark,
 } from "../vt/vt";
-import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "./rows";
+import {
+	Decor,
+	Decoration,
+	FrameError,
+	FrameRows,
+	Shown,
+	decorate,
+	empty,
+	fitShown,
+	planRows,
+	relitRows,
+	undecorate,
+} from "./rows";
 import { Mark } from "./mark";
 import { holdsButton } from "./mouseButton";
 
@@ -46,6 +58,7 @@ export enum TermError {
 	FramePlanFailed,
 	FrameCursorFailed,
 	FrameLineFailed,
+	FrameTintFailed,
 	EncodeFailed,
 	WriteFailed,
 	InputBacklogged,
@@ -75,6 +88,7 @@ export interface Term {
 	keys: Keys;
 	held: KeyEvent | null;
 	shown: Vec<Shown>;
+	decor: Decor;
 	cursorInk: CellInk | null;
 	buf: Vec<uint8>;
 	cols: int32;
@@ -137,6 +151,7 @@ export function openTerm(
 		keys: keys.value,
 		held: null,
 		shown: [],
+		decor: Decor.empty(),
 		cursorInk: null,
 		buf: buf,
 		cols: 0,
@@ -191,6 +206,7 @@ function frameFailure(error: FrameError): TermError {
 		FrameError.PlanFailed => TermError.FramePlanFailed,
 		FrameError.CursorFailed => TermError.FrameCursorFailed,
 		FrameError.LineFailed => TermError.FrameLineFailed,
+		FrameError.TintFailed => TermError.FrameTintFailed,
 	};
 }
 
@@ -247,7 +263,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 			shell: events.shell,
 		});
 	}
-	const planned = t.shown.planRows(vt, t.cursorInk);
+	const planned = t.shown.planRows(vt, t.cursorInk, t.decor);
 	if (!planned.ok) { return Result.err(frameFailure(planned.error)); }
 	const look = vt.cursorLook();
 	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
@@ -273,9 +289,17 @@ export function inkCursor(this t: Term, ink: CellInk | null): Result<FrameRows, 
 	t.cursorInk = ink;
 	const s = t.session;
 	if (s === null) { return Result.ok(FrameRows.none()); }
-	const relit = t.shown.relitRows(s.vt, ink);
+	const relit = t.shown.relitRows(s.vt, ink, t.decor);
 	if (!relit.ok) { return Result.err(frameFailure(relit.error)); }
 	return Result.ok(relit.value);
+}
+
+export function decorate(this t: Term, d: Decoration): void {
+	t.decor.decorate(d);
+}
+
+export function undecorate(this t: Term, id: int32): void {
+	t.decor.undecorate(id);
 }
 
 function sendBytes(this s: Session, bytes: Readonly<Span<uint8>>): Result<boolean, TermError> {

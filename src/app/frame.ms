@@ -4,7 +4,16 @@ import { Style, TextDecorationLine, TextDecorationStyle } from "../../../neon/sr
 import { CellInk, GridLine, LineRun } from "../grid/lines";
 import { Marked } from "../select/select";
 import { CellFlag, Cursor, Rgb, Underline, Vt } from "../vt/vt";
-import { FrameError, FrameRows, Shown, fitShown, planRows, relitRows } from "../controller/rows";
+import {
+	Decor,
+	FrameError,
+	FrameRows,
+	Shown,
+	empty,
+	fitShown,
+	planRows,
+	relitRows,
+} from "../controller/rows";
 
 export interface RowSlot {
 	line: GridLine;
@@ -195,7 +204,7 @@ export function applyFrame(
 	vt: Vt,
 	ink: CellInk | null,
 ): Result<Cursor | null, FrameError> {
-	const planned = try shown.planRows(vt, ink);
+	const planned = try shown.planRows(vt, ink, Decor.empty());
 	const _chars = applyRows(grid, styles, planned.rows);
 	return Result.ok(planned.cursor);
 }
@@ -207,7 +216,7 @@ export function relightCursor(
 	vt: Vt,
 	ink: CellInk | null,
 ): Result<void, FrameError> {
-	const _chars = applyRows(grid, styles, try shown.relitRows(vt, ink));
+	const _chars = applyRows(grid, styles, try shown.relitRows(vt, ink, Decor.empty()));
 	return Result.ok(null);
 }
 

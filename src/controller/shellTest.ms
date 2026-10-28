@@ -3,6 +3,7 @@ import { defaults } from "../config/config";
 import { IoFrame, settingsOf } from "./io";
 import { KeyMod, NO_MODS, modSet } from "../keys/keys";
 import { key } from "./terminalRig";
+import { Rgb, ShellStep } from "../vt/vt";
 
 test "a shell actor opens its recording, fits, and hands out the recorded rows in a frame" {
 	const shell = new Shell({ command: "", cwd: null, recording: "hello" });
@@ -126,4 +127,36 @@ test "a shell shut down twice is closed once, and every call after it does nothi
 	port.closeKey();
 	assert (await shell.frame()) === null;
 	assert (await shell.relight(null)).rows.length == 0;
+}
+
+const TINT: Rgb = { r: 58, g: 28, b: 36 };
+
+test "a decoration sent through the shell's port tints the next frame's rows" {
+	const ran = "\x1b]133;A\x07$ false\r\n\x1b]133;C\x07oops\r\n\x1b]133;D;1\x07\x1b]133;A\x07$ ";
+	const shell = new Shell({ command: "", cwd: null, recording: ran });
+	const port = portOf(shell);
+	port.fit(20, 3, 0, 0);
+	const first = await shell.frame();
+	let from = -1;
+	let to = -1;
+	if (first !== null && first.frame !== null) {
+		for (const m of first.frame.shell) {
+			if (m.step === ShellStep.CommandDone) {
+				from = m.done.prompt ?? -1;
+				to = m.done.end;
+			}
+		}
+	}
+	port.decorate({ id: 7, from: from, to: to, tint: { fg: null, bg: TINT } });
+	const next = await shell.frame();
+	let tinted: string[] = [];
+	if (next !== null && next.frame !== null && next.frame.rows !== null) {
+		for (const r of next.frame.rows.rows) {
+			if (r.line.runs.length > 0 && r.line.runs[0].bg == TINT) { tinted.push(`${r.y}`); }
+		}
+	}
+	assert tinted.join(",") == "0,1";
+	port.undecorate(7);
+	assert firstChanged(await shell.frame()) == "$ false";
+	await closed(shell);
 }

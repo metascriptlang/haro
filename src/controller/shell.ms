@@ -4,7 +4,7 @@ import { CellInk } from "../grid/lines";
 import { NativePty, spawn } from "../pty/pty";
 import { Replay, ofText, toPty } from "../pty/replay";
 import { Pty, PtyError } from "../pty/transport";
-import { FrameRows, none } from "./rows";
+import { Decoration, FrameRows, none } from "./rows";
 import { Hit } from "./controls";
 import {
 	Io,
@@ -16,6 +16,7 @@ import {
 	closeKey,
 	configure,
 	confirmDialog,
+	decorate,
 	drain,
 	fit,
 	focus,
@@ -30,6 +31,7 @@ import {
 	relight,
 	shutdown,
 	text,
+	undecorate,
 	wheel,
 } from "./io";
 import { OpenPty, TermError, openTerm } from "./term";
@@ -87,6 +89,8 @@ export actor Shell {
 	confirmDialog(): void { this.io?.confirmDialog(); }
 	cancelDialog(): void { this.io?.cancelDialog(); }
 	pasted(clipboard: string): void { this.io?.pasted(clipboard); }
+	decorate(d: Decoration): void { this.io?.decorate(d); }
+	undecorate(id: int32): void { this.io?.undecorate(id); }
 
 	frame(): IoFrame | null {
 		const io = this.io;
@@ -153,6 +157,8 @@ export function portOf(shell: Shell): IoPort {
 		confirmDialog: (): void => { shell.confirmDialog(); },
 		cancelDialog: (): void => { shell.cancelDialog(); },
 		pasted: (clipboard: string): void => { shell.pasted(clipboard); },
+		decorate: (d: Decoration): void => { shell.decorate(d); },
+		undecorate: (id: int32): void => { shell.undecorate(id); },
 		frame: (done: (got: IoFrame) => void): void => { const _framed = framed(shell, done); },
 		relight: (ink: CellInk | null, done: (rows: FrameRows) => void): void => {
 			const _relit = relit(shell, ink, done);

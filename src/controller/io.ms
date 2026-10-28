@@ -6,7 +6,7 @@ import { Pending, pendingOf } from "./pending";
 import { KeyEvent, OptionAsAlt } from "../keys/keys";
 import { CellInk } from "../grid/lines";
 import { Config } from "../config/config";
-import { FrameRows, none } from "./rows";
+import { Decoration, FrameRows, none } from "./rows";
 import { Mark } from "./mark";
 import { Asks, Controls, Hit, holding, refit, takeAsks, typed, vtOf } from "./controls";
 import { cancel, clipboardAsked, clipboardText, confirm } from "./clipboard";
@@ -16,6 +16,7 @@ import {
 	Frame,
 	Term,
 	TermError,
+	decorate as decorateRows,
 	exitedAbnormally,
 	drain,
 	inkCursor,
@@ -27,6 +28,7 @@ import {
 	shellExitCode,
 	shellExitSignal,
 	shutdown,
+	undecorate as undecorateRows,
 } from "./term";
 
 export struct Settings {
@@ -127,6 +129,8 @@ export interface IoPort {
 	confirmDialog: () => void;
 	cancelDialog: () => void;
 	pasted: (clipboard: string) => void;
+	decorate: (d: Decoration) => void;
+	undecorate: (id: int32) => void;
 	frame: (done: (got: IoFrame) => void) => void;
 	relight: (ink: CellInk | null, done: (rows: FrameRows) => void) => void;
 }
@@ -263,6 +267,14 @@ export function pasted(this io: Io, clipboard: string): void {
 	io.check(Where.Clipboard, io.controls.clipboardText(io.term, clipboard));
 }
 
+export function decorate(this io: Io, d: Decoration): void {
+	io.term.decorateRows(d);
+}
+
+export function undecorate(this io: Io, id: int32): void {
+	io.term.undecorateRows(id);
+}
+
 export function drain(this io: Io): void {
 	const drained = io.term.drain();
 	if (!drained.ok) { io.fail(Where.Output, drained.error); }
@@ -357,6 +369,8 @@ export function port(this io: Io): IoPort {
 		confirmDialog: (): void => { io.confirmDialog(); },
 		cancelDialog: (): void => { io.cancelDialog(); },
 		pasted: (clipboard: string): void => { io.pasted(clipboard); },
+		decorate: (d: Decoration): void => { io.decorate(d); },
+		undecorate: (id: int32): void => { io.undecorate(id); },
 		frame: (done: (got: IoFrame) => void): void => { done(io.frame()); },
 		relight: (ink: CellInk | null, done: (rows: FrameRows) => void): void => { done(io.relight(ink)); },
 	};

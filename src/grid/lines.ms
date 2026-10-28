@@ -1,6 +1,17 @@
 import { fromCodePoint } from "std/core/string";
 import { Marked, RowSpan } from "../select/select";
-import { Cell, CellFlag, Cursor, Row, Rgb, Underline, Vt, isUnicodeScalar } from "../vt/vt";
+import {
+	Cell,
+	CellFlag,
+	Cursor,
+	Grapheme,
+	Row,
+	Rgb,
+	Underline,
+	Vt,
+	graphemes,
+	isUnicodeScalar,
+} from "../vt/vt";
 
 export enum GridError {
 	CodepointInvalid,
@@ -24,6 +35,12 @@ export struct CellInk {
 }
 
 export struct RowTint {
+	fg: Rgb | null;
+	bg: Rgb | null;
+}
+
+export struct RowNote {
+	text: string;
 	fg: Rgb | null;
 	bg: Rgb | null;
 }
@@ -120,6 +137,34 @@ function isEmpty(this cell: Cell, background: Rgb): boolean {
 		run.underline == Underline.None && run.flags.isDisjointFrom(LINE_FLAGS);
 }
 
+struct Placed {
+	at: int32;
+	graphemes: Vec<Grapheme>;
+}
+
+const NOTE_GAP = 1;
+
+function placed(this note: RowNote | null, count: int32, own: int32): Placed | null {
+	if (note === null) { return null; }
+	const parts = graphemes(note.text);
+	let cells = 0;
+	for (const g of parts) { cells += g.cells; }
+	const at = count - cells;
+	if (cells == 0 || at < own + (own > 0 ? NOTE_GAP : 0)) { return null; }
+	return { at: at, graphemes: parts };
+}
+
+function noted(this run: LineRun, note: RowNote): LineRun {
+	return {
+		...run,
+		fg: note.fg ?? faded(run.fg, run.bg),
+		bg: note.bg ?? run.bg,
+		underline: Underline.None,
+		underlineColor: null,
+		flags: 0 as BitSet<CellFlag>,
+	};
+}
+
 export function cellOnRow(this cursor: Cursor | null, y: int32): int32 {
 	return cursor !== null && cursor.y == y ? cursor.x : -1;
 }
@@ -131,6 +176,7 @@ export function line(
 	selection: CellInk,
 	background: Rgb,
 	tint: RowTint | null = null,
+	note: RowNote | null = null,
 ): Result<GridLine, GridError> {
 	let text = "";
 	let runs: Vec<LineRun> = [];
@@ -144,8 +190,10 @@ export function line(
 	let end = count;
 	while (end > 0 && row.cells[end - 1].isEmpty(background)) { end--; }
 	if (cursorInk !== null) { end = Math.max(end, Math.min(cursorAt + 1, count)); }
+	const placedNote = note.placed(count, end);
 	if (selected !== null) { end = Math.max(end, Math.min(selected.to + 1, count)); }
 	if (tint !== null && tint.bg !== null) { end = count; }
+	if (placedNote !== null) { end = placedNote.at; }
 	for (let i = 0; i < end; i++) {
 		const cell = row.cells[i];
 		const extra = cell.extra as int32;
@@ -186,6 +234,19 @@ export function line(
 			text += fromCodePoint(cp as number);
 			pushCell(widths, k == 0 ? cells : 0, utf8Bytes(cp));
 			pushUnits(runs, run, cp > 0xFFFF ? 2 : 1, split && k == 0);
+		}
+	}
+	if (placedNote !== null && note !== null) {
+		let at = placedNote.at;
+		for (const g of placedNote.graphemes) {
+			let run = row.cells[at].lineRun();
+			if (tint !== null) { run = run.tinted(tint); }
+			run = run.noted(note);
+			if (selected.covers(at, at + g.cells - 1)) { run = run.inked(selection); }
+			text += g.text;
+			pushCell(widths, g.cells as uint8, g.text.byteLength() as int32);
+			pushUnits(runs, run, g.text.length as int32, at == placedNote.at);
+			at += g.cells;
 		}
 	}
 	return Result.ok({
@@ -229,7 +290,8 @@ function tintedLine(
 	cols: int32,
 	cursorCell: int32,
 	selected: Marked | null,
-	tint: RowTint,
+	tint: RowTint | null,
+	note: RowNote | null = null,
 ): GridLine | null {
 	const created = Vt.create(cols, 2);
 	if (!created.ok) { return null; }
@@ -243,7 +305,7 @@ function tintedLine(
 	let found: GridLine | null = null;
 	if (marked && updated.ok && colors.ok && rows.ok) {
 		const cursorInk: CellInk = { fg: null, bg: RED };
-		const line = rows.value[0].line(cursorCell, cursorInk, SWAP, colors.value.bg, tint);
+		const line = rows.value[0].line(cursorCell, cursorInk, SWAP, colors.value.bg, tint, note);
 		if (line.ok) { found = line.value; }
 	}
 	return found;
@@ -568,5 +630,55 @@ test "a row tint keeps a cell's own colour where it names none" {
 		assert line.runs[0].fg == GREEN && line.runs[1].fg == GREEN;
 		assert line.runs[0].bg == plain.runs[0].bg;
 		assert line.runs[1].bg != plain.runs[0].bg;
+	}
+}
+
+function noteOf(text: string): RowNote {
+	return { text: text, fg: null, bg: null };
+}
+
+function unitsOf(line: GridLine): string {
+	return line.runs.map((r: LineRun): string => `${r.units}`).join(",");
+}
+
+test "a note sits right-aligned on its row in the row's foreground drawn faint" {
+	const line = tintedLine("$ false", 24, -1, null, null, noteOf("exit 2 · 1.3s"));
+	const plain = firstLine("$ false", 24, -1);
+	assert line !== null && plain !== null;
+	if (line !== null && plain !== null) {
+		assert line.text == "$ false" + "    " + "exit 2 · 1.3s", line.text;
+		assert unitsOf(line) == "11,13", unitsOf(line);
+		const own = plain.runs[0];
+		assert line.runs[0].fg == own.fg;
+		assert line.runs[1].fg == faded(own.fg, own.bg);
+		assert line.runs[1].bg == own.bg;
+		assert line.widths.length == line.text.byteLength();
+	}
+}
+
+test "a note that would overlap the row's text or its cursor is hidden" {
+	const fits = tintedLine("0123456789abc", 20, -1, null, null, noteOf("exit 2"));
+	const touches = tintedLine("0123456789abcd", 20, -1, null, null, noteOf("exit 2"));
+	const cursor = tintedLine("$ ", 20, 15, null, null, noteOf("exit 2"));
+	assert fits !== null && touches !== null && cursor !== null;
+	if (fits !== null && touches !== null && cursor !== null) {
+		assert fits.text == "0123456789abc exit 2", fits.text;
+		assert touches.text == "0123456789abcd", touches.text;
+		assert !cursor.text.includes("exit"), cursor.text;
+	}
+}
+
+test "a note's own colours win over the row tint, and a wide grapheme takes two cells" {
+	const note: RowNote = { text: "中!", fg: GREEN, bg: RED };
+	const line = tintedLine("ab", 8, -1, null, { fg: null, bg: TINT }, note);
+	const under = tintedLine("ab", 8, -1, null, { fg: null, bg: TINT }, noteOf("x"));
+	assert line !== null && under !== null;
+	if (line !== null && under !== null) {
+		assert line.text == "ab" + "   " + "中!", line.text;
+		assert line.runs[line.runs.length - 1].fg == GREEN;
+		assert line.runs[line.runs.length - 1].bg == RED;
+		assert line.runs[0].bg == TINT;
+		assert line.widths[5] == 2 && line.widths[8] == 1;
+		assert under.runs[under.runs.length - 1].bg == TINT;
 	}
 }

@@ -38,6 +38,7 @@ interface Running {
 
 const running: Running = { pane: null, outside: "" };
 
+// A call outside a hook is reported after evaluation, not raised at the call: compiler card 2026-10-28-embed-a-host-routine-cannot-raise-an-error-into-the-script.
 function onPane(name: string, act: (pane: HookPane) => void): RaiserValue {
 	const pane = running.pane;
 	if (pane !== null) {

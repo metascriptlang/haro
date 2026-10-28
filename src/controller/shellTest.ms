@@ -160,3 +160,22 @@ test "a decoration sent through the shell's port tints the next frame's rows" {
 	assert firstChanged(await shell.frame()) == "$ false";
 	await closed(shell);
 }
+
+test "an annotation sent through the shell's port shows on the next frame's prompt row" {
+	const ran = "\x1b]133;A\x07$ false\r\n\x1b]133;C\x07oops\r\n\x1b]133;D;1\x07\x1b]133;A\x07$ ";
+	const shell = new Shell({ command: "", cwd: null, recording: ran });
+	const port = portOf(shell);
+	port.fit(20, 3, 0, 0);
+	const first = await shell.frame();
+	let at = -1;
+	if (first !== null && first.frame !== null) {
+		for (const m of first.frame.shell) {
+			if (m.step === ShellStep.CommandDone) { at = m.done.prompt ?? -1; }
+		}
+	}
+	port.annotate({ id: 3, at: at, note: { text: "exit 1", fg: null, bg: null } });
+	assert firstChanged(await shell.frame()) == "$ false       exit 1";
+	port.unannotate(3);
+	assert firstChanged(await shell.frame()) == "$ false";
+	await closed(shell);
+}

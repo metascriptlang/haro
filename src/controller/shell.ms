@@ -4,13 +4,14 @@ import { CellInk } from "../grid/lines";
 import { NativePty, spawn } from "../pty/pty";
 import { Replay, ofText, toPty } from "../pty/replay";
 import { Pty, PtyError } from "../pty/transport";
-import { Decoration, FrameRows, none } from "./rows";
+import { Annotation, Decoration, FrameRows, none } from "./rows";
 import { Hit } from "./controls";
 import {
 	Io,
 	IoFrame,
 	IoPort,
 	Settings,
+	annotate,
 	autoscroll,
 	cancelDialog,
 	closeKey,
@@ -31,6 +32,7 @@ import {
 	relight,
 	shutdown,
 	text,
+	unannotate,
 	undecorate,
 	wheel,
 } from "./io";
@@ -91,6 +93,8 @@ export actor Shell {
 	pasted(clipboard: string): void { this.io?.pasted(clipboard); }
 	decorate(d: Decoration): void { this.io?.decorate(d); }
 	undecorate(id: int32): void { this.io?.undecorate(id); }
+	annotate(a: Annotation): void { this.io?.annotate(a); }
+	unannotate(id: int32): void { this.io?.unannotate(id); }
 
 	frame(): IoFrame | null {
 		const io = this.io;
@@ -159,6 +163,8 @@ export function portOf(shell: Shell): IoPort {
 		pasted: (clipboard: string): void => { shell.pasted(clipboard); },
 		decorate: (d: Decoration): void => { shell.decorate(d); },
 		undecorate: (id: int32): void => { shell.undecorate(id); },
+		annotate: (a: Annotation): void => { shell.annotate(a); },
+		unannotate: (id: int32): void => { shell.unannotate(id); },
 		frame: (done: (got: IoFrame) => void): void => { const _framed = framed(shell, done); },
 		relight: (ink: CellInk | null, done: (rows: FrameRows) => void): void => {
 			const _relit = relit(shell, ink, done);

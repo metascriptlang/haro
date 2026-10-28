@@ -103,7 +103,8 @@ features are written against that surface as user code and plugins rather than b
 
 The surface is the `haro` package (`assets/haro/index.ms`), and `~/.config/haro/config.ms` is
 written against it. `config`, its `onKey`, `onPrompt` and `onCommandDone` hooks, and the host
-routines `send` and `notify` exist today; the other hooks, routines and plugins below are planned:
+routines `send`, `notify`, `decorate` and `undecorate` exist today; the other hooks, routines and
+plugins below are planned:
 
 - `export const config: HaroConfig`: the settings, checked by msc against the type before Haro
   reads them: a config table, but typed.
@@ -120,7 +121,11 @@ routines `send` and `notify` exist today; the other hooks, routines and plugins 
   calls them on the pane it runs for: `send` writes text to that pane's shell, `notify` shows a
   desktop notification. A call outside a hook, at the top level of `config.ms`, refuses the config.
 - Plugins draw in **cells**: floating windows, decorations over a range of
-  cells, and virtual text. Haro's own blocks are written as the first plugin, so the
+  cells, and virtual text. Row decorations exist: OSC 133 marks give `onPrompt` and
+  `onCommandDone` anchors (`at`; `prompt`, `output`, `end`), places in the text that follow it
+  through scroll, resize and scrollback and die when it is pruned, and `decorate({ from, to,
+  background?, foreground? })` tints the whole rows from one anchor up to the next, on the
+  primary screen only; a colour that is not `#rrggbb` is the hook's error. Haro's own blocks are written as the first plugin, so the
   surface is proven by a real consumer.
 
 ### It needs Raiser embedded in Haro

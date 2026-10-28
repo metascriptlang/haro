@@ -155,3 +155,12 @@ test "a bracketed paste is framed and only its end marker is unsafe" {
 		assert vt.pasted("plain", false) == "plain";
 	});
 }
+
+test "a key's text typed from the heap encodes as that text" {
+	assert withKeys((k: Keys, vt: Vt): void => {
+		const none = 0 as BitSet<KeyMod>;
+		for (const c of ["a", "l", "j", "ệ"]) {
+			assert k.encoded(vt, press("Unidentified", `x${c}`.substring(1), 0, none)) == ascii(c.asBytes());
+		}
+	});
+}

@@ -46,8 +46,9 @@ typedef void (WINAPI *CloseFn)(HPCON);
 
 static struct { CreateFn create; ResizeFn resize; CloseFn close; } api;
 
-static void loadApi(void) {
-	if (api.create) return;
+static INIT_ONCE apiOnce = INIT_ONCE_STATIC_INIT;
+
+static BOOL CALLBACK loadApiOnce(PINIT_ONCE once, PVOID param, PVOID* context) {
 	HMODULE dll = LoadLibraryExW(L"conpty.dll", NULL, LOAD_LIBRARY_SEARCH_APPLICATION_DIR);
 	CreateFn create = dll ? (CreateFn)(void*)GetProcAddress(dll, "CreatePseudoConsole") : NULL;
 	ResizeFn resize = dll ? (ResizeFn)(void*)GetProcAddress(dll, "ResizePseudoConsole") : NULL;
@@ -56,11 +57,16 @@ static void loadApi(void) {
 		api.resize = resize;
 		api.close = close;
 		api.create = create;
-		return;
+		return TRUE;
 	}
 	api.resize = ResizePseudoConsole;
 	api.close = ClosePseudoConsole;
 	api.create = CreatePseudoConsole;
+	return TRUE;
+}
+
+static void loadApi(void) {
+	InitOnceExecuteOnce(&apiOnce, loadApiOnce, NULL, NULL);
 }
 
 void ptySetWake(void (*wake)(void)) {

@@ -102,16 +102,18 @@ palette, panels), but Haro keeps a small core and exposes it, and those
 features are written against that surface as user code and plugins rather than built into Haro.
 
 The surface is the `haro` package (`assets/haro/index.ms`), and `~/.config/haro/config.ms` is
-written against it. `config` and its `onKey` hook exist today; the other hooks, host routines
-and plugins below are planned:
+written against it. `config` and its `onKey`, `onPrompt` and `onCommandDone` hooks exist today;
+the other hooks, host routines and plugins below are planned:
 
 - `export const config: HaroConfig`: the settings, checked by msc against the type before Haro
   reads them: a config table, but typed.
 - Hooks (`onKey`, `onPrompt`, `onCommandDone`, `onOutput`, …) are fields of `config`, so
   `HaroConfig` checks them and a wrong one is an error on its line in `config.ms`. They receive
   events. `onKey` gets each key pressed (`KeyPress`) and answers whether it handled it and
-  what text to send; it runs before keybinds. Haro already reads the OSC 133 prompt marks a
-  block needs.
+  what text to send; it runs before keybinds. `onPrompt` runs when the shell starts a primary
+  prompt (OSC 133;A), and `onCommandDone` when a command finishes (OSC 133;D), with its exit
+  code, its command line and its duration from 133;C when the shell reported them; both return
+  nothing yet. A hook that throws becomes a notice and the terminal carries on.
 - A config with a hook keeps its interpreter for the life of the window, so it is evaluated at
   every start (about 0.5 s) and is not cached; a config without one starts from the cache.
 - Host routines (`send`, `decorate`, `openFloat`, …) act on the terminal.

@@ -103,36 +103,42 @@ function over(under: RowTint | null, tint: RowTint): RowTint {
 }
 
 function retint(this d: Decor, vt: Vt, rows: int32): Result<void, VtError> {
-	d.stale = false;
-	d.tints = [];
-	d.notes = [];
-	if (d.decorations.length == 0 && d.annotations.length == 0) { return Result.ok(null); }
-	if (try vt.alternateScreen()) { return Result.ok(null); }
-	const offset = try vt.scrollOffset();
-	let live: Vec<Decoration> = [];
-	for (let i = 0; i < rows; i++) {
-		d.tints.push(null);
-		d.notes.push(null);
+	if (d.decorations.length == 0 && d.annotations.length == 0 || try vt.alternateScreen()) {
+		d.tints = [];
+		d.notes = [];
+		d.stale = false;
+		return Result.ok(null);
 	}
+	const offset = try vt.scrollOffset();
+	let tints: Vec<RowTint | null> = [];
+	let notes: Vec<RowNote | null> = [];
+	for (let i = 0; i < rows; i++) {
+		tints.push(null);
+		notes.push(null);
+	}
+	let live: Vec<Decoration> = [];
 	for (const decoration of d.decorations) {
 		const from = try vt.anchorRow(decoration.from);
 		const to = try vt.anchorRow(decoration.to);
 		if (from === null || to === null) { continue; }
 		live.push(decoration);
 		for (let y = Math.max(from - offset, 0); y < Math.min(to - offset, rows); y++) {
-			d.tints[y] = over(d.tints[y], decoration.tint);
+			tints[y] = over(tints[y], decoration.tint);
 		}
 	}
-	d.decorations = live;
 	let noted: Vec<Annotation> = [];
 	for (const annotation of d.annotations) {
 		const at = try vt.anchorRow(annotation.at);
 		if (at === null) { continue; }
 		noted.push(annotation);
 		const y = at - offset;
-		if (y >= 0 && y < rows) { d.notes[y] = annotation.note; }
+		if (y >= 0 && y < rows) { notes[y] = annotation.note; }
 	}
+	d.tints = tints;
+	d.notes = notes;
+	d.decorations = live;
 	d.annotations = noted;
+	d.stale = false;
 	return Result.ok(null);
 }
 

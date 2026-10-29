@@ -41,6 +41,7 @@ import { Controls, open } from "./controls";
 import { copySelection } from "./clipboard";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
+import { GhosttyTrackedGridRef } from "../../vendor/ghostty/include/ghostty/vt.h";
 
 test "a frame under synchronized output is not applied until the hold ends" {
 	assert onFresh("abc\x1b[?2026h", (t: Term, sink: Sink): void => {
@@ -454,5 +455,33 @@ test "shutting a terminal down twice frees its handles once" {
 		t.shutdown();
 		t.shutdown();
 		assert t.session === null;
+	}).ok;
+}
+
+test "a failed decoration pass keeps the tints on screen and is retried by the next frame" {
+	const ran = "\x1b]133;A\x07$ false\r\n\x1b]133;C\x07oops\r\n\x1b]133;D;1\x07\x1b]133;A\x07$ ";
+	assert onFresh(ran, (t: Term, sink: Sink): void => {
+		const first = t.pumpFrame();
+		assert first.ok;
+		if (!first.ok) { return; }
+		const block = failedBlock(first.value.shell);
+		t.decorate({ id: 1, from: block[0], to: block[1], tint: { fg: null, bg: TINT } });
+		assert t.pumpFrame().ok;
+		assert t.decor.tints[0] !== null;
+		const s = t.session;
+		assert s !== null;
+		if (s === null) { return; }
+		let saved: Vec<GhosttyTrackedGridRef> = [];
+		for (const a of s.vt.effects.anchors) { saved.push(a.tracked); }
+		const bad = 0 as GhosttyTrackedGridRef;
+		for (let i = 0; i < s.vt.effects.anchors.length; i++) { s.vt.effects.anchors[i].tracked = bad; }
+		t.decorate({ id: 2, from: block[0], to: block[1], tint: { fg: null, bg: TINT } });
+		const failed = t.pumpFrame();
+		for (let i = 0; i < s.vt.effects.anchors.length; i++) { s.vt.effects.anchors[i].tracked = saved[i]; }
+		assert !failed.ok;
+		assert t.decor.stale;
+		assert t.decor.tints[0] !== null;
+		assert t.pumpFrame().ok;
+		assert !t.decor.stale;
 	}).ok;
 }

@@ -1,19 +1,19 @@
 import { CursorShape } from "../vt/vt";
 
-export const ANIMATION_LENGTH: float64 = 0.15;
-export const SHORT_ANIMATION_LENGTH: float64 = 0.04;
-export const TRAIL_SIZE: float64 = 1.0;
-export const BAR_FRACTION: float64 = 1.0 / 8;
-export const PARTICLE_OPACITY: float64 = 200.0 / 255;
-export const PARTICLE_LIFETIME: float64 = 4.0;
-export const PARTICLE_DENSITY: float64 = 7.0;
-export const PARTICLE_SPEED: float64 = 10.0;
-export const PARTICLE_CURL: float64 = 1.0;
-export const TICK: float64 = 0.017;
-export const ANTICIPATION: float64 = 0.2;
-export const MAX_WINDUP: float64 = 2;
-export const STOP_DISTANCE: float64 = 0.1;
-const MAX_TICKS_PER_FRAME = 30;
+const ANIMATION_LENGTH: float64 = 0.15;
+const SHORT_ANIMATION_LENGTH: float64 = 0.04;
+const TRAIL_SIZE: float64 = 1.0;
+const BAR_FRACTION: float64 = 1.0 / 8;
+const PARTICLE_OPACITY: float64 = 200.0 / 255;
+const PARTICLE_LIFETIME: float64 = 4.0;
+const PARTICLE_DENSITY: float64 = 7.0;
+const PARTICLE_SPEED: float64 = 10.0;
+const PARTICLE_CURL: float64 = 1.0;
+const TICK: float64 = 0.017;
+const ANTICIPATION: float64 = 0.2;
+const MAX_WINDUP: float64 = 2;
+const STOP_DISTANCE: float64 = 0.1;
+const MAX_TICKS_PER_FRAME: int32 = 30;
 
 const PCG_MULTIPLIER: uint64 = 6364136223846793005;
 const PCG_STATE: uint64 = 9600629759793949339;
@@ -24,13 +24,13 @@ export struct Point {
 	y: float64;
 }
 
-export struct Feel {
+struct Feel {
 	stiffness: float64;
 	damping: float64;
 }
 
-export const JUMP: Feel = { stiffness: 0.3, damping: 0.5 };
-export const TYPING: Feel = { stiffness: 0.5, damping: 0.9 };
+const JUMP: Feel = { stiffness: 0.3, damping: 0.5 };
+const TYPING: Feel = { stiffness: 0.5, damping: 0.9 };
 
 struct Spring {
 	position: float64;

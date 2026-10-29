@@ -140,8 +140,11 @@ function annotated(pane: HookPane, d: RaiserHostValue): RaiserValue {
 	return boxInt(pane.annotate(noted.value.at, noted.value.note));
 }
 
-function idOf(arg: RaiserValue): int32 | null {
-	return arg.kind == RaiserValueKind.Int ? arg.intVal as int32 : null;
+function idOf(name: string, arg: RaiserValue): int32 {
+	if (arg.kind != RaiserValueKind.Int) {
+		throw new Error(`${name} takes the id that decorate or annotate returned`);
+	}
+	return arg.intVal as int32;
 }
 
 export function implementRoutines(): void {
@@ -165,9 +168,9 @@ export function implementRoutines(): void {
 		return onPane("decorate", (pane: HookPane): RaiserValue => decorated(pane, d));
 	});
 	implementRoutine("haro.undecorate", (args: RaiserValue[]): RaiserValue => {
-		const id = idOf(args[0]);
+		const id = idOf("undecorate", args[0]);
 		return onPane("undecorate", (pane: HookPane): RaiserValue => {
-			if (id !== null) { pane.undecorate(id); }
+			pane.undecorate(id);
 			return boxVoid();
 		});
 	});
@@ -176,9 +179,9 @@ export function implementRoutines(): void {
 		return onPane("annotate", (pane: HookPane): RaiserValue => annotated(pane, d));
 	});
 	implementRoutine("haro.unannotate", (args: RaiserValue[]): RaiserValue => {
-		const id = idOf(args[0]);
+		const id = idOf("unannotate", args[0]);
 		return onPane("unannotate", (pane: HookPane): RaiserValue => {
-			if (id !== null) { pane.unannotate(id); }
+			pane.unannotate(id);
 			return boxVoid();
 		});
 	});

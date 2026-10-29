@@ -87,3 +87,21 @@ export function smokeFlood(io: IoPort, view: View, pace: Pace, quit: () => void)
 		setTimeout(tick, 1000);
 	}, 4000);
 }
+
+const TYPED_KEYS: int32 = 200;
+const TYPING_GAP_MS = 50;
+
+export function smokeTyping(io: IoPort, quit: () => void): void {
+	let typed = 0;
+	const type = (): void => {
+		if (typed == TYPED_KEYS) {
+			console.log(`smoke: typed ${TYPED_KEYS} keys`);
+			setTimeout(quit, 1500);
+			return;
+		}
+		typed += 1;
+		io.text(typed % 40 == 0 ? "\r" : "x", performance.now());
+		setTimeout(type, TYPING_GAP_MS);
+	};
+	setTimeout(type, 3000);
+}

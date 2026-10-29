@@ -28,7 +28,7 @@ import {
 	startIn,
 	watchConfig,
 } from "./configWatch";
-import { smoke, smokeFlood, smokeReplay } from "./smoke";
+import { smoke, smokeFlood, smokeReplay, smokeTyping } from "./smoke";
 import { exitCodeText } from "../controller/term";
 import { Shell, closeThen, closed, opened, portOf } from "../controller/shell";
 import { View, open } from "./frame";
@@ -259,6 +259,7 @@ async function runShell(command: string): Promise<int32> {
 	ptySetWake(ionWakeLoop);
 	if (hasFlag("--smoke")) { smoke(portOf(shell), view, quitWith(shell)); }
 	if (hasFlag("--flood")) { smokeFlood(portOf(shell), view, pace, quitWith(shell)); }
+	if (hasFlag("--typing")) { smokeTyping(portOf(shell), quitWith(shell)); }
 	return await openWindow(shell, view, (code: int32): void => {
 		note(`the shell exited with code ${exitCodeText(code)}`);
 		quitWith(shell)();

@@ -133,6 +133,15 @@ function gridSide(cells: int32, fail: VtError): Result<uint16, VtError> {
 	return Result.ok(cells as uint16);
 }
 
+function configure(terminal: GhosttyTerminal, out anchor: GhosttyTrackedGridRef): Result<void, VtError> {
+	try checked(vtTopTrack(terminal, anchor), VtError.AnchorFailed);
+	try applyColors(terminal, { r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 });
+	try applyBlinkDefault(terminal, true);
+	try applyGraphemeWidth(terminal);
+	try applyScrollback(terminal, SCROLLBACK_LINES);
+	return Result.ok(null);
+}
+
 export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtError> {
 	const wide = try gridSide(cols, VtError.CreateFailed);
 	const tall = try gridSide(rows, VtError.CreateFailed);
@@ -150,26 +159,28 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		return Result.err(VtError.CreateFailed);
 	}
 	const effects = openEffects(terminal, state);
-	let anchor: GhosttyTrackedGridRef;
-	if (effects.ok && ok(vtTopTrack(terminal, anchor))
-		&& applyColors(terminal, { r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 }).ok
-		&& applyBlinkDefault(terminal, true).ok && applyGraphemeWidth(terminal).ok
-		&& applyScrollback(terminal, SCROLLBACK_LINES).ok) {
-		return Result.ok({
-			terminal: terminal,
-			state: state,
-			iterator: iterator,
-			cells: cells,
-			effects: effects.value,
-			mouse: { codec: null, stale: true, geometry: null },
-			anchor: anchor,
-			painted: { alternate: false, rows: [], palette: null },
-		});
+	if (!effects.ok) {
+		freeHandles(terminal, state, iterator, cells);
+		return Result.err(effects.error);
 	}
-	if (effects.ok) { closeEffects(terminal); }
-	ghostty_tracked_grid_ref_free(anchor);
-	freeHandles(terminal, state, iterator, cells);
-	return Result.err(VtError.CreateFailed);
+	let anchor: GhosttyTrackedGridRef;
+	const configured = configure(terminal, anchor);
+	if (!configured.ok) {
+		closeEffects(terminal);
+		ghostty_tracked_grid_ref_free(anchor);
+		freeHandles(terminal, state, iterator, cells);
+		return Result.err(configured.error);
+	}
+	return Result.ok({
+		terminal: terminal,
+		state: state,
+		iterator: iterator,
+		cells: cells,
+		effects: effects.value,
+		mouse: { codec: null, stale: true, geometry: null },
+		anchor: anchor,
+		painted: { alternate: false, rows: [], palette: null },
+	});
 }
 
 export function write(this vt: Vt, bytes: Readonly<Span<uint8>>): void {

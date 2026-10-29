@@ -16,6 +16,9 @@ export enum VtError {
 	CellSizeInvalid,
 	GeometryInvalid,
 	UnderlineUnknown,
+	EffectsWireFailed,
+	AnchorFailed,
+	MouseOpenFailed,
 }
 
 export enum PasteError {

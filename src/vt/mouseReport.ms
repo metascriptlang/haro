@@ -46,10 +46,10 @@ function open(this m: Mouse): Result<MouseCodec, VtError> {
 	if (known !== null) { return Result.ok(known); }
 	let encoder: GhosttyMouseEncoder;
 	let event: GhosttyMouseEvent;
-	try checked(ghostty_mouse_encoder_new(vtAllocator(), encoder), VtError.ReadFailed);
+	try checked(ghostty_mouse_encoder_new(vtAllocator(), encoder), VtError.MouseOpenFailed);
 	if (!ok(ghostty_mouse_event_new(vtAllocator(), event))) {
 		ghostty_mouse_encoder_free(encoder);
-		return Result.err(VtError.ReadFailed);
+		return Result.err(VtError.MouseOpenFailed);
 	}
 	let track = true;
 	const trackOption = GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL;

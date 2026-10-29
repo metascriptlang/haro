@@ -95,7 +95,7 @@ export function openEffects(
 	};
 	if (vtEffectsWire(terminal, Handle.borrow(e).ptr) != 0) {
 		closeEffects(terminal);
-		return Result.err(VtError.CreateFailed);
+		return Result.err(VtError.EffectsWireFailed);
 	}
 	return Result.ok(e);
 }

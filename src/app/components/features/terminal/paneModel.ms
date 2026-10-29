@@ -495,10 +495,6 @@ function fitLayout(this m: PaneModel): void {
 		padBottom: heightPx - rows * rowPx + padPx,
 	};
 	m.cursor.paintCursor();
-	console.log(
-		`haro: layout ${m.layoutWidth}x${m.layoutHeight} ratio ${ratio} ` +
-			`cell ${cellPx}x${rowPx} px grid ${cols}x${rows}`
-	);
 	m.cols = cols;
 	m.rows = rows;
 	m.io.fit(cols, rows, cellPx, rowPx);

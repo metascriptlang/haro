@@ -119,8 +119,6 @@ export interface PaneModel {
 	setForeground: Setter<string>;
 	padding: Accessor<number>;
 	setPadding: Setter<number>;
-	viewWidth: Accessor<number>;
-	setViewWidth: Setter<number>;
 	cursor: CursorModel;
 	preedit: PreeditModel;
 	grid: ViewHandle | null;
@@ -154,7 +152,6 @@ export function open(
 	const [background, setBackground] = createSignal<string>(started.background.hexOf());
 	const [foreground, setForeground] = createSignal<string>(started.foreground.hexOf());
 	const [padding, setPadding] = createSignal<number>(started.padding);
-	const [viewWidth, setViewWidth] = createSignal<number>(0);
 	const metrics: CellMetrics = {
 		fontSize: fontSize,
 		fontFamily: fontFamily,
@@ -190,8 +187,6 @@ export function open(
 		setForeground: setForeground,
 		padding: padding,
 		setPadding: setPadding,
-		viewWidth: viewWidth,
-		setViewWidth: setViewWidth,
 		cursor: CursorModel.open(metrics, padding, started.foreground, (ink: CellInk | null): void => {
 			io.relight(ink, (rows: FrameRows): void => { view.repaintCursor(rows); });
 		}),
@@ -324,7 +319,7 @@ function applied(this m: PaneModel, got: IoFrame): void {
 			m.cursor.showCursor(f.cursor, f.look);
 		}
 	}
-	m.dialog.showPending(got.pending, m.metrics.cellWidth(), m.viewWidth());
+	m.dialog.showPending(got.pending, m.metrics.cellWidth(), m.layoutWidth);
 	m.answerAsks(got.asks);
 	m.autoscrolling = got.autoscroll;
 	m.autoscrollSoon();
@@ -393,7 +388,7 @@ function shellEnded(this m: PaneModel, exit: Exit): void {
 }
 
 export function notify(this m: PaneModel, text: string): void {
-	const cols = noticeCols(m.viewWidth(), m.padding(), m.metrics.cellWidth());
+	const cols = noticeCols(m.layoutWidth, m.padding(), m.metrics.cellWidth());
 	m.notice.showNotice(text, cols);
 }
 
@@ -478,7 +473,6 @@ function fitLayout(this m: PaneModel): void {
 	}
 	const cols = size.value[0];
 	const rows = size.value[1];
-	m.setViewWidth(m.layoutWidth);
 	m.setCellWidth(cellPx / ratio);
 	m.setRowHeight(rowPx / ratio);
 	flush();

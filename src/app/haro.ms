@@ -3,7 +3,12 @@ import { requestFrame } from "../../../neon/src/animation/frame";
 import { onSettled } from "../../../neon/src/core/effect";
 import { Cleanup } from "../../../neon/src/core/types";
 import {
-	runWindow, DesktopOptions, desktopOptions, setOptionAsAlt, setWindowTitle, OptionAsAlt as OptionSides,
+	runWindow,
+	DesktopOptions,
+	desktopOptions,
+	setOptionAsAlt,
+	setWindowTitle,
+	OptionAsAlt as OptionSides,
 } from "../../../neon/src/platform/ion/window";
 import {
 	WindowEventCloseRequested,
@@ -30,7 +35,15 @@ import { Config } from "../config/config";
 import { CommandDone } from "../vt/vt";
 import { KeyEvent, OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
-import { HookPane, Hooks, KeyAnswer, UNHANDLED, answerKey, commandDone, prompted } from "../config/hooks";
+import {
+	HookPane,
+	Hooks,
+	KeyAnswer,
+	UNHANDLED,
+	answerKey,
+	commandDone,
+	prompted,
+} from "../config/hooks";
 import {
 	ConfigWatch,
 	forFile,
@@ -196,7 +209,8 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 		timing: { clock: (): float64 => performance.now(), schedule: inFrame },
 		keyHook: {
 			answer: (pane: HookPane, k: KeyEvent): Result<KeyAnswer, string> => {
-				return withHooks(Result.ok(UNHANDLED), (hooks: Hooks): Result<KeyAnswer, string> => {
+				const unhandled: Result<KeyAnswer, string> = Result.ok(UNHANDLED);
+				return withHooks(unhandled, (hooks: Hooks): Result<KeyAnswer, string> => {
 					return hooks.answerKey(pane, k);
 				});
 			},
@@ -272,7 +286,9 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 		font: families[0],
 		fontFamily: families.join(", "),
 	};
-	const code = runWindow(opts, (): NeonNode => App(portOf(shell), view, host, config.loaded.config, stats));
+	const code = runWindow(opts, (): NeonNode => {
+		return App(portOf(shell), view, host, config.loaded.config, stats);
+	});
 	note("the window closed");
 	await closed(shell);
 	return code;

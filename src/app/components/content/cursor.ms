@@ -93,7 +93,8 @@ function cursorWidth(this c: CursorModel): float64 {
 	const at = c.at;
 	if (at === null || !at.wide) { return cellWidth; }
 	const shape = c.look.shapeOf(c.focused);
-	return shape == CursorShape.Block || shape == CursorShape.BlockHollow ? 2 * cellWidth : cellWidth;
+	const doubled = shape == CursorShape.Block || shape == CursorShape.BlockHollow;
+	return doubled ? 2 * cellWidth : cellWidth;
 }
 
 function litCell(this c: CursorModel): Cell {
@@ -117,7 +118,13 @@ function operations(this c: CursorModel): GraphicsOp[] {
 			CursorShape.BlockHollow => {
 				const width = (c.metrics.fontSize() * OUTLINE_PER_EM) as float32;
 				const color = colorOf(c.tint, 1);
-				ops.push({ kind: "strokePoly", points: points, width: width, closed: true, color: color });
+				ops.push({
+					kind: "strokePoly",
+					points: points,
+					width: width,
+					closed: true,
+					color: color,
+				});
 			},
 			CursorShape.Bar | CursorShape.Underline => {
 				ops.push({ kind: "fillConvex", points: points, color: colorOf(c.tint, 1) });
@@ -125,7 +132,8 @@ function operations(this c: CursorModel): GraphicsOp[] {
 			CursorShape.Block => {
 				if (c.trail.resting()) { return ops; }
 				for (const piece of points.outside(c.litCell())) {
-					ops.push({ kind: "fillConvex", points: piece, color: colorOf(c.tint, TRAIL_ALPHA) });
+					const color = colorOf(c.tint, TRAIL_ALPHA);
+					ops.push({ kind: "fillConvex", points: piece, color: color });
 				}
 			},
 		}

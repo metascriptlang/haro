@@ -169,7 +169,8 @@ test "the line reports each counter under its own name, and a reset zeroes them 
 	s.noteApplied(2, 2, 10, 6);
 	assert s.line() == "refreshes=7 more=3 held=2 rows=6 scrolled=3 chars=100 echo n=0 settle n=0";
 	s.reset();
-	assert s.tally.refreshes == 0 && s.tally.more == 0 && s.tally.held == 0 && s.tally.scrolled == 0;
+	assert s.tally.refreshes == 0 && s.tally.more == 0;
+	assert s.tally.held == 0 && s.tally.scrolled == 0;
 }
 
 test "painted rows mark the launch only when characters were drawn" {

@@ -29,7 +29,15 @@ import { PreeditModel, open } from "../../content/preedit";
 import { NoticeModel, noticeCols, showNotice } from "../notice/notice";
 import { PasteDialogModel, invalidate, showPending } from "../paste/pasteDialog";
 import { Asks } from "../../../../controller/controls";
-import { Exit, Failure, IoFrame, IoPort, Where, label, settingsOf } from "../../../../controller/io";
+import {
+	Exit,
+	Failure,
+	IoFrame,
+	IoPort,
+	Where,
+	label,
+	settingsOf,
+} from "../../../../controller/io";
 import { TermError, exitCodeText } from "../../../../controller/term";
 
 const HOLD_RECHECK_MS = 100;
@@ -187,9 +195,14 @@ export function open(
 		setForeground: setForeground,
 		padding: padding,
 		setPadding: setPadding,
-		cursor: CursorModel.open(metrics, padding, started.foreground, (ink: CellInk | null): void => {
-			io.relight(ink, (rows: FrameRows): void => { view.repaintCursor(rows); });
-		}),
+		cursor: CursorModel.open(
+			metrics,
+			padding,
+			started.foreground,
+			(ink: CellInk | null): void => {
+				io.relight(ink, (rows: FrameRows): void => { view.repaintCursor(rows); });
+			},
+		),
 		preedit: PreeditModel.open(),
 		grid: null,
 		holdTimer: null,
@@ -441,10 +454,13 @@ export function connectHost(this m: PaneModel, events: HostEvents): void {
 		m.io.drain();
 		m.timing.schedule((): void => { m.woke(); });
 	});
-	createEffect((): number => PixelRatio.get(), (ratio: number, was: number | null): Cleanup | null => {
-		if (was !== null && m.layoutWidth > 0) { m.fitLayout(); }
-		return null;
-	});
+	createEffect(
+		(): number => PixelRatio.get(),
+		(ratio: number, was: number | null): Cleanup | null => {
+			if (was !== null && m.layoutWidth > 0) { m.fitLayout(); }
+			return null;
+		},
+	);
 }
 
 export function laidOut(this m: PaneModel, e: NeonEvent): void {
@@ -457,7 +473,8 @@ export function laidOut(this m: PaneModel, e: NeonEvent): void {
 function fitLayout(this m: PaneModel): void {
 	const font = familyFont(m.metrics.fontFamily(), 400, false);
 	if (!font.ok) {
-		m.failed(Where.Font, `family "${m.metrics.fontFamily()}" has no face: ${font.error.toString()}`);
+		const reason = font.error.toString();
+		m.failed(Where.Font, `family "${m.metrics.fontFamily()}" has no face: ${reason}`);
 		return;
 	}
 	const ratio = PixelRatio.get();

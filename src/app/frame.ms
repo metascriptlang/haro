@@ -108,7 +108,9 @@ function styleOf(this styles: Styles, run: LineRun, background: Rgb): Style {
 	const bgBits = plain ? PLAIN_BG : run.bg.rgbBits();
 	const look = (bgBits << BG_SHIFT) | (run.fg.rgbBits() << FG_SHIFT) | run.lookBits();
 	const key = tinted ? `${look}${tint!.hexOf()}` : "";
-	const known = tinted ? recall(styles.tinted, styles.olderTinted, key) : recall(styles.looks, styles.olderLooks, look);
+	const known = tinted
+		? recall(styles.tinted, styles.olderTinted, key)
+		: recall(styles.looks, styles.olderLooks, look);
 	if (known !== null) { return known; }
 	const fg = run.fg.hexOf();
 	const bg = plain ? "" : run.bg.hexOf();
@@ -142,7 +144,9 @@ function styleOf(this styles: Styles, run: LineRun, background: Rgb): Style {
 }
 
 export function spansOf(this styles: Styles, l: GridLine, background: Rgb): TextSpan[] {
-	if (l.runs.length == 1) { return [{ text: l.text, style: styles.styleOf(l.runs[0], background) }]; }
+	if (l.runs.length == 1) {
+		return [{ text: l.text, style: styles.styleOf(l.runs[0], background) }];
+	}
 	let spans: TextSpan[] = [];
 	let at = 0;
 	for (const run of l.runs) {
@@ -159,7 +163,8 @@ export function applyRows(grid: List<RowSlot>, styles: Styles, f: FrameRows): in
 	for (let i = 0; i < f.scrolled; i++) { grid.move(0, last); }
 	for (let i = 0; i < f.rows.length; i++) {
 		chars += f.rows[i].line.text.length as int32;
-		grid.set(f.rows[i].y, { line: f.rows[i].line, spans: styles.spansOf(f.rows[i].line, f.background) });
+		const line = f.rows[i].line;
+		grid.set(f.rows[i].y, { line: line, spans: styles.spansOf(line, f.background) });
 	}
 	return chars;
 }
@@ -414,7 +419,8 @@ test "selected cells, a wide one included, draw with their colours swapped" {
 
 test "each underline style and an overline reach the span's decoration" {
 	const styles = Styles.empty();
-	const over: LineRun = { ...run(1, WHITE, BLACK, Underline.None), flags: (0 as BitSet<CellFlag>).incl(CellFlag.Overline) };
+	const overline = (0 as BitSet<CellFlag>).incl(CellFlag.Overline);
+	const over: LineRun = { ...run(1, WHITE, BLACK, Underline.None), flags: overline };
 	const all: LineRun = {
 		...run(1, WHITE, BLACK, Underline.Double),
 		flags: CellFlag.Overline | CellFlag.Strikethrough,

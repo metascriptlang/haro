@@ -1,6 +1,6 @@
-import { changeStamp, ensureDir, isDir, writeFile } from "std/fs";
+import { ensureDir, isDir, writeFile } from "std/fs";
 import { Config, StartKind, defaults } from "../config/config";
-import { Loaded, empty, load } from "../config/source";
+import { Loaded, configStamp, empty, load } from "../config/source";
 import { resourcePath } from "../../../ion/src/index";
 import { cwd } from "std/process";
 import { homeDir } from "std/os";
@@ -38,12 +38,26 @@ export function readConfig(this w: ConfigWatch): void {
 		return;
 	}
 	w.error = got.error;
-	w.loaded.stamp = changeStamp(w.file);
+	w.loaded.stamp = w.stampNow();
+}
+
+function stampNow(this w: ConfigWatch): string {
+	return stampText(configStamp(w.file, API));
+}
+
+function stampText(read: Result<string, string>): string {
+	return read.ok ? read.value : `unreadable: ${read.error}`;
 }
 
 function poll(this w: ConfigWatch, handler: (c: Config | null, error: string) => void): void {
-	const stamp = changeStamp(w.file);
+	const read = configStamp(w.file, API);
+	const stamp = stampText(read);
 	if (stamp == w.loaded.stamp) { return; }
+	if (!read.ok) {
+		w.loaded.stamp = stamp;
+		handler(null, read.error);
+		return;
+	}
 	if (stamp == "") {
 		w.loaded.stamp = stamp;
 		handler(null, `${w.file} is gone; the last config it gave stays`);

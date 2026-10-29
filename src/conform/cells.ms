@@ -1,12 +1,13 @@
 import { readFile } from "std/fs";
-import { Screen, blankScreen } from "./screen";
+import { Screen } from "./screen";
 
 const GRAPHEMES_ON = "\x1b[?2027h";
 const GRAPHEMES_OFF = "\x1b[?2027l";
 
 function screenAfter(cols: int32, rows: int32, bytes: string): Screen | null {
-	const s = blankScreen(cols, rows);
-	if (s === null) { return null; }
+	const opened = Screen.open(cols, rows);
+	if (!opened.ok) { return null; }
+	const s = opened.value;
 	if (!s.feed(bytes).ok) {
 		s.close();
 		return null;

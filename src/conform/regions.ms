@@ -1,5 +1,5 @@
 import { defaultIndexed } from "./palette";
-import { Screen, blankScreen } from "./screen";
+import { Screen } from "./screen";
 import { Rgb, size } from "../vt/vt";
 
 function rowFilledWith(s: Screen, y: int32, units: int32, bg: Rgb): boolean {
@@ -30,9 +30,11 @@ function scrollbackAndScreen(s: Screen): string {
 }
 
 test "CUP clamps to the screen and treats 0 as 1" {
-	const s = blankScreen(80, 80);
-	const small = blankScreen(5, 5);
-	assert s !== null && small !== null;
+	const sOpened = Screen.open(80, 80);
+	const smallOpened = Screen.open(5, 5);
+	assert sOpened.ok && smallOpened.ok;
+	const s = sOpened.value;
+	const small = smallOpened.value;
 	defer s.close();
 	defer small.close();
 	assert s.feedsInStep("\x1b[0;0H") && s.cursorAt(0, 0);
@@ -43,8 +45,9 @@ test "CUP clamps to the screen and treats 0 as 1" {
 }
 
 test "CUP, HVP, CHA and VPA move the cursor to one-based places" {
-	const s = blankScreen(4, 3);
-	assert s !== null;
+	const sOpened = Screen.open(4, 3);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep(cup(1, 1)) && s.cursorAt(1, 1);
 	assert s.feedsInStep("\x1b[3;3f") && s.cursorAt(2, 2);
@@ -57,9 +60,11 @@ test "CUP, HVP, CHA and VPA move the cursor to one-based places" {
 }
 
 test "REP repeats the last character, IRM inserts instead of overwriting" {
-	const rep = blankScreen(4, 3);
-	const irm = blankScreen(8, 3);
-	assert rep !== null && irm !== null;
+	const repOpened = Screen.open(4, 3);
+	const irmOpened = Screen.open(8, 3);
+	assert repOpened.ok && irmOpened.ok;
+	const rep = repOpened.value;
+	const irm = irmOpened.value;
 	defer rep.close();
 	defer irm.close();
 	assert rep.feedsInStep("h" + cup(1, 0) + "\x1b[2ba");
@@ -69,10 +74,13 @@ test "REP repeats the last character, IRM inserts instead of overwriting" {
 }
 
 test "ICH, ECH and DCH shift or blank cells from the cursor" {
-	const ich = blankScreen(4, 3);
-	const ech = blankScreen(4, 3);
-	const dch = blankScreen(12, 1);
-	assert ich !== null && ech !== null && dch !== null;
+	const ichOpened = Screen.open(4, 3);
+	const echOpened = Screen.open(4, 3);
+	const dchOpened = Screen.open(12, 1);
+	assert ichOpened.ok && echOpened.ok && dchOpened.ok;
+	const ich = ichOpened.value;
+	const ech = echOpened.value;
+	const dch = dchOpened.value;
 	defer ich.close();
 	defer ech.close();
 	defer dch.close();
@@ -91,8 +99,9 @@ test "ICH, ECH and DCH shift or blank cells from the cursor" {
 }
 
 test "deleting characters fills the vacated cells with the current background" {
-	const s = blankScreen(8, 1);
-	assert s !== null;
+	const sOpened = Screen.open(8, 1);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("\x1b[40m\x1b[Kfoo\x1b[2P");
 	assert s.text(0) == "foo";
@@ -100,8 +109,9 @@ test "deleting characters fills the vacated cells with the current background" {
 }
 
 test "ED erases below the cursor, and 2J fills the whole screen with the current background" {
-	const s = blankScreen(3, 3);
-	assert s !== null;
+	const sOpened = Screen.open(3, 3);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("abc\r\ndef\r\nghi" + cup(1, 2) + "\x1b[J");
 	assert s.lines() == "abc\ndef\ng";
@@ -113,8 +123,9 @@ test "ED erases below the cursor, and 2J fills the whole screen with the current
 }
 
 test "ED 3 erases the scrollback and the viewport is all that is left" {
-	const s = blankScreen(3, 3);
-	assert s !== null;
+	const sOpened = Screen.open(3, 3);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("abc\r\ndef\r\nghi\r\n111\r\n222\r\na");
 	assert scrollbackAndScreen(s) == "abc\ndef\nghi\n111\n222\na";
@@ -125,9 +136,11 @@ test "ED 3 erases the scrollback and the viewport is all that is left" {
 }
 
 test "inserting and deleting lines inside left and right margins moves only the margin columns" {
-	const up = blankScreen(5, 5);
-	const down = blankScreen(5, 5);
-	assert up !== null && down !== null;
+	const upOpened = Screen.open(5, 5);
+	const downOpened = Screen.open(5, 5);
+	assert upOpened.ok && downOpened.ok;
+	const up = upOpened.value;
+	const down = downOpened.value;
 	defer up.close();
 	defer down.close();
 	const rows = "111\r\n222\r\n333\r\n44444\r\n555";
@@ -141,8 +154,9 @@ test "inserting and deleting lines inside left and right margins moves only the 
 }
 
 test "DL inside shrinking and growing scroll regions" {
-	const s = blankScreen(3, 5);
-	assert s !== null;
+	const sOpened = Screen.open(3, 5);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("111\r\n222\r\n333\r\n444\r\n555");
 	assert s.feedsInStep(cup(0, 1) + "\x1b[2M");
@@ -156,8 +170,9 @@ test "DL inside shrinking and growing scroll regions" {
 }
 
 test "DL on a one-column screen deletes from the cursor row" {
-	const s = blankScreen(1, 3);
-	assert s !== null;
+	const sOpened = Screen.open(1, 3);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("a\r\nb\r\nc" + cup(0, 1) + "\x1b[M");
 	assert s.lines() == "a\nc\n";
@@ -167,9 +182,11 @@ test "DL on a one-column screen deletes from the cursor row" {
 }
 
 test "reverse index moves up, and scrolls the screen down at the top row" {
-	const s = blankScreen(1, 3);
-	const top = blankScreen(1, 3);
-	assert s !== null && top !== null;
+	const sOpened = Screen.open(1, 3);
+	const topOpened = Screen.open(1, 3);
+	assert sOpened.ok && topOpened.ok;
+	const s = sOpened.value;
+	const top = topOpened.value;
 	defer s.close();
 	defer top.close();
 	assert s.feedsInStep("1\n\x1bM\n");
@@ -179,8 +196,9 @@ test "reverse index moves up, and scrolls the screen down at the top row" {
 }
 
 test "output scrolls the screen and keeps the lines in scrollback" {
-	const s = blankScreen(1, 2);
-	assert s !== null;
+	const sOpened = Screen.open(1, 2);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	for (let i = 1; i <= 8; i++) { assert s.feedsInStep(`${i}\n`); }
 	assert s.lines() == "8\n";
@@ -188,8 +206,9 @@ test "output scrolls the screen and keeps the lines in scrollback" {
 }
 
 test "a region that starts on the first row pushes its top line into scrollback" {
-	const s = blankScreen(1, 3);
-	assert s !== null;
+	const sOpened = Screen.open(1, 3);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("1\n2\n3\n4\n");
 	assert s.lines() == "3\n4\n";
@@ -205,8 +224,9 @@ test "a region that starts on the first row pushes its top line into scrollback"
 }
 
 test "a region below the first row scrolls in place and never touches scrollback" {
-	const s = blankScreen(1, 5);
-	assert s !== null;
+	const sOpened = Screen.open(1, 5);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("1\n2\n3\n4\n5");
 	assert s.feedsInStep(region(1, 2) + cup(0, 2) + "\na");
@@ -224,8 +244,9 @@ test "a region below the first row scrolls in place and never touches scrollback
 }
 
 test "the alternate screen scrolls without scrollback and gives the main screen back" {
-	const s = blankScreen(1, 5);
-	assert s !== null;
+	const sOpened = Screen.open(1, 5);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("M\no\nn\nk\ne\ny");
 	assert s.lines() == "o\nn\nk\ne\ny";
@@ -243,8 +264,9 @@ test "the alternate screen scrolls without scrollback and gives the main screen 
 }
 
 test "DECCOLM with mode 40 on resizes the terminal and the rows follow" {
-	const s = blankScreen(5, 5);
-	assert s !== null;
+	const sOpened = Screen.open(5, 5);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("ABCDE\x1b[?3l");
 	assert s.untrimmedText(0).length == 5;
@@ -264,8 +286,9 @@ function numbered(from: int32, to: int32): string {
 }
 
 test "a flood past the scrollback limit leaves the last rows right and the frames in step" {
-	const s = blankScreen(40, 24);
-	assert s !== null;
+	const sOpened = Screen.open(40, 24);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	const lines = 120000;
 	const batch = 4000;
@@ -279,8 +302,9 @@ test "a flood past the scrollback limit leaves the last rows right and the frame
 }
 
 test "widening and narrowing reflows a wrapped line and keeps hard breaks" {
-	const s = blankScreen(4, 8);
-	assert s !== null;
+	const sOpened = Screen.open(4, 8);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("111\r\n2222aa\r\n333\r\n");
 	assert s.lines() == "111\n2222\naa\n333\n\n\n\n";
@@ -297,8 +321,9 @@ test "widening and narrowing reflows a wrapped line and keeps hard breaks" {
 }
 
 test "a line that fills the width survives being widened, and rows can shrink and grow around it" {
-	const s = blankScreen(20, 4);
-	assert s !== null;
+	const sOpened = Screen.open(20, 4);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("some long long text");
 	assert s.resize(18, 4).ok && s.mismatch() == "";
@@ -311,10 +336,13 @@ test "a line that fills the width survives being widened, and rows can shrink an
 }
 
 test "a drawing character set, a hidden cursor and a reset before a wrap do not stop the reflow" {
-	const draw = blankScreen(4, 4);
-	const hidden = blankScreen(4, 4);
-	const reset = blankScreen(4, 4);
-	assert draw !== null && hidden !== null && reset !== null;
+	const drawOpened = Screen.open(4, 4);
+	const hiddenOpened = Screen.open(4, 4);
+	const resetOpened = Screen.open(4, 4);
+	assert drawOpened.ok && hiddenOpened.ok && resetOpened.ok;
+	const draw = drawOpened.value;
+	const hidden = hiddenOpened.value;
+	const reset = resetOpened.value;
 	defer draw.close();
 	defer hidden.close();
 	defer reset.close();
@@ -328,11 +356,15 @@ test "a drawing character set, a hidden cursor and a reset before a wrap do not 
 }
 
 test "C0 controls move the cursor without writing: BS, LF, CR and tab stops" {
-	const bs = blankScreen(4, 3);
-	const lf = blankScreen(10, 3);
-	const cr = blankScreen(10, 3);
-	const tab = blankScreen(25, 3);
-	assert bs !== null && lf !== null && cr !== null && tab !== null;
+	const bsOpened = Screen.open(4, 3);
+	const lfOpened = Screen.open(10, 3);
+	const crOpened = Screen.open(10, 3);
+	const tabOpened = Screen.open(25, 3);
+	assert bsOpened.ok && lfOpened.ok && crOpened.ok && tabOpened.ok;
+	const bs = bsOpened.value;
+	const lf = lfOpened.value;
+	const cr = crOpened.value;
+	const tab = tabOpened.value;
 	defer bs.close();
 	defer lf.close();
 	defer cr.close();
@@ -348,9 +380,11 @@ test "C0 controls move the cursor without writing: BS, LF, CR and tab stops" {
 }
 
 test "IND and NEL scroll at the bottom, NEL also returns to the first column" {
-	const ind = blankScreen(4, 4);
-	const nel = blankScreen(4, 4);
-	assert ind !== null && nel !== null;
+	const indOpened = Screen.open(4, 4);
+	const nelOpened = Screen.open(4, 4);
+	assert indOpened.ok && nelOpened.ok;
+	const ind = indOpened.value;
+	const nel = nelOpened.value;
 	defer ind.close();
 	defer nel.close();
 	assert ind.feedsInStep("a\r\nb\x1bD") && ind.cursorAt(1, 2);
@@ -364,8 +398,9 @@ test "IND and NEL scroll at the bottom, NEL also returns to the first column" {
 }
 
 test "RI moves up one row at a time and scrolls the rows down at the top" {
-	const s = blankScreen(2, 4);
-	assert s !== null;
+	const sOpened = Screen.open(2, 4);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("a\r\nb\r\nc\r\nd.");
 	assert s.lines() == "a\nb\nc\nd." && s.cursorAt(1, 3);
@@ -377,8 +412,9 @@ test "RI moves up one row at a time and scrolls the rows down at the top" {
 }
 
 test "a tab stop set with HTS is dropped when the column count changes" {
-	const s = blankScreen(25, 3);
-	assert s !== null;
+	const sOpened = Screen.open(25, 3);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("boo\x1bH\r\n") && s.cursorAt(0, 1);
 	assert s.feedsInStep("\t") && s.cursorAt(3, 1);

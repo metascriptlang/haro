@@ -205,9 +205,3 @@ export function cursorAt(this s: Screen, x: int32, y: int32): boolean {
 	const c = s.cursor;
 	return c !== null && c.x == x && c.y == y;
 }
-
-export function blankScreen(cols: int32, rows: int32): Screen | null {
-	const r = Screen.open(cols, rows);
-	if (!r.ok) { return null; }
-	return r.value;
-}

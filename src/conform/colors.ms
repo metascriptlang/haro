@@ -1,5 +1,5 @@
 import { rgb } from "./palette";
-import { Screen, blankScreen } from "./screen";
+import { Screen } from "./screen";
 
 function firstSpanColor(s: Screen, y: int32): string {
 	const spans = s.spans(y);
@@ -9,8 +9,9 @@ function firstSpanColor(s: Screen, y: int32): string {
 }
 
 test "an OSC 4 palette change repaints the cells that use the entry, OSC 104 puts it back" {
-	const s = blankScreen(10, 3);
-	assert s !== null;
+	const sOpened = Screen.open(10, 3);
+	assert sOpened.ok;
+	const s = sOpened.value;
 	defer s.close();
 	assert s.feedsInStep("\x1b[31mr\x1b[0m\r\n\x1b[41m \x1b[0m");
 	assert firstSpanColor(s, 0) == "#cc6666";
@@ -24,10 +25,13 @@ test "an OSC 4 palette change repaints the cells that use the entry, OSC 104 put
 }
 
 test "a new default colour (OSC 10, OSC 11, DECSCNM) repaints rows already drawn" {
-	const fg = blankScreen(10, 3);
-	const bg = blankScreen(10, 3);
-	const reverse = blankScreen(10, 3);
-	assert fg !== null && bg !== null && reverse !== null;
+	const fgOpened = Screen.open(10, 3);
+	const bgOpened = Screen.open(10, 3);
+	const reverseOpened = Screen.open(10, 3);
+	assert fgOpened.ok && bgOpened.ok && reverseOpened.ok;
+	const fg = fgOpened.value;
+	const bg = bgOpened.value;
+	const reverse = reverseOpened.value;
 	defer fg.close();
 	defer bg.close();
 	defer reverse.close();
@@ -61,15 +65,21 @@ function redExactly(s: Screen, y: int32, from: int32, units: int32): boolean {
 }
 
 test "erasing, inserting and deleting fill the vacated cells with the current background" {
-	const index = blankScreen(5, 5);
-	const ech = blankScreen(10, 10);
-	const ich = blankScreen(10, 10);
-	const el = blankScreen(5, 5);
-	const ed = blankScreen(5, 5);
-	const dl = blankScreen(5, 5);
+	const indexOpened = Screen.open(5, 5);
+	const echOpened = Screen.open(10, 10);
+	const ichOpened = Screen.open(10, 10);
+	const elOpened = Screen.open(5, 5);
+	const edOpened = Screen.open(5, 5);
+	const dlOpened = Screen.open(5, 5);
 	const bg = "\x1b[48;2;255;0;0m";
-	assert index !== null && ech !== null && ich !== null &&
-		el !== null && ed !== null && dl !== null;
+	assert indexOpened.ok && echOpened.ok && ichOpened.ok &&
+		elOpened.ok && edOpened.ok && dlOpened.ok;
+	const index = indexOpened.value;
+	const ech = echOpened.value;
+	const ich = ichOpened.value;
+	const el = elOpened.value;
+	const ed = edOpened.value;
+	const dl = dlOpened.value;
 	defer index.close();
 	defer ech.close();
 	defer ich.close();

@@ -39,22 +39,24 @@ function logSince(
 	stats: Stats,
 	wakes: int32,
 	applies: int32,
-	requested: number,
-	drawn: number,
+	requested: int64,
+	drawn: int64,
 ): void {
 	setTimeout((): void => {
 		const counts = frameCounts();
+		const nowRequested = counts[0] as int64;
+		const nowDrawn = counts[1] as int64;
 		console.log(
 			`haro stats: ${stats.line()} wakes=${pace.wakes - wakes} ` +
-			`applies=${pace.applies - applies} requested=${counts[0] - requested} ` +
-			`drawn=${counts[1] - drawn} ${voidLine()}`,
+			`applies=${pace.applies - applies} requested=${nowRequested - requested} ` +
+			`drawn=${nowDrawn - drawn} ${voidLine()}`,
 		);
 		stats.reset();
 		if (!launchShown && stats.launched()) {
 			launchShown = true;
 			console.log(`haro launch: ${stats.launchLine()}`);
 		}
-		logSince(pace, stats, pace.wakes, pace.applies, counts[0], counts[1]);
+		logSince(pace, stats, pace.wakes, pace.applies, nowRequested, nowDrawn);
 	}, STATS_MS);
 }
 

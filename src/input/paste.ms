@@ -208,10 +208,6 @@ export function closeDialogOf(cols: int32): Dialog {
 	return { top: top, code: [] };
 }
 
-function line(text: string, tone: Tone): Line {
-	return { text: text, tone: tone };
-}
-
 test "a line break is a warning only when the program has not asked for bracketed paste" {
 	assert warningFor("one line", false) == Warning.None;
 	assert warningFor("a\nb", false) == Warning.MultiLine;
@@ -288,13 +284,13 @@ test "a dialog for a paste with no warning is refused" {
 
 test "the dialog states what it asks, how big the text is, and previews its first lines" {
 	const d = dialogOf(Warning.MultiLine, "ls\ncd ..\nrm -rf x\nexit", 40, 3);
-	assert d.top[0] == line("Warning: potentially unsafe paste", Tone.Title);
-	assert d.top[d.top.length - 1] == line("4 lines, 22 characters", Tone.Dim);
+	assert d.top[0] == ({ text: "Warning: potentially unsafe paste", tone: Tone.Title } as Line);
+	assert d.top[d.top.length - 1] == ({ text: "4 lines, 22 characters", tone: Tone.Dim } as Line);
 	assert d.top.length >= 4;
 	assert d.code.length == 4;
-	assert d.code[0] == line("ls", Tone.Code);
-	assert d.code[2] == line("rm -rf x", Tone.Code);
-	assert d.code[3] == line("… 1 more line", Tone.Dim);
+	assert d.code[0] == ({ text: "ls", tone: Tone.Code } as Line);
+	assert d.code[2] == ({ text: "rm -rf x", tone: Tone.Code } as Line);
+	assert d.code[3] == ({ text: "… 1 more line", tone: Tone.Dim } as Line);
 }
 
 test "a preview that fits shows no more-lines row and a large text says its size" {
@@ -314,10 +310,10 @@ test "a preview that fits shows no more-lines row and a large text says its size
 
 test "a trailing line break previews and counts a last empty line" {
 	const d = dialogOf(Warning.MultiLine, "a\nb\n", 40, 8);
-	assert d.top[d.top.length - 1] == line("3 lines, 4 characters", Tone.Dim);
+	assert d.top[d.top.length - 1] == ({ text: "3 lines, 4 characters", tone: Tone.Dim } as Line);
 	assert d.code.length == 3;
-	assert d.code[1] == line("b", Tone.Code);
-	assert d.code[2] == line("", Tone.Code);
+	assert d.code[1] == ({ text: "b", tone: Tone.Code } as Line);
+	assert d.code[2] == ({ text: "", tone: Tone.Code } as Line);
 }
 
 test "a clipboard read is denied by escape or enter and allowed only by ctrl enter" {
@@ -342,15 +338,15 @@ test "a close is confirmed by enter alone and cancelled by escape alone" {
 test "the close dialog says a program runs and asks to end it, with nothing to preview" {
 	const d = closeDialogOf(40);
 	assert d.top.length == 2;
-	assert d.top[0] == line("A program is still running", Tone.Title);
-	assert d.top[1] == line("Close the window and end it?", Tone.Body);
+	assert d.top[0] == ({ text: "A program is still running", tone: Tone.Title } as Line);
+	assert d.top[1] == ({ text: "Close the window and end it?", tone: Tone.Body } as Line);
 	assert d.code.length == 0;
 }
 
 test "the read dialog names the access, says how big the clipboard is and previews it" {
 	const d = askDialogOf("secret\ntoken", 40, 8);
-	assert d.top[0] == line("Authorize clipboard access", Tone.Title);
-	assert d.top[d.top.length - 1] == line("2 lines, 12 characters", Tone.Dim);
+	assert d.top[0] == ({ text: "Authorize clipboard access", tone: Tone.Title } as Line);
+	assert d.top[d.top.length - 1] == ({ text: "2 lines, 12 characters", tone: Tone.Dim } as Line);
 	assert d.code.length == 2;
-	assert d.code[1] == line("token", Tone.Code);
+	assert d.code[1] == ({ text: "token", tone: Tone.Code } as Line);
 }

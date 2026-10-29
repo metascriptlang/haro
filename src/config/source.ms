@@ -181,6 +181,9 @@ function decodeCache(lines: string[], stamp: string): Loaded | null {
 	if (!c.ok || lines.length != 2 + c.value.fontFamily.length * LINES_PER_FAMILY) { return null; }
 	let faces: Vec<Faces> = [];
 	for (let at = 2; at < lines.length; at += LINES_PER_FAMILY) {
+		for (let k = at; k < at + LINES_PER_FAMILY; k++) {
+			if (lines[k] != "" && !exists(lines[k])) { return null; }
+		}
 		faces.push({
 			regular: lines[at],
 			bold: pathOrNull(lines[at + 1]),
@@ -224,22 +227,28 @@ test "a config is evaluated against the std it is given, and a missing one is na
 	if (!missing.ok) { assert missing.error.includes(`${dir}/noStd/std/core/system/index.ms`), missing.error; }
 }
 
-test "a cached record gives back each family's faces in order" {
+test "a cached record gives back each family's faces in order, and not once a face file is gone" {
+	const dir = `${cwd()}/out/cachedFaces`;
+	assert ensureDir(dir).ok;
+	const names = ["a.otf", "ai.otf", "b.otf", "bb.otf", "bbi.otf"];
+	for (const name of names) { assert writeFile(`${dir}/${name}`, "x").ok; }
 	const json = "{\"fontFamily\":[\"A\",\"B\"]}";
 	const faces: Vec<Faces> = [
-		{ regular: "/a.otf", bold: null, italic: "/ai.otf", boldItalic: null },
-		{ regular: "/b.otf", bold: "/bb.otf", italic: null, boldItalic: "/bbi.otf" },
+		{ regular: `${dir}/a.otf`, bold: null, italic: `${dir}/ai.otf`, boldItalic: null },
+		{ regular: `${dir}/b.otf`, bold: `${dir}/bb.otf`, italic: null, boldItalic: `${dir}/bbi.otf` },
 	];
 	const hit = decodeCache(encodeCache("s1", json, faces).split("\n"), "s1");
 	assert hit !== null;
 	if (hit !== null) {
 		assert hit.faces.length == 2;
-		assert hit.faces[0].italic == "/ai.otf";
+		assert hit.faces[0].italic == `${dir}/ai.otf`;
 		assert hit.faces[0].bold === null;
-		assert hit.faces[1].boldItalic == "/bbi.otf";
+		assert hit.faces[1].boldItalic == `${dir}/bbi.otf`;
 	}
 	assert decodeCache(encodeCache("s1", json, faces).split("\n"), "s2") === null;
 	assert decodeCache(encodeCache("s1", json, [faces[0]]).split("\n"), "s1") === null;
+	assert remove(`${dir}/bbi.otf`).ok;
+	assert decodeCache(encodeCache("s1", json, faces).split("\n"), "s1") === null;
 }
 
 test "Windows keeps its cache under the home directory when LOCALAPPDATA is unset" {

@@ -30,7 +30,7 @@ import { Config } from "../config/config";
 import { CommandDone } from "../vt/vt";
 import { KeyEvent, OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
-import { HookPane, KeyAnswer, UNHANDLED, answerKey, commandDone, prompted } from "../config/hooks";
+import { HookPane, Hooks, KeyAnswer, UNHANDLED, answerKey, commandDone, prompted } from "../config/hooks";
 import {
 	ConfigWatch,
 	forFile,
@@ -170,6 +170,11 @@ function quitWith(shell: Shell): () => void {
 	return (): void => { const _closing = closeThen(shell, (): void => { exit(0); }); };
 }
 
+function withHooks<R>(absent: R, use: (hooks: Hooks) => R): R {
+	const hooks = config.loaded.hooks;
+	return hooks === null ? absent : use(hooks);
+}
+
 async function openWindow(shell: Shell, view: View, exited: (code: int32) => void): Promise<int32> {
 	registerFallbacks();
 	const families = familyList(config.loaded.faces);
@@ -191,18 +196,21 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 		timing: { clock: (): float64 => performance.now(), schedule: inFrame },
 		keyHook: {
 			answer: (pane: HookPane, k: KeyEvent): Result<KeyAnswer, string> => {
-				const hooks = config.loaded.hooks;
-				return hooks === null ? Result.ok(UNHANDLED) : hooks.answerKey(pane, k);
+				return withHooks(Result.ok(UNHANDLED), (hooks: Hooks): Result<KeyAnswer, string> => {
+					return hooks.answerKey(pane, k);
+				});
 			},
 		},
 		shellHook: {
 			prompted: (pane: HookPane, at: int32): Result<void, string> => {
-				const hooks = config.loaded.hooks;
-				return hooks === null ? Result.ok(null) : hooks.prompted(pane, at);
+				return withHooks(Result.ok(null), (hooks: Hooks): Result<void, string> => {
+					return hooks.prompted(pane, at);
+				});
 			},
 			commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => {
-				const hooks = config.loaded.hooks;
-				return hooks === null ? Result.ok(null) : hooks.commandDone(pane, done);
+				return withHooks(Result.ok(null), (hooks: Hooks): Result<void, string> => {
+					return hooks.commandDone(pane, done);
+				});
 			},
 		},
 		events: {

@@ -1,8 +1,10 @@
+import { GhosttyStyle, size_t } from "../../vendor/ghostty/include/ghostty/vt.h";
 import {
 	CellFlag,
 	Rgb,
 	Underline,
 	Vt,
+	VtError,
 	clean,
 	Grapheme,
 	dirtyRows,
@@ -14,6 +16,7 @@ import {
 	update,
 	writeText,
 } from "./vt";
+import { underlineOf } from "./render";
 import {
 	shown,
 	withVt,
@@ -44,6 +47,18 @@ test "a link at a column that does not fit sixteen bits is refused, not wrapped 
 		assert shown(vt.linkAt(0, 0)) == "https://example.com";
 		assert shown(vt.linkAt(65536, 0)) == "<failed>";
 	});
+}
+
+test "an underline value libghostty does not define is an error naming it" {
+	let style: GhosttyStyle = { size: sizeof GhosttyStyle as size_t };
+	style.underline = 99;
+	const found = underlineOf(style);
+	assert !found.ok;
+	if (!found.ok) { assert found.error == VtError.UnderlineUnknown; }
+	style.underline = 3;
+	const curly = underlineOf(style);
+	assert curly.ok;
+	if (curly.ok) { assert curly.value == Underline.Curly; }
 }
 
 test "a styled cell carries its colour, flags and underline" {

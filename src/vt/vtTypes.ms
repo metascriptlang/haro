@@ -15,6 +15,7 @@ export enum VtError {
 	ScrollbackInvalid,
 	CellSizeInvalid,
 	GeometryInvalid,
+	UnderlineUnknown,
 }
 
 export enum PasteError {

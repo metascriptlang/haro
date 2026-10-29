@@ -12,6 +12,7 @@ import {
 	GhosttyRenderStateRowIterator,
 	GhosttyRenderStateRowSelection,
 	GhosttyResult,
+	GhosttySgrUnderline,
 	GhosttyStyle,
 	GhosttyStyleColorTag,
 	ghostty_render_state_row_cells_next,
@@ -88,14 +89,15 @@ function styleFlags(style: GhosttyStyle): BitSet<CellFlag> {
 	return flags;
 }
 
-function underlineOf(style: GhosttyStyle): Underline {
-	return match (style.underline) {
-		1 => Underline.Single,
-		2 => Underline.Double,
-		3 => Underline.Curly,
-		4 => Underline.Dotted,
-		5 => Underline.Dashed,
-		_ => Underline.None,
+export function underlineOf(style: GhosttyStyle): Result<Underline, VtError> {
+	return match (style.underline as GhosttySgrUnderline) {
+		GhosttySgrUnderline.GHOSTTY_SGR_UNDERLINE_NONE => Result.ok(Underline.None),
+		GhosttySgrUnderline.GHOSTTY_SGR_UNDERLINE_SINGLE => Result.ok(Underline.Single),
+		GhosttySgrUnderline.GHOSTTY_SGR_UNDERLINE_DOUBLE => Result.ok(Underline.Double),
+		GhosttySgrUnderline.GHOSTTY_SGR_UNDERLINE_CURLY => Result.ok(Underline.Curly),
+		GhosttySgrUnderline.GHOSTTY_SGR_UNDERLINE_DOTTED => Result.ok(Underline.Dotted),
+		GhosttySgrUnderline.GHOSTTY_SGR_UNDERLINE_DASHED => Result.ok(Underline.Dashed),
+		_ => Result.err(VtError.UnderlineUnknown),
 	};
 }
 
@@ -226,7 +228,7 @@ function readCell(
 		const styleKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE;
 		try checked(cellsGet(cells, styleKey, style), VtError.ReadFailed);
 		flags = styleFlags(style);
-		underline = underlineOf(style);
+		underline = try underlineOf(style);
 		if (underline != Underline.None) { underlineColor = try underlineColorOf(state, style); }
 	}
 	if (facts.wide == GhosttyCellWide.GHOSTTY_CELL_WIDE_WIDE) { flags = flags.incl(CellFlag.Wide); }

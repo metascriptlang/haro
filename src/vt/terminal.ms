@@ -232,6 +232,8 @@ export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, V
 	}
 	try checked(r, VtError.ReadFailed);
 	if (len == 0) { return Result.ok(null); }
+	// Typed local until card
+	// 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
 	const uri: string | null = wellFormed(buf[0..(len as int32)]);
 	return Result.ok(uri);
 }

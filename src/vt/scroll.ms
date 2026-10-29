@@ -51,6 +51,8 @@ function screenRow(tracked: GhosttyTrackedGridRef): Result<int32 | null, VtError
 	const r = ghostty_tracked_grid_ref_point(tracked, screen, at);
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
 	try checked(r, VtError.ReadFailed);
+	// Typed local until card
+	// 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
 	const row: int32 | null = at.y as int32;
 	return Result.ok(row);
 }

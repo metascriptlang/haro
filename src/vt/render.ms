@@ -134,6 +134,8 @@ function underlineColorOf(
 	const color = style.underline_color;
 	return match (color.tag) {
 		GhosttyStyleColorTag.GHOSTTY_STYLE_COLOR_RGB => {
+			// Typed local until card
+			// 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
 			const found: Rgb | null = rgb(color.value.rgb);
 			return Result.ok(found);
 		},
@@ -141,6 +143,8 @@ function underlineColorOf(
 			let palette: Colors256;
 			const key = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLOR_PALETTE;
 			try checked(stateGet(state, key, palette), VtError.ReadFailed);
+			// Typed local until card
+			// 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
 			const found: Rgb | null = rgb(palette.c[color.value.palette]);
 			return Result.ok(found);
 		},
@@ -270,7 +274,8 @@ function selectedIn(iterator: GhosttyRenderStateRowIterator): Result<RowSpan | n
 	const r = rowGet(iterator, key, picked);
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
 	try checked(r, VtError.ReadFailed);
-	// Typed local until card 2026-10-21-result-ok-drops-null-from-declared-return.md
+	// Typed local until card
+	// 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
 	const span: RowSpan | null = { from: picked.start_x as int32, to: picked.end_x as int32 };
 	return Result.ok(span);
 }

@@ -67,6 +67,8 @@ function markedFound(
 ): Result<Marked | null, VtError> {
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
 	try checked(r, VtError.SelectFailed);
+	// Typed local until card
+	// 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
 	const m: Marked | null = try markedOf(terminal, selection);
 	return Result.ok(m);
 }
@@ -146,6 +148,8 @@ export function selectedText(this vt: Vt): Result<string | null, VtError> {
 	}
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }
 	try checked(r, VtError.ReadFailed);
+	// Typed local until card
+	// 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
 	const text: string | null = buf[0..(written as int32)].asString();
 	return Result.ok(text);
 }

@@ -22,7 +22,8 @@ function scrolledRows(this vt: Vt): Result<int32 | null, VtError> {
 	const anchored = try vt.anchoredRow();
 	if (anchored === null) { return Result.ok(null); }
 	const offset = try vt.scrollOffset();
-	// Typed local until card 2026-10-21-result-ok-drops-null-from-declared-return.md
+	// Typed local until card
+	// 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
 	const scrolled: int32 | null = offset - anchored;
 	return Result.ok(scrolled);
 }

@@ -56,6 +56,8 @@ export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	const tailKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_WIDE_TAIL;
 	try checked(stateGet(vt.state, tailKey, tail), VtError.ReadFailed);
 	if (tail) {
+		// Typed local until card
+		// 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
 		const onTail: Cursor | null = { x: (x as int32) - 1, y: y as int32, wide: true };
 		return Result.ok(onTail);
 	}
@@ -65,6 +67,8 @@ export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	try checked(vtGridRef(vt.terminal, viewport, x as int32, y as int32, under), VtError.ReadFailed);
 	try checked(gridRefCell(under, cell), VtError.ReadFailed);
 	const width = try widthOf(cell);
+	// Typed local until card
+	// 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
 	const at: Cursor | null = {
 		x: x as int32,
 		y: y as int32,

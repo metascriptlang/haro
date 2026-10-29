@@ -15,6 +15,7 @@ import {
 	Term,
 	TermError,
 	sendReplies,
+	shutdown,
 	drain,
 
 	annotate,
@@ -445,5 +446,13 @@ test "a drain reads the clock the terminal was opened with to spend its budget" 
 		const more = t.drain();
 		assert more.ok;
 		if (more.ok) { assert more.value; }
+	}).ok;
+}
+
+test "shutting a terminal down twice frees its handles once" {
+	assert onTerm("ready", (t: Term, sink: Sink): void => {
+		t.shutdown();
+		t.shutdown();
+		assert t.session === null;
 	}).ok;
 }

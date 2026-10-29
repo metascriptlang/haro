@@ -102,6 +102,7 @@ export interface Term {
 	cellHeight: int32;
 	alive: boolean;
 	ended: boolean;
+	closed: boolean;
 	spawnedAt: float64;
 	marks: Vec<Mark>;
 }
@@ -165,6 +166,7 @@ export function openTerm(
 		cellHeight: 0,
 		alive: true,
 		ended: false,
+		closed: false,
 		spawnedAt: -1,
 		marks: [],
 	});
@@ -432,6 +434,8 @@ export function sendReplies(this t: Term): Result<void, TermError> {
 }
 
 export function shutdown(this t: Term): void {
+	if (t.closed) { return; }
+	t.closed = true;
 	const s = t.session;
 	if (s !== null) {
 		s.close();

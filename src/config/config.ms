@@ -217,10 +217,12 @@ function readKeybind(v: JsonValue, key: string): Result<Keybind, string> {
 }
 
 function startDirOf(text: string): StartDir | null {
-	if (text == "inherit") { return { kind: StartKind.Inherit }; }
-	if (text == "home") { return { kind: StartKind.Home }; }
 	if (text.startsWith("~/") || isAbsolute(text)) { return { kind: StartKind.Path, path: text }; }
-	return null;
+	return match (text) {
+		"inherit" => ({ kind: StartKind.Inherit }),
+		"home" => ({ kind: StartKind.Home }),
+		_ => null,
+	};
 }
 
 export function parse(json: string): Result<Config, string> {

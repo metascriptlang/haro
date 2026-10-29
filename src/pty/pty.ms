@@ -12,6 +12,13 @@ import { isDir } from "std/fs";
 import { langEntry } from "./locale";
 import { ShellLaunch, bashMajorOf, launchOf } from "./shellIntegration";
 import { Pty, PtyError } from "./transport";
+import {
+	ptyClose,
+	ptyExitCode,
+	ptyExited,
+	ptyResize,
+	ptyWait,
+} from "./nativePty.h";
 
 extern function ptyOpen(
 	commandLine: cstring,
@@ -23,27 +30,14 @@ extern function ptyOpen(
 	heightPx: int32,
 ): int32;
 extern function ptyRead(id: int32, buf: Span<uint8>): int64;
-extern function ptyWait(id: int32, timeoutMs: int32): int32;
 extern function ptyWrite(id: int32, data: Readonly<Span<uint8>>): int64;
-extern function ptyResize(
-	id: int32,
-	cols: int32,
-	rows: int32,
-	widthPx: int32,
-	heightPx: int32,
-): int32;
-extern function ptyExited(id: int32): int32;
-extern function ptyExitCode(id: int32): int32;
-extern function ptyClose(id: int32): void;
 
 when (!windows) {
 	import { env } from "std/process";
+	import { ptyChildPid, ptyExitSignal, ptyMaster } from "./nativePty.h";
 
 	@include("unistd.h");
 
-	extern function ptyMaster(id: int32): int32;
-	extern function ptyChildPid(id: int32): int32;
-	extern function ptyExitSignal(id: int32): int32;
 	extern function tcgetpgrp(fd: int32): int32;
 }
 
@@ -62,8 +56,7 @@ function launchIn(commandLine: string, shellScripts: string | null): ShellLaunch
 function envBlock(entries: Vec<string>): Vec<uint8> {
 	let block: Vec<uint8> = [];
 	for (const entry of entries) {
-		for (const b of entry.asBytes()) { block.push(b); }
-		block.push(0);
+		block = [...block, ...entry.asBytes(), 0];
 	}
 	return block;
 }
@@ -114,6 +107,7 @@ function openError(code: int32): PtyError {
 	};
 }
 
+const PTY_WAIT_FAILED: int32 = -2;
 const PTY_OUT_OF_MEMORY: int64 = -2;
 const PTY_BACKLOGGED: int64 = -3;
 
@@ -133,7 +127,7 @@ export function read(this p: NativePty, buf: Span<uint8>): Result<int32, PtyErro
 export function wait(this p: NativePty, timeoutMs: int32): Result<boolean, PtyError> {
 	const r = ptyWait(p.id, timeoutMs);
 	return match (r) {
-		-2 => Result.err(PtyError.WaitFailed),
+		PTY_WAIT_FAILED => Result.err(PtyError.WaitFailed),
 		_ when r < 0 => Result.err(PtyError.Closed),
 		_ => Result.ok(r == 1),
 	};

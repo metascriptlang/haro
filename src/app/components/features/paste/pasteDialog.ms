@@ -36,7 +36,7 @@ import { Button } from "../../ui/button";
 import { CellMetrics, CellText } from "../../ui/cellText";
 import { ModalLayer } from "../../layout/modalLayer";
 
-export struct Shown {
+export struct ShownLine {
 	spans: TextSpan[];
 }
 
@@ -49,8 +49,8 @@ export interface PasteDialogModel {
 	cancelLabel: Accessor<string>;
 	setConfirmLabel: Setter<string>;
 	setCancelLabel: Setter<string>;
-	top: List<Shown>;
-	code: List<Shown>;
+	top: List<ShownLine>;
+	code: List<ShownLine>;
 	shown: Pending;
 }
 
@@ -81,11 +81,11 @@ function styleOf(tone: Tone): Style {
 	};
 }
 
-function shownLine(this line: Line): Shown {
+function shownLine(this line: Line): ShownLine {
 	return { spans: [{ text: line.text, style: styleOf(line.tone) }] };
 }
 
-function fill(list: List<Shown>, lines: Readonly<Span<Line>>): void {
+function fill(list: List<ShownLine>, lines: Readonly<Span<Line>>): void {
 	while (list.length() > 0) { list.remove(list.length() - 1); }
 	for (const line of lines) { list.push(line.shownLine()); }
 }
@@ -99,7 +99,7 @@ export function open(this typeof PasteDialogModel): PasteDialogModel {
 		visible: visible, cols: cols, setVisible: setVisible, setCols: setCols,
 		confirmLabel: confirmLabel, cancelLabel: cancelLabel,
 		setConfirmLabel: setConfirmLabel, setCancelLabel: setCancelLabel,
-		top: createList<Shown>([]), code: createList<Shown>([]),
+		top: createList<ShownLine>([]), code: createList<ShownLine>([]),
 		shown: { kind: PendingKind.None },
 	};
 }
@@ -155,7 +155,9 @@ export function PasteDialog(props: {
 }): NeonNode {
 	const d = props.model;
 	const m = props.metrics;
-	const row = (item: Accessor<Shown>): NeonNode => <CellText metrics={m} spans={item().spans} widths={[]} />;
+	const row = (item: Accessor<ShownLine>): NeonNode => {
+		return <CellText metrics={m} spans={item().spans} widths={[]} />;
+	};
 	return <Show when={d.visible()}>
 		<ModalLayer>
 			<View

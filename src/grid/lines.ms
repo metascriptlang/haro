@@ -261,12 +261,11 @@ export function line(
 const SWAP: CellInk = { fg: null, bg: null };
 const RED: Rgb = { r: 255, g: 0, b: 0 };
 
-function inkedLine(
+function lineOfFirstRow(
 	text: string,
 	cols: int32,
-	cursorCell: int32,
-	cursorInk: CellInk | null,
 	selected: Marked | null,
+	build: (row: Row, background: Rgb) => Result<GridLine, GridError>,
 ): GridLine | null {
 	const created = Vt.create(cols, 2);
 	if (!created.ok) { return null; }
@@ -279,10 +278,21 @@ function inkedLine(
 	const rows = vt.rows();
 	let found: GridLine | null = null;
 	if (marked && updated.ok && colors.ok && rows.ok) {
-		const line = rows.value[0].line(cursorCell, cursorInk, SWAP, colors.value.bg);
+		const line = build(rows.value[0], colors.value.bg);
 		if (line.ok) { found = line.value; }
 	}
 	return found;
+}
+
+function inkedLine(
+	text: string,
+	cols: int32,
+	cursorCell: int32,
+	cursorInk: CellInk | null,
+	selected: Marked | null,
+): GridLine | null {
+	return lineOfFirstRow(text, cols, selected, (row: Row, background: Rgb) =>
+		row.line(cursorCell, cursorInk, SWAP, background));
 }
 
 function tintedLine(
@@ -293,22 +303,9 @@ function tintedLine(
 	tint: RowTint | null,
 	note: RowNote | null = null,
 ): GridLine | null {
-	const created = Vt.create(cols, 2);
-	if (!created.ok) { return null; }
-	const vt = created.value;
-	defer vt.free();
-	vt.writeText(text);
-	const marked = selected === null || vt.selectionSet(selected).ok;
-	const updated = vt.update();
-	const colors = vt.palette();
-	const rows = vt.rows();
-	let found: GridLine | null = null;
-	if (marked && updated.ok && colors.ok && rows.ok) {
-		const cursorInk: CellInk = { fg: null, bg: RED };
-		const line = rows.value[0].line(cursorCell, cursorInk, SWAP, colors.value.bg, tint, note);
-		if (line.ok) { found = line.value; }
-	}
-	return found;
+	const cursorInk: CellInk = { fg: null, bg: RED };
+	return lineOfFirstRow(text, cols, selected, (row: Row, background: Rgb) =>
+		row.line(cursorCell, cursorInk, SWAP, background, tint, note));
 }
 
 function firstLine(text: string, cols: int32, cursorCell: int32): GridLine | null {
@@ -480,7 +477,7 @@ test "a trailing blank that shows a background, an underline or a strikethrough 
 	}
 }
 
-function unitsOf(text: string, cursorCell: int32): string {
+function unitsWithCursor(text: string, cursorCell: int32): string {
 	const line = firstLine(text, 12, cursorCell);
 	if (line === null) { return "no line"; }
 	let out: string[] = [];
@@ -489,15 +486,15 @@ function unitsOf(text: string, cursorCell: int32): string {
 }
 
 test "the cursor's cell is a run of its own, so a ligature under it shows its parts" {
-	assert unitsOf("a->b", -1) == "4";
-	assert unitsOf("a->b", 2) == "2,1,1";
-	assert unitsOf("a->b", 0) == "1,3";
+	assert unitsWithCursor("a->b", -1) == "4";
+	assert unitsWithCursor("a->b", 2) == "2,1,1";
+	assert unitsWithCursor("a->b", 0) == "1,3";
 }
 
 test "fi, fl and st never share a run, so they stay unligated" {
-	assert unitsOf("fifl", -1) == "1,2,1";
-	assert unitsOf("ast", -1) == "2,1";
-	assert unitsOf("ft", -1) == "2";
+	assert unitsWithCursor("fifl", -1) == "1,2,1";
+	assert unitsWithCursor("ast", -1) == "2,1";
+	assert unitsWithCursor("ft", -1) == "2";
 }
 
 test "a lit block cursor draws its cell in the cursor colour, its text in the cell's background" {
@@ -637,7 +634,7 @@ function noteOf(text: string): RowNote {
 	return { text: text, fg: null, bg: null };
 }
 
-function unitsOf(line: GridLine): string {
+function unitsOfLine(line: GridLine): string {
 	return line.runs.map((r: LineRun): string => `${r.units}`).join(",");
 }
 
@@ -647,7 +644,7 @@ test "a note sits right-aligned on its row in the row's foreground drawn faint" 
 	assert line !== null && plain !== null;
 	if (line !== null && plain !== null) {
 		assert line.text == "$ false" + "    " + "exit 2 · 1.3s", line.text;
-		assert unitsOf(line) == "11,13", unitsOf(line);
+		assert unitsOfLine(line) == "11,13", unitsOfLine(line);
 		const own = plain.runs[0];
 		assert line.runs[0].fg == own.fg;
 		assert line.runs[1].fg == faded(own.fg, own.bg);

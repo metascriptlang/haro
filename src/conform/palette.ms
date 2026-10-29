@@ -21,19 +21,30 @@ function hexChannel(text: string, at: int32): int32 {
 	return HEX.indexOf(text[at]) * 16 + HEX.indexOf(text[at + 1]);
 }
 
+function isHexDigits(text: string, from: int32, to: int32): boolean {
+	for (let i = from; i < to; i++) {
+		if (HEX.indexOf(text[i]) < 0) { return false; }
+	}
+	return true;
+}
+
 export function cssHex(c: Rgb): string {
 	return "#" + hexDigits(c.r) + hexDigits(c.g) + hexDigits(c.b);
 }
 
-export function fromCssHex(text: string): Rgb {
-	return rgb(hexChannel(text, 1), hexChannel(text, 3), hexChannel(text, 5));
+export function fromCssHex(text: string): Result<Rgb, string> {
+	if (text.length != 7 || text[0] != "#" || !isHexDigits(text, 1, 7)) {
+		return Result.err(`"${text}" is not a #rrggbb colour in lower-case hex`);
+	}
+	return Result.ok(rgb(hexChannel(text, 1), hexChannel(text, 3), hexChannel(text, 5)));
 }
 
 function oscRgb(c: Rgb): string {
 	return `rgb:${hexDigits(c.r)}/${hexDigits(c.g)}/${hexDigits(c.b)}`;
 }
 
-function ownIndexed(n: int32): Rgb {
+function ownIndexed(index: uint8): Rgb {
+	const n = index as int32;
 	return rgb(n, (n * 7 + 31) % 256, 255 - n);
 }
 
@@ -41,7 +52,8 @@ function cubeLevel(v: int32): uint8 {
 	return (v == 0 ? 0 : v * 40 + 55) as uint8;
 }
 
-export function defaultIndexed(n: int32): Rgb {
+export function defaultIndexed(index: uint8): Rgb {
+	const n = index as int32;
 	if (n < 16) {
 		const c = DEFAULT_NAMED[n];
 		return {
@@ -58,14 +70,16 @@ export function defaultIndexed(n: int32): Rgb {
 	return { r: gray, g: gray, b: gray };
 }
 
-export function indexed(n: int32, own: boolean): Rgb {
+export function indexed(n: uint8, own: boolean): Rgb {
 	return own ? ownIndexed(n) : defaultIndexed(n);
 }
 
 export function palettePrelude(own: boolean): string {
 	let out = "";
 	if (own) {
-		for (let n = 0; n < 256; n++) { out += `\x1b]4;${n};${oscRgb(ownIndexed(n))}\x07`; }
+		for (let n = 0; n < 256; n++) {
+			out += `\x1b]4;${n};${oscRgb(ownIndexed(n as uint8))}\x07`;
+		}
 	}
 	return out + `\x1b]10;${oscRgb(DEFAULT_FG)}\x07\x1b]11;${oscRgb(DEFAULT_BG)}\x07`;
 }

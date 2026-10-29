@@ -45,9 +45,13 @@ function loadFixture(name: string, compare: Compare): Result<Fixture, string> {
 	});
 }
 
-function colorOf(token: string, fallback: Rgb, own: boolean): Rgb {
-	if (token == "d") { return fallback; }
-	if (token[0] == "i") { return indexed(token.slice(1).parseInt() as int32, own); }
+function colorOf(token: string, fallback: Rgb, own: boolean): Result<Rgb, string> {
+	if (token == "d") { return Result.ok(fallback); }
+	if (token[0] == "i") {
+		const n = token.slice(1).parseInt();
+		if (!(n >= 0 && n <= 255)) { return Result.err(`palette index ${token} is not 0 to 255`); }
+		return Result.ok(indexed(n as uint8, own));
+	}
 	return fromCssHex(token);
 }
 
@@ -86,15 +90,15 @@ function merged(runs: Vec<LineRun>): Vec<LineRun> {
 	return out;
 }
 
-function expectedRuns(line: string, own: boolean): Vec<LineRun> {
+function expectedRuns(line: string, own: boolean): Result<Vec<LineRun>, string> {
 	let runs: Vec<LineRun> = [];
-	if (line == "") { return runs; }
+	if (line == "") { return Result.ok(runs); }
 	for (const item of line.split(" ")) {
 		const parts = item.split(":");
 		const flags = parts[3];
 		const inverse = flags.includes("V");
-		const fg = colorOf(parts[1], DEFAULT_FG, own);
-		const bg = colorOf(parts[2], DEFAULT_BG, own);
+		const fg = try colorOf(parts[1], DEFAULT_FG, own);
+		const bg = try colorOf(parts[2], DEFAULT_BG, own);
 		runs.push({
 			units: parts[0].parseInt() as int32,
 			fg: inverse ? bg : fg,
@@ -104,7 +108,7 @@ function expectedRuns(line: string, own: boolean): Vec<LineRun> {
 			flags: flagsOf(flags),
 		});
 	}
-	return merged(runs);
+	return Result.ok(merged(runs));
 }
 
 function withoutTrailingEmpty(runs: Vec<LineRun>, textUnits: int32): Vec<LineRun> {
@@ -149,10 +153,8 @@ function firstFailure(
 			return Result.err(`row ${y}: expected "${fixture.text[y]}" got "${s.text(y)}"`);
 		}
 		if (compare == Compare.Text || (skipRunsRow !== null && y == skipRunsRow)) { continue; }
-		const want = runsText(withoutTrailingEmpty(
-			expectedRuns(fixture.attrs[y], own),
-			fixture.text[y].length as int32,
-		));
+		const expected = try expectedRuns(fixture.attrs[y], own);
+		const want = runsText(withoutTrailingEmpty(expected, fixture.text[y].length as int32));
 		const got = runsText(merged(s.runs(y)));
 		if (got != want) { return Result.err(`row ${y} runs: expected ${want}got ${got}`); }
 	}
@@ -262,7 +264,7 @@ test "every alacritty fixture conforms: whole, in 61-byte and in its own small f
 	}
 }
 
-test "underline row 7 ends double where the fixture records curly: SGR 21 after 4:3 replaces the style" {
+test "underline row 7 ends double where the fixture records curly, after 4:3 then 21" {
 	const fixture = loadFixture("underline", Compare.RunsOwnPalette);
 	assert fixture.ok, "underline fixture";
 	const opened = Screen.open(fixture.value.cols, fixture.value.rows);

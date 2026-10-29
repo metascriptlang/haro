@@ -47,12 +47,12 @@ test "SGR 30-37 and 40-47 pick the eight named colours, 90-97 and 100-107 the br
 		const brightBg = look(`${100 + n}`);
 		assert fg !== null && bg !== null && brightFg !== null && brightBg !== null;
 		if (fg !== null && bg !== null && brightFg !== null && brightBg !== null) {
-			assert fg.run.fg == defaultIndexed(n);
+			assert fg.run.fg == defaultIndexed(n as uint8);
 			assert fg.run.bg == fg.defaultBg;
-			assert bg.run.bg == defaultIndexed(n);
+			assert bg.run.bg == defaultIndexed(n as uint8);
 			assert bg.run.fg == bg.defaultFg;
-			assert brightFg.run.fg == defaultIndexed(8 + n);
-			assert brightBg.run.bg == defaultIndexed(8 + n);
+			assert brightFg.run.fg == defaultIndexed((8 + n) as uint8);
+			assert brightBg.run.bg == defaultIndexed((8 + n) as uint8);
 		}
 	}
 }

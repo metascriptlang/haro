@@ -29,8 +29,8 @@ function send(
 export function paste(this c: Controls, t: Term, text: string): Result<Pasted, TermError> {
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(Pasted.Empty); }
-	const modes = try vt.modes();
-	const bracketed = modes.bracketedPaste;
+	const terminalModes = try vt.modes();
+	const bracketed = terminalModes.bracketedPaste;
 	const clean = normalized(text, bracketed);
 	if (clean == "" && !bracketed) { return Result.ok(Pasted.Empty); }
 	const warning = warningFor(clean, bracketed);

@@ -43,9 +43,15 @@ export function configPath(): string {
 	return `${homeDir().replaceAll("\\", "/")}/.config/haro/config.ms`;
 }
 
+function windowsCacheDir(localAppData: string, home: string): string {
+	const base = localAppData != "" ? localAppData : `${home}/AppData/Local`;
+	return `${base.replaceAll("\\", "/")}/haro`;
+}
+
 export function cacheDir(): string {
 	when (windows) {
-		return `${env.get("LOCALAPPDATA").replaceAll("\\", "/")}/haro`;
+		return windowsCacheDir(env.get("LOCALAPPDATA"), homeDir().replaceAll("\\", "/"));
+
 	} else when (macos) {
 		return `${homeDir()}/Library/Caches/haro`;
 	} else {
@@ -234,6 +240,11 @@ test "a cached record gives back each family's faces in order" {
 	}
 	assert decodeCache(encodeCache("s1", json, faces).split("\n"), "s2") === null;
 	assert decodeCache(encodeCache("s1", json, [faces[0]]).split("\n"), "s1") === null;
+}
+
+test "Windows keeps its cache under the home directory when LOCALAPPDATA is unset" {
+	assert windowsCacheDir("C:\\Users\\me\\AppData\\Local", "C:/Users/me") == "C:/Users/me/AppData/Local/haro";
+	assert windowsCacheDir("", "C:/Users/me") == "C:/Users/me/AppData/Local/haro";
 }
 
 test "a file is written whole under its name, with no temporary file left beside it" {

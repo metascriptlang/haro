@@ -198,7 +198,7 @@ function step(this c: CursorModel, now: number): void {
 	const dt = Math.max(0, (now - c.last) / 1000);
 	c.last = now;
 	const shape = c.look.shapeOf(c.focused);
-	const moving = c.trail.animate(dt, shape, c.cursorWidth(), c.metrics.rowHeight(), false);
+	const moving = c.trail.animate(dt, shape, c.cursorWidth(), c.metrics.rowHeight());
 	if (!c.trail.resting()) {
 		c.holdBlink();
 	} else if (c.blinkTimer < 0) {
@@ -333,11 +333,11 @@ function cursorFor(look: CursorLook): CursorModel {
 test "a moving block lights its new cell at once and draws a fainter trail that leaves the lit cell uncovered" {
 	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: false });
 	c.trail.moveTo(34, 44);
-	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
+	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20)) {}
 	assert c.operations().length == 0;
 	assert c.blockInk() !== null;
 	c.trail.moveTo(154, 44);
-	assert c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false);
+	assert c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20);
 	assert c.blockInk() !== null;
 	assert c.operations().length > 0;
 	for (const op of c.operations()) {
@@ -401,10 +401,10 @@ test "an unfocused cursor is an outline an eighth of an em wide, and a hidden on
 test "each particle is a square a fifth of a cell wide that fades with its lifetime" {
 	const c = cursorFor({ visible: false, shape: CursorShape.Block, blinking: false });
 	c.trail.moveTo(34, 44);
-	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
+	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20)) {}
 	c.trail.moveTo(34, 244);
 	while (c.trail.particles.length == 0) {
-		const _moving = c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false);
+		const _moving = c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20);
 	}
 	const cells = c.dustCells();
 	assert cells.length == c.trail.particles.length;
@@ -441,7 +441,7 @@ test "showing a cursor that has not moved, changed look or tint arms no frame on
 test "a step at rest leaves the drawing and the dust alone, and clears them once when they empty" {
 	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: false });
 	c.trail.moveTo(34, 44);
-	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
+	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20)) {}
 	const sets = { drawing: 0, dust: 0 };
 	const setDrawing = c.setDrawing;
 	const setDust = c.setDust;
@@ -460,7 +460,7 @@ test "a step at rest leaves the drawing and the dust alone, and clears them once
 test "a blinking cursor stays drawn while it moves and blinks again from on once it rests" {
 	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: true });
 	c.trail.moveTo(34, 44);
-	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
+	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20)) {}
 	c.trail.moveTo(134, 44);
 	c.blinkOn = false;
 	c.step(16);

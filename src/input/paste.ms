@@ -94,11 +94,27 @@ function wrap(text: string, cols: int32): Vec<string> {
 	return out;
 }
 
+function pairAt(text: string, at: int32): boolean {
+	if (at < 0 || at + 1 >= text.length) { return false; }
+	const high = text.charCodeAt(at);
+	const low = text.charCodeAt(at + 1);
+	return high >= 0xD800 && high <= 0xDBFF && low >= 0xDC00 && low <= 0xDFFF;
+}
+
+function cutAt(text: string, units: int32): int32 {
+	return pairAt(text, units - 1) ? units - 1 : units;
+}
+
 export function visible(line: string, cols: int32): string {
 	const cut = line.length > cols;
-	const head = cut ? line.slice(0, cols) : line;
+	const head = cut ? line.slice(0, cutAt(line, cols)) : line;
 	let out = "";
 	for (let i = 0; i < head.length; i++) {
+		if (pairAt(head, i)) {
+			out += head.slice(i, i + 2);
+			i++;
+			continue;
+		}
 		const c = head.charCodeAt(i);
 		out += match (c) {
 			"\t".code => TAB,
@@ -108,7 +124,7 @@ export function visible(line: string, cols: int32): string {
 		};
 	}
 	if (!cut && out.length <= cols) { return out; }
-	return out.slice(0, cols - 1) + "…";
+	return out.slice(0, cutAt(out, cols - 1)) + "…";
 }
 
 function sizeOf(units: int32): string {
@@ -122,6 +138,7 @@ function title(warning: Warning): string {
 }
 
 function body(warning: Warning): string {
+	if (warning == Warning.None) { throw new Error("a paste with Warning.None has no dialog body"); }
 	return match (warning) {
 		Warning.MultiLine => "You are about to paste text that contains multiple lines. " +
 			"If you paste this text into your shell, it may result in the unexpected execution " +
@@ -129,7 +146,8 @@ function body(warning: Warning): string {
 		Warning.EndMarker => "This text contains the sequence that ends a bracketed paste, " +
 			"so what follows it could run as commands the program never expected to receive. " +
 			"Do you wish to continue?",
-		_ => "You are about to paste text that is longer than 5 KiB. Do you wish to continue?",
+		Warning.Large => "You are about to paste text that is longer than 5 KiB. Do you wish to continue?",
+		Warning.None => "",
 	};
 }
 
@@ -251,6 +269,21 @@ test "control characters show as caret notation and a long line ends in an ellip
 	assert visible("abcdefghij", 10) == "abcdefghij";
 	assert visible("abcdefghijk", 10) == "abcdefghi…";
 	assert visible("\x1b\x1b\x1b\x1b\x1b", 6) == "^[^[^…";
+}
+
+test "a line cut to the columns never splits a surrogate pair" {
+	const pair = "\u{1F600}";
+	assert pair.length == 2;
+	assert visible("ab" + pair + "cdef", 3) == "ab…";
+	assert visible("abcd" + pair + "ef", 5) == "abcd…";
+	assert visible(pair + pair + pair, 3) == pair + "…";
+	assert visible("a" + pair, 5) == "a" + pair;
+}
+
+test "a dialog for a paste with no warning is refused" {
+	let refused = false;
+	try { dialogOf(Warning.None, "x", 40, 4); } catch (e) { refused = true; }
+	assert refused;
 }
 
 test "the dialog states what it asks, how big the text is, and previews its first lines" {

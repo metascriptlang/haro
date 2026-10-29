@@ -86,6 +86,8 @@ Kitty graphics is a later decision.
 - Glyphs sit on an **integer cell grid**: monospace cells with whole-pixel origins. The font is
   JetBrains Mono NL (`assets/`, SIL OFL 1.1, picked by the person 2026-10-15): the NL cut has no
   ligatures, which a terminal must never apply across cells.
+  `fontFamily` lets the person choose another family; the grid keeps a ligature from spanning
+  cells either way (`isUnligatedPair`, the run split at the cursor in `src/grid/lines.ms`).
 - Cell backgrounds, underline (straight and wavy) and strikethrough are instances of void2d's UI
   pipeline. A selected cell and the cell under a resting block cursor are drawn in their own
   colours, so the character stays readable: a selection change rebuilds only the rows whose

@@ -86,7 +86,7 @@ function shownLine(this line: Line): Shown {
 }
 
 function fill(list: List<Shown>, lines: Readonly<Span<Line>>): void {
-	while (list.length() > 0) { list.remove(0); }
+	while (list.length() > 0) { list.remove(list.length() - 1); }
 	for (const line of lines) { list.push(line.shownLine()); }
 }
 

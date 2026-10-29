@@ -46,6 +46,7 @@ export interface Effects {
 	replies: Vec<uint8>;
 	events: VtEvents;
 	heldSinceMs: float64 | null;
+	holdFailed: boolean;
 	freed: boolean;
 	holdLimitMs: float64;
 	clipboard: string | null;
@@ -80,6 +81,7 @@ export function openEffects(
 		replies: [],
 		events: NO_EVENTS,
 		heldSinceMs: null,
+		holdFailed: false,
 		freed: false,
 		holdLimitMs: HOLD_LIMIT_MS,
 		clipboard: null,
@@ -97,8 +99,9 @@ export function openEffects(
 	return Result.ok(e);
 }
 
-export function closeEffects(terminal: GhosttyTerminal): void {
-	const _cleared = vtEffectsWire(terminal, null);
+export function closeEffects(terminal: GhosttyTerminal): Result<void, VtError> {
+	if (vtEffectsWire(terminal, null) != 0) { return Result.err(VtError.WriteFailed); }
+	return Result.ok(null);
 }
 
 function dropLostAnchors(this e: Effects): void {
@@ -190,7 +193,10 @@ function renderHold(terminal: GhosttyTerminal, effects: Ptr<void>, held: boolean
 		e.heldSinceMs = null;
 		return;
 	}
-	const _captured = ghostty_render_state_update(e.state, terminal);
+	if (!ok(ghostty_render_state_update(e.state, terminal))) {
+		e.holdFailed = true;
+		return;
+	}
 	e.heldSinceMs = performance.now();
 }
 

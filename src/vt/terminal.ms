@@ -297,17 +297,21 @@ export function answerClipboard(this vt: Vt, text: string, allow: boolean): Resu
 	return Result.ok(null);
 }
 
-// A hold older than the limit ends here: the terminal has no clock, and a program that never
-// releases would freeze the screen (terminal.h, "Timeouts").
 export function holding(this vt: Vt): boolean {
 	const e = vt.effects;
 	const since = e.heldSinceMs;
-	if (since === null) { return false; }
-	if (performance.now() - since < e.holdLimitMs) { return true; }
+	return since !== null && performance.now() - since < e.holdLimitMs;
+}
+
+// A hold older than the limit ends here: the terminal has no clock, and a program that never
+// releases would freeze the screen (terminal.h, "Timeouts").
+function releaseExpiredHold(this vt: Vt): Result<void, VtError> {
+	const e = vt.effects;
+	if (e.heldSinceMs === null) { return Result.ok(null); }
 	let mode: GhosttyTerminalModeConfig = { mode: MODE_SYNC_OUTPUT, value: false };
-	const _released = terminalSet(vt.terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode);
+	try checked(terminalSet(vt.terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode), VtError.WriteFailed);
 	e.heldSinceMs = null;
-	return false;
+	return Result.ok(null);
 }
 
 export function holdLimit(this vt: Vt, ms: int64): void {
@@ -315,7 +319,12 @@ export function holdLimit(this vt: Vt, ms: int64): void {
 }
 
 export function update(this vt: Vt): Result<void, VtError> {
+	if (vt.effects.holdFailed) {
+		vt.effects.holdFailed = false;
+		return Result.err(VtError.UpdateFailed);
+	}
 	if (vt.holding()) { return Result.ok(null); }
+	try vt.releaseExpiredHold();
 	try checked(ghostty_render_state_update(vt.state, vt.terminal), VtError.UpdateFailed);
 	return Result.ok(null);
 }
@@ -337,11 +346,12 @@ export function free(this vt: Vt): void {
 	vt.effects.freed = true;
 	ghostty_tracked_grid_ref_free(vt.anchor);
 	vt.effects.freeAnchors();
-	closeEffects(vt.terminal);
+	const closed = closeEffects(vt.terminal);
 	const codec = vt.mouse.codec;
 	if (codec !== null) {
 		ghostty_mouse_encoder_free(codec.encoder);
 		ghostty_mouse_event_free(codec.event);
 	}
 	freeHandles(vt.terminal, vt.state, vt.iterator, vt.cells);
+	if (!closed.ok) { throw new Error("Vt.free: the terminal's effect callbacks could not be unwired"); }
 }

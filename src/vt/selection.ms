@@ -83,8 +83,8 @@ export function selectionSet(this vt: Vt, m: Marked): Result<void, VtError> {
 	return Result.ok(null);
 }
 
-export function selectionClear(this vt: Vt): void {
-	const _cleared = unset(vt.terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SELECTION, null);
+export function selectionClear(this vt: Vt): Result<void, VtError> {
+	return checked(unset(vt.terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SELECTION, null), VtError.SelectFailed);
 }
 
 export function selection(this vt: Vt): Result<Marked | null, VtError> {

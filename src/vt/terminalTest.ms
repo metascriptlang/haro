@@ -203,6 +203,17 @@ test "a palette of more than 256 colours is refused by its own error" {
 	});
 }
 
+test "a hold past its limit is released by update, not by asking whether the terminal is holding" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.holdLimit(0);
+		vt.writeText("\x1b[?2026hstuck");
+		assert !vt.holding();
+		assert vt.effects.heldSinceMs !== null;
+		assert vt.update().ok;
+		assert vt.effects.heldSinceMs === null;
+	});
+}
+
 test "freeing a terminal twice releases its handles once" {
 	const created = Vt.create(10, 4);
 	assert created.ok;

@@ -33,7 +33,6 @@ import {
 	NO_EVENTS,
 	VtEvents,
 	answerRead,
-	byteAt,
 	closeEffects,
 	freeAnchors,
 	openEffects,
@@ -62,6 +61,7 @@ import {
 	Rgb,
 	VtError,
 } from "./vtTypes";
+import { wellFormed } from "./wellFormed";
 
 export struct Vt {
 	terminal: GhosttyTerminal;
@@ -200,9 +200,7 @@ function terminalString(
 ): Result<string, VtError> {
 	let text: GhosttyString;
 	try checked(terminalGet(terminal, key, text), VtError.ReadFailed);
-	let bytes: Vec<uint8> = [];
-	for (let i = 0; i < (text.len as int32); i++) { bytes.push(byteAt(text, i) as uint8); }
-	return Result.ok(bytes[0..bytes.length].asString());
+	return Result.ok(wellFormed(text.ptr[0..text.len]));
 }
 
 export function title(this vt: Vt): Result<string, VtError> {
@@ -221,7 +219,7 @@ export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, V
 	}
 	try checked(r, VtError.ReadFailed);
 	if (len == 0) { return Result.ok(null); }
-	const uri: string | null = buf[0..(len as int32)].asString();
+	const uri: string | null = wellFormed(buf[0..(len as int32)]);
 	return Result.ok(uri);
 }
 

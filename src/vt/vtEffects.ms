@@ -37,6 +37,7 @@ import {
 	vtTrack,
 } from "./vtNative";
 import { VtError } from "./vtTypes";
+import { wellFormed, wellFormedPrefix } from "./wellFormed";
 
 const HOLD_LIMIT_MS: float64 = 1000;
 
@@ -211,7 +212,7 @@ function plainText(write: Ptr<GhosttyClipboardWrite>): string | null {
 	if (write.location != GhosttyClipboardLocation.GHOSTTY_CLIPBOARD_LOCATION_STANDARD) { return null; }
 	if (write.contents_len == 0) { return ""; }
 	for (const c of write.contents[0..write.contents_len]) {
-		if (c.mime.ptr[0..c.mime.len].asString() == PLAIN_TEXT) { return c.data.ptr[0..c.data.len].asString(); }
+		if (c.mime.ptr[0..c.mime.len].asString() == PLAIN_TEXT) { return wellFormed(c.data.ptr[0..c.data.len]); }
 	}
 	return null;
 }
@@ -258,50 +259,8 @@ function xtversion(terminal: GhosttyTerminal, effects: Ptr<void>): GhosttyString
 
 export const NOTIFICATION_TITLE_BYTES = 256;
 export const NOTIFICATION_BODY_BYTES = 1024;
-const REPLACEMENT_CHARACTER = "\u{fffd}";
-const LONGEST_UTF8_BYTES = 4;
-
-export function byteAt(text: Readonly<GhosttyString>, at: int32): int32 {
-	return text.ptr[at] as int32;
-}
-
-function wellFormedLength(text: Readonly<GhosttyString>, at: int32, end: int32): int32 {
-	const lead = byteAt(text, at);
-	if (lead < 0x80) { return 1; }
-	let width = 0;
-	if (lead >= 0xc2 && lead <= 0xdf) { width = 2; }
-	if (lead >= 0xe0 && lead <= 0xef) { width = 3; }
-	if (lead >= 0xf0 && lead <= 0xf4) { width = 4; }
-	if (width == 0 || at + width > end) { return 0; }
-	const low = lead == 0xe0 ? 0xa0 : lead == 0xf0 ? 0x90 : 0x80;
-	const high = lead == 0xed ? 0x9f : lead == 0xf4 ? 0x8f : 0xbf;
-	const second = byteAt(text, at + 1);
-	if (second < low || second > high) { return 0; }
-	for (let i = 2; i < width; i++) {
-		const next = byteAt(text, at + i);
-		if (next < 0x80 || next > 0xbf) { return 0; }
-	}
-	return width;
-}
-
-function wellFormedPrefix(text: Readonly<GhosttyString>, maxBytes: int32): string {
-	const scan = maxBytes + LONGEST_UTF8_BYTES;
-	const end = text.len < (scan as uint64) ? text.len as int32 : scan;
-	const replacement = REPLACEMENT_CHARACTER.asBytes();
-	let out: Vec<uint8> = [];
-	let at = 0;
-	while (at < end) {
-		const width = wellFormedLength(text, at, end);
-		const size = width == 0 ? replacement.length as int32 : width;
-		if (out.length + size > maxBytes) { break; }
-		if (width == 0) {
-			pushAll(out, replacement);
-		} else {
-			for (let i = 0; i < width; i++) { out.push(byteAt(text, at + i) as uint8); }
-		}
-		at += Math.max(width, 1);
-	}
-	return out[0..out.length].asString();
+function boundedText(text: Readonly<GhosttyString>, maxBytes: int32): string {
+	return wellFormedPrefix(text.ptr[0..text.len], maxBytes);
 }
 
 @exportName("haroVtDesktopNotification")
@@ -312,8 +271,8 @@ function desktopNotification(
 ): void {
 	const hasBody = notification.size >= (sizeof GhosttyTerminalDesktopNotification as size_t);
 	effectsAt(effects).events.notification = {
-		title: wellFormedPrefix(notification.title, NOTIFICATION_TITLE_BYTES),
-		body: hasBody ? wellFormedPrefix(notification.body, NOTIFICATION_BODY_BYTES) : "",
+		title: boundedText(notification.title, NOTIFICATION_TITLE_BYTES),
+		body: hasBody ? boundedText(notification.body, NOTIFICATION_BODY_BYTES) : "",
 	};
 }
 
@@ -337,7 +296,7 @@ function semanticPrompt(
 		},
 		GhosttySemanticPromptKind.GHOSTTY_SEMANTIC_PROMPT_OUTPUT_START => {
 			e.running = {
-				command: wellFormedPrefix(event.command, COMMAND_BYTES),
+				command: boundedText(event.command, COMMAND_BYTES),
 				startedMs: performance.now(),
 				prompt: e.promptAt,
 				output: e.anchorCursor(terminal),

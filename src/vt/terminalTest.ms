@@ -17,7 +17,12 @@ import {
 	write,
 	writeText,
 } from "./vt";
-import { numberedLines, topLine, withVt } from "./vtRig";
+import {
+	numberedLines,
+	topLine,
+	withVt,
+	writeBroken,
+} from "./vtRig";
 
 test "written text lands on the rows the render state reports" {
 	assert withVt(20, 4, (vt: Vt): void => {
@@ -61,6 +66,24 @@ test "an untitled terminal has an empty title" {
 		const title = vt.title();
 		assert title.ok;
 		if (title.ok) { assert title.value == ""; }
+	});
+}
+
+test "a pwd with invalid UTF-8 reads back as well-formed text" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeBroken("\x1b]7;file:///a", "b\x07");
+		const pwd = vt.pwd();
+		assert pwd.ok;
+		if (pwd.ok) { assert pwd.value == "file:///a\u{fffd}b"; }
+	});
+}
+
+test "a title with invalid UTF-8 reads back as well-formed text" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeBroken("\x1b]2;a", "b\x07");
+		const title = vt.title();
+		assert title.ok;
+		if (title.ok) { assert title.value == "" || title.value == "a\u{fffd}b"; }
 	});
 }
 

@@ -20,6 +20,7 @@ import {
 	numberedLines,
 	shown,
 	withVt,
+	writeBroken,
 } from "./vtRig";
 
 test "a selection across two wrapped rows copies one logical line" {
@@ -30,6 +31,15 @@ test "a selection across two wrapped rows copies one logical line" {
 		assert shown(vt.selectedText()) == "cdefghijklmno";
 		assert vt.selectionSet(marked(0, 0, 2, 3)).ok;
 		assert shown(vt.selectedText()) == "abcdefghijklmnop\nnext";
+	});
+}
+
+test "a selection over bytes that are not UTF-8 copies well-formed text" {
+	assert withVt(10, 4, (vt: Vt): void => {
+		vt.writeBroken("a", "b");
+		assert vt.update().ok;
+		assert vt.selectionSet(marked(0, 0, 0, 2)).ok;
+		assert shown(vt.selectedText()) == "a\u{fffd}b";
 	});
 }
 

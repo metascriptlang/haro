@@ -5,7 +5,9 @@ import {
 	create,
 	free,
 	lines,
+	write,
 } from "./vt";
+import { pushAll } from "./vtNative";
 
 export function withVt(cols: int32, rows: int32, body: (vt: Vt) => void): boolean {
 	const created = Vt.create(cols, rows);
@@ -13,6 +15,14 @@ export function withVt(cols: int32, rows: int32, body: (vt: Vt) => void): boolea
 	defer created.value.free();
 	body(created.value);
 	return true;
+}
+
+export function writeBroken(this vt: Vt, head: string, tail: string): void {
+	let bytes: Vec<uint8> = [];
+	pushAll(bytes, head.asBytes());
+	bytes.push(0xff);
+	pushAll(bytes, tail.asBytes());
+	vt.write(bytes);
 }
 
 export function ascii(bytes: Readonly<Span<uint8>>): string {

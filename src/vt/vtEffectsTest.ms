@@ -30,7 +30,12 @@ import {
 	ShellStep,
 } from "./vtEffects";
 import { pushAll } from "./vtNative";
-import { ascii, linefeedLines, withVt } from "./vtRig";
+import {
+	ascii,
+	linefeedLines,
+	withVt,
+	writeBroken,
+} from "./vtRig";
 
 test "a cursor position query is answered with the cursor's place" {
 	assert withVt(20, 4, (vt: Vt): void => {
@@ -261,6 +266,17 @@ test "an OSC 52 write reaches the host once, and only for the standard clipboard
 		assert vt.takeClipboard() === null;
 		vt.writeText("\x1b]52;c;\x07");
 		assert vt.takeClipboard() == "";
+	});
+}
+
+test "an OSC 52 write with invalid UTF-8 reaches the host as well-formed text" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeBroken("\x1b]52;c;YQ==\x07", "");
+		assert vt.takeClipboard() == "a";
+		vt.writeText("\x1b]52;c;YdJi\x07");
+		const text = vt.takeClipboard();
+		assert text !== null;
+		if (text !== null) { assert text == "a\u{fffd}b"; }
 	});
 }
 

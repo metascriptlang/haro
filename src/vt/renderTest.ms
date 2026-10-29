@@ -14,7 +14,11 @@ import {
 	update,
 	writeText,
 } from "./vt";
-import { shown, withVt } from "./vtRig";
+import {
+	shown,
+	withVt,
+	writeBroken,
+} from "./vtRig";
 
 test "an OSC 8 link answers for each of its cells and for no others" {
 	assert withVt(20, 4, (vt: Vt): void => {
@@ -24,6 +28,13 @@ test "an OSC 8 link answers for each of its cells and for no others" {
 		assert shown(vt.linkAt(4, 0)) == "<none>";
 		assert shown(vt.linkAt(0, 1)) == "<none>";
 		assert shown(vt.linkAt(0, 40)) == "<failed>";
+	});
+}
+
+test "an OSC 8 link with invalid UTF-8 reads back as well-formed text" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeBroken("\x1b]8;;https://e.com/a", "b\x1b\\link");
+		assert shown(vt.linkAt(0, 0)) == "https://e.com/a\u{fffd}b";
 	});
 }
 

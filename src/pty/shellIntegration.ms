@@ -138,12 +138,12 @@ export function launchOf(
 		if (!STARTUP_FLAGS.includes(flag)) { return untouched; }
 	}
 	const name = basename(program);
-	if (name == "bash") {
-		const major = bashMajor(program);
-		if (major === null) { return untouched; }
-		return bashLaunch(words[0], flags, scripts, major, inherited);
-	}
 	return match (name) {
+		"bash" => {
+			const major = bashMajor(program);
+			if (major === null) { return untouched; }
+			bashLaunch(words[0], flags, scripts, major, inherited)
+		},
 		"zsh" => zshLaunch(commandLine, scripts, inherited("ZDOTDIR")),
 		"fish" => fishLaunch(commandLine, scripts, inherited("XDG_DATA_DIRS")),
 		_ => untouched,

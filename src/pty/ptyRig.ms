@@ -1,3 +1,6 @@
+import { isFile } from "std/fs";
+import { env } from "std/process";
+import { bashMajorOf } from "./shellIntegration";
 import { NativePty, close, open } from "./pty";
 import { Pty } from "./transport";
 
@@ -20,4 +23,13 @@ export function withPty(command: string, body: (p: NativePty) => void): boolean 
 	defer p.close();
 	body(p);
 	return true;
+}
+
+export function bash5OnPath(): string | null {
+	for (const dir of env.get("PATH").split(":")) {
+		const candidate = `${dir}/bash`;
+		if (dir != "" && isFile(candidate) && (bashMajorOf(candidate) ?? 0) >= 5) { return candidate; }
+	}
+	console.log("skipped: no bash 5 on PATH");
+	return null;
 }

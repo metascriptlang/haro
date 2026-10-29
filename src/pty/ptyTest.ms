@@ -1,8 +1,8 @@
 import { PtyError } from "./transport";
 import { NativePty, busy, close, exitCode, exitSignal, open, read, resize, spawn, toPty, wait, write } from "./pty";
-import { ensureDir, exists, normalize, remove, removeAll, writeFile } from "std/fs";
+import { ensureDir, normalize, remove, removeAll, writeFile } from "std/fs";
 import { tmpDir } from "std/os";
-import { drainText, withPty } from "./ptyRig";
+import { bash5OnPath, drainText, withPty } from "./ptyRig";
 
 @include("unistd.h");
 
@@ -255,6 +255,12 @@ when (!windows) {
 	}
 
 	test "the child is told the terminal is Haro, not the one Haro was started from" {
+		const inheritedProgram = env.get("TERM_PROGRAM");
+		const inheritedSession = env.get("TERM_SESSION_ID");
+		defer {
+			const _program = env.set("TERM_PROGRAM", inheritedProgram);
+			const _session = env.set("TERM_SESSION_ID", inheritedSession);
+		}
 		assert env.set("TERM_PROGRAM", "OtherTerminal");
 		assert env.set("TERM_SESSION_ID", "w0t0");
 		assert withPty("sh -c 'echo \"[$TERM_PROGRAM|$TERM_SESSION_ID|$TERM]\"'", (p: NativePty): void => {
@@ -273,9 +279,9 @@ when (!windows) {
 
 	test "the child keeps an inherited LANG" {
 		const inherited = env.get("LANG");
+		defer { const _back = env.set("LANG", inherited); }
 		assert env.set("LANG", "fr_FR.UTF-8");
 		assert childLang() == "LANG=fr_FR.UTF-8";
-		assert env.set("LANG", inherited);
 	}
 
 	when (macos) {
@@ -283,11 +289,11 @@ when (!windows) {
 
 		test "a child started without a LANG gets one from the macOS locale preference" {
 			const inherited = env.get("LANG");
+			defer { const _back = env.set("LANG", inherited); }
 			assert env.delete("LANG");
 			assert childLang() == `LANG=${preferredLang()}`;
 			assert env.set("LANG", "");
 			assert childLang() == `LANG=${preferredLang()}`;
-			assert env.set("LANG", inherited);
 		}
 	}
 
@@ -353,12 +359,15 @@ when (!windows) {
 		return text.includes(wanted);
 	}
 
-	const BASH5 = "/opt/homebrew/bin/bash";
-
-	function bashCloseMs(flags: string, typed: string, waitForPrompt: boolean): float64 {
+	function bashCloseMs(
+		bash: string,
+		flags: string,
+		typed: string,
+		waitForPrompt: boolean,
+	): float64 {
 		const home = `${normalize(tmpDir())}/haroBashHome${getpid()}`;
 		if (!ensureDir(home).ok) { return -1; }
-		const opened = NativePty.open(`HOME='${home}' ${BASH5} ${flags}`, 80, 24);
+		const opened = NativePty.open(`HOME='${home}' ${bash} ${flags}`, 80, 24);
 		let took: float64 = -1;
 		if (opened.ok) {
 			const p = opened.value;
@@ -374,15 +383,17 @@ when (!windows) {
 	}
 
 	test "closing returns right after exit is typed into a login shell" {
-		if (exists(BASH5)) {
-			const took = bashCloseMs("-l", "exit\r", false);
+		const bash = bash5OnPath();
+		if (bash !== null) {
+			const took = bashCloseMs(bash, "-l", "exit\r", false);
 			assert took >= 0 && took < 3000;
 		}
 	}
 
 	test "closing returns right after a shell finishes a command" {
-		if (exists(BASH5)) {
-			const took = bashCloseMs("", "sh -c 'exit 3'\r", true);
+		const bash = bash5OnPath();
+		if (bash !== null) {
+			const took = bashCloseMs(bash, "", "sh -c 'exit 3'\r", true);
 			assert took >= 0 && took < 3000;
 		}
 	}

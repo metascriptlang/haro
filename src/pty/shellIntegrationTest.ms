@@ -3,8 +3,9 @@ import { Vt, pwd, takeEvents, takeReplies, write as feed } from "../vt/vt";
 import { ShellMark, ShellStep } from "../vt/vtEffects";
 import { withVt } from "../vt/vtRig";
 import { cwd, env } from "std/process";
-import { ensureDir, isFile, removeAll, writeFile } from "std/fs";
+import { ensureDir, removeAll, writeFile } from "std/fs";
 import { bashMajorOf } from "./shellIntegration";
+import { bash5OnPath } from "./ptyRig";
 import { tmpDir } from "std/os";
 
 const SCRIPTS = `${cwd()}/assets/shell`;
@@ -103,26 +104,27 @@ function times(text: string, part: string): int32 {
 }
 
 const BASH3 = "/bin/bash";
-const BASH5 = "/opt/homebrew/bin/bash";
 
 function bashes(): Vec<string> {
 	let found: Vec<string> = [BASH3];
-	if (isFile(BASH5)) { found.push(BASH5); }
+	const bash5 = bash5OnPath();
+	if (bash5 !== null) { found.push(bash5); }
 	return found;
 }
 
 function inHome(home: string, zdotdir: string, body: () => Run): Run {
 	const inheritedHome = env.get("HOME");
 	const inheritedZdotdir = env.get("ZDOTDIR");
+	defer {
+		const _backHome = env.set("HOME", inheritedHome);
+		const _backZdotdir = inheritedZdotdir == "" ?
+			env.delete("ZDOTDIR") :
+			env.set("ZDOTDIR", inheritedZdotdir);
+		const _removed = removeAll(home);
+	}
 	const _home = env.set("HOME", home);
 	const _zdotdir = zdotdir == "" ? env.delete("ZDOTDIR") : env.set("ZDOTDIR", zdotdir);
-	const got = body();
-	const _backHome = env.set("HOME", inheritedHome);
-	const _backZdotdir = inheritedZdotdir == "" ?
-		env.delete("ZDOTDIR") :
-		env.set("ZDOTDIR", inheritedZdotdir);
-	const _removed = removeAll(home);
-	return got;
+	return body();
 }
 
 test "a zsh under Haro marks its prompt and a failed command, and still loads the user's files" {

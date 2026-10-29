@@ -19,7 +19,7 @@ import {
 } from "../../../ion/src/index";
 import { ionWakeLoop } from "../../../ion/src/platform/bridge.h";
 import { argv, exit } from "std/process";
-import { appendFile, ensureDir, readFile } from "std/fs";
+import { appendFile, ensureDir, exists, fileSize, readFile, rename } from "std/fs";
 import { homeDir } from "std/os";
 import { App } from "./app";
 import { Pace } from "./pace";
@@ -92,11 +92,27 @@ const pace = Pace.start();
 const stats = Stats.empty();
 const config = ConfigWatch.forFile(flagValue("--config") ?? configPath());
 
+const LOG_LIMIT_BYTES = 1048576;
+let logFailed = false;
+
+function logFailure(what: string): void {
+	if (logFailed) { return; }
+	logFailed = true;
+	console.error(`haro: log write failed: ${what}`);
+}
+
 function note(line: string): void {
 	console.log(`haro: ${line}`);
 	const dir = cacheDir();
-	if (!ensureDir(dir).ok) { return; }
-	const _logged = appendFile(`${dir}/haro.log`, `${Date.now()} ${line}\n`);
+	const made = ensureDir(dir);
+	if (!made.ok) { logFailure(made.error.toString()); return; }
+	const path = `${dir}/haro.log`;
+	if (exists(path) && fileSize(path) > LOG_LIMIT_BYTES) {
+		const rotated = rename(path, `${path}.1`);
+		if (!rotated.ok) { logFailure(rotated.error.toString()); return; }
+	}
+	const logged = appendFile(path, `${Date.now()} ${line}\n`);
+	if (!logged.ok) { logFailure(logged.error.toString()); }
 }
 
 function fail(message: string): never {

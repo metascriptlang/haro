@@ -18,7 +18,15 @@ function counts(label: string): void {
 	console.log(`smoke: ${label}: requested=${c[0]} drawn=${c[1]}`);
 }
 
-export function smokeReplay(io: IoPort, view: View, quit: () => void): void {
+function numberedLines(count: int32): string {
+	when (windows) {
+		return `1..${count} | % { "line $_" }\r`;
+	} else {
+		return `seq 1 ${count} | sed 's/^/line /'\r`;
+	}
+}
+
+export function smokeReplay(view: View, quit: () => void): void {
 	setTimeout((): void => {
 		view.dump("replayed");
 		counts("after the replay");
@@ -29,7 +37,7 @@ export function smokeReplay(io: IoPort, view: View, quit: () => void): void {
 export function smoke(io: IoPort, view: View, quit: () => void): void {
 	setTimeout((): void => { view.dump("prompt"); counts("after the prompt"); }, 4000);
 	setTimeout((): void => {
-		io.text("1..200 | % { \"line $_\" }\r", performance.now());
+		io.text(numberedLines(200), performance.now());
 		console.log("smoke: sent 200 lines");
 	}, 4200);
 	setTimeout((): void => { view.dump("after 200 lines"); }, 6500);
@@ -82,7 +90,7 @@ export function smokeFlood(io: IoPort, view: View, pace: Pace, quit: () => void)
 	};
 	setTimeout((): void => {
 		report("before the flood");
-		io.text(`1..${FLOOD_LINES} | % { "line $_" }\r`, performance.now());
+		io.text(numberedLines(FLOOD_LINES), performance.now());
 		console.log(`smoke: sent ${FLOOD_LINES} lines`);
 		setTimeout(tick, 1000);
 	}, 4000);

@@ -303,7 +303,7 @@ async function runReplay(path: string): Promise<int32> {
 	const shell = new Shell({ command: "", cwd: null, recording: recording.value });
 	await started(shell);
 	const view = View.open();
-	if (hasFlag("--smoke")) { smokeReplay(portOf(shell), view, quitWith(shell)); }
+	if (hasFlag("--smoke")) { smokeReplay(view, quitWith(shell)); }
 	return await openWindow(shell, view, (code: int32): void => {
 		console.log(`haro: the recording ended with code ${exitCodeText(code)}`);
 	});

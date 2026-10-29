@@ -5,7 +5,18 @@ import { Cleanup } from "../../../neon/src/core/types";
 import {
 	runWindow, DesktopOptions, desktopOptions, setOptionAsAlt, setWindowTitle, OptionAsAlt as OptionSides,
 } from "../../../neon/src/platform/ion/window";
-import { beep, listen, notify, onWake, openExternal } from "../../../ion/src/index";
+import {
+	WindowEventCloseRequested,
+	beep,
+	listen,
+	notify,
+	onExitRequested,
+	onWake,
+	onWindowEvent,
+	openExternal,
+	preventClose,
+	preventExit,
+} from "../../../ion/src/index";
 import { ionWakeLoop } from "../../../ion/src/platform/bridge.h";
 import { argv, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
@@ -188,6 +199,15 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 			onCloseKey: (handler: () => void): void => {
 				listen((name: string, id: string): void => {
 					if (name == "menu.click" && id == CLOSE_WINDOW) { handler(); }
+				});
+				onWindowEvent((label: string, eventType: int32): void => {
+					if (eventType != WindowEventCloseRequested) { return; }
+					preventClose();
+					handler();
+				});
+				onExitRequested((): void => {
+					preventExit();
+					handler();
 				});
 			},
 			onConfig: (handler: (change: ConfigChange) => void): void => {

@@ -76,8 +76,24 @@ export enum Where {
 
 export function label(this w: Where): string {
 	return match (w) {
+		Where.Settings => "settings",
+		Where.Fit => "fit",
+		Where.Font => "font",
+		Where.Key => "key",
+		Where.Text => "text",
+		Where.Typed => "typed",
+		Where.Focus => "focus",
+		Where.Press => "press",
+		Where.Move => "move",
+		Where.Release => "release",
+		Where.Wheel => "wheel",
+		Where.Autoscroll => "autoscroll",
 		Where.CloseKey => "close key",
-		_ => w.toString().toLowerCase(),
+		Where.Paste => "paste",
+		Where.Clipboard => "clipboard",
+		Where.Output => "output",
+		Where.Selection => "selection",
+		Where.Cursor => "cursor",
 	};
 }
 

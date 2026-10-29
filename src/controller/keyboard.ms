@@ -99,14 +99,10 @@ function controlKey(
 		Action.None => { return Result.ok(false); },
 		Action.Copy => { return c.copySelection(t); },
 		Action.Paste => { c.pasteFrom(); },
-		Action.PageUp | Action.PageDown => {
-			const pages: int32 = action == Action.PageUp ? -1 : 1;
-			try vt.scrollPages(pages);
-		},
-		Action.PromptUp | Action.PromptDown => {
-			const toward = action == Action.PromptUp ? PromptJump.Previous : PromptJump.Next;
-			try vt.jumpToPrompt(toward);
-		},
+		Action.PageUp => { try vt.scrollPages(-1); },
+		Action.PageDown => { try vt.scrollPages(1); },
+		Action.PromptUp => { try vt.jumpToPrompt(PromptJump.Previous); },
+		Action.PromptDown => { try vt.jumpToPrompt(PromptJump.Next); },
 		Action.LineUp => { vt.scrollLines(-KEYBOARD_ROWS); },
 		Action.LineDown => { vt.scrollLines(KEYBOARD_ROWS); },
 		Action.Top => { vt.scrollTop(); },

@@ -50,9 +50,12 @@ export function planPress(
 ): PressPlan {
 	if (button == MouseButton.Left && mods.has(KeyMod.Ctrl) && overLink) { return PressPlan.Link; }
 	if (claimsMouse(tracking, mods.has(KeyMod.Shift))) { return PressPlan.Report; }
-	if (button == MouseButton.Left) { return PressPlan.Select; }
-	if (button == MouseButton.Right) { return PressPlan.CopyOrPaste; }
-	return PressPlan.Ignore;
+	return match (button) {
+		MouseButton.Left => PressPlan.Select,
+		MouseButton.Right => PressPlan.CopyOrPaste,
+		MouseButton.None | MouseButton.Middle |
+		MouseButton.WheelUp | MouseButton.WheelDown => PressPlan.Ignore,
+	};
 }
 
 export function pointerDown(

@@ -22,15 +22,13 @@ export function pendingOf(held: Held | null, reading: string | null, closing: bo
 }
 
 export function samePending(a: Pending, b: Pending): boolean {
-	if (a.kind === PendingKind.Paste) {
-		if (b.kind !== PendingKind.Paste) { return false; }
-		return a.held.text == b.held.text && a.held.warning == b.held.warning;
-	}
-	if (a.kind === PendingKind.Read) {
-		if (b.kind !== PendingKind.Read) { return false; }
-		return a.text == b.text;
-	}
-	return a.kind === b.kind;
+	return match (a.kind) {
+		PendingKind.Paste => b.kind === PendingKind.Paste
+			&& a.held.text == b.held.text
+			&& a.held.warning == b.held.warning,
+		PendingKind.Read => b.kind === PendingKind.Read && a.text == b.text,
+		PendingKind.None | PendingKind.Close => a.kind === b.kind,
+	};
 }
 
 test "a close outranks a held paste, which outranks a clipboard read" {

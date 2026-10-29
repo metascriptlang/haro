@@ -42,9 +42,9 @@ export struct ShownLine {
 
 export interface PasteDialogModel {
 	visible: Accessor<boolean>;
-	cols: Accessor<number>;
+	cols: Accessor<int32>;
 	setVisible: Setter<boolean>;
-	setCols: Setter<number>;
+	setCols: Setter<int32>;
 	confirmLabel: Accessor<string>;
 	cancelLabel: Accessor<string>;
 	setConfirmLabel: Setter<string>;
@@ -66,7 +66,7 @@ const READ_CONFIRM = "Allow (Ctrl+Enter)";
 const CLOSE_CANCEL = "Cancel (Esc)";
 const CLOSE_CONFIRM = "Close (Enter)";
 
-export function dialogCols(viewWidth: number, cellWidth: number): int32 {
+export function dialogCols(viewWidth: float64, cellWidth: float64): int32 {
 	if (cellWidth <= 0) { return MIN_COLS; }
 	const room = viewWidth - 2 * MARGIN - 2 * DIALOG_PADDING - 2;
 	const fit = Math.floor(room / cellWidth) as int32;
@@ -92,7 +92,7 @@ function fill(list: List<ShownLine>, lines: Readonly<Span<Line>>): void {
 
 export function open(this typeof PasteDialogModel): PasteDialogModel {
 	const [visible, setVisible] = createSignal<boolean>(false);
-	const [cols, setCols] = createSignal<number>(MIN_COLS as number);
+	const [cols, setCols] = createSignal<int32>(MIN_COLS);
 	const [confirmLabel, setConfirmLabel] = createSignal<string>(PASTE_CONFIRM);
 	const [cancelLabel, setCancelLabel] = createSignal<string>(PASTE_CANCEL);
 	return {
@@ -104,7 +104,12 @@ export function open(this typeof PasteDialogModel): PasteDialogModel {
 	};
 }
 
-export function showPending(this d: PasteDialogModel, pending: Pending, cellWidth: number, viewWidth: number): void {
+export function showPending(
+	this d: PasteDialogModel,
+	pending: Pending,
+	cellWidth: float64,
+	viewWidth: float64,
+): void {
 	const cols = dialogCols(viewWidth, cellWidth);
 	if (pending.kind === PendingKind.None) {
 		d.shown = pending;
@@ -119,10 +124,12 @@ export function showPending(this d: PasteDialogModel, pending: Pending, cellWidt
 		},
 		PendingKind.Paste => {
 			const held = pending.held;
-			d.present(dialogOf(held.warning, held.text, cols, PREVIEW_ROWS), cols, PASTE_CONFIRM, PASTE_CANCEL);
+			const dialog = dialogOf(held.warning, held.text, cols, PREVIEW_ROWS);
+			d.present(dialog, cols, PASTE_CONFIRM, PASTE_CANCEL);
 		},
 		PendingKind.Read => {
-			d.present(askDialogOf(pending.text, cols, PREVIEW_ROWS), cols, READ_CONFIRM, READ_CANCEL);
+			const dialog = askDialogOf(pending.text, cols, PREVIEW_ROWS);
+			d.present(dialog, cols, READ_CONFIRM, READ_CANCEL);
 		},
 		PendingKind.None => { return; },
 	}
@@ -141,7 +148,7 @@ function present(
 ): void {
 	fill(d.top, dialog.top);
 	fill(d.code, dialog.code);
-	d.setCols(cols as number);
+	d.setCols(cols);
 	d.setConfirmLabel(confirm);
 	d.setCancelLabel(cancel);
 	d.setVisible(true);
@@ -163,7 +170,7 @@ export function PasteDialog(props: {
 			<View
 				style={{
 					backgroundColor: DIALOG_CARD, padding: DIALOG_PADDING, gap: DIALOG_GAP,
-					width: d.cols() * m.cellWidth() + 2 * DIALOG_PADDING + 2,
+					width: (d.cols() as float64) * m.cellWidth() + 2 * DIALOG_PADDING + 2,
 					borderWidth: 1, borderColor: DIALOG_BORDER, borderRadius: DIALOG_RADIUS,
 					boxShadow: DIALOG_SHADOW,
 				}}>

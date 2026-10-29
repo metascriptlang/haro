@@ -26,7 +26,7 @@ export function noticeLines(text: string, cols: int32): string[] {
 	return out;
 }
 
-export function noticeCols(viewWidth: number, padding: number, cellWidth: number): int32 {
+export function noticeCols(viewWidth: float64, padding: float64, cellWidth: float64): int32 {
 	if (cellWidth <= 0) { return FALLBACK_COLS; }
 	const room = viewWidth - 2 * padding - 2 * NOTICE_PADDING;
 	return Math.max(1, Math.floor(room / cellWidth)) as int32;

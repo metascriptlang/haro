@@ -1,6 +1,9 @@
+import { GhosttyPointTag, GhosttyTrackedGridRef } from "../../vendor/ghostty/include/ghostty/vt.h";
 import {
+	Rgb,
 	SCROLLBACK_LINES,
 	Vt,
+	VtError,
 	create,
 	free,
 	holdLimit,
@@ -8,6 +11,7 @@ import {
 	lines,
 	resize,
 	scrollTop,
+	setPalette,
 	setPullScrollback,
 	setScrollback,
 	size,
@@ -17,6 +21,7 @@ import {
 	write,
 	writeText,
 } from "./vt";
+import { ok, vtTrack } from "./vtNative";
 import {
 	numberedLines,
 	topLine,
@@ -186,3 +191,15 @@ test "a grid size outside 1 to 65535 is refused instead of wrapping into another
 		}
 	});
 }
+
+test "a palette of more than 256 colours is refused by its own error" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		let colors: Vec<Rgb> = [];
+		for (let i = 0; i < 257; i++) { colors.push({ r: 1, g: 2, b: 3 }); }
+		const refused = vt.setPalette(colors);
+		assert !refused.ok;
+		if (!refused.ok) { assert refused.error == VtError.PaletteTooLong; }
+		assert vt.setPalette(colors[0..256]).ok;
+	});
+}
+

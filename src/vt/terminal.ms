@@ -257,8 +257,8 @@ export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<voi
 	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_COLOR_PALETTE;
 	let palette: Colors256;
 	const defaultKey = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_COLOR_PALETTE_DEFAULT;
-	if (colors.length > 256 || !ok(unset(vt.terminal, option, null))
-		|| !ok(terminalGet(vt.terminal, defaultKey, palette))) {
+	if (colors.length > 256) { return Result.err(VtError.PaletteTooLong); }
+	if (!ok(unset(vt.terminal, option, null)) || !ok(terminalGet(vt.terminal, defaultKey, palette))) {
 		return Result.err(VtError.ReadFailed);
 	}
 	for (let i = 0; i < colors.length; i++) {

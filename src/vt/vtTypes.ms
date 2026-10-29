@@ -11,6 +11,7 @@ export enum VtError {
 	GraphemeTooLong,
 	CodepointInvalid,
 	SelectFailed,
+	PaletteTooLong,
 }
 
 export enum PasteError {

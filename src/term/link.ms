@@ -1,4 +1,14 @@
-import { chmod, exists, isDir, isFile, mkdir, realpath, removeAll, symlink, writeFile } from "std/fs";
+import {
+	chmod,
+	exists,
+	isDir,
+	isFile,
+	mkdir,
+	realpath,
+	removeAll,
+	symlink,
+	writeFile,
+} from "std/fs";
 import { hostname, tmpDir } from "std/os";
 import { fileUri, isLocalHost } from "./pwd";
 
@@ -233,7 +243,11 @@ test "a file type that launches as a program is refused by name, case aside, eve
 
 
 test "the Windows file types that run on a double click are refused by name" {
-	for (const ext of [".hta", ".wsf", ".jse", ".vbe", ".reg", ".dll", ".pif", ".jar", ".url", ".cpl", ".msc"]) {
+	const extensions = [
+		".hta", ".wsf", ".jse", ".vbe", ".reg", ".dll",
+		".pif", ".jar", ".url", ".cpl", ".msc",
+	];
+	for (const ext of extensions) {
 		assert refusedFor(`file:///c:/x${ext}`) == LinkRefusal.RunsAsProgram;
 	}
 }

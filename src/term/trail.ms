@@ -234,7 +234,9 @@ function direction(this t: Trail): Point {
 }
 
 export function moveTo(this t: Trail, x: float64, y: float64): void {
-	t.jumped = t.jumped || Math.abs(x - t.destination.x) > 0.01 || Math.abs(y - t.destination.y) > 0.01;
+	t.jumped = t.jumped ||
+		Math.abs(x - t.destination.x) > 0.01 ||
+		Math.abs(y - t.destination.y) > 0.01;
 	t.destination = point(x, y);
 }
 
@@ -287,7 +289,10 @@ function spray(this t: Trail, h: float64, dt: float64): boolean {
 		const spin = t.unit();
 		t.particles.push({
 			pos: from.plus(travel.times(along)).plus(point(0, h * 0.5)),
-			speed: point(base.x * 0.5 * 3 * PARTICLE_SPEED, (0.4 + Math.abs(base.y)) * 3 * PARTICLE_SPEED),
+			speed: point(
+				base.x * 0.5 * 3 * PARTICLE_SPEED,
+				(0.4 + Math.abs(base.y)) * 3 * PARTICLE_SPEED,
+			),
 			rotation: (spin - 0.5) * (Math.PI / 2) * PARTICLE_CURL,
 			lifetime: share * PARTICLE_LIFETIME,
 		});
@@ -353,7 +358,13 @@ function landing(this t: Trail): Point {
 	return past.x * t.travel.x + past.y * t.travel.y > 0 ? head : t.destination;
 }
 
-export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float64, h: float64): boolean {
+export function animate(
+	this t: Trail,
+	dt: float64,
+	shape: CursorShape,
+	w: float64,
+	h: float64,
+): boolean {
 	if (t.reshape(shape)) { t.remainder = 0; }
 	t.cell = point(w, h);
 	const half = point(w * 0.5, h * 0.5);
@@ -383,7 +394,8 @@ export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float
 			}
 			for (let i = 0; i < t.corners.length; i++) {
 				const a = (aligned[i] - lo) / (hi - lo);
-				t.corners[i].jump(center, w, h, Number.isFinite(a) ? Math.min(1, Math.max(0, a)) : 1);
+				const along = Number.isFinite(a) ? Math.min(1, Math.max(0, a)) : 1;
+				t.corners[i].jump(center, w, h, along);
 			}
 		}
 		t.spring(dt);
@@ -514,7 +526,8 @@ test "a jump along the pixel diagonal moves its side corners at half the trailin
 }
 
 test "every jump keeps the cursor's shape convex until it rests" {
-	for (const to of [point(130, 40), point(830, 40), point(130, 840), point(-270, -360), point(40, 40)]) {
+	const targets = [point(130, 40), point(830, 40), point(130, 840), point(-270, -360), point(40, 40)];
+	for (const to of targets) {
 		const t = placed(30, 40);
 		t.moveTo(to.x, to.y);
 		let frames = 0;

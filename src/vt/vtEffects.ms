@@ -24,6 +24,7 @@ import {
 	ghostty_tracked_grid_ref_has_value,
 	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
+import { encodeBase64 } from "std/crypto/encoding";
 import { Handle } from "std/ffi";
 import {
 	GHOSTTY_DA_CONFORMANCE_LEVEL_2,
@@ -363,21 +364,7 @@ function holdRead(e: Effects, from: int32): void {
 	e.readAsked = true;
 }
 
-const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".asBytes();
-const PAD: uint8 = 0x3d;
 const SEMICOLON: uint8 = 0x3b;
-
-function pushBase64(ref out: Vec<uint8>, bytes: Readonly<Span<uint8>>): void {
-	for (let i = 0; i < bytes.length; i += 3) {
-		let v = (bytes[i] as uint32) << 16;
-		if (i + 1 < bytes.length) { v |= (bytes[i + 1] as uint32) << 8; }
-		if (i + 2 < bytes.length) { v |= bytes[i + 2] as uint32; }
-		out.push(BASE64[((v >> 18) & 63) as int32]);
-		out.push(BASE64[((v >> 12) & 63) as int32]);
-		out.push(i + 1 < bytes.length ? BASE64[((v >> 6) & 63) as int32] : PAD);
-		out.push(i + 2 < bytes.length ? BASE64[(v & 63) as int32] : PAD);
-	}
-}
 
 export function answerRead(this e: Effects, text: string, allow: boolean): boolean {
 	const frame = e.readFrame;
@@ -389,7 +376,7 @@ export function answerRead(this e: Effects, text: string, allow: boolean): boole
 		head++;
 	}
 	pushAll(e.replies, frame[0..head]);
-	if (allow) { pushBase64(e.replies, text.asBytes()); }
+	if (allow) { pushAll(e.replies, text.asBytes().encodeBase64().asBytes()); }
 	pushAll(e.replies, frame[head..frame.length]);
 	e.readFrame = null;
 	return true;

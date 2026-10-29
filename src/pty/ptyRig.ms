@@ -2,16 +2,25 @@ import { isFile } from "std/fs";
 import { env } from "std/process";
 import { bashMajorOf } from "./shellIntegration";
 import { NativePty, close, open } from "./pty";
-import { Pty } from "./transport";
+import { Pty, PtyError } from "./transport";
 
-export function drainText(this p: Pty, chunk: int32): string {
+const DRAIN_TIMEOUT_MS: int32 = 10000;
+
+export function drainText(this p: Pty, chunk: int32): Result<string, string> {
 	let buf: Vec<uint8> = new Array(chunk);
 	let text = "";
 	while (true) {
-		const ready = p.wait(10000);
-		if (!ready.ok || !ready.value) { return text; }
+		const ready = p.wait(DRAIN_TIMEOUT_MS);
+		if (!ready.ok) {
+			if (ready.error == PtyError.Closed) { return Result.ok(text); }
+			return Result.err(`wait failed: ${ready.error.toString()}`);
+		}
+		if (!ready.value) { return Result.err(`no output for ${DRAIN_TIMEOUT_MS} ms`); }
 		const r = p.read(buf);
-		if (!r.ok) { return text; }
+		if (!r.ok) {
+			if (r.error == PtyError.Closed) { return Result.ok(text); }
+			return Result.err(`read failed: ${r.error.toString()}`);
+		}
 		text += buf[0..r.value].asString();
 	}
 }

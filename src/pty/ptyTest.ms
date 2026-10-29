@@ -39,7 +39,8 @@ function quietWaitMs(this p: NativePty, timeoutMs: int32): Result<float64, PtyEr
 test "a child's output reaches read and its exit ends the stream" {
 	assert withPty(ECHO_HELLO, (p: NativePty): void => {
 		const text = p.toPty().drainText(4096);
-		assert text.includes("hello");
+		assert text.ok, text.error;
+		if (text.ok) { assert text.value.includes("hello"); }
 		assert p.exitCode() === 0;
 	});
 }
@@ -95,7 +96,9 @@ when (windows) {
 } else {
 	test "a command the shell cannot find shows the shell's reason and exits 127" {
 		assert withPty(MISSING_PROGRAM, (p: NativePty): void => {
-			assert p.toPty().drainText(4096).includes(MISSING_PROGRAM);
+			const out = p.toPty().drainText(4096);
+			assert out.ok, out.error;
+			if (out.ok) { assert out.value.includes(MISSING_PROGRAM); }
 			assert p.exitCode() === 127;
 		});
 	}
@@ -135,11 +138,15 @@ test "a native pty starts its command in the directory it is given" {
 	const spawned = NativePty.spawn(PRINT_DIRECTORY, 80, 24, dir);
 	assert spawned.ok;
 	if (spawned.ok) {
-		const out = spawned.value.drainText(4096).replaceAll("\\", "/");
-		when (windows) {
-			assert out.toLowerCase().includes(`[${dir.toLowerCase()}]`);
-		} else {
-			assert out.includes(`[${dir}]`);
+		const drained = spawned.value.drainText(4096);
+		assert drained.ok, drained.error;
+		if (drained.ok) {
+			const out = drained.value.replaceAll("\\", "/");
+			when (windows) {
+				assert out.toLowerCase().includes(`[${dir.toLowerCase()}]`);
+			} else {
+				assert out.includes(`[${dir}]`);
+			}
 		}
 		spawned.value.close();
 	}
@@ -149,7 +156,9 @@ test "a directory that does not exist is skipped and the command still runs" {
 	const spawned = NativePty.spawn(ECHO_HELLO, 80, 24, "/no/such/haro/directory");
 	assert spawned.ok;
 	if (spawned.ok) {
-		assert spawned.value.drainText(4096).includes("hello");
+		const out = spawned.value.drainText(4096);
+		assert out.ok, out.error;
+		if (out.ok) { assert out.value.includes("hello"); }
 		spawned.value.close();
 	}
 }
@@ -168,9 +177,13 @@ when (!windows) {
 		assert dup2(spare, leaked) == leaked;
 		assert closeFd(spare) == 0;
 		assert withPty("sh -c 'ls -1 /dev/fd'", (p: NativePty): void => {
-			const listing = p.toPty().drainText(4096).split("\r\n");
-			assert listing.includes("0");
-			assert !listing.includes(`${leaked}`);
+			const out = p.toPty().drainText(4096);
+			assert out.ok, out.error;
+			if (out.ok) {
+				const listing = out.value.split("\r\n");
+				assert listing.includes("0");
+				assert !listing.includes(`${leaked}`);
+			}
 		});
 		assert closeFd(leaked) == 0;
 	}
@@ -210,26 +223,33 @@ when (!windows) {
 
 	test "a shell that has exited is not busy, and reports its exit code" {
 		assert withPty("sh -c 'exit 3'", (p: NativePty): void => {
-			const _text = p.toPty().drainText(4096);
+			const out = p.toPty().drainText(4096);
+			assert out.ok, out.error;
 			assert p.exitCode() === 3;
 			assert !p.busy();
 		});
 	}
 
-	function endOf(command: string): string {
+	function endOf(command: string): Result<string, string> {
 		const opened = NativePty.open(command, 80, 24);
-		if (!opened.ok) { return "not opened"; }
+		if (!opened.ok) { return Result.err(`open failed: ${opened.error.toString()}`); }
 		const p = opened.value;
-		const _text = p.toPty().drainText(4096);
-		const ended = `${p.exitCode() ?? -1} ${p.exitSignal()}`;
-		p.close();
-		return ended;
+		defer p.close();
+		const drained = p.toPty().drainText(4096);
+		if (!drained.ok) { return Result.err(drained.error); }
+		return Result.ok(`${p.exitCode() ?? -1} ${p.exitSignal()}`);
 	}
 
 	test "a shell killed by a signal reports the signal apart from a status that only looks like one" {
-		assert endOf("sh -c 'kill -KILL $$'") == "137 9";
-		assert endOf("sh -c 'exit 137'") == "137 0";
-		assert endOf("sh -c 'exit 0'") == "0 0";
+		const killed = endOf("sh -c 'kill -KILL $$'");
+		assert killed.ok, killed.error;
+		if (killed.ok) { assert killed.value == "137 9"; }
+		const lookalike = endOf("sh -c 'exit 137'");
+		assert lookalike.ok, lookalike.error;
+		if (lookalike.ok) { assert lookalike.value == "137 0"; }
+		const clean = endOf("sh -c 'exit 0'");
+		assert clean.ok, clean.error;
+		if (clean.ok) { assert clean.value == "0 0"; }
 	}
 
 	function becomesBusy(this p: NativePty, wanted: boolean, withinMs: float64): boolean {
@@ -264,24 +284,29 @@ when (!windows) {
 		assert env.set("TERM_PROGRAM", "OtherTerminal");
 		assert env.set("TERM_SESSION_ID", "w0t0");
 		assert withPty("sh -c 'echo \"[$TERM_PROGRAM|$TERM_SESSION_ID|$TERM]\"'", (p: NativePty): void => {
-			assert p.toPty().drainText(4096).includes("[Haro||xterm-256color]");
+			const out = p.toPty().drainText(4096);
+			assert out.ok, out.error;
+			if (out.ok) { assert out.value.includes("[Haro||xterm-256color]"); }
 		});
 		assert env.get("TERM_PROGRAM") == "OtherTerminal";
 	}
 
-	function childLang(): string {
+	function childLang(): Result<string, string> {
 		const opened = NativePty.open("env", 80, 24);
-		if (!opened.ok) { return "open failed"; }
-		const out = opened.value.toPty().drainText(65536);
-		opened.value.close();
-		return out.split("\r\n").filter((line: string): boolean => line.startsWith("LANG=")).join("|");
+		if (!opened.ok) { return Result.err(`open failed: ${opened.error.toString()}`); }
+		defer opened.value.close();
+		const out = try opened.value.toPty().drainText(65536);
+		const langs = out.split("\r\n").filter((line: string): boolean => line.startsWith("LANG="));
+		return Result.ok(langs.join("|"));
 	}
 
 	test "the child keeps an inherited LANG" {
 		const inherited = env.get("LANG");
 		defer { const _back = env.set("LANG", inherited); }
 		assert env.set("LANG", "fr_FR.UTF-8");
-		assert childLang() == "LANG=fr_FR.UTF-8";
+		const lang = childLang();
+		assert lang.ok, lang.error;
+		if (lang.ok) { assert lang.value == "LANG=fr_FR.UTF-8"; }
 	}
 
 	when (macos) {
@@ -291,9 +316,13 @@ when (!windows) {
 			const inherited = env.get("LANG");
 			defer { const _back = env.set("LANG", inherited); }
 			assert env.delete("LANG");
-			assert childLang() == `LANG=${preferredLang()}`;
+			const lang = childLang();
+			assert lang.ok, lang.error;
+			if (lang.ok) { assert lang.value == `LANG=${preferredLang()}`; }
 			assert env.set("LANG", "");
-			assert childLang() == `LANG=${preferredLang()}`;
+			const blank = childLang();
+			assert blank.ok, blank.error;
+			if (blank.ok) { assert blank.value == `LANG=${preferredLang()}`; }
 		}
 	}
 
@@ -308,8 +337,11 @@ when (!windows) {
 			assert p.wait(5000).ok;
 			assert p.resize(100, 30, 9, 18).ok;
 			const out = p.toPty().drainText(4096);
-			assert out.includes("(24, 80, 640, 384)");
-			assert out.includes("(30, 100, 900, 540)");
+			assert out.ok, out.error;
+			if (out.ok) {
+				assert out.value.includes("(24, 80, 640, 384)");
+				assert out.value.includes("(30, 100, 900, 540)");
+			}
 			p.close();
 		}
 	}
@@ -406,7 +438,8 @@ when (!windows) {
 		assert spawned.ok;
 		if (spawned.ok) {
 			const out = spawned.value.drainText(4096);
-			assert out.includes("got only.md fallback end");
+			assert out.ok, out.error;
+			if (out.ok) { assert out.value.includes("got only.md fallback end"); }
 			spawned.value.close();
 		}
 		assert removeAll(dir).ok;
@@ -418,7 +451,9 @@ when (!windows) {
 		const job = `setsid sh -c "for t in${ticks}; do echo spam; sleep 0.01; done"`;
 		assert withPty(`sh -c '${job} & sleep 0.2; echo done'`, (p: NativePty): void => {
 			const start: float64 = performance.now();
-			assert p.toPty().drainText(4096).includes("done");
+			const out = p.toPty().drainText(4096);
+			assert out.ok, out.error;
+			if (out.ok) { assert out.value.includes("done"); }
 			assert performance.now() - start < 2500;
 			assert p.exitCode() === 0;
 		});
@@ -428,7 +463,9 @@ when (!windows) {
 when (windows) {
 	test "a resize after the child exited is refused, since its console is already closed" {
 		assert withPty(ECHO_HELLO, (p: NativePty): void => {
-			assert p.toPty().drainText(4096).includes("hello");
+			const out = p.toPty().drainText(4096);
+			assert out.ok, out.error;
+			if (out.ok) { assert out.value.includes("hello"); }
 			assert p.exitCode() === 0;
 			assert !p.resize(100, 30).ok;
 		});
@@ -436,7 +473,9 @@ when (windows) {
 
 	test "environment variables in the command line are expanded, as Windows shortcuts do" {
 		assert withPty("%SystemRoot%\\System32\\cmd.exe /c echo hello", (p: NativePty): void => {
-			assert p.toPty().drainText(4096).includes("hello");
+			const out = p.toPty().drainText(4096);
+			assert out.ok, out.error;
+			if (out.ok) { assert out.value.includes("hello"); }
 		});
 	}
 }
@@ -446,7 +485,9 @@ test "a native pty spawned as a Pty reads its output and reports its exit throug
 	assert spawned.ok;
 	if (spawned.ok) {
 		const pty = spawned.value;
-		assert pty.drainText(4096).includes("hello");
+		const out = pty.drainText(4096);
+		assert out.ok, out.error;
+		if (out.ok) { assert out.value.includes("hello"); }
 		assert pty.exitCode() === 0;
 		pty.close();
 	}
@@ -489,7 +530,9 @@ test "a line written to the child reaches it" {
 	assert withPty(ECHO_LINE_READ, (p: NativePty): void => {
 		let line: Vec<uint8> = [0x68, 0x69, 0x0D];
 		assert p.write(line).ok;
-		assert p.toPty().drainText(4096).includes("[hi]");
+		const out = p.toPty().drainText(4096);
+		assert out.ok, out.error;
+		if (out.ok) { assert out.value.includes("[hi]"); }
 	});
 }
 

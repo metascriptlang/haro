@@ -5,15 +5,20 @@ import { drainText } from "./ptyRig";
 test "a replay hands back its bytes in order, whatever the read size" {
 	const replay = Replay.ofText("hello, replay");
 	assert replay.bytes.length == 13;
-	assert replay.toPty().drainText(4096) == "hello, replay";
-	assert replay.toPty().drainText(5) == "hello, replay";
-	assert replay.toPty().drainText(1) == "hello, replay";
+	for (const chunk of [4096, 5, 1]) {
+		const out = replay.toPty().drainText(chunk);
+		assert out.ok, out.error;
+		if (out.ok) { assert out.value == "hello, replay"; }
+	}
 }
 
 test "text split inside a character across reads drains back whole" {
 	const text = "hé € 😀!";
-	assert Replay.ofText(text).toPty().drainText(1) == text;
-	assert Replay.ofText(text).toPty().drainText(3) == text;
+	for (const chunk of [1, 3]) {
+		const out = Replay.ofText(text).toPty().drainText(chunk);
+		assert out.ok, out.error;
+		if (out.ok) { assert out.value == text; }
+	}
 }
 
 test "a replay is ready until its last byte, then ends like a child that exited" {
@@ -41,7 +46,9 @@ test "a replay accepts writes and resizes and changes nothing" {
 	buf[0] = "q".code as uint8;
 	assert pty.write(buf[0..1]).ok;
 	assert pty.resize(100, 30, 8, 16).ok;
-	assert pty.drainText(8) == "xyz";
+	const out = pty.drainText(8);
+	assert out.ok, out.error;
+	if (out.ok) { assert out.value == "xyz"; }
 }
 
 test "a closed replay refuses every call" {
@@ -56,6 +63,9 @@ test "a closed replay refuses every call" {
 
 test "a replay can be played again from its start" {
 	const replay = Replay.ofText("again");
-	assert replay.toPty().drainText(8) == "again";
-	assert replay.toPty().drainText(8) == "again";
+	for (const _play of [1, 2]) {
+		const out = replay.toPty().drainText(8);
+		assert out.ok, out.error;
+		if (out.ok) { assert out.value == "again"; }
+	}
 }

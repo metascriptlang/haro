@@ -227,7 +227,7 @@ function plainText(write: Ptr<GhosttyClipboardWrite>): string | null {
 }
 
 const XTVERSION_NAME: cstring = "haro";
-const XTVERSION_NAME_BYTES = 4;
+const XTVERSION_NAME_BYTES = "haro".length;
 
 @exportName("haroVtDeviceAttributes")
 function deviceAttributes(terminal: GhosttyTerminal, effects: Ptr<void>, out da: GhosttyDeviceAttributes): boolean {
@@ -262,7 +262,7 @@ function sizeReport(terminal: GhosttyTerminal, effects: Ptr<void>, out size: Gho
 
 @exportName("haroVtXtversion")
 function xtversion(terminal: GhosttyTerminal, effects: Ptr<void>): GhosttyString {
-	const name: GhosttyString = { ptr: XTVERSION_NAME as Ptr<uint8>, len: XTVERSION_NAME_BYTES };
+	const name: GhosttyString = { ptr: XTVERSION_NAME as Ptr<uint8>, len: XTVERSION_NAME_BYTES as size_t };
 	return name;
 }
 

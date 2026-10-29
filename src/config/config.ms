@@ -41,6 +41,7 @@ const PALETTE_SIZE = 256;
 const MAX_SCROLLBACK: int64 = 100000;
 const MIN_FONT_SIZE: float64 = 1;
 const MAX_FONT_SIZE: float64 = 255;
+const MAX_PADDING: float64 = 512;
 
 when (windows) {
 	const DEFAULT_COMMAND = "pwsh.exe -NoLogo";
@@ -246,8 +247,8 @@ export function parse(json: string): Result<Config, string> {
 			"padding" => {
 				if (!given) { continue; }
 				c.padding = try readNumber(v, key);
-				if (c.padding < 0) {
-					return Result.err(`padding ${c.padding} must be 0 or more`);
+				if (c.padding < 0 || c.padding > MAX_PADDING) {
+					return Result.err(`padding ${c.padding} must be from 0 to ${MAX_PADDING}`);
 				}
 			},
 			"command" => { if (given) { c.command = try readString(v, key); } },
@@ -405,7 +406,6 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"fontSize":0.5}`) == "fontSize 0.5 must be from 1 to 255 points";
 	assert refusal(`{"fontSize":256}`) == "fontSize 256 must be from 1 to 255 points";
 	assert refusal(`{"padding":"6"}`) == "padding must be a number";
-	assert refusal(`{"padding":-1}`) == "padding -1 must be 0 or more";
 	assert refusal(`{"workingDirectory":"projects"}`) ==
 		`workingDirectory "projects" must be home, inherit, an absolute path or a path under ~/`;
 	assert refusal(`{"background":"#12345"}`) == `background: "#12345" is not a #rrggbb colour`;
@@ -431,6 +431,12 @@ test "a field the config cannot use is refused by name" {
 		`optionAsAlt: "true" must be neither, left, right or both`;
 	assert refusal(`{"optionAsAlt":true}`) == "optionAsAlt must be a string";
 	assert refusal("[]") == "config must be an object";
+}
+
+test "a padding beyond the cap is refused by name" {
+	assert refusal(`{"padding":-1}`) == "padding -1 must be from 0 to 512";
+	assert refusal(`{"padding":513}`) == "padding 513 must be from 0 to 512";
+	assert refusal(`{"padding":512}`) == "";
 }
 
 test "the shell starts at home unless Haro was probably started from a command line" {

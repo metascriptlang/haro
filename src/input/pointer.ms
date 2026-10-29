@@ -145,7 +145,10 @@ function viewOf(cols: int32, rows: int32, text: string): Vt | null {
 	if (!created.ok) { return null; }
 	const vt = created.value;
 	vt.writeText(text);
-	if (!vt.update().ok) { return null; }
+	if (!vt.update().ok) {
+		vt.free();
+		return null;
+	}
 	return vt;
 }
 
@@ -296,15 +299,22 @@ const PAGE_SPAN: int32 = 700;
 
 function prunable(): Vt | null {
 	const vt = viewOf(80, 4, "r0");
-	if (vt === null || !vt.setScrollback(1000).ok) { return null; }
+	if (vt === null) { return null; }
+	if (!vt.setScrollback(1000).ok) {
+		vt.free();
+		return null;
+	}
 	vt.writeText(prunedLines(1, 6000));
 	for (let next = 6001; next < 8001; next += 20) {
-		if (!vt.update().ok) { return null; }
-		const offset = vt.scrollOffset();
-		if (!offset.ok) { return null; }
+		const offset = vt.update().ok ? vt.scrollOffset() : null;
+		if (offset === null || !offset.ok) {
+			vt.free();
+			return null;
+		}
 		if (offset.value >= PAGE_SPAN) { return vt; }
 		vt.writeText(prunedLines(next, 20));
 	}
+	vt.free();
 	return null;
 }
 

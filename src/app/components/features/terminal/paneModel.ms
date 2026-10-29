@@ -124,8 +124,8 @@ export interface PaneModel {
 	cursor: CursorModel;
 	preedit: PreeditModel;
 	grid: ViewHandle | null;
-	holdTimer: number;
-	scrollTimer: number;
+	holdTimer: number | null;
+	scrollTimer: number | null;
 	decorations: int32;
 	mouseGeometry: MouseGeometry;
 	layoutWidth: number;
@@ -197,8 +197,8 @@ export function open(
 		}),
 		preedit: PreeditModel.open(),
 		grid: null,
-		holdTimer: -1,
-		scrollTimer: -1,
+		holdTimer: null,
+		scrollTimer: null,
 		decorations: 0,
 		mouseGeometry: geometryOf(1, 1, 1, 1),
 		layoutWidth: 0,
@@ -268,17 +268,17 @@ function answerAsks(this m: PaneModel, asks: Asks): void {
 }
 
 function watchHold(this m: PaneModel): void {
-	if (m.holdTimer >= 0) { return; }
+	if (m.holdTimer !== null) { return; }
 	m.holdTimer = setTimeout((): void => {
-		m.holdTimer = -1;
+		m.holdTimer = null;
 		m.refresh();
 	}, HOLD_RECHECK_MS);
 }
 
 function autoscrollSoon(this m: PaneModel): void {
-	if (m.scrollTimer >= 0 || !m.autoscrolling) { return; }
+	if (m.scrollTimer !== null || !m.autoscrolling) { return; }
 	m.scrollTimer = setTimeout((): void => {
-		m.scrollTimer = -1;
+		m.scrollTimer = null;
 		m.io.autoscroll();
 		m.refresh();
 	}, AUTOSCROLL_MS);

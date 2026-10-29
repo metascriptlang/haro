@@ -380,10 +380,11 @@ test "a frame held by synchronized output is counted each time, and its recheck 
 		m.refresh();
 		assert m.stats.line().startsWith("refreshes=1 more=0 held=1");
 		const timer = m.holdTimer;
-		assert timer >= 0;
+		assert timer !== null;
 		m.refresh();
 		assert m.stats.tally.held == 2;
-		assert m.holdTimer == timer;
+		const again = m.holdTimer;
+		assert again !== null && timer !== null && again == timer;
 		clearTimeout(timer);
 	}).ok;
 }
@@ -391,15 +392,16 @@ test "a frame held by synchronized output is counted each time, and its recheck 
 test "dragging above the grid keeps a refresh timer running for the autoscroll, one at a time" {
 	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
 		const m = paneOf(t, noCalls());
-		assert m.scrollTimer < 0;
+		assert m.scrollTimer === null;
 		m.io.press(MouseButton.Left, hitAt(3, 2), 0);
 		m.io.move({ ...hitAt(3, 0), y: -12 }, true);
 		m.refresh();
 		assert m.autoscrolling;
 		const timer = m.scrollTimer;
-		assert timer >= 0;
+		assert timer !== null;
 		m.refresh();
-		assert m.scrollTimer == timer;
+		const again = m.scrollTimer;
+		assert again !== null && timer !== null && again == timer;
 		clearTimeout(timer);
 	}).ok;
 }

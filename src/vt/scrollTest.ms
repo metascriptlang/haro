@@ -20,7 +20,7 @@ function topAfterJump(this vt: Vt, toward: PromptJump): string {
 	const jumped = vt.jumpToPrompt(toward);
 	if (!jumped.ok) { return "<failed>"; }
 	if (!jumped.value) { return "<none>"; }
-	vt.update();
+	if (!vt.update().ok) { return "<failed>"; }
 	return vt.topLine();
 }
 
@@ -28,8 +28,8 @@ test "the viewport jumps between OSC 133 prompts" {
 	assert withVt(10, 3, (vt: Vt): void => {
 		const prompt = "\x1b]133;A\x07";
 		vt.writeText(`${prompt}p1\r\nout1\r\nout2\r\n${prompt}p2\r\nout3\r\n${prompt}p3`);
-		vt.update();
-		assert vt.lines().ok;
+		assert vt.update().ok;
+		assert vt.topLine() == "p2";
 		assert vt.topAfterJump(PromptJump.Previous) == "p1";
 		assert vt.topAfterJump(PromptJump.Previous) == "<none>";
 		assert vt.topAfterJump(PromptJump.Next) == "p2";

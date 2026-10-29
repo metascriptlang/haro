@@ -44,7 +44,7 @@ test "AltGr text reaches the program as the text once the consumed Ctrl+Alt is d
 		const brace: KeyEvent = { ...press("Digit7", "{", 0x37, ctrlAlt), consumedMods: ctrlAlt };
 		assert k.encoded(vt, brace.withoutAltGr()) == "{";
 		const polish: KeyEvent = { ...brace, key: "KeyA", unshifted: 0x61, text: "ą" };
-		assert k.encoded(vt, polish.withoutAltGr()) == "Ä";
+		assert k.encoded(vt, polish.withoutAltGr()) == "Ä\u0085";
 	});
 }
 
@@ -93,6 +93,9 @@ test "macOS Option sends the escape before the key text the window kept when it 
 			k.optionAsAlt = OptionAsAlt.Left;
 			assert k.encoded(vt, asAlt) == "\x1bB";
 			k.optionAsAlt = OptionAsAlt.Neither;
+			assert k.encoded(vt, composed) == "\u00c4\u00b1";
+		} else {
+			assert k.encoded(vt, asAlt) == "\x1bB";
 			assert k.encoded(vt, composed) == "\u00c4\u00b1";
 		}
 	});

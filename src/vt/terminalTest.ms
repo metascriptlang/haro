@@ -131,10 +131,10 @@ function rowsAfterGrowing(pull: boolean): string {
 	if (!created.ok) { return "create failed"; }
 	const vt = created.value;
 	defer vt.free();
-	vt.setPullScrollback(pull);
+	if (!vt.setPullScrollback(pull).ok) { return "pull failed"; }
 	vt.writeText("l1\r\nl2\r\nl3\r\nl4\r\nl5");
-	vt.resize(10, 5);
-	vt.update();
+	if (!vt.resize(10, 5).ok) { return "resize failed"; }
+	if (!vt.update().ok) { return "update failed"; }
 	const lines = vt.lines();
 	if (!lines.ok) { return "read failed"; }
 	return lines.value.join("|");

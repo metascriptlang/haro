@@ -147,7 +147,7 @@ test "an erased selection is gone from the terminal" {
 		vt.writeText("hello");
 		assert vt.update().ok;
 		assert vt.selectionSet(marked(0, 0, 0, 4)).ok;
-		vt.selectionClear();
+		assert vt.selectionClear().ok;
 		const none = vt.selection();
 		assert none.ok;
 		if (none.ok) { assert none.value === null; }

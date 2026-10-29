@@ -11,7 +11,14 @@ export const PARTICLE_SPEED: float64 = 10.0;
 export const PARTICLE_CURL: float64 = 1.0;
 export const PARTICLE_PUSH: float64 = 0.5;
 export const PARTICLE_DRAG: float64 = 0.15;
-const DRAG_TICK: float64 = 0.017;
+export const TICK: float64 = 0.017;
+export const STIFFNESS: float64 = 0.3;
+export const DAMPING: float64 = 0.5;
+export const ANTICIPATION: float64 = 0.2;
+export const MAX_WINDUP: float64 = 2;
+export const STOP_DISTANCE: float64 = 0.1;
+export const ARRIVAL: float64 = 0.5;
+const MAX_TICKS_PER_FRAME = 30;
 
 const PCG_MULTIPLIER: uint64 = 6364136223846793005;
 const PCG_STATE: uint64 = 9600629759793949339;
@@ -52,6 +59,13 @@ export interface Trail {
 	particles: Particle[];
 	destination: Point;
 	jumped: boolean;
+	placed: boolean;
+	arrived: boolean;
+	head: Point;
+	headFrom: Point;
+	headVelocity: Point;
+	lag: float64;
+	cell: Point;
 	shape: Point;
 	spawnedFrom: Point;
 	remainder: float64;
@@ -95,6 +109,14 @@ function middle(this points: Point[]): Point {
 		sum = sum.plus(p);
 	}
 	return sum.times(1.0 / points.length);
+}
+
+function inCells(this p: Point, cell: Point): Point {
+	return point(p.x / cell.x, p.y / cell.y);
+}
+
+function inPixels(this p: Point, cell: Point): Point {
+	return point(p.x * cell.x, p.y * cell.y);
 }
 
 function lerp(from: float64, to: float64, t: float64): float64 {
@@ -181,6 +203,13 @@ export function start(this typeof Trail): Trail {
 		particles: [],
 		destination: point(0, 0),
 		jumped: false,
+		placed: false,
+		arrived: true,
+		head: point(0, 0),
+		headFrom: point(0, 0),
+		headVelocity: point(0, 0),
+		lag: 0,
+		cell: point(1, 1),
 		shape: point(0, 0),
 		spawnedFrom: point(0, 0),
 		remainder: 0,
@@ -229,20 +258,8 @@ function currents(this t: Trail): Point[] {
 	return points;
 }
 
-function velocity(this c: Corner): Point {
-	return point(-c.x.velocity, -c.y.velocity);
-}
-
-function flow(this t: Trail): Point {
-	let points: Point[] = [];
-	for (const c of t.corners) {
-		points.push(c.velocity());
-	}
-	return points.middle();
-}
-
 function spray(this t: Trail, h: float64, dt: float64, immediate: boolean): boolean {
-	const drag = Math.exp(Math.log(1 - PARTICLE_DRAG) * (dt / DRAG_TICK));
+	const drag = Math.exp(Math.log(1 - PARTICLE_DRAG) * (dt / TICK));
 	let i = 0;
 	while (i < t.particles.length) {
 		const p = t.particles[i];
@@ -268,7 +285,7 @@ function spray(this t: Trail, h: float64, dt: float64, immediate: boolean): bool
 		const wanted = (travel.length() / h) * PARTICLE_DENSITY + t.remainder;
 		const count = Math.floor(wanted) as int32;
 		t.remainder = wanted - (count as float64);
-		const push = t.flow().times(PARTICLE_PUSH);
+		const push = dt > 0 ? travel.times(PARTICLE_PUSH / dt) : point(0, 0);
 		for (let n = 0; n < count; n++) {
 			const share = ((n + 1) as float64) / (count as float64);
 			const base = t.direction();
@@ -287,12 +304,75 @@ function spray(this t: Trail, h: float64, dt: float64, immediate: boolean): bool
 	return t.particles.length > 0;
 }
 
+function place(this t: Trail): void {
+	t.head = t.destination;
+	t.headFrom = t.destination;
+	t.headVelocity = point(0, 0);
+	t.lag = 0;
+	t.arrived = true;
+}
+
+function headResting(this t: Trail): boolean {
+	return t.head == t.destination && t.headFrom == t.destination && t.headVelocity == point(0, 0);
+}
+
+function windup(this t: Trail): Point {
+	const back = t.head.minus(t.destination).times(ANTICIPATION).inCells(t.cell);
+	const cells = back.length();
+	return (cells > MAX_WINDUP ? back.times(MAX_WINDUP / cells) : back).inPixels(t.cell);
+}
+
+function tick(this t: Trail): boolean {
+	const keep = 1 - DAMPING;
+	const pull = STIFFNESS / (1 + 2.5 * keep);
+	t.headFrom = t.head;
+	t.headVelocity = t.headVelocity.plus(t.destination.minus(t.head).times(pull));
+	t.head = t.head.plus(t.headVelocity);
+	t.headVelocity = t.headVelocity.times(keep);
+	const far = t.destination.minus(t.head).inCells(t.cell).length();
+	const fast = t.headVelocity.inCells(t.cell).length();
+	if (far > STOP_DISTANCE || fast > STOP_DISTANCE) { return true; }
+	t.place();
+	return false;
+}
+
+function spring(this t: Trail, dt: float64): void {
+	if (t.headResting()) { return; }
+	t.lag += dt;
+	let ticks = 0;
+	while (t.lag >= TICK) {
+		if (ticks == MAX_TICKS_PER_FRAME) {
+			t.lag = 0;
+			break;
+		}
+		t.lag -= TICK;
+		ticks += 1;
+		if (!t.tick()) { return; }
+	}
+}
+
+function drawnHead(this t: Trail): Point {
+	return t.headFrom.plus(t.head.minus(t.headFrom).times(t.lag / TICK));
+}
+
 export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float64, h: float64, immediate: boolean): boolean {
 	if (t.reshape(shape)) { t.remainder = 0; }
-	const center = point(t.destination.x + w * 0.5, t.destination.y + h * 0.5);
+	t.cell = point(w, h);
+	const half = point(w * 0.5, h * 0.5);
+	const center = t.destination.plus(half);
 	let animating = false;
 	if (center.x != 0 || center.y != 0) {
 		if (t.jumped) {
+			const lead = t.corners[0];
+			const step = lead.target(center, w, h).minus(lead.previous).inCells(t.cell);
+			const short = Math.abs(step.x) <= 2.001 && Math.abs(step.y) <= 0.001;
+			if (immediate || short || !t.placed) {
+				t.place();
+			} else {
+				if (t.headResting()) { t.headVelocity = t.windup(); }
+				t.arrived = false;
+			}
+			t.placed = true;
 			const aligned: float64[] = [];
 			let lo = Infinity;
 			let hi = -Infinity;
@@ -307,9 +387,15 @@ export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float
 				t.corners[i].jump(center, w, h, Number.isFinite(a) ? Math.min(1, Math.max(0, a)) : 1);
 			}
 		}
+		t.spring(dt);
+		const head = t.drawnHead();
+		const off = head.minus(t.destination).inCells(t.cell);
+		if (Math.abs(off.x) < ARRIVAL && Math.abs(off.y) < ARRIVAL) { t.arrived = true; }
+		const riding = head.plus(half);
 		for (const c of t.corners) {
-			if (c.follow(center, w, h, dt, immediate)) { animating = true; }
+			if (c.follow(riding, w, h, dt, immediate)) { animating = true; }
 		}
+		if (!t.headResting()) { animating = true; }
 		if (t.spray(h, dt, immediate)) { animating = true; }
 	}
 	t.jumped = false;
@@ -317,6 +403,7 @@ export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float
 }
 
 export function resting(this t: Trail): boolean {
+	if (!t.headResting()) { return false; }
 	for (const c of t.corners) {
 		if (c.x.position != 0 || c.y.position != 0) { return false; }
 	}
@@ -401,26 +488,15 @@ test "the cursor rests with its corners on the cell it was moved to" {
 	assert shown[2] == point(40, 60);
 }
 
-test "a move of up to two cells along a row uses the short animation for every corner" {
+test "a move of up to two cells along a row lands the head at once and uses the short animation" {
 	const t = placed(30, 40);
 	t.moveTo(50, 40);
 	const _moving = t.animate(FRAME, CursorShape.Block, 10, 20, false);
+	assert t.drawnHead() == point(50, 40);
+	assert t.arrived;
 	for (const c of t.corners) {
 		assert near(c.length, SHORT_ANIMATION_LENGTH);
 	}
-}
-
-test "on a long jump the leading corners land at once and the trailing ones stretch behind" {
-	const t = placed(30, 40);
-	t.moveTo(130, 40);
-	assert t.animate(FRAME, CursorShape.Block, 10, 20, false);
-	const shown = t.shownCorners();
-	assert shown[1] == point(140, 40);
-	assert shown[2] == point(140, 60);
-	assert shown[0].x < 130;
-	assert shown[3].x < 130;
-	assert near(t.corners[0].length, ANIMATION_LENGTH);
-	assert near(t.corners[1].length, 0);
 }
 
 test "a jump along the pixel diagonal moves its side corners at half the trailing pace" {
@@ -446,21 +522,23 @@ test "every jump keeps the cursor's shape convex until it rests" {
 	}
 }
 
-test "sixty and a hundred and twenty frames a second trace the same motion" {
+test "sixty and a hundred and twenty frames a second move the head alike and the tail within a cell" {
 	const a = placed(30, 40);
 	const b = placed(30, 40);
 	a.moveTo(130, 240);
 	b.moveTo(130, 240);
-	for (let f = 0; f < 12; f++) {
+	for (let f = 0; f < 60; f++) {
 		const _a = a.animate(FRAME, CursorShape.Block, 10, 20, false);
 		const _b = b.animate(FRAME / 2, CursorShape.Block, 10, 20, false);
 		const _c = b.animate(FRAME / 2, CursorShape.Block, 10, 20, false);
+		assert a.drawnHead().minus(b.drawnHead()).length() < 0.000001;
 		const ca = a.currents();
 		const cb = b.currents();
 		for (let i = 0; i < 4; i++) {
-			assert ca[i].minus(cb[i]).length() < 0.1;
+			assert ca[i].minus(cb[i]).length() < 10;
 		}
 	}
+	assert a.resting() && b.resting();
 }
 
 test "a bar keeps its corners in the left eighth of the cell" {
@@ -525,4 +603,41 @@ test "an immediate move snaps every corner and sprays nothing" {
 	assert !t.animate(FRAME, CursorShape.Block, 10, 20, true);
 	assert t.particles.length == 0;
 	assert t.shownCorners()[0] == point(130, 240);
+}
+
+test "a long jump's head springs past the new cell and back while the tail stays behind it" {
+	const t = placed(30, 40);
+	t.moveTo(150, 40);
+	const _first = t.animate(FRAME, CursorShape.Block, 10, 20, false);
+	assert near(t.corners[1].length, 0) && near(t.corners[2].length, 0);
+	assert near(t.corners[0].length, ANIMATION_LENGTH);
+	let farthest = 0.0;
+	let frames = 0;
+	while (!t.resting()) {
+		const _moving = t.animate(FRAME, CursorShape.Block, 10, 20, false);
+		const q = t.currents();
+		farthest = Math.max(farthest, q[1].x);
+		assert q[0].x <= q[1].x;
+		frames += 1;
+	}
+	assert farthest > 160;
+	assert frames < 90;
+	assert t.shownCorners()[1] == point(160, 40);
+}
+
+test "the new cell counts as reached only once the head is within half a cell of it" {
+	const t = placed(30, 40);
+	assert t.arrived;
+	t.moveTo(150, 40);
+	const _first = t.animate(FRAME, CursorShape.Block, 10, 20, false);
+	assert !t.arrived;
+	let frames = 0;
+	while (!t.arrived) {
+		const _moving = t.animate(FRAME, CursorShape.Block, 10, 20, false);
+		const off = t.drawnHead().minus(t.destination);
+		if (t.arrived) { assert Math.abs(off.x) < 5 && Math.abs(off.y) < 10; }
+		frames += 1;
+	}
+	assert !t.resting();
+	assert frames < 20;
 }

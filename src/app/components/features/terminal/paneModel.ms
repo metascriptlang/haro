@@ -40,6 +40,7 @@ export interface Desktop {
 	setTitle: (title: string) => void;
 	notify: (title: string, body: string) => void;
 	openLink: (uri: string) => void;
+	bell: () => void;
 	close: () => void;
 	exited: (code: int32) => void;
 }
@@ -302,6 +303,7 @@ function applied(this m: PaneModel, got: IoFrame): void {
 		if (notification !== null && !m.cursor.focused) {
 			m.desktop.notify(notification.title, notification.body);
 		}
+		if (f.bells > 0) { m.desktop.bell(); }
 		for (const mark of f.shell) { m.marked(mark); }
 		if (f.held) {
 			m.stats.tally.held += 1;

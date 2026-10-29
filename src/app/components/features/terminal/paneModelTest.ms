@@ -40,11 +40,12 @@ interface Calls {
 	title: string;
 	notified: string;
 	closed: int32;
+	bells: int32;
 	exits: string;
 }
 
 function noCalls(): Calls {
-	return { fatal: "", noted: "", title: "", notified: "", closed: 0, exits: "" };
+	return { fatal: "", noted: "", title: "", notified: "", closed: 0, bells: 0, exits: "" };
 }
 
 function desktopFor(calls: Calls): Desktop {
@@ -52,6 +53,7 @@ function desktopFor(calls: Calls): Desktop {
 		setTitle: (title: string): void => { calls.title = title; },
 		notify: (title: string, body: string): void => { calls.notified += `${title}|${body}\n`; },
 		openLink: (uri: string): void => {},
+		bell: (): void => { calls.bells += 1; },
 		close: (): void => { calls.closed += 1; },
 		exited: (code: int32): void => { calls.exits += `${code} `; },
 	};
@@ -195,6 +197,17 @@ test "a program's title reaches the window" {
 		const m = paneOf(t, calls);
 		m.refresh();
 		assert calls.title == "vim";
+	}).ok;
+}
+
+test "bells rung within one frame ring the host once, and a frame without one rings nothing" {
+	assert onFresh("\x07\x07", (t: Term, sink: Sink): void => {
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		m.refresh();
+		assert calls.bells == 1, `${calls.bells}`;
+		m.refresh();
+		assert calls.bells == 1, `${calls.bells}`;
 	}).ok;
 }
 

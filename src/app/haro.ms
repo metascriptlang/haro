@@ -5,7 +5,7 @@ import { Cleanup } from "../../../neon/src/core/types";
 import {
 	runWindow, DesktopOptions, desktopOptions, setOptionAsAlt, setWindowTitle, OptionAsAlt as OptionSides,
 } from "../../../neon/src/platform/ion/window";
-import { listen, notify, onWake, openExternal } from "../../../ion/src/index";
+import { beep, listen, notify, onWake, openExternal } from "../../../ion/src/index";
 import { ionWakeLoop } from "../../../ion/src/platform/bridge.h";
 import { argv, exit } from "std/process";
 import { appendFile, ensureDir, readFile } from "std/fs";
@@ -153,6 +153,7 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 				notify(titleOr(title), body, NOTIFICATION_ID);
 			},
 			openLink: (uri: string): void => { openExternal(uri); },
+			bell: (): void => { beep(); },
 			close: (): void => {
 				note("Close Window or a keybind closed the window");
 				quitWith(shell)();

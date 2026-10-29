@@ -138,6 +138,11 @@ function step(this c: CursorModel, now: number): void {
 	c.last = now;
 	const shape = c.look.shapeOf(c.focused);
 	const moving = c.trail.animate(dt, shape, c.cursorWidth(), c.metrics.rowHeight(), false);
+	if (!c.trail.resting()) {
+		c.holdBlink();
+	} else if (c.blinkTimer < 0) {
+		c.syncBlink();
+	}
 	const ops = c.operations();
 	if (ops.length > 0 || c.drawing().length > 0) { c.setDrawing(ops); }
 	const cells = c.dustCells();
@@ -151,12 +156,16 @@ function blockInk(this c: CursorModel): CellInk | null {
 	return lit ? { fg: CURSOR_TEXT, bg: c.tint } : null;
 }
 
-export function paintCursor(this c: CursorModel): void {
+function inkCell(this c: CursorModel): void {
 	const ink = c.blockInk();
 	if (ink != c.ink) {
 		c.ink = ink;
 		c.inked(ink);
 	}
+}
+
+export function paintCursor(this c: CursorModel): void {
+	c.inkCell();
 	const at = c.at;
 	if (at !== null && c.look.visible) {
 		const pad = c.padding();
@@ -171,6 +180,12 @@ function stopBlink(this c: CursorModel): void {
 	if (c.blinkTimer >= 0) { clearTimeout(c.blinkTimer); }
 	c.blinkTimer = -1;
 	c.blinkOn = true;
+}
+
+function holdBlink(this c: CursorModel): void {
+	if (c.blinkTimer < 0 && c.blinkOn) { return; }
+	c.stopBlink();
+	c.inkCell();
 }
 
 function armBlink(this c: CursorModel): void {
@@ -374,4 +389,20 @@ test "a step at rest leaves the drawing and the dust alone, and clears them once
 	};
 	c.step(100);
 	assert sets.drawing == 0 && sets.dust == 0;
+}
+
+test "a blinking cursor stays drawn while it moves and blinks again from on once it rests" {
+	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: true });
+	c.trail.moveTo(34, 44);
+	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
+	c.trail.moveTo(134, 44);
+	c.blinkOn = false;
+	c.step(16);
+	assert c.blinkOn;
+	assert c.operations().length == 1;
+	c.settle();
+	assert c.trail.resting();
+	assert c.blinkOn;
+	assert c.blinkTimer >= 0;
+	c.stopBlink();
 }

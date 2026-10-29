@@ -54,8 +54,6 @@ function onPane(name: string, act: (pane: HookPane) => RaiserValue): RaiserValue
 	return act(pane);
 }
 
-const NO_DECORATION = -1;
-
 struct Asked {
 	from: int32;
 	to: int32;
@@ -139,8 +137,8 @@ function annotated(pane: HookPane, d: RaiserHostValue): RaiserValue {
 	return boxInt(pane.annotate(noted.value.at, noted.value.note));
 }
 
-function idOf(arg: RaiserValue): int32 {
-	return arg.kind == RaiserValueKind.Int ? arg.intVal as int32 : NO_DECORATION;
+function idOf(arg: RaiserValue): int32 | null {
+	return arg.kind == RaiserValueKind.Int ? arg.intVal as int32 : null;
 }
 
 export function implementRoutines(): void {
@@ -166,7 +164,7 @@ export function implementRoutines(): void {
 	implementRoutine("haro.undecorate", (args: RaiserValue[]): RaiserValue => {
 		const id = idOf(args[0]);
 		return onPane("undecorate", (pane: HookPane): RaiserValue => {
-			pane.undecorate(id);
+			if (id !== null) { pane.undecorate(id); }
 			return boxVoid();
 		});
 	});
@@ -177,7 +175,7 @@ export function implementRoutines(): void {
 	implementRoutine("haro.unannotate", (args: RaiserValue[]): RaiserValue => {
 		const id = idOf(args[0]);
 		return onPane("unannotate", (pane: HookPane): RaiserValue => {
-			pane.unannotate(id);
+			if (id !== null) { pane.unannotate(id); }
 			return boxVoid();
 		});
 	});

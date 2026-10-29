@@ -61,8 +61,7 @@ const FAILED_BACKGROUND = "#3a1c24";
 
 function tookText(durationMs?: number): string {
 	if (durationMs === undefined) { return ""; }
-	const tenths = Math.round(durationMs / 100) as int32;
-	return ` · ${Math.floor(tenths / 10)}.${tenths % 10}s`;
+	return ` · ${(durationMs / 1000).toFixed(1)}s`;
 }
 
 export function markFailed(e: CommandDone): void {

@@ -12,7 +12,6 @@ import { Trail, particleAlpha } from "../../../term/trail";
 import { CURSOR_TEXT } from "../../theme";
 import { CellMetrics } from "../ui/cellText";
 
-const BLOCK_ALPHA = 0.8;
 const PARTICLE_SIDE = 0.2;
 const OUTLINE_PER_EM = 1.0 / 8;
 
@@ -95,6 +94,64 @@ function cursorWidth(this c: CursorModel): float64 {
 	return shape == CursorShape.Block || shape == CursorShape.BlockHollow ? 2 * cellWidth : cellWidth;
 }
 
+interface Cell {
+	left: float32;
+	top: float32;
+	right: float32;
+	bottom: float32;
+}
+
+function litCell(this c: CursorModel): Cell {
+	const at = c.trail.destination;
+	return {
+		left: at.x as float32,
+		top: at.y as float32,
+		right: (at.x + c.cursorWidth()) as float32,
+		bottom: (at.y + c.metrics.rowHeight()) as float32,
+	};
+}
+
+function cut(this polygon: Vec2[], nx: float32, ny: float32, limit: float32): Vec2[] {
+	let kept: Vec2[] = [];
+	for (let i = 0; i < polygon.length; i++) {
+		const a = polygon[i];
+		const b = polygon[(i + 1) % polygon.length];
+		const da = nx * a.x + ny * a.y - limit;
+		const db = nx * b.x + ny * b.y - limit;
+		if (da <= 0) { kept.push(a); }
+		if ((da < 0 && db > 0) || (da > 0 && db < 0)) {
+			const t = da / (da - db);
+			kept.push(vec2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t));
+		}
+	}
+	return kept;
+}
+
+function area(this polygon: Vec2[]): float32 {
+	let twice: float32 = 0;
+	for (let i = 0; i < polygon.length; i++) {
+		const a = polygon[i];
+		const b = polygon[(i + 1) % polygon.length];
+		twice += a.x * b.y - b.x * a.y;
+	}
+	return Math.abs(twice / 2) as float32;
+}
+
+function outside(this quad: Vec2[], cell: Cell): Vec2[][] {
+	const across = quad.cut(-1, 0, -cell.left).cut(1, 0, cell.right);
+	const pieces = [
+		quad.cut(1, 0, cell.left),
+		quad.cut(-1, 0, -cell.right),
+		across.cut(0, 1, cell.top),
+		across.cut(0, -1, -cell.bottom),
+	];
+	let shown: Vec2[][] = [];
+	for (const piece of pieces) {
+		if (piece.length >= 3 && piece.area() >= 0.5) { shown.push(piece); }
+	}
+	return shown;
+}
+
 function operations(this c: CursorModel): GraphicsOp[] {
 	let ops: GraphicsOp[] = [];
 	if (c.at !== null && c.look.drawn(c.focused, c.blinkOn)) {
@@ -107,9 +164,12 @@ function operations(this c: CursorModel): GraphicsOp[] {
 			const width = (c.metrics.fontSize() * OUTLINE_PER_EM) as float32;
 			const color = colorOf(c.tint, 1);
 			ops.push({ kind: "strokePoly", points: points, width: width, closed: true, color: color });
-		} else if (shape != CursorShape.Block || !c.trail.resting()) {
-			const alpha = shape == CursorShape.Block ? BLOCK_ALPHA : 1;
-			ops.push({ kind: "fillConvex", points: points, color: colorOf(c.tint, alpha) });
+		} else if (shape != CursorShape.Block) {
+			ops.push({ kind: "fillConvex", points: points, color: colorOf(c.tint, 1) });
+		} else if (!c.trail.resting()) {
+			for (const piece of points.outside(c.litCell())) {
+				ops.push({ kind: "fillConvex", points: piece, color: colorOf(c.tint, 1) });
+			}
 		}
 	}
 	return ops;
@@ -268,22 +328,28 @@ function cursorFor(look: CursorLook): CursorModel {
 	return c;
 }
 
-test "a focused block is a translucent quad only while it moves; at rest its cell is lit" {
+test "a moving block is one opaque trail that reaches its lit cell from the first frame and leaves it uncovered" {
 	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: false });
 	c.trail.moveTo(34, 44);
 	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
 	assert c.operations().length == 0;
-	c.trail.moveTo(54, 44);
+	c.trail.moveTo(134, 44);
 	assert c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false);
 	const ops = c.operations();
-	assert ops.length == 1;
-	const quad = ops[0];
-	if (quad.kind == "fillConvex") {
-		assert quad.points[0].x != 54;
-		assert quad.color.a == (BLOCK_ALPHA as float32);
-	} else {
-		assert false;
+	assert ops.length >= 1;
+	let reach: float32 = 0;
+	for (const op of ops) {
+		if (op.kind == "fillConvex") {
+			assert op.color.a == 1;
+			for (const p of op.points) {
+				assert p.x <= 134 || p.y <= 44 || p.y >= 64;
+				reach = Math.max(reach, p.x) as float32;
+			}
+		} else {
+			assert false;
+		}
 	}
+	assert reach == 134;
 	c.look = { visible: true, shape: CursorShape.Bar, blinking: false };
 	assert c.operations().length == 1;
 }

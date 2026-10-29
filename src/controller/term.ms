@@ -223,7 +223,7 @@ export function drain(this t: Term): Result<boolean, TermError> {
 function drainFor(this t: Term, budgetMs: float64): Result<boolean, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(false); }
-	const began = performance.now();
+	const began = t.now();
 	let more = false;
 	for (let i = 0; i < DRAIN_LIMIT && t.alive; i++) {
 		const ready = s.pty.wait(0);
@@ -235,7 +235,7 @@ function drainFor(this t: Term, budgetMs: float64): Result<boolean, TermError> {
 			t.alive = false;
 			t.ended = true;
 		}
-		more = alive.value && (i == DRAIN_LIMIT - 1 || performance.now() - began >= budgetMs);
+		more = alive.value && (i == DRAIN_LIMIT - 1 || t.now() - began >= budgetMs);
 		if (more) { break; }
 	}
 	return Result.ok(more);

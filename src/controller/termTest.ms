@@ -15,6 +15,7 @@ import {
 	Term,
 	TermError,
 	sendReplies,
+	drain,
 
 	annotate,
 	decorate,
@@ -430,3 +431,19 @@ test "a reply the program has not read past its limit is refused as backlogged, 
 	}).ok;
 }
 
+interface Ticks {
+	at: float64;
+}
+
+test "a drain reads the clock the terminal was opened with to spend its budget" {
+	const ticks: Ticks = { at: 0 };
+	const now = (): float64 => {
+		ticks.at += 10;
+		return ticks.at;
+	};
+	assert onPty(Replay.ofText("ab").toPty(), now, 20, 5, (t: Term): void => {
+		const more = t.drain();
+		assert more.ok;
+		if (more.ok) { assert more.value; }
+	}).ok;
+}

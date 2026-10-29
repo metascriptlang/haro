@@ -30,6 +30,7 @@ import {
 	Decoration,
 	FrameError,
 	FrameRows,
+	Planned,
 	Shown,
 	annotate,
 	decorate,
@@ -246,17 +247,28 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 	const more = try t.drain();
 	const ended = t.ended;
 	const vt = s.vt;
-	const events = vt.takeEvents();
-	const copied = vt.takeClipboard();
+	const held = vt.holding();
+	let planned: Planned | null = null;
+	let look: CursorLook = HIDDEN;
+	if (!held) {
+		const rows = t.shown.planRows(vt, t.cursorInk, t.decor);
+		if (!rows.ok) { return Result.err(frameFailure(rows.error)); }
+		const lit = vt.cursorLook();
+		if (!lit.ok) { return Result.err(TermError.FrameLookFailed); }
+		planned = rows.value;
+		look = lit.value;
+	}
 	let title: string | null = null;
-	if (events.titleChanged) {
+	if (vt.effects.events.titleChanged) {
 		const named = vt.title();
 		if (!named.ok) { return Result.err(TermError.EventsFailed); }
 		title = named.value;
 	}
+	const events = vt.takeEvents();
+	const copied = vt.takeClipboard();
 	const asked = vt.clipboardAsked();
-	if (vt.holding()) {
-		t.ended = false;
+	t.ended = false;
+	if (planned === null) {
 		return Result.ok({
 			...idleFrame(more, ended),
 			held: true,
@@ -268,15 +280,10 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 			shell: events.shell,
 		});
 	}
-	const planned = t.shown.planRows(vt, t.cursorInk, t.decor);
-	if (!planned.ok) { return Result.err(frameFailure(planned.error)); }
-	const look = vt.cursorLook();
-	if (!look.ok) { return Result.err(TermError.FrameLookFailed); }
-	t.ended = false;
 	return Result.ok({
-		rows: move planned.value.rows,
-		cursor: planned.value.cursor,
-		look: look.value,
+		rows: move planned.rows,
+		cursor: planned.cursor,
+		look: look,
 		colors: vt.painted.palette,
 		more: more,
 		ended: ended,

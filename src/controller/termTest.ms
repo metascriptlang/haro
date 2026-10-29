@@ -96,6 +96,36 @@ test "a frame carries what the program asked of the host: a clipboard write, bel
 	}).ok;
 }
 
+test "a frame that fails keeps what the program asked of the host for the next frame" {
+	const asked = "\x1b]52;c;aGk=\x07\x07\x07\x1b]2;build done\x07\x1b]9;tests passed\x07\x1b]133;A\x07";
+	assert onFresh(asked, (t: Term, sink: Sink): void => {
+		t.shown.pop();
+		const failed = t.pumpFrame();
+		assert !failed.ok;
+		t.shown.fitShown(5);
+		const frame = t.pumpFrame();
+		assert frame.ok;
+		if (frame.ok) {
+			assert frame.value.copied == "hi";
+			assert frame.value.bells == 2;
+			assert frame.value.title == "build done";
+			assert frame.value.notification !== null;
+			assert frame.value.shell.length == 1;
+		}
+	}).ok;
+}
+
+test "a clipboard read that was asked in a failed frame is still asked in the next" {
+	assert onFresh("\x1b]52;c;?\x07", (t: Term, sink: Sink): void => {
+		t.shown.pop();
+		assert !t.pumpFrame().ok;
+		t.shown.fitShown(5);
+		const frame = t.pumpFrame();
+		assert frame.ok;
+		if (frame.ok) { assert frame.value.asked; }
+	}).ok;
+}
+
 test "planning rows for a grid shorter than the screen names the row that does not fit" {
 	assert onFresh("abc", (t: Term, sink: Sink): void => {
 		const s = t.session;

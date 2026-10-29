@@ -10,7 +10,7 @@ import { Annotation, Decoration, FrameRows, none } from "./rows";
 import { Mark } from "./mark";
 import { Asks, Controls, Hit, holding, refit, takeAsks, typed, vtOf } from "./controls";
 import { cancel, clipboardAsked, clipboardText, confirm } from "./clipboard";
-import { answerClose, closeKey, keyDown, keyUp } from "./keyboard";
+import { answerClose, closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
 import { autoscrollTick, endDrag, pointerDown, pointerMove, pointerUp, roll, syncSelection } from "./mouse";
 import {
 	Frame,
@@ -128,6 +128,7 @@ export interface IoPort {
 	wheel: (notches: float64, h: Hit) => void;
 	autoscroll: () => void;
 	closeKey: () => void;
+	closeWindow: () => void;
 	confirmDialog: () => void;
 	cancelDialog: () => void;
 	pasted: (clipboard: string) => void;
@@ -249,6 +250,10 @@ export function autoscroll(this io: Io): void {
 
 export function closeKey(this io: Io): void {
 	io.check(Where.CloseKey, io.controls.closeKey(io.term));
+}
+
+export function closeWindow(this io: Io): void {
+	io.controls.closeWindow(io.term);
 }
 
 export function confirmDialog(this io: Io): void {
@@ -378,6 +383,7 @@ export function port(this io: Io): IoPort {
 		wheel: (notches: float64, h: Hit): void => { io.wheel(notches, h); },
 		autoscroll: (): void => { io.autoscroll(); },
 		closeKey: (): void => { io.closeKey(); },
+		closeWindow: (): void => { io.closeWindow(); },
 		confirmDialog: (): void => { io.confirmDialog(); },
 		cancelDialog: (): void => { io.cancelDialog(); },
 		pasted: (clipboard: string): void => { io.pasted(clipboard); },

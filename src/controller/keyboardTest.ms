@@ -7,7 +7,7 @@ const SUPER = modSet(KeyMod.Super);
 import { selected } from "../input/pointer";
 import { Term, releaseHeldKey, sendKey } from "./term";
 import { Controls, holding } from "./controls";
-import { closeKey, keyDown, keyUp } from "./keyboard";
+import { closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
 import { Warning } from "../input/paste";
 import { BindAction, CLIPBOARD_MODS, Keybind, Screen } from "../input/bindings";
 import {
@@ -379,5 +379,30 @@ test "close window from the menu runs a super w keybind for this screen and othe
 			assert inApp.sent == "\x1b[119;9u";
 			assert board.closed == 2;
 		}).ok;
+	}).ok;
+}
+
+test "the close button and Quit close the window without running the super w keybind" {
+	const binds: Vec<Keybind> = [
+		{
+			code: "KeyW",
+			mods: SUPER,
+			text: "\x1b[119;9u",
+			action: BindAction.SendText,
+			screen: Screen.Alternate,
+		},
+	];
+	assert onTerm("\x1b[?1049h", (app: Term, inApp: Sink): void => {
+		const c = Controls.open();
+		c.keybinds = binds;
+		const board = boardOf("");
+		c.closeWindow(app);
+		assert handled(settled(board, c, app, Result.ok(true)));
+		assert inApp.sent == "";
+		assert board.closed == 1;
+		inApp.busy = true;
+		c.closeWindow(app);
+		assert c.closing;
+		assert inApp.sent == "";
 	}).ok;
 }

@@ -15,6 +15,7 @@ import {
 	autoscroll,
 	cancelDialog,
 	closeKey,
+	closeWindow,
 	configure,
 	confirmDialog,
 	decorate,
@@ -90,6 +91,7 @@ export actor Shell {
 	wheel(notches: float64, h: Hit): void { this.io?.wheel(notches, h); }
 	autoscroll(): void { this.io?.autoscroll(); }
 	closeKey(): void { this.io?.closeKey(); }
+	closeWindow(): void { this.io?.closeWindow(); }
 	confirmDialog(): void { this.io?.confirmDialog(); }
 	cancelDialog(): void { this.io?.cancelDialog(); }
 	pasted(clipboard: string): void { this.io?.pasted(clipboard); }
@@ -160,6 +162,7 @@ export function portOf(shell: Shell): IoPort {
 		wheel: (notches: float64, h: Hit): void => { shell.wheel(notches, h); },
 		autoscroll: (): void => { shell.autoscroll(); },
 		closeKey: (): void => { shell.closeKey(); },
+		closeWindow: (): void => { shell.closeWindow(); },
 		confirmDialog: (): void => { shell.confirmDialog(); },
 		cancelDialog: (): void => { shell.cancelDialog(); },
 		pasted: (clipboard: string): void => { shell.pasted(clipboard); },

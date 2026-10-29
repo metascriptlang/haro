@@ -125,6 +125,7 @@ test "a shell shut down twice is closed once, and every call after it does nothi
 	port.fit(30, 5, 0, 0);
 	port.autoscroll();
 	port.closeKey();
+	port.closeWindow();
 	assert (await shell.frame()) === null;
 	assert (await shell.relight(null)).rows.length == 0;
 }

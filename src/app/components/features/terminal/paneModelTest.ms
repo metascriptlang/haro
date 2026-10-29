@@ -119,6 +119,7 @@ function timingCounting(scheduled: Scheduled): Timing {
 interface Host {
 	config: ((change: ConfigChange) => void) | null;
 	closeKey: (() => void) | null;
+	closeRequest: (() => void) | null;
 	wake: (() => void) | null;
 }
 
@@ -126,6 +127,7 @@ function hostOf(host: Host): HostEvents {
 	return {
 		onConfig: (handler: (change: ConfigChange) => void): void => { host.config = handler; },
 		onCloseKey: (handler: () => void): void => { host.closeKey = handler; },
+		onCloseRequest: (handler: () => void): void => { host.closeRequest = handler; },
 		onWake: (handler: () => void): void => { host.wake = handler; },
 	};
 }
@@ -441,7 +443,7 @@ test "a clipboard read the program asks for goes to the system clipboard, once p
 test "a config change applies live except the shell it starts, which asks for a restart" {
 	assert onFresh("", (t: Term, sink: Sink): void => {
 		const m = paneOf(t, noCalls());
-		const host: Host = { config: null, closeKey: null, wake: null };
+		const host: Host = { config: null, closeKey: null, closeRequest: null, wake: null };
 		m.connectHost(hostOf(host));
 		const onConfig = host.config;
 		assert onConfig !== null;
@@ -466,12 +468,12 @@ test "a config change applies live except the shell it starts, which asks for a 
 	}).ok;
 }
 
-test "the host's wake drains the shell and refreshes on the scheduler; its close key asks to close" {
+test "the host's wake drains the shell and refreshes on the scheduler; its close key and close request ask to close" {
 	assert onTerm("$ ", (t: Term, sink: Sink): void => {
 		const scheduled: Scheduled = { runs: [] };
 		const calls = noCalls();
 		const m = paneWith(Io.open(t), calls, timingCounting(scheduled));
-		const host: Host = { config: null, closeKey: null, wake: null };
+		const host: Host = { config: null, closeKey: null, closeRequest: null, wake: null };
 		m.connectHost(hostOf(host));
 		const wake = host.wake;
 		const closeKey = host.closeKey;
@@ -485,6 +487,10 @@ test "the host's wake drains the shell and refreshes on the scheduler; its close
 			assert calls.closed == 0;
 			closeKey();
 			assert calls.closed == 1;
+			const closeRequest = host.closeRequest;
+			assert closeRequest !== null;
+			if (closeRequest !== null) { closeRequest(); }
+			assert calls.closed == 2;
 		}
 	}).ok;
 }

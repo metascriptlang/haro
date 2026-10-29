@@ -77,6 +77,7 @@ export interface ShellHook {
 export interface HostEvents {
 	onWake: (handler: () => void) => void;
 	onCloseKey: (handler: () => void) => void;
+	onCloseRequest: (handler: () => void) => void;
 	onConfig: (handler: (change: ConfigChange) => void) => void;
 }
 
@@ -423,6 +424,11 @@ function closeKeyPressed(this m: PaneModel): void {
 	m.refresh();
 }
 
+function closeRequested(this m: PaneModel): void {
+	m.io.closeWindow();
+	m.refresh();
+}
+
 function woke(this m: PaneModel): void {
 	m.cursor.wakeCursor(Date.now() as float64);
 	m.refresh();
@@ -431,6 +437,7 @@ function woke(this m: PaneModel): void {
 export function connectHost(this m: PaneModel, events: HostEvents): void {
 	events.onConfig((change: ConfigChange): void => { m.reconfigure(change); });
 	events.onCloseKey((): void => { m.closeKeyPressed(); });
+	events.onCloseRequest((): void => { m.closeRequested(); });
 	events.onWake((): void => {
 		m.io.drain();
 		m.timing.schedule((): void => { m.woke(); });

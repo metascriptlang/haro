@@ -45,7 +45,7 @@ export function closeKey(this c: Controls, t: Term): Result<boolean, TermError> 
 	return Result.ok(true);
 }
 
-function closeWindow(this c: Controls, t: Term): void {
+export function closeWindow(this c: Controls, t: Term): void {
 	if (t.busy()) {
 		c.closing = true;
 		return;

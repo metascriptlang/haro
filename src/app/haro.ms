@@ -200,6 +200,8 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 				listen((name: string, id: string): void => {
 					if (name == "menu.click" && id == CLOSE_WINDOW) { handler(); }
 				});
+			},
+			onCloseRequest: (handler: () => void): void => {
 				onWindowEvent((label: string, eventType: int32): void => {
 					if (eventType != WindowEventCloseRequested) { return; }
 					preventClose();

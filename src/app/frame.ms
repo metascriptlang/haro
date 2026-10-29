@@ -12,7 +12,6 @@ import {
 	empty,
 	fitShown,
 	planRows,
-	relitRows,
 } from "../controller/rows";
 
 export interface RowSlot {
@@ -209,17 +208,6 @@ export function applyFrame(
 	return Result.ok(planned.cursor);
 }
 
-export function relightCursor(
-	grid: List<RowSlot>,
-	styles: Styles,
-	ref shown: Vec<Shown>,
-	vt: Vt,
-	ink: CellInk | null,
-): Result<void, FrameError> {
-	const _chars = applyRows(grid, styles, try shown.relitRows(vt, ink, Decor.empty()));
-	return Result.ok(null);
-}
-
 const BLACK: Rgb = { r: 0, g: 0, b: 0 };
 const WHITE: Rgb = { r: 255, g: 255, b: 255 };
 const RED: Rgb = { r: 255, g: 0, b: 0 };
@@ -391,29 +379,6 @@ test "a lit cursor colours its cell and moves with it, rebuilding only the rows 
 		assert backgroundOf(grid.at(0), 1) == "#ff0000";
 		assert grid.at(1).spans.length == 1;
 		assert grid.at(2) === untouched;
-		vt.free();
-	}
-}
-
-test "relighting the cursor rebuilds only its row, so a blink turns its cell off and on" {
-	const created = Vt.create(12, 2);
-	assert created.ok;
-	if (created.ok) {
-		const vt = created.value;
-		const grid = createList<RowSlot>([RowSlot.blank(), RowSlot.blank()]);
-		let shown: Vec<Shown> = [];
-		fitShown(shown, 2);
-		const styles = Styles.empty();
-		const lit: CellInk = { fg: null, bg: RED };
-		vt.writeText("ab\r\ncd\x1b[1;1H");
-		assert applyFrame(grid, styles, shown, vt, lit).ok;
-		assert backgroundOf(grid.at(0), 0) == "#ff0000";
-		const other = grid.at(1);
-		assert relightCursor(grid, styles, shown, vt, null).ok;
-		assert backgroundOf(grid.at(0), 0) == "none";
-		assert relightCursor(grid, styles, shown, vt, lit).ok;
-		assert backgroundOf(grid.at(0), 0) == "#ff0000";
-		assert grid.at(1) === other;
 		vt.free();
 	}
 }

@@ -1,7 +1,7 @@
 export interface Pace {
 	queued: boolean;
-	wakes: int32;
-	applies: int32;
+	wakes: int64;
+	applies: int64;
 }
 
 export function start(this typeof Pace): Pace {
@@ -62,4 +62,14 @@ test "a burst of a wake every millisecond applies once per frame and strands no 
 	assert !dirty;
 	assert p.applies == frames;
 	assert frames <= 200 / 16 + 1;
+}
+
+test "wakes and applies count past the int32 range" {
+	const p = Pace.start();
+	p.wakes = 2147483647;
+	p.applies = 2147483647;
+	p.asksFrame();
+	p.applied();
+	assert (p.wakes as int64) > 2147483647;
+	assert (p.applies as int64) > 2147483647;
 }

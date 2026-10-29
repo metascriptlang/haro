@@ -37,8 +37,8 @@ function voidLine(): string {
 function logSince(
 	pace: Pace,
 	stats: Stats,
-	wakes: int32,
-	applies: int32,
+	wakes: int64,
+	applies: int64,
 	requested: int64,
 	drawn: int64,
 ): void {

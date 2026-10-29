@@ -1,12 +1,12 @@
 import { Mark } from "../controller/mark";
 
 export struct Tally {
-	refreshes: int32;
-	more: int32;
-	held: int32;
-	rows: int32;
-	scrolled: int32;
-	chars: int32;
+	refreshes: int64;
+	more: int64;
+	held: int64;
+	rows: int64;
+	scrolled: int64;
+	chars: int64;
 	echoes: Vec<float64>;
 	settles: Vec<float64>;
 }
@@ -176,4 +176,18 @@ test "painted rows mark the launch only when characters were drawn" {
 	assert !s.launched();
 	s.noteApplied(3, 0, 12, 6);
 	assert s.launched();
+}
+
+test "the tally counts past the int32 range" {
+	const s = Stats.empty();
+	s.tally.chars = 2147483647;
+	s.tally.rows = 2147483647;
+	s.tally.scrolled = 2147483647;
+	s.tally.refreshes = 2147483647;
+	s.noteApplied(1, 1, 1, 5);
+	s.tally.refreshes += 1;
+	assert (s.tally.chars as int64) > 2147483647;
+	assert (s.tally.rows as int64) > 2147483647;
+	assert (s.tally.scrolled as int64) > 2147483647;
+	assert (s.tally.refreshes as int64) > 2147483647;
 }

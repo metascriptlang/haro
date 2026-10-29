@@ -166,6 +166,8 @@ function operations(this c: CursorModel): GraphicsOp[] {
 			ops.push({ kind: "strokePoly", points: points, width: width, closed: true, color: color });
 		} else if (shape != CursorShape.Block) {
 			ops.push({ kind: "fillConvex", points: points, color: colorOf(c.tint, 1) });
+		} else if (!c.trail.arrived) {
+			ops.push({ kind: "fillConvex", points: points, color: colorOf(c.tint, 1) });
 		} else if (!c.trail.resting()) {
 			for (const piece of points.outside(c.litCell())) {
 				ops.push({ kind: "fillConvex", points: piece, color: colorOf(c.tint, 1) });
@@ -203,6 +205,7 @@ function step(this c: CursorModel, now: number): void {
 	} else if (c.blinkTimer < 0) {
 		c.syncBlink();
 	}
+	c.inkCell();
 	const ops = c.operations();
 	if (ops.length > 0 || c.drawing().length > 0) { c.setDrawing(ops); }
 	const cells = c.dustCells();
@@ -212,7 +215,7 @@ function step(this c: CursorModel, now: number): void {
 
 function blockInk(this c: CursorModel): CellInk | null {
 	const lit = c.at !== null && c.look.drawn(c.focused, c.blinkOn) &&
-		c.look.shapeOf(c.focused) == CursorShape.Block;
+		c.look.shapeOf(c.focused) == CursorShape.Block && c.trail.arrived;
 	return lit ? { fg: CURSOR_TEXT, bg: c.tint } : null;
 }
 
@@ -328,28 +331,38 @@ function cursorFor(look: CursorLook): CursorModel {
 	return c;
 }
 
-test "a moving block is one opaque trail that reaches its lit cell from the first frame and leaves it uncovered" {
+test "a moving block is the cursor until its head reaches the new cell, then a trail that leaves the lit cell uncovered" {
 	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: false });
 	c.trail.moveTo(34, 44);
 	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
 	assert c.operations().length == 0;
-	c.trail.moveTo(134, 44);
+	assert c.blockInk() !== null;
+	c.trail.moveTo(154, 44);
 	assert c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false);
-	const ops = c.operations();
-	assert ops.length >= 1;
-	let reach: float32 = 0;
-	for (const op of ops) {
+	assert c.blockInk() === null;
+	const flying = c.operations();
+	assert flying.length == 1;
+	const quad = flying[0];
+	if (quad.kind == "fillConvex") {
+		assert quad.color.a == 1;
+	} else {
+		assert false;
+	}
+	while (!c.trail.arrived) {
+		assert c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false);
+	}
+	assert c.blockInk() !== null;
+	assert !c.trail.resting();
+	for (const op of c.operations()) {
 		if (op.kind == "fillConvex") {
 			assert op.color.a == 1;
 			for (const p of op.points) {
-				assert p.x <= 134 || p.y <= 44 || p.y >= 64;
-				reach = Math.max(reach, p.x) as float32;
+				assert p.x <= 154 || p.x >= 164 || p.y <= 44 || p.y >= 64;
 			}
 		} else {
 			assert false;
 		}
 	}
-	assert reach == 134;
 	c.look = { visible: true, shape: CursorShape.Bar, blinking: false };
 	assert c.operations().length == 1;
 }

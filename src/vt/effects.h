@@ -7,7 +7,7 @@
 int vtEffectsWire(GhosttyTerminal terminal, void* effects);
 
 /* Defined in vtEffects.ms, which includes this header, so a signature that drifts fails the C compile. */
-void haroVtWritePty(GhosttyTerminal terminal, void* effects, uint8_t* bytes, size_t n);
+void haroVtWritePty(GhosttyTerminal terminal, void* effects, const uint8_t* bytes, size_t n);
 void haroVtBell(GhosttyTerminal terminal, void* effects);
 void haroVtTitleChanged(GhosttyTerminal terminal, void* effects);
 void haroVtPwdChanged(GhosttyTerminal terminal, void* effects);
@@ -17,7 +17,7 @@ bool haroVtSize(GhosttyTerminal terminal, void* effects, GhosttySizeReportSize* 
 void haroVtClipboardWrite(GhosttyTerminal terminal, void* effects, GhosttyClipboardWrite* write);
 void haroVtClipboardRead(GhosttyTerminal terminal, void* effects, GhosttyClipboardRead* read);
 GhosttyString haroVtXtversion(GhosttyTerminal terminal, void* effects);
-void haroVtDesktopNotification(GhosttyTerminal terminal, void* effects, GhosttyTerminalDesktopNotification* notification);
-void haroVtSemanticPrompt(GhosttyTerminal terminal, void* effects, GhosttyTerminalSemanticPrompt* event);
+void haroVtDesktopNotification(GhosttyTerminal terminal, void* effects, const GhosttyTerminalDesktopNotification* notification);
+void haroVtSemanticPrompt(GhosttyTerminal terminal, void* effects, const GhosttyTerminalSemanticPrompt* event);
 
 #endif

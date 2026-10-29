@@ -162,6 +162,7 @@ test "a scroll moves the rows it keeps and builds none" {
 	assert opened.ok;
 	if (opened.ok) {
 		const s = opened.value;
+		defer s.close();
 		assert s.feed("a\r\nb\r\nc\r\nd").ok;
 		const q = s.grid.attach();
 		assert s.feed("\r\ne\r\nf").ok;
@@ -176,6 +177,5 @@ test "a scroll moves the rows it keeps and builds none" {
 		assert s.lines() == "c\nd\ne\nf";
 		assert s.mismatch() == "";
 		s.grid.detach(q);
-		s.close();
 	}
 }

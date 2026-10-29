@@ -9,8 +9,6 @@ export const PARTICLE_LIFETIME: float64 = 4.0;
 export const PARTICLE_DENSITY: float64 = 7.0;
 export const PARTICLE_SPEED: float64 = 10.0;
 export const PARTICLE_CURL: float64 = 1.0;
-export const PARTICLE_PUSH: float64 = 0.5;
-export const PARTICLE_DRAG: float64 = 0.15;
 export const TICK: float64 = 0.017;
 export const STIFFNESS: float64 = 0.3;
 export const DAMPING: float64 = 0.5;
@@ -48,7 +46,6 @@ interface Corner {
 export struct Particle {
 	pos: Point;
 	speed: Point;
-	push: Point;
 	rotation: float64;
 	lifetime: float64;
 }
@@ -258,7 +255,6 @@ function currents(this t: Trail): Point[] {
 }
 
 function spray(this t: Trail, h: float64, dt: float64, immediate: boolean): boolean {
-	const drag = Math.exp(Math.log(1 - PARTICLE_DRAG) * (dt / TICK));
 	let i = 0;
 	while (i < t.particles.length) {
 		const p = t.particles[i];
@@ -268,9 +264,8 @@ function spray(this t: Trail, h: float64, dt: float64, immediate: boolean): bool
 			continue;
 		}
 		t.particles[i] = {
-			pos: p.pos.plus(p.speed.plus(p.push).times(dt)),
+			pos: p.pos.plus(p.speed.times(dt)),
 			speed: p.speed.rotated(dt * p.rotation),
-			push: p.push.times(drag),
 			rotation: p.rotation,
 			lifetime: p.lifetime - dt,
 		};
@@ -284,7 +279,6 @@ function spray(this t: Trail, h: float64, dt: float64, immediate: boolean): bool
 		const wanted = (travel.length() / h) * PARTICLE_DENSITY + t.remainder;
 		const count = Math.floor(wanted) as int32;
 		t.remainder = wanted - (count as float64);
-		const push = dt > 0 ? travel.times(PARTICLE_PUSH / dt) : point(0, 0);
 		for (let n = 0; n < count; n++) {
 			const share = ((n + 1) as float64) / (count as float64);
 			const base = t.direction();
@@ -293,7 +287,6 @@ function spray(this t: Trail, h: float64, dt: float64, immediate: boolean): bool
 			t.particles.push({
 				pos: from.plus(travel.times(along)).plus(point(0, h * 0.5)),
 				speed: point(base.x * 0.5 * 3 * PARTICLE_SPEED, (0.4 + Math.abs(base.y)) * 3 * PARTICLE_SPEED),
-				push: push,
 				rotation: (spin - 0.5) * (Math.PI / 2) * PARTICLE_CURL,
 				lifetime: share * PARTICLE_LIFETIME,
 			});
@@ -549,29 +542,22 @@ test "a bar keeps its corners in the left eighth of the cell" {
 	assert near(t.corners[2].current.y, 60);
 }
 
-function pushed(this t: Trail): Point {
-	let sum = point(0, 0);
-	for (const p of t.particles) {
-		sum = sum.plus(p.push);
-	}
-	return sum;
-}
-
-test "dust leaves from under the row the cursor travels, falls, and is pushed the way it moves" {
-	const right = placed(30, 40);
-	right.moveTo(130, 40);
-	const left = placed(130, 40);
-	left.moveTo(30, 40);
+test "dust leaves from under the row the cursor travels and falls there instead of riding along with it" {
+	const t = placed(30, 40);
+	t.moveTo(130, 40);
 	for (let f = 0; f < 4; f++) {
-		const _r = right.animate(FRAME, CursorShape.Block, 10, 20, false);
-		const _l = left.animate(FRAME, CursorShape.Block, 10, 20, false);
+		const _moving = t.animate(FRAME, CursorShape.Block, 10, 20, false);
 	}
-	assert right.particles.length > 0 && left.particles.length > 0;
-	assert right.pushed().x > 0;
-	assert left.pushed().x < 0;
-	for (const p of right.particles) {
+	assert t.particles.length > 0;
+	let before: Point[] = [];
+	for (const p of t.particles) {
 		assert p.pos.y >= 60;
 		assert p.speed.y > 0;
+		before.push(p.pos);
+	}
+	const _next = t.animate(FRAME, CursorShape.Block, 10, 20, false);
+	for (let i = 0; i < before.length; i++) {
+		assert t.particles[i].pos.minus(before[i]).length() <= 3 * PARTICLE_SPEED * 1.5 * FRAME;
 	}
 }
 

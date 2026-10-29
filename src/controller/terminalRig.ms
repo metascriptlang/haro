@@ -40,14 +40,18 @@ export function onPty(
 	rows: int32,
 	body: (t: Term) => void,
 ): Result<void, TermError> {
-	const t = try openTerm((c: int32, r: int32): Result<Pty, PtyError> => { return Result.ok(pty); }, now);
+	const opener = (c: int32, r: int32): Result<Pty, PtyError> => { return Result.ok(pty); };
+	const t = try openTerm(opener, now);
 	defer t.shutdown();
 	const _fit = try t.fit(cols, rows);
 	body(t);
 	return Result.ok(null);
 }
 
-export function onUnfit(text: string, body: (t: Term, sink: Sink) => void): Result<void, TermError> {
+export function onUnfit(
+	text: string,
+	body: (t: Term, sink: Sink) => void,
+): Result<void, TermError> {
 	const sink: Sink = { sent: "", busy: false };
 	const t = try openTerm((c: int32, r: int32): Result<Pty, PtyError> => {
 		return Result.ok(recorder(text, sink));
@@ -138,14 +142,18 @@ export function lines(n: int32): string {
 
 export function offsetOf(t: Term): int32 {
 	const s = t.session;
-	if (s === null) { return -1; }
-	return try s.vt.scrollOffset() catch -1;
+	if (s === null) { throw new Error("offsetOf: the terminal has no session"); }
+	const offset = s.vt.scrollOffset();
+	if (!offset.ok) { throw new Error(`offsetOf: ${offset.error}`); }
+	return offset.value;
 }
 
 export function atBottomOf(t: Term): boolean {
 	const s = t.session;
-	if (s === null) { return false; }
-	return try s.vt.atBottom() catch false;
+	if (s === null) { throw new Error("atBottomOf: the terminal has no session"); }
+	const bottom = s.vt.atBottom();
+	if (!bottom.ok) { throw new Error(`atBottomOf: ${bottom.error}`); }
+	return bottom.value;
 }
 
 export function spotAt(col: int32, row: int32): Spot {
@@ -172,8 +180,9 @@ export function hitWith(col: int32, row: int32, mods: BitSet<KeyMod>): Hit {
 }
 
 export function drag(c: Controls, t: Term, clip: Board, from: Spot, to: Spot): boolean {
-	const pressed = settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(from.col, from.row), 0)).ok;
+	const down = c.pointerDown(t, MouseButton.Left, hitAt(from.col, from.row), 0);
+	const pressed = settled(clip, c, t, down).ok;
 	const moved = c.pointerMove(t, hitAt(to.col, to.row), true).ok;
-	const _released = c.pointerUp(t, MouseButton.Left, hitAt(to.col, to.row));
-	return pressed && moved;
+	const released = c.pointerUp(t, MouseButton.Left, hitAt(to.col, to.row)).ok;
+	return pressed && moved && released;
 }

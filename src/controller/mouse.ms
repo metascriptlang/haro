@@ -9,7 +9,6 @@ import { Controls, Hit, holding, vtOf } from "./controls";
 import { copySelection, pasteFrom } from "./clipboard";
 
 function reportMouse(
-	this c: Controls,
 	t: Term,
 	action: MouseAction,
 	button: MouseButton,
@@ -75,13 +74,13 @@ export function pointerDown(
 	}
 	match (planPress(button, h.mods, modes.mouseTracking, uri !== null)) {
 		PressPlan.Link => {
-			c.openLink(uri!);
+			if (uri !== null) { c.openLink(uri); }
 			return Result.ok(true);
 		},
 		PressPlan.Report => {
 			c.pointer.clear(vt);
 			c.button = button;
-			return c.reportMouse(t, MouseAction.Press, button, h);
+			return reportMouse(t, MouseAction.Press, button, h);
 		},
 		PressPlan.Select => {
 			const reach = (h.cell.cellWidth as float64) / h.scale;
@@ -111,7 +110,7 @@ export function pointerMove(
 	const modes = try vt.modes();
 	if (claimsMouse(modes.mouseTracking, h.mods.has(KeyMod.Shift))) {
 		if (!pressed) { c.button = MouseButton.None; }
-		try c.reportMouse(t, MouseAction.Motion, c.button, h);
+		try reportMouse(t, MouseAction.Motion, c.button, h);
 		return Result.ok(false);
 	}
 	if (!c.pointer.dragging) {
@@ -136,7 +135,7 @@ export function pointerUp(
 	c.endDrag();
 	if (!reported || c.holding()) { return Result.ok(false); }
 	c.button = MouseButton.None;
-	return c.reportMouse(t, MouseAction.Release, button, h);
+	return reportMouse(t, MouseAction.Release, button, h);
 }
 
 export function endDrag(this c: Controls): void {
@@ -178,7 +177,7 @@ export function roll(
 			c.pointer.clear(vt);
 			const button = rows < 0 ? MouseButton.WheelUp : MouseButton.WheelDown;
 			for (let i = 0; i < presses; i++) {
-				try c.reportMouse(t, MouseAction.Press, button, h);
+				try reportMouse(t, MouseAction.Press, button, h);
 			}
 			return Result.ok(shown);
 		},

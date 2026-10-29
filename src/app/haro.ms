@@ -48,7 +48,7 @@ when (!windows) {
 }
 
 when (macos) {
-	import { MenuItem, MenuRole, ModCmd, Submenu, resourcePath, setAppMenu } from "../../../ion/src/index";
+	import { MenuItem, MenuRole, ModCmd, Submenu, setAppMenu } from "../../../ion/src/index";
 
 	@include("unistd.h");
 
@@ -74,16 +74,6 @@ when (macos) {
 				items: [MenuItem.standard(MenuRole.Minimize), MenuItem.standard(MenuRole.Zoom)],
 			},
 		];
-	}
-
-	// macOS aborts a process outside an app bundle that asks for its notification centre, and Ion's
-	// notify does not check: Ion card 2026-10-25-notify-aborts-a-process-outside-an-app-bundle
-	function notificationsReachable(): boolean {
-		return resourcePath() != "";
-	}
-} else {
-	function notificationsReachable(): boolean {
-		return true;
 	}
 }
 
@@ -160,7 +150,7 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 		desktop: {
 			setTitle: (title: string): void => { setWindowTitle(titleOr(title)); },
 			notify: (title: string, body: string): void => {
-				if (notificationsReachable()) { notify(titleOr(title), body, NOTIFICATION_ID); }
+				notify(titleOr(title), body, NOTIFICATION_ID);
 			},
 			openLink: (uri: string): void => { openExternal(uri); },
 			close: (): void => {

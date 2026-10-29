@@ -14,6 +14,8 @@ import {
 	Frame,
 	Term,
 	TermError,
+	sendReplies,
+
 	annotate,
 	decorate,
 	pumpFrame,
@@ -381,3 +383,37 @@ test "copying a row that carries an annotation returns only the row's own text" 
 		assert board.copied == "$ false", board.copied;
 	}).ok;
 }
+
+interface Pending {
+	blocked: boolean;
+	sent: string;
+}
+
+function blockable(state: Pending): Pty {
+	return {
+		...Replay.ofText("").toPty(),
+		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
+			if (state.blocked) { return Result.err(PtyError.Backlogged); }
+			state.sent += data.asString();
+			return Result.ok(null);
+		},
+		exitCode: (): int32 | null => { return null; },
+	};
+}
+
+test "a reply refused as backlogged stays queued until a write takes it" {
+	const state: Pending = { blocked: true, sent: "" };
+	assert onPty(blockable(state), (): float64 => 0, 20, 5, (t: Term): void => {
+		const s = t.session;
+		assert s !== null;
+		if (s === null) { return; }
+		s.vt.writeText("\x1b[5n");
+		assert !t.sendReplies().ok;
+		state.blocked = false;
+		assert t.sendReplies().ok;
+		assert state.sent == "\x1b[0n";
+		assert t.sendReplies().ok;
+		assert state.sent == "\x1b[0n";
+	}).ok;
+}
+

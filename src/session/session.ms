@@ -52,9 +52,11 @@ export function pump(this s: Session, buf: Span<uint8>): Result<boolean, Session
 }
 
 export function sendReplies(this s: Session): Result<void, SessionError> {
-	const replies = s.vt.takeReplies();
+	const replies = s.vt.effects.replies;
 	if (replies.length == 0) { return Result.ok(null); }
-	return s.send(replies);
+	try s.send(replies);
+	s.vt.effects.replies = [];
+	return Result.ok(null);
 }
 
 export function screen(this s: Session): Result<Vec<string>, SessionError> {

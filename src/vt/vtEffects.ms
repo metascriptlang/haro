@@ -168,7 +168,12 @@ function effectsAt(p: Ptr<void>): Effects {
 }
 
 @exportName("haroVtWritePty")
-function writePty(terminal: GhosttyTerminal, effects: Ptr<void>, bytes: Readonly<Ptr<uint8>>, n: size_t): void {
+function writePty(
+	terminal: GhosttyTerminal,
+	effects: Ptr<void>,
+	bytes: Readonly<Ptr<uint8>>,
+	n: size_t,
+): void {
 	pushAll(effectsAt(effects).replies, bytes[0..n]);
 }
 
@@ -204,7 +209,11 @@ function renderHold(terminal: GhosttyTerminal, effects: Ptr<void>, held: boolean
 const PLAIN_TEXT = "text/plain";
 
 @exportName("haroVtClipboardWrite")
-function clipboardWrite(terminal: GhosttyTerminal, effects: Ptr<void>, write: Ptr<GhosttyClipboardWrite>): void {
+function clipboardWrite(
+	terminal: GhosttyTerminal,
+	effects: Ptr<void>,
+	write: Ptr<GhosttyClipboardWrite>,
+): void {
 	let reply: GhosttyClipboardWriteReply = {
 		size: sizeof GhosttyClipboardWriteReply as size_t,
 		result: GhosttyClipboardWriteResult.GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED,
@@ -218,10 +227,13 @@ function clipboardWrite(terminal: GhosttyTerminal, effects: Ptr<void>, write: Pt
 }
 
 function plainText(write: Ptr<GhosttyClipboardWrite>): string | null {
-	if (write.location != GhosttyClipboardLocation.GHOSTTY_CLIPBOARD_LOCATION_STANDARD) { return null; }
+	const standard = GhosttyClipboardLocation.GHOSTTY_CLIPBOARD_LOCATION_STANDARD;
+	if (write.location != standard) { return null; }
 	if (write.contents_len == 0) { return ""; }
 	for (const c of write.contents[0..write.contents_len]) {
-		if (c.mime.ptr[0..c.mime.len].asString() == PLAIN_TEXT) { return wellFormed(c.data.ptr[0..c.data.len]); }
+		if (c.mime.ptr[0..c.mime.len].asString() == PLAIN_TEXT) {
+			return wellFormed(c.data.ptr[0..c.data.len]);
+		}
 	}
 	return null;
 }
@@ -230,7 +242,11 @@ const XTVERSION_NAME: cstring = "haro";
 const XTVERSION_NAME_BYTES = "haro".length;
 
 @exportName("haroVtDeviceAttributes")
-function deviceAttributes(terminal: GhosttyTerminal, effects: Ptr<void>, out da: GhosttyDeviceAttributes): boolean {
+function deviceAttributes(
+	terminal: GhosttyTerminal,
+	effects: Ptr<void>,
+	out da: GhosttyDeviceAttributes,
+): boolean {
 	da = {
 		primary: { conformance_level: GHOSTTY_DA_CONFORMANCE_LEVEL_2, num_features: 2 },
 		secondary: { device_type: GHOSTTY_DA_DEVICE_TYPE_VT220, firmware_version: 10 },
@@ -241,7 +257,11 @@ function deviceAttributes(terminal: GhosttyTerminal, effects: Ptr<void>, out da:
 }
 
 @exportName("haroVtSize")
-function sizeReport(terminal: GhosttyTerminal, effects: Ptr<void>, out size: GhosttySizeReportSize): boolean {
+function sizeReport(
+	terminal: GhosttyTerminal,
+	effects: Ptr<void>,
+	out size: GhosttySizeReportSize,
+): boolean {
 	let cols: uint16 = 0;
 	let rows: uint16 = 0;
 	let width: uint32 = 0;
@@ -262,7 +282,10 @@ function sizeReport(terminal: GhosttyTerminal, effects: Ptr<void>, out size: Gho
 
 @exportName("haroVtXtversion")
 function xtversion(terminal: GhosttyTerminal, effects: Ptr<void>): GhosttyString {
-	const name: GhosttyString = { ptr: XTVERSION_NAME as Ptr<uint8>, len: XTVERSION_NAME_BYTES as size_t };
+	const name: GhosttyString = {
+		ptr: XTVERSION_NAME as Ptr<uint8>,
+		len: XTVERSION_NAME_BYTES as size_t,
+	};
 	return name;
 }
 
@@ -340,7 +363,11 @@ const SHORTEST_OSC52_REPLY = "\x1b]52;c;\x07".byteLength;
 // moves the empty reply written after mark (ESC ] 52 ; c ; and the program's terminator) into
 // readFrame, for answerClipboard to fill once the user decides.
 @exportName("haroVtClipboardRead")
-function clipboardRead(terminal: GhosttyTerminal, effects: Ptr<void>, read: Ptr<GhosttyClipboardRead>): void {
+function clipboardRead(
+	terminal: GhosttyTerminal,
+	effects: Ptr<void>,
+	read: Ptr<GhosttyClipboardRead>,
+): void {
 	let reply: GhosttyClipboardReadReply = {
 		size: sizeof GhosttyClipboardReadReply as size_t,
 		result: GhosttyClipboardReadResult.GHOSTTY_CLIPBOARD_READ_RESULT_DENIED,
@@ -348,7 +375,8 @@ function clipboardRead(terminal: GhosttyTerminal, effects: Ptr<void>, read: Ptr<
 	const e = effectsAt(effects);
 	const mark = e.replies.length;
 	read.reply(read, reply as Ptr<GhosttyClipboardReadReply>);
-	if (read.location == GhosttyClipboardLocation.GHOSTTY_CLIPBOARD_LOCATION_STANDARD) { holdRead(e, mark); }
+	const standard = GhosttyClipboardLocation.GHOSTTY_CLIPBOARD_LOCATION_STANDARD;
+	if (read.location == standard) { holdRead(e, mark); }
 }
 
 function holdRead(e: Effects, from: int32): void {

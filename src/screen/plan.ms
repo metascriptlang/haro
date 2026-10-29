@@ -28,7 +28,11 @@ function scrolledRows(this vt: Vt): Result<int32 | null, VtError> {
 	return Result.ok(scrolled);
 }
 
-function changedRowsAfterScroll(all: Readonly<Span<Row>>, painted: Readonly<Span<Row>>, scrolled: int32): Vec<int32> {
+function changedRowsAfterScroll(
+	all: Readonly<Span<Row>>,
+	painted: Readonly<Span<Row>>,
+	scrolled: int32,
+): Vec<int32> {
 	const rowCount = all.length as int32;
 	let out: Vec<int32> = [];
 	for (let y = 0; y < rowCount; y++) {

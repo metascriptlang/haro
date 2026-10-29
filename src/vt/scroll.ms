@@ -96,9 +96,11 @@ export function jumpToPrompt(this vt: Vt, toward: PromptJump): Result<boolean, V
 		let at: GhosttyGridRef;
 		let row: GhosttyRow = 0;
 		let prompt = GhosttyRowSemanticPrompt.GHOSTTY_ROW_SEMANTIC_NONE;
-		try checked(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, 0, y as int32, at), VtError.ReadFailed);
+		const screen = GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN;
+		const promptKey = GhosttyRowData.GHOSTTY_ROW_DATA_SEMANTIC_PROMPT;
+		try checked(vtGridRef(vt.terminal, screen, 0, y as int32, at), VtError.ReadFailed);
 		try checked(gridRefRow(at, row), VtError.ReadFailed);
-		try checked(rowPrompt(row, GhosttyRowData.GHOSTTY_ROW_DATA_SEMANTIC_PROMPT, prompt), VtError.ReadFailed);
+		try checked(rowPrompt(row, promptKey, prompt), VtError.ReadFailed);
 		if (prompt == GhosttyRowSemanticPrompt.GHOSTTY_ROW_SEMANTIC_PROMPT) {
 			vtScroll(vt.terminal, GhosttyTerminalScrollViewportTag.GHOSTTY_SCROLL_VIEWPORT_ROW, y);
 			return Result.ok(true);

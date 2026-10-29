@@ -64,7 +64,8 @@ export function cursor(this vt: Vt): Result<Cursor | null, VtError> {
 	let under: GhosttyGridRef;
 	let cell: GhosttyCell = 0;
 	const viewport = GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT;
-	try checked(vtGridRef(vt.terminal, viewport, x as int32, y as int32, under), VtError.ReadFailed);
+	const gridRead = vtGridRef(vt.terminal, viewport, x as int32, y as int32, under);
+	try checked(gridRead, VtError.ReadFailed);
 	try checked(gridRefCell(under, cell), VtError.ReadFailed);
 	const width = try widthOf(cell);
 	// Typed local until card

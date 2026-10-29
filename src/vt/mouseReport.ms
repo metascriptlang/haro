@@ -59,7 +59,12 @@ function open(this m: Mouse): Result<MouseCodec, VtError> {
 	return Result.ok(codec);
 }
 
-export function geometryOf(cellWidth: int32, cellHeight: int32, width: int32, height: int32): MouseGeometry {
+export function geometryOf(
+	cellWidth: int32,
+	cellHeight: int32,
+	width: int32,
+	height: int32,
+): MouseGeometry {
 	return {
 		cellWidth: cellWidth,
 		cellHeight: cellHeight,

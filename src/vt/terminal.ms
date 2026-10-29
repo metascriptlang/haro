@@ -104,14 +104,16 @@ function applyBlinkDefault(terminal: GhosttyTerminal, on: boolean): Result<void,
 	let mode: GhosttyTerminalModeConfig = { mode: MODE_CURSOR_BLINKING, value: on };
 	let blink = on;
 	const blinkOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK;
-	try checked(terminalSet(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode), VtError.WriteFailed);
+	const modeOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE;
+	try checked(terminalSet(terminal, modeOption, mode), VtError.WriteFailed);
 	try checked(terminalSet(terminal, blinkOption, blink), VtError.WriteFailed);
 	return Result.ok(null);
 }
 
 function applyGraphemeWidth(terminal: GhosttyTerminal): Result<void, VtError> {
 	let mode: GhosttyTerminalModeConfig = { mode: MODE_GRAPHEME_CLUSTER, value: true };
-	try checked(terminalSet(terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE_DEFAULT, mode), VtError.WriteFailed);
+	const modeDefault = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE_DEFAULT;
+	try checked(terminalSet(terminal, modeDefault, mode), VtError.WriteFailed);
 	return Result.ok(null);
 }
 
@@ -133,7 +135,10 @@ function gridSide(cells: int32, fail: VtError): Result<uint16, VtError> {
 	return Result.ok(cells as uint16);
 }
 
-function configure(terminal: GhosttyTerminal, out anchor: GhosttyTrackedGridRef): Result<void, VtError> {
+function configure(
+	terminal: GhosttyTerminal,
+	out anchor: GhosttyTrackedGridRef,
+): Result<void, VtError> {
 	try checked(vtTopTrack(terminal, anchor), VtError.AnchorFailed);
 	try applyColors(terminal, { r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 });
 	try applyBlinkDefault(terminal, true);
@@ -233,7 +238,8 @@ export function title(this vt: Vt): Result<string, VtError> {
 
 export function linkAt(this vt: Vt, x: int32, y: int32): Result<string | null, VtError> {
 	let at: GhosttyGridRef;
-	try checked(vtGridRef(vt.terminal, GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT, x, y, at), VtError.ReadFailed);
+	const viewport = GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT;
+	try checked(vtGridRef(vt.terminal, viewport, x, y, at), VtError.ReadFailed);
 	let buf: Vec<uint8> = new Array(256);
 	let len: size_t = 0;
 	let r = gridRefLink(at, buf, len);
@@ -285,7 +291,10 @@ export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<voi
 	let palette: Colors256;
 	const defaultKey = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_COLOR_PALETTE_DEFAULT;
 	if (colors.length > 256) { return Result.err(VtError.PaletteTooLong); }
-	if (!ok(unset(vt.terminal, option, null)) || !ok(terminalGet(vt.terminal, defaultKey, palette))) {
+	if (
+		!ok(unset(vt.terminal, option, null)) ||
+		!ok(terminalGet(vt.terminal, defaultKey, palette))
+	) {
 		return Result.err(VtError.ReadFailed);
 	}
 	for (let i = 0; i < colors.length; i++) {
@@ -336,7 +345,8 @@ function releaseExpiredHold(this vt: Vt): Result<void, VtError> {
 	const e = vt.effects;
 	if (e.heldSinceMs === null) { return Result.ok(null); }
 	let mode: GhosttyTerminalModeConfig = { mode: MODE_SYNC_OUTPUT, value: false };
-	try checked(terminalSet(vt.terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE, mode), VtError.WriteFailed);
+	const modeOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE;
+	try checked(terminalSet(vt.terminal, modeOption, mode), VtError.WriteFailed);
 	e.heldSinceMs = null;
 	return Result.ok(null);
 }
@@ -359,8 +369,10 @@ export function update(this vt: Vt): Result<void, VtError> {
 export function size(this vt: Vt): Result<[int32, int32], VtError> {
 	let cols: uint16 = 0;
 	let rows: uint16 = 0;
-	try checked(stateGet(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLS, cols), VtError.ReadFailed);
-	try checked(stateGet(vt.state, GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROWS, rows), VtError.ReadFailed);
+	const colsKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLS;
+	const rowsKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_ROWS;
+	try checked(stateGet(vt.state, colsKey, cols), VtError.ReadFailed);
+	try checked(stateGet(vt.state, rowsKey, rows), VtError.ReadFailed);
 	return Result.ok([cols as int32, rows as int32]);
 }
 
@@ -380,5 +392,7 @@ export function free(this vt: Vt): void {
 		ghostty_mouse_event_free(codec.event);
 	}
 	freeHandles(vt.terminal, vt.state, vt.iterator, vt.cells);
-	if (!closed.ok) { throw new Error("Vt.free: the terminal's effect callbacks could not be unwired"); }
+	if (!closed.ok) {
+		throw new Error("Vt.free: the terminal's effect callbacks could not be unwired");
+	}
 }

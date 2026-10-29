@@ -219,7 +219,9 @@ function clusterAt(this vt: Vt, base: uint32): Vec<uint32> {
 		for (const cell of row.cells) {
 			if (cell.cp == base && cell.flags.has(CellFlag.Wide)) {
 				found.push(base);
-				for (let k = 0; k < (cell.extra as int32); k++) { found.push(row.extra[extraAt + k]); }
+				for (let k = 0; k < (cell.extra as int32); k++) {
+					found.push(row.extra[extraAt + k]);
+				}
 				return found;
 			}
 			extraAt += cell.extra as int32;

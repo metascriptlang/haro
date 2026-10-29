@@ -46,7 +46,8 @@ function screenRef(terminal: GhosttyTerminal, at: Point): Result<GhosttyGridRef,
 function screenPoint(terminal: GhosttyTerminal, gridRef: GhosttyGridRef): Result<Point, VtError> {
 	let at = gridRef;
 	let c: GhosttyPointCoordinate;
-	try checked(pointOf(terminal, at, GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN, c), VtError.SelectFailed);
+	const screen = GhosttyPointTag.GHOSTTY_POINT_TAG_SCREEN;
+	try checked(pointOf(terminal, at, screen, c), VtError.SelectFailed);
 	return Result.ok({ row: c.y as int32, col: c.x as int32 });
 }
 
@@ -86,7 +87,8 @@ export function selectionSet(this vt: Vt, m: Marked): Result<void, VtError> {
 }
 
 export function selectionClear(this vt: Vt): Result<void, VtError> {
-	return checked(unset(vt.terminal, GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SELECTION, null), VtError.SelectFailed);
+	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SELECTION;
+	return checked(unset(vt.terminal, option, null), VtError.SelectFailed);
 }
 
 export function selection(this vt: Vt): Result<Marked | null, VtError> {

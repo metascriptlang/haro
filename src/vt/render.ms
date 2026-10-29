@@ -62,7 +62,9 @@ export function palette(this vt: Vt): Result<Palette, VtError> {
 	try checked(stateGet(vt.state, setKey, set), VtError.ReadFailed);
 	let cursor: GhosttyColorRgb = { r: 0, g: 0, b: 0 };
 	const cursorKey = GhosttyRenderStateData.GHOSTTY_RENDER_STATE_DATA_COLOR_CURSOR;
-	if (set && !ok(stateGet(vt.state, cursorKey, cursor))) { return Result.err(VtError.ReadFailed); }
+	if (set && !ok(stateGet(vt.state, cursorKey, cursor))) {
+		return Result.err(VtError.ReadFailed);
+	}
 	return Result.ok({ fg: rgb(fg), bg: rgb(bg), cursor: set ? rgb(cursor) : null });
 }
 
@@ -183,8 +185,14 @@ function rawFacts(raw: GhosttyCell): Result<RawFacts, VtError> {
 		GhosttyCellData.GHOSTTY_CELL_DATA_WIDE,
 		GhosttyCellData.GHOSTTY_CELL_DATA_CODEPOINT,
 	];
-	let values: Ptr<void>[4] = [tag as Ptr<void>, styled as Ptr<void>, wide as Ptr<void>, cp as Ptr<void>];
-	try checked(cellFacts(raw, 4, keys as Ptr<GhosttyCellData>, values as Ptr<Ptr<void>>, null), VtError.ReadFailed);
+	let values: Ptr<void>[4] = [
+		tag as Ptr<void>,
+		styled as Ptr<void>,
+		wide as Ptr<void>,
+		cp as Ptr<void>,
+	];
+	const read = cellFacts(raw, 4, keys as Ptr<GhosttyCellData>, values as Ptr<Ptr<void>>, null);
+	try checked(read, VtError.ReadFailed);
 	return Result.ok({ tag: tag[0], styled: styled[0], wide: wide[0], cp: cp[0] });
 }
 
@@ -199,7 +207,8 @@ function readCell(
 	try checked(cellsGet(cells, rawKey, raw), VtError.ReadFailed);
 	const facts = try rawFacts(raw);
 	const grapheme = facts.tag == GhosttyCellContentTag.GHOSTTY_CELL_CONTENT_CODEPOINT_GRAPHEME;
-	const plain = facts.tag == GhosttyCellContentTag.GHOSTTY_CELL_CONTENT_CODEPOINT && !facts.styled;
+	const codepointTag = GhosttyCellContentTag.GHOSTTY_CELL_CONTENT_CODEPOINT;
+	const plain = facts.tag == codepointTag && !facts.styled;
 	const bgKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_BG_COLOR;
 	const bg = plain ? colors.bg : colorOr(cells, bgKey, colors.bg);
 	const none = 0 as BitSet<CellFlag>;
@@ -217,7 +226,8 @@ function readCell(
 	let count: uint32 = 1;
 	let base = facts.cp;
 	if (grapheme) {
-		const lenKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN;
+		const lenKey =
+			GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN;
 		try checked(cellsGet(cells, lenKey, count), VtError.ReadFailed);
 		base = try graphemesOf(cells, count, extra);
 	}
@@ -269,7 +279,9 @@ function readRow(
 }
 
 function selectedIn(iterator: GhosttyRenderStateRowIterator): Result<RowSpan | null, VtError> {
-	let picked: GhosttyRenderStateRowSelection = { size: sizeof GhosttyRenderStateRowSelection as size_t };
+	let picked: GhosttyRenderStateRowSelection = {
+		size: sizeof GhosttyRenderStateRowSelection as size_t,
+	};
 	const key = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION;
 	const r = rowGet(iterator, key, picked);
 	if (r == GhosttyResult.GHOSTTY_NO_VALUE) { return Result.ok(null); }

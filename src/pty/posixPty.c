@@ -301,9 +301,11 @@ static void execChild(char** argv, char** env, const char* cwd, int failed, int 
 		if (fd != failed) close(fd);
 	}
 	if (cwd[0] != '\0' && chdir(cwd) != 0) {
-		size_t last = 0;
-		while (env[last] != NULL) last++;
-		env[last - 1] = NULL;
+		size_t kept = 0;
+		for (size_t i = 0; env[i] != NULL; i++) {
+			if (strncmp(env[i], "PWD=", 4) != 0) env[kept++] = env[i];
+		}
+		env[kept] = NULL;
 	}
 	environ = env;
 	execvp(argv[0], argv);

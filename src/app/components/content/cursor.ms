@@ -14,6 +14,7 @@ import { CellMetrics } from "../ui/cellText";
 
 const PARTICLE_SIDE = 0.2;
 const OUTLINE_PER_EM = 1.0 / 8;
+const TRAIL_ALPHA = 0.6;
 
 export interface CursorModel {
 	metrics: CellMetrics;
@@ -168,7 +169,7 @@ function operations(this c: CursorModel): GraphicsOp[] {
 			ops.push({ kind: "fillConvex", points: points, color: colorOf(c.tint, 1) });
 		} else if (!c.trail.resting()) {
 			for (const piece of points.outside(c.litCell())) {
-				ops.push({ kind: "fillConvex", points: piece, color: colorOf(c.tint, 1) });
+				ops.push({ kind: "fillConvex", points: piece, color: colorOf(c.tint, TRAIL_ALPHA) });
 			}
 		}
 	}
@@ -329,7 +330,7 @@ function cursorFor(look: CursorLook): CursorModel {
 	return c;
 }
 
-test "a moving block lights its new cell at once and draws a trail that leaves the lit cell uncovered" {
+test "a moving block lights its new cell at once and draws a fainter trail that leaves the lit cell uncovered" {
 	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: false });
 	c.trail.moveTo(34, 44);
 	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
@@ -341,7 +342,7 @@ test "a moving block lights its new cell at once and draws a trail that leaves t
 	assert c.operations().length > 0;
 	for (const op of c.operations()) {
 		if (op.kind == "fillConvex") {
-			assert op.color.a == 1;
+			assert op.color.a < 1;
 			for (const p of op.points) {
 				assert p.x <= 154 || p.x >= 164 || p.y <= 44 || p.y >= 64;
 			}

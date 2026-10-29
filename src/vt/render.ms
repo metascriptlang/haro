@@ -349,7 +349,11 @@ export function graphemes(text: string): Vec<Grapheme> {
 export function text(this row: Row): Result<string, VtError> {
 	let text = "";
 	let extraAt = 0;
+	let afterWide = false;
 	for (const cell of row.cells) {
+		const spacerTail = afterWide && cell.cp == 0;
+		afterWide = cell.flags.has(CellFlag.Wide);
+		if (spacerTail) { continue; }
 		if (cell.cp == 0) {
 			text += " ";
 			continue;

@@ -91,7 +91,7 @@ test "a cluster of forty codepoints is one cell that keeps them all" {
 			assert row.cells[1].cp == 0x62;
 			const text = row.text();
 			assert text.ok;
-			if (text.ok) { assert text.value.startsWith(cluster + "b"); }
+			if (text.ok) { assert text.value == cluster + "b" + " ".repeat(8); }
 		}
 	});
 }
@@ -106,7 +106,7 @@ test "a character above the basic plane reads back whole" {
 			assert rows.value[0].cells[1].cp == 0x1F600;
 			const text = rows.value[0].text();
 			assert text.ok;
-			if (text.ok) { assert text.value.startsWith("x😀"); }
+			if (text.ok) { assert text.value == "x😀" + " ".repeat(7); }
 		}
 	});
 }
@@ -269,4 +269,18 @@ test "only rows written since the last clean are dirty" {
 test "text splits into graphemes with the cells the terminal gives each" {
 	const got = graphemes("e\u0301x·中🚀").map((g: Grapheme): string => `${g.text}:${g.cells}`);
 	assert got.join(" ") == "e\u0301:1 x:1 ·:1 中:2 🚀:2", got.join(" ");
+}
+
+test "a wide character reads back without the spacer cell that follows it" {
+	assert withVt(10, 2, (vt: Vt): void => {
+		vt.writeText("中a");
+		assert vt.update().ok;
+		const rows = vt.rows();
+		assert rows.ok;
+		if (rows.ok) {
+			const text = rows.value[0].text();
+			assert text.ok;
+			if (text.ok) { assert text.value == "中a" + " ".repeat(7); }
+		}
+	});
 }

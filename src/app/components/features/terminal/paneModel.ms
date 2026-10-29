@@ -258,6 +258,9 @@ function answerAsks(this m: PaneModel, asks: Asks): void {
 		Clipboard.getString().then((text: string): void => {
 			m.io.pasted(text);
 			m.refresh();
+		}).catch((e: Error): void => {
+			m.report.note(`paste failed: ${e}`);
+			m.notify(`Haro could not read the clipboard: ${e}`);
 		});
 	}
 	if (asks.close) { m.desktop.close(); }

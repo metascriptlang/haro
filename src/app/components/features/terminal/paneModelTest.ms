@@ -440,6 +440,22 @@ test "a clipboard read the program asks for goes to the system clipboard, once p
 	}).ok;
 }
 
+test "a clipboard read the OS refuses is told to the user" {
+	const panes: PaneModel[] = [];
+	installClipboardServices({
+		getClipboard: async (): Promise<string> => { throw new Error("refused"); },
+		setClipboard: (text: string): void => {},
+	});
+	assert onFresh("\x1b]52;c;?\x07", (t: Term, sink: Sink): void => {
+		const m = paneOf(t, noCalls());
+		panes.push(m);
+		m.refresh();
+	}).ok;
+	for (let i = 0; i < 4; i++) { await Promise.resolve(0); }
+	installClipboardServices(null);
+	assert panes[0].notice.text.startsWith("Haro could not read the clipboard");
+}
+
 test "a config change applies live except the shell it starts, which asks for a restart" {
 	assert onFresh("", (t: Term, sink: Sink): void => {
 		const m = paneOf(t, noCalls());

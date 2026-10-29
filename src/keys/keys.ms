@@ -124,7 +124,7 @@ export function modsMask(mods: BitSet<KeyMod>): uint16 {
 	return (mods as uint32) as uint16;
 }
 
-const MODS_LIMIT: int32 = 1 << 10;
+const MODS_LIMIT: int32 = 1 << (KeyMod.SuperRight as int32 + 1);
 
 export function modsOf(mask: number): BitSet<KeyMod> {
 	if (!(mask >= 0 && mask < MODS_LIMIT) || Math.floor(mask) != mask) {

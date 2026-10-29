@@ -97,12 +97,12 @@ export function watchConfig(
 test "a start directory that does not exist is skipped and said, and one that exists is kept" {
 	const w = ConfigWatch.forFile("/no/such/haro/config.ms");
 	w.loaded = { config: { ...defaults(), workingDirectory: { kind: StartKind.Path, path: "/no/such/haro/dir" } }, faces: [], stamp: "", notice: "" };
-	assert w.startIn(true, "/Users/me") === null;
+	assert w.startIn(true, "/home/me") === null;
 	assert w.error == "workingDirectory /no/such/haro/dir does not exist, so the shell starts where Haro was started";
 	const here = cwd();
 	w.loaded.config.workingDirectory = { kind: StartKind.Path, path: here };
 	w.error = "";
-	assert w.startIn(true, "/Users/me") == here;
+	assert w.startIn(true, "/home/me") == here;
 	assert w.error == "";
 }
 

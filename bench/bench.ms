@@ -17,6 +17,8 @@ const DEFAULT_REPS: int32 = 7;
 const DEFAULT_FRAME_KIB: int32 = 64;
 const FRAME_MS: float64 = 16.0;
 const MIB: float64 = 1048576.0;
+const USAGE =
+	"usage: haroBench [--list] [--only name,name] [--reps N] [--frame-kib N] [--paced]";
 
 enum Stage {
 	Write,
@@ -117,6 +119,7 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 	const created = Vt.create(w.cols, w.rows);
 	if (!created.ok) { return Result.err(BenchError.VtCreate); }
 	const vt = created.value;
+	defer vt.free();
 	let setup = w.setup;
 	let payload = w.payload;
 	vt.write(setup);
@@ -157,8 +160,26 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 		}
 		lastFrame = performance.now();
 	}
-	vt.free();
 	return Result.ok(totals);
+}
+
+function halfwayTo(this a: Totals, b: Totals): Totals {
+	return {
+		write: (a.write + b.write) / 2.0,
+		plan: (a.plan + b.plan) / 2.0,
+		lines: (a.lines + b.lines) / 2.0,
+		spans: (a.spans + b.spans) / 2.0,
+		apply: (a.apply + b.apply) / 2.0,
+		frames: (a.frames + b.frames) / 2,
+		rows: (a.rows + b.rows) / 2,
+		lineErrors: (a.lineErrors + b.lineErrors) / 2,
+		spanCount: (a.spanCount + b.spanCount) / 2,
+	};
+}
+
+function medianOf(sorted: Readonly<Span<Totals>>): Totals {
+	const upper = sorted.length / 2;
+	return sorted.length % 2 == 1 ? sorted[upper] : sorted[upper - 1].halfwayTo(sorted[upper]);
 }
 
 function measure(
@@ -167,14 +188,8 @@ function measure(
 	const _warmUp = try runPass(w, stage, cadence);
 	let samples: Vec<Totals> = [];
 	for (let i = 0; i < reps; i++) { samples.push(try runPass(w, stage, cadence)); }
-	for (let i = 1; i < reps; i++) {
-		for (let j = i; j > 0 && samples[j - 1].totalMs() > samples[j].totalMs(); j--) {
-			const t = samples[j];
-			samples[j] = samples[j - 1];
-			samples[j - 1] = t;
-		}
-	}
-	return Result.ok({ median: samples[reps / 2], bestMs: samples[0].totalMs() });
+	samples.sort((a: Totals, b: Totals): number => a.totalMs() - b.totalMs());
+	return Result.ok({ median: medianOf(samples), bestMs: samples[0].totalMs() });
 }
 
 function fixed(value: float64, places: int32): string {
@@ -188,7 +203,7 @@ function fixed(value: float64, places: int32): string {
 }
 
 function pad(text: string, width: int32): string {
-	return " ".repeat(width - (text.byteLength as int32)) + text;
+	return " ".repeat(Math.max(0, width - (text.byteLength as int32))) + text;
 }
 
 function describe(w: Workload, stage: Stage, m: Measured): string {
@@ -230,10 +245,22 @@ function hasFlag(flag: string): boolean {
 	return false;
 }
 
-function intOption(flag: string, fallback: int32): int32 {
-	const text = flagValue(flag);
-	if (text === null) { return fallback; }
-	return text.parseInt() as int32;
+const MAX_OPTION_DIGITS = 9;
+
+function countOf(flag: string, text: string | null, fallback: int32): Result<int32, string> {
+	if (text === null) { return Result.ok(fallback); }
+	const refused = `${flag} must be a whole number of 1 or more, not "${text}"`;
+	if (text.length == 0 || text.length > MAX_OPTION_DIGITS) { return Result.err(refused); }
+	for (let i = 0; i < text.length; i++) {
+		const unit = text.charCodeAt(i);
+		if (unit < "0".code || unit > "9".code) { return Result.err(refused); }
+	}
+	const n = text.parseInt() as int32;
+	return n >= 1 ? Result.ok(n) : Result.err(refused);
+}
+
+function intOption(flag: string, fallback: int32): Result<int32, string> {
+	return countOf(flag, flagValue(flag), fallback);
 }
 
 function selectedWorkloads(): string[] {
@@ -247,10 +274,22 @@ function main(): int32 {
 		for (const name of WORKLOAD_NAMES) { console.log(name); }
 		return 0;
 	}
-	const reps = intOption("--reps", DEFAULT_REPS);
+	const repsAsked = intOption("--reps", DEFAULT_REPS);
+	const frameKibAsked = intOption("--frame-kib", DEFAULT_FRAME_KIB);
+	if (!repsAsked.ok) {
+		console.log(repsAsked.error);
+		console.log(USAGE);
+		return 2;
+	}
+	if (!frameKibAsked.ok) {
+		console.log(frameKibAsked.error);
+		console.log(USAGE);
+		return 2;
+	}
+	const reps = repsAsked.value;
 	const paced = hasFlag("--paced");
 	const cadence: Cadence = {
-		frameBytes: intOption("--frame-kib", DEFAULT_FRAME_KIB) * 1024,
+		frameBytes: frameKibAsked.value * 1024,
 		gapMs: paced ? FRAME_MS : 0.0,
 	};
 	const stages = [Stage.Write, Stage.Lines, Stage.Spans, Stage.Apply];
@@ -362,6 +401,29 @@ test "a measured stage describes itself on one line" {
 		assert text.includes("spans ");
 		assert !text.includes("lineErrors");
 	}
+}
+
+test "an option is a whole number of 1 or more, and anything else is refused by name" {
+	assert countOf("--reps", null, 7).ok;
+	const three = countOf("--reps", "3", 7);
+	assert three.ok && three.value == 3;
+	for (const bad of ["0", "-1", "abc", "", "1.5", "99999999999"]) {
+		const r = countOf("--frame-kib", bad, 64);
+		assert !r.ok;
+		if (!r.ok) { assert r.error.includes(`--frame-kib must be a whole number`), r.error; }
+	}
+}
+
+test "the median of an even count is halfway between the two middle samples" {
+	const at = (write: float64): Totals => ({ ...Totals.zero(), write: write });
+	assert medianOf([at(1.0), at(2.0), at(9.0)]).write == 2.0;
+	assert medianOf([at(1.0), at(2.0), at(4.0), at(9.0)]).write == 3.0;
+	assert medianOf([at(5.0)]).write == 5.0;
+}
+
+test "padding never repeats a negative count" {
+	assert pad("abcd", 2) == "abcd";
+	assert pad("ab", 4) == "  ab";
 }
 
 test "fixed keeps the places asked and leading zeros" {

@@ -113,13 +113,18 @@ export function showPending(this d: PasteDialogModel, pending: Pending, cellWidt
 	}
 	if (samePending(d.shown, pending)) { return; }
 	d.shown = pending;
-	if (pending.kind === PendingKind.Close) {
-		d.present(closeDialogOf(cols), cols, CLOSE_CONFIRM, CLOSE_CANCEL);
-	} else if (pending.kind === PendingKind.Paste) {
-		const held = pending.held;
-		d.present(dialogOf(held.warning, held.text, cols, PREVIEW_ROWS), cols, PASTE_CONFIRM, PASTE_CANCEL);
-	} else {
-		d.present(askDialogOf(pending.text, cols, PREVIEW_ROWS), cols, READ_CONFIRM, READ_CANCEL);
+	match (pending.kind) {
+		PendingKind.Close => {
+			d.present(closeDialogOf(cols), cols, CLOSE_CONFIRM, CLOSE_CANCEL);
+		},
+		PendingKind.Paste => {
+			const held = pending.held;
+			d.present(dialogOf(held.warning, held.text, cols, PREVIEW_ROWS), cols, PASTE_CONFIRM, PASTE_CANCEL);
+		},
+		PendingKind.Read => {
+			d.present(askDialogOf(pending.text, cols, PREVIEW_ROWS), cols, READ_CONFIRM, READ_CANCEL);
+		},
+		PendingKind.None => { return; },
 	}
 }
 

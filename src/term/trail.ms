@@ -3,6 +3,7 @@ import { CursorShape } from "../vt/vt";
 export const BAR_FRACTION: float64 = 1.0 / 8;
 export const TICK: float64 = 0.017;
 export const ANTICIPATION: float64 = 0.2;
+export const MAX_WINDUP: float64 = 2;
 export const STOP_DISTANCE: float64 = 0.1;
 export const MAX_TICKS_PER_FRAME = 30;
 export const MINIMUM_VOLUME_FACTOR: float64 = 0.7;
@@ -10,9 +11,8 @@ export const VOLUME_REDUCTION: float64 = 0.3;
 export const PARTICLE_OPACITY: float64 = 200.0 / 255;
 export const PARTICLE_LIFETIME: float64 = 4.0;
 export const PARTICLE_DENSITY: float64 = 7.0;
-export const PARTICLE_SPEED: float64 = 20.0;
+export const PARTICLE_SPEED: float64 = 10.0;
 export const PARTICLE_CURL: float64 = 1.0;
-export const PARTICLE_SPREAD: float64 = 0.5;
 export const PARTICLE_PUSH: float64 = 0.5;
 export const PARTICLE_DRAG: float64 = 0.15;
 
@@ -200,6 +200,14 @@ function reshape(this t: Trail, shape: CursorShape): boolean {
 	return true;
 }
 
+function currents(this t: Trail): Point[] {
+	let points: Point[] = [];
+	for (const c of t.corners) {
+		points.push(c.current);
+	}
+	return points;
+}
+
 function drawn(this t: Trail): Point[] {
 	const between = t.lag / TICK;
 	let points: Point[] = [];
@@ -267,8 +275,15 @@ function aim(this t: Trail, center: Point): void {
 		const x = hi == lo ? 0 : (distances[i] - lo) / (hi - lo);
 		const s = feel.stiffness + (feel.trailingStiffness - feel.stiffness) * Math.pow(x, feel.trailingExponent);
 		c.stiffness = Math.min(1, s);
-		if (settled) { c.velocity = c.current.minus(c.target).times(ANTICIPATION); }
+		if (settled) { c.velocity = t.windup(c); }
 	}
+}
+
+function windup(this t: Trail, c: Corner): Point {
+	const back = c.current.minus(c.target).times(ANTICIPATION).inCells(t.cell);
+	const cells = back.length();
+	const capped = cells > MAX_WINDUP ? back.times(MAX_WINDUP / cells) : back;
+	return capped.inPixels(t.cell);
 }
 
 function restLength(this t: Trail): float64 {
@@ -292,16 +307,20 @@ function stretchTo(this t: Trail, limit: float64): void {
 		}
 	}
 	const from = t.corners[head].current;
+	const axis = t.targets().middle().minus(t.currents().middle()).inCells(t.cell).normalized();
 	let longest = 0.0;
 	for (const c of t.corners) {
-		longest = Math.max(longest, c.current.minus(from).inCells(t.cell).length());
+		longest = Math.max(longest, Math.abs(c.current.minus(from).inCells(t.cell).dot(axis)));
 	}
 	if (longest <= limit) { return; }
 	const factor = limit / longest;
 	for (let i = 0; i < t.corners.length; i++) {
 		if (i == head) { continue; }
 		const c = t.corners[i];
-		c.current = from.plus(c.current.minus(from).times(factor));
+		const span = c.current.minus(from).inCells(t.cell);
+		const along = span.dot(axis);
+		const across = span.minus(axis.times(along));
+		c.current = from.plus(axis.times(along * factor).plus(across).inPixels(t.cell));
 	}
 }
 
@@ -381,10 +400,9 @@ function spray(this t: Trail, dt: float64, immediate: boolean): boolean {
 			const base = t.direction();
 			const along = t.unit();
 			const spin = t.unit();
-			const jitter = point(t.unit() - 0.5, t.unit() - 0.5).times(PARTICLE_SPREAD).inPixels(t.cell);
 			t.particles.push({
-				pos: from.plus(travel.times(along)).plus(jitter),
-				speed: base.times(PARTICLE_SPEED),
+				pos: from.plus(travel.times(along)).plus(point(0, t.cell.y * 0.5)),
+				speed: point(base.x * 0.5 * 3 * PARTICLE_SPEED, (0.4 + Math.abs(base.y)) * 3 * PARTICLE_SPEED),
 				push: flow,
 				rotation: (spin - 0.5) * (Math.PI / 2) * PARTICLE_CURL,
 				lifetime: share * PARTICLE_LIFETIME,
@@ -612,7 +630,7 @@ function pushed(this t: Trail): Point {
 	return sum;
 }
 
-test "dust leaves along the row the cursor travels and is pushed the way it moves" {
+test "dust leaves from under the row the cursor travels, falls, and is pushed the way it moves" {
 	const right = placed(30, 40);
 	right.moveTo(130, 40);
 	const left = placed(130, 40);
@@ -625,7 +643,8 @@ test "dust leaves along the row the cursor travels and is pushed the way it move
 	assert right.pushed().x > 0;
 	assert left.pushed().x < 0;
 	for (const p of right.particles) {
-		assert p.pos.y > 40 && p.pos.y < 60;
+		assert p.pos.y >= 60;
+		assert p.speed.y > 0;
 	}
 }
 
@@ -650,3 +669,57 @@ test "an immediate move snaps every corner and sprays nothing" {
 	assert t.particles.length == 0;
 	assert t.shownCorners()[0] == point(130, 240);
 }
+
+function convex(this q: Point[]): boolean {
+	let sign = 0.0;
+	for (let i = 0; i < q.length; i++) {
+		const a = q[i];
+		const b = q[(i + 1) % q.length];
+		const c = q[(i + 2) % q.length];
+		const turn = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+		if (turn == 0) { continue; }
+		if (sign != 0 && (turn > 0) != (sign > 0)) { return false; }
+		sign = turn;
+	}
+	return true;
+}
+
+test "a jump past the longest smear stays convex and keeps its row's height while it stretches" {
+	for (const to of [point(830, 40), point(130, 840), point(-270, -360)]) {
+		const t = placed(30, 40);
+		t.moveTo(to.x, to.y);
+		let frames = 0;
+		while (!t.resting() || frames == 0) {
+			const _moving = t.animate(FRAME, CursorShape.Block, 10, 20, false);
+			assert t.shownCorners().convex();
+			frames += 1;
+		}
+	}
+	const t = placed(30, 40);
+	t.moveTo(830, 40);
+	let frames = 0;
+	while (!t.resting() || frames == 0) {
+		const _moving = t.animate(FRAME, CursorShape.Block, 10, 20, false);
+		const d = t.shownCorners();
+		assert near(d[3].y - d[0].y, 20) && near(d[2].y - d[1].y, 20);
+		frames += 1;
+	}
+}
+
+test "a far jump winds up no farther than a near one would" {
+	const near10 = placed(30, 40);
+	near10.moveTo(130, 40);
+	const far80 = placed(30, 40);
+	far80.moveTo(830, 40);
+	let nearBack = 0.0;
+	let farBack = 0.0;
+	for (let f = 0; f < 10; f++) {
+		const _n = near10.animate(FRAME, CursorShape.Block, 10, 20, false);
+		const _f = far80.animate(FRAME, CursorShape.Block, 10, 20, false);
+		nearBack = Math.max(nearBack, 30 - near10.drawn()[0].x);
+		farBack = Math.max(farBack, 30 - far80.drawn()[0].x);
+	}
+	assert nearBack > 0;
+	assert farBack <= nearBack * 1.5;
+}
+

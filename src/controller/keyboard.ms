@@ -11,7 +11,7 @@ import {
 	scrollPages,
 	scrollTop,
 } from "../vt/vt";
-import { Term, TermError, busy, cooked } from "./term";
+import { Term, TermError, busy, cooked, vtFailed } from "./term";
 import { Controls, holding, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";
 
@@ -36,9 +36,8 @@ function runKeybind(
 export function closeKey(this c: Controls, t: Term): Result<boolean, TermError> {
 	const vt = t.vtOf();
 	if (vt !== null) {
-		const alt = vt.alternateScreen();
-		if (!alt.ok) { return Result.err(TermError.VtFailed); }
-		const bind = bindFor(c.keybinds, "KeyW", SUPER_ONLY, alt.value);
+		const alt = try vt.alternateScreen();
+		const bind = bindFor(c.keybinds, "KeyW", SUPER_ONLY, alt);
 		if (try c.runKeybind(t, bind)) { return Result.ok(true); }
 	}
 	c.closeWindow(t);
@@ -90,24 +89,23 @@ function controlKey(
 	if (c.holding()) { return c.answerHeld(t, e); }
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
-	const alt = vt.alternateScreen();
-	if (!alt.ok) { return Result.err(TermError.VtFailed); }
+	const alt = try vt.alternateScreen();
 	const mods = e.cooked().mods;
-	if (try c.runKeybind(t, bindFor(c.keybinds, e.key, mods, alt.value))) {
+	if (try c.runKeybind(t, bindFor(c.keybinds, e.key, mods, alt))) {
 		return Result.ok(true);
 	}
-	const action = resolve(e.key, mods, alt.value);
+	const action = resolve(e.key, mods, alt);
 	match (action) {
 		Action.None => { return Result.ok(false); },
 		Action.Copy => { return c.copySelection(t); },
 		Action.Paste => { c.pasteFrom(); },
 		Action.PageUp | Action.PageDown => {
 			const pages: int32 = action == Action.PageUp ? -1 : 1;
-			if (!vt.scrollPages(pages).ok) { return Result.err(TermError.VtFailed); }
+			try vt.scrollPages(pages);
 		},
 		Action.PromptUp | Action.PromptDown => {
 			const toward = action == Action.PromptUp ? PromptJump.Previous : PromptJump.Next;
-			if (!vt.jumpToPrompt(toward).ok) { return Result.err(TermError.VtFailed); }
+			try vt.jumpToPrompt(toward);
 		},
 		Action.LineUp => { vt.scrollLines(-KEYBOARD_ROWS); },
 		Action.LineDown => { vt.scrollLines(KEYBOARD_ROWS); },

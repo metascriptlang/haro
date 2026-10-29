@@ -23,6 +23,7 @@ import {
 	PasteError,
 	Palette,
 	ShellMark,
+	VtError,
 } from "../vt/vt";
 import {
 	Annotation,
@@ -77,6 +78,10 @@ export enum TermError {
 	ClipboardUnasked,
 	SettingsRefused,
 	FrameRowOutOfRange,
+}
+
+export converter vtFailed(e: VtError): TermError {
+	return TermError.VtFailed;
 }
 
 export type OpenPty = (

@@ -4,7 +4,7 @@ import { WheelRoute, route } from "../input/wheel";
 import { openable, refusalText } from "../term/link";
 import { MouseAction, MouseInput, Vt } from "../vt/vt";
 import { MouseButton } from "./mouseButton";
-import { Term, TermError, tapKey } from "./term";
+import { Term, TermError, tapKey, vtFailed } from "./term";
 import { Controls, Hit, holding, vtOf } from "./controls";
 import { copySelection, pasteFrom } from "./clipboard";
 
@@ -65,15 +65,12 @@ export function pointerDown(
 	if (c.holding()) { return Result.ok(false); }
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
-	const modes = vt.modes();
-	if (!modes.ok) { return Result.err(TermError.VtFailed); }
+	const modes = try vt.modes();
 	let uri: string | null = null;
 	if (button == MouseButton.Left && h.mods.has(KeyMod.Ctrl)) {
-		const link = vt.linkAt(h.at.col, h.at.row);
-		if (!link.ok) { return Result.err(TermError.VtFailed); }
-		uri = link.value;
+		uri = try vt.linkAt(h.at.col, h.at.row);
 	}
-	match (planPress(button, h.mods, modes.value.mouseTracking, uri !== null)) {
+	match (planPress(button, h.mods, modes.mouseTracking, uri !== null)) {
 		PressPlan.Link => {
 			c.openLink(uri!);
 			return Result.ok(true);
@@ -85,8 +82,7 @@ export function pointerDown(
 		},
 		PressPlan.Select => {
 			const reach = (h.cell.cellWidth as float64) / h.scale;
-			const pressed = c.pointer.press(vt, h.at, h.x, h.y, time, reach);
-			if (!pressed.ok) { return Result.err(TermError.VtFailed); }
+			try c.pointer.press(vt, h.at, h.x, h.y, time, reach);
 			return Result.ok(true);
 		},
 		PressPlan.CopyOrPaste => {
@@ -109,9 +105,8 @@ export function pointerMove(
 	if (c.holding()) { return Result.ok(false); }
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
-	const modes = vt.modes();
-	if (!modes.ok) { return Result.err(TermError.VtFailed); }
-	if (claimsMouse(modes.value.mouseTracking, h.mods.has(KeyMod.Shift))) {
+	const modes = try vt.modes();
+	if (claimsMouse(modes.mouseTracking, h.mods.has(KeyMod.Shift))) {
 		if (!pressed) { c.button = MouseButton.None; }
 		try c.reportMouse(t, MouseAction.Motion, c.button, h);
 		return Result.ok(false);
@@ -125,9 +120,7 @@ export function pointerMove(
 		return Result.ok(false);
 	}
 	c.autoscroll = autoscrollOf(h.y * h.scale, h.cell.height);
-	const dragged = c.pointer.drag(vt, h.at);
-	if (!dragged.ok) { return Result.err(TermError.VtFailed); }
-	return Result.ok(dragged.value);
+	return Result.ok(try c.pointer.drag(vt, h.at));
 }
 
 export function pointerUp(
@@ -155,8 +148,7 @@ export function autoscrollTick(this c: Controls, t: Term): Result<boolean, TermE
 		return Result.ok(false);
 	}
 	vt.scrollLines(c.autoscroll);
-	const dragged = c.pointer.drag(vt, c.pointer.last);
-	if (!dragged.ok) { return Result.err(TermError.VtFailed); }
+	try c.pointer.drag(vt, c.pointer.last);
 	return Result.ok(true);
 }
 
@@ -169,14 +161,13 @@ export function roll(
 	if (c.holding()) { return Result.ok(false); }
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
-	const alt = vt.alternateScreen();
-	const modes = vt.modes();
-	if (!alt.ok || !modes.ok) { return Result.err(TermError.VtFailed); }
+	const alt = try vt.alternateScreen();
+	const modes = try vt.modes();
 	const rows = c.wheel.rows(notches);
 	if (rows == 0) { return Result.ok(false); }
 	const shift = h.mods.has(KeyMod.Shift);
-	const claimed = claimsMouse(modes.value.mouseTracking, shift);
-	const where = route(alt.value, claimed, modes.value.altScroll && !shift);
+	const claimed = claimsMouse(modes.mouseTracking, shift);
+	const where = route(alt, claimed, modes.altScroll && !shift);
 	const presses = rows < 0 ? -rows : rows;
 	match (where) {
 		WheelRoute.Report => {
@@ -200,8 +191,7 @@ export function roll(
 		WheelRoute.Viewport => {
 			vt.scrollLines(rows);
 			if (c.pointer.dragging) {
-				const dragged = c.pointer.drag(vt, c.pointer.last);
-				if (!dragged.ok) { return Result.err(TermError.VtFailed); }
+				try c.pointer.drag(vt, c.pointer.last);
 			}
 			return Result.ok(true);
 		},
@@ -210,7 +200,6 @@ export function roll(
 
 export function syncSelection(this c: Controls, vt: Vt): Result<boolean, TermError> {
 	const shown = c.pointer.selected();
-	const kept = c.pointer.sync(vt);
-	if (!kept.ok) { return Result.err(TermError.VtFailed); }
-	return Result.ok(shown && !kept.value);
+	const kept = try c.pointer.sync(vt);
+	return Result.ok(shown && !kept);
 }

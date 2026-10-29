@@ -5,7 +5,7 @@ import { Wheel } from "../input/wheel";
 import { Held } from "../input/paste";
 import { MouseGeometry, Vt } from "../vt/vt";
 import { MouseButton } from "./mouseButton";
-import { Term, TermError, fit } from "./term";
+import { Term, TermError, fit, vtFailed } from "./term";
 
 export enum ClipRead {
 	Paste,
@@ -103,9 +103,8 @@ export function refit(
 export function typed(this c: Controls, t: Term): Result<boolean, TermError> {
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
-	const bottom = vt.atBottom();
-	if (!bottom.ok) { return Result.err(TermError.VtFailed); }
-	if (c.pointer.sel === null && bottom.value) { return Result.ok(false); }
+	const bottom = try vt.atBottom();
+	if (c.pointer.sel === null && bottom) { return Result.ok(false); }
 	c.pointer.clear(vt);
 	vt.scrollBottom();
 	return Result.ok(true);

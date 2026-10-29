@@ -2,7 +2,7 @@ import { KeyEvent } from "../keys/keys";
 import { Reply, replyTo, replyToRead, warningFor, Warning } from "../input/paste";
 import { clear, copyText } from "../input/pointer";
 import { answerClipboard, modes } from "../vt/vt";
-import { PasteCheck, Term, TermError } from "./term";
+import { PasteCheck, Term, TermError, vtFailed } from "./term";
 import { ClipRead, Controls, askRead, typed, vtOf } from "./controls";
 
 export enum Pasted {
@@ -29,9 +29,8 @@ function send(
 export function paste(this c: Controls, t: Term, text: string): Result<Pasted, TermError> {
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(Pasted.Empty); }
-	const modes = vt.modes();
-	if (!modes.ok) { return Result.err(TermError.VtFailed); }
-	const bracketed = modes.value.bracketedPaste;
+	const modes = try vt.modes();
+	const bracketed = modes.bracketedPaste;
 	const clean = normalized(text, bracketed);
 	if (clean == "" && !bracketed) { return Result.ok(Pasted.Empty); }
 	const warning = warningFor(clean, bracketed);
@@ -51,7 +50,7 @@ function answerRead(
 ): Result<boolean, TermError> {
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
-	if (!vt.answerClipboard(text, allow).ok) { return Result.err(TermError.VtFailed); }
+	try vt.answerClipboard(text, allow);
 	try t.sendReplies();
 	return Result.ok(true);
 }
@@ -116,9 +115,7 @@ export function pasteFrom(this c: Controls): void {
 export function copySelection(this c: Controls, t: Term): Result<boolean, TermError> {
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
-	const text = c.pointer.copyText(vt);
-	if (!text.ok) { return Result.err(TermError.VtFailed); }
-	const got = text.value;
+	const got = try c.pointer.copyText(vt);
 	if (got === null) { return Result.ok(false); }
 	c.asks.copy = got;
 	c.pointer.clear(vt);

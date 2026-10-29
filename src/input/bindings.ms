@@ -112,8 +112,12 @@ function pascalCase(snake: string): string {
 function codeOf(name: string): string | null {
 	if (name.length == 1 && name >= "a" && name <= "z") { return `Key${name.toUpperCase()}`; }
 	if (name.length == 1 && name >= "0" && name <= "9") { return `Digit${name}`; }
-	if (name.startsWith("key_") && name.length == 5) { return codeOf(name.slice(4)); }
-	if (name.startsWith("digit_") && name.length == 7) { return codeOf(name.slice(6)); }
+	if (name.startsWith("key_") && name.length == 5 && name[4] >= "a" && name[4] <= "z") {
+		return codeOf(name.slice(4));
+	}
+	if (name.startsWith("digit_") && name.length == 7 && name[6] >= "0" && name[6] <= "9") {
+		return codeOf(name.slice(6));
+	}
 	if (name.startsWith("numpad_") && name.length == 8 && name[7] >= "0" && name[7] <= "9") {
 		return pascalCase(name);
 	}
@@ -281,6 +285,8 @@ test "a keybind that is not a trigger is refused by name" {
 	assert bound("ctrl+ctrl+a") == `"ctrl+ctrl+a" names ctrl twice`;
 	assert bound("a+b") == `"a+b" names more than one key`;
 	assert bound("ctrl+shift") == `"ctrl+shift" names no key`;
+	assert bound("key_5") == `"key_5": "key_5" is not a key or modifier name`;
+	assert bound("digit_a") == `"digit_a": "digit_a" is not a key or modifier name`;
 	assert !keybind("f25", "x", BindAction.SendText, Screen.Any).ok;
 	assert !keybind("f01", "x", BindAction.SendText, Screen.Any).ok;
 }

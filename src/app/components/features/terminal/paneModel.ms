@@ -218,15 +218,16 @@ function failureText(error: TermError): string {
 }
 
 function reported(this m: PaneModel, f: Failure): void {
-	if (f.where == Where.Fit && f.error == TermError.PtyOpenFailed) {
-		m.notify("the shell did not start: check command in config.ms, or --shell");
-		return;
+	const error = f.error;
+	match (error) {
+		TermError.PtyOpenFailed when f.where == Where.Fit => {
+			m.notify("the shell did not start: check command in config.ms, or --shell");
+		},
+		TermError.InputBacklogged => {
+			m.notify("the program has not read the last 16 MB sent to it, so this input was dropped");
+		},
+		_ => { m.failedAs(f.started, f.where, failureText(error)); },
 	}
-	if (f.error == TermError.InputBacklogged) {
-		m.notify("the program has not read the last 16 MB sent to it, so this input was dropped");
-		return;
-	}
-	m.failedAs(f.started, f.where, failureText(f.error));
 }
 
 function failedAs(this m: PaneModel, started: boolean, where: Where, error: string): void {

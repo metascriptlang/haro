@@ -3,7 +3,7 @@ when (!macos) {
 	import { env } from "std/process";
 }
 import { homeDir } from "std/os";
-import { changeStamp, ensureDir, exists, readFile, writeFile } from "std/fs";
+import { changeStamp, ensureDir, exists, readFile, remove, rename, writeFile } from "std/fs";
 import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
 import { CommandDone, Rgb } from "../vt/vt";
@@ -90,17 +90,23 @@ function runnerOf(importPath: string): string {
 		"}\n";
 }
 
+function writeAtomically(path: string, content: string): Result<void, string> {
+	const temp = `${path}.${Date.now()}.${performance.now()}.tmp`;
+	if (!writeFile(temp, content).ok) { return Result.err(`cannot write ${path}`); }
+	if (!rename(temp, path).ok) {
+		const _abandoned = remove(temp);
+		return Result.err(`cannot write ${path}`);
+	}
+	return Result.ok(null);
+}
+
 function evaluate(path: string, dir: string, api: string, metascript: string): Result<Evaluated, string> {
 	const target = relative(dir, path);
 	const importPath = target.startsWith(".") || isAbsolute(target) ? target : `./${target}`;
 	const runner = runnerOf(importPath);
-	if (!writeFile(`${dir}/evaluate.ms`, runner).ok) {
-		return Result.err(`cannot write ${dir}/evaluate.ms`);
-	}
+	try writeAtomically(`${dir}/evaluate.ms`, runner);
 	const beside = `${dirname(path)}/build.ms`;
-	if (!exists(beside) && !writeFile(beside, packagesOf(api)).ok) {
-		return Result.err(`cannot write ${beside}`);
-	}
+	if (!exists(beside)) { try writeAtomically(beside, packagesOf(api)); }
 	const made = createInterpreter(metascript, [dirname(api)]);
 	if (!made.ok) {
 		return Result.err(`running config.ms needs MetaScript's std: ${made.error}`);
@@ -194,7 +200,8 @@ export function load(path: string, api: string, metascript: string): Result<Load
 	const config = try parse(evaluated.json);
 	const fonts = fontsFound(config.fontFamily);
 	const cacheable = fonts.notice == "" && evaluated.hooks === null;
-	const uncached = cacheable && !writeFile(cacheFile, encodeCache(stamp, evaluated.json, fonts.faces)).ok;
+	const uncached = cacheable &&
+		!writeAtomically(cacheFile, encodeCache(stamp, evaluated.json, fonts.faces)).ok;
 	const notice = uncached ? `cannot write ${cacheFile}, so the config is read again next start` : fonts.notice;
 	return Result.ok({ config: config, faces: fonts.faces, stamp: stamp, notice: notice, hooks: evaluated.hooks });
 }
@@ -227,6 +234,17 @@ test "a cached record gives back each family's faces in order" {
 	}
 	assert decodeCache(encodeCache("s1", json, faces).split("\n"), "s2") === null;
 	assert decodeCache(encodeCache("s1", json, [faces[0]]).split("\n"), "s1") === null;
+}
+
+test "a file is written whole under its name, with no temporary file left beside it" {
+	const dir = `${cwd()}/out/atomicWrite`;
+	assert ensureDir(dir).ok;
+	assert writeFile(`${dir}/f.txt`, "old").ok;
+	assert writeAtomically(`${dir}/f.txt`, "new").ok;
+	const read = readFile(`${dir}/f.txt`);
+	assert read.ok && read.value == "new";
+	assert readDir(dir).length == 1;
+	assert !writeAtomically(`${dir}/missing/f.txt`, "x").ok;
 }
 
 test "a font family that is not installed is skipped with a notice naming it" {

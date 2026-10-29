@@ -104,13 +104,18 @@ function writeAtomically(path: string, content: string): Result<void, string> {
 	return Result.ok(null);
 }
 
+function buildBeside(path: string, api: string): Result<void, string> {
+	const beside = `${dirname(path)}/build.ms`;
+	if (!exists(beside)) { try writeAtomically(beside, packagesOf(api)); }
+	return Result.ok(null);
+}
+
 function evaluate(path: string, dir: string, api: string, metascript: string): Result<Evaluated, string> {
 	const target = relative(dir, path);
 	const importPath = target.startsWith(".") || isAbsolute(target) ? target : `./${target}`;
 	const runner = runnerOf(importPath);
 	try writeAtomically(`${dir}/evaluate.ms`, runner);
-	const beside = `${dirname(path)}/build.ms`;
-	if (!exists(beside)) { try writeAtomically(beside, packagesOf(api)); }
+	try buildBeside(path, api);
 	const made = createInterpreter(metascript, [dirname(api)]);
 	if (!made.ok) {
 		return Result.err(`running config.ms needs MetaScript's std: ${made.error}`);
@@ -219,6 +224,7 @@ export function configStamp(path: string, api: string): Result<string, string> {
 }
 
 export function load(path: string, api: string, metascript: string): Result<Loaded, string> {
+	if (exists(path)) { try buildBeside(path, api); }
 	const stamp = try configStamp(path, api);
 	if (stamp == "") { return Result.ok(Loaded.empty()); }
 	const dir = cacheDir();

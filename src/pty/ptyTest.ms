@@ -5,6 +5,7 @@ import {
 	close,
 	exitCode,
 	exitSignal,
+	mergedEnv,
 	open,
 	read,
 	resize,
@@ -47,6 +48,18 @@ function quietWaitMs(this p: NativePty, timeoutMs: int32): Result<float64, PtyEr
 		if (!ready) { return Result.ok(performance.now() - start); }
 		try p.read(buf);
 	}
+}
+
+test "the child's environment keeps inherited entries and applies Haro's replacements, the given entries and the cwd" {
+	const inherited: Vec<string> = [
+		"PATH=/bin", "TERM=dumb", "TERM_PROGRAM=Other", "PWD=/old", "LANG=C", "EDITOR=vi",
+	];
+	const got = mergedEnv(inherited, ["LANG=fr", "ZDOTDIR=/z"] as Vec<string>, "/new");
+	assert got.join("|") == "PATH=/bin|EDITOR=vi|TERM=xterm-256color|COLORTERM=truecolor|" +
+		"TERM_PROGRAM=Haro|LANG=fr|ZDOTDIR=/z|PWD=/new";
+	const keptPwd = mergedEnv(inherited, [] as Vec<string>, "");
+	assert keptPwd.includes("PWD=/old");
+	assert !keptPwd.some((entry: string): boolean => entry.startsWith("PWD=/new"));
 }
 
 test "a child's output reaches read and its exit ends the stream" {

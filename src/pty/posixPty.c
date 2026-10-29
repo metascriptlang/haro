@@ -272,70 +272,23 @@ extern char** environ;
 
 #define COUNT(a) (sizeof (a) / sizeof (a)[0])
 
-static const char* const REPLACED[] = {
-	"TERM=", "COLORTERM=", "TERM_PROGRAM=", "TERM_PROGRAM_VERSION=", "TERM_SESSION_ID=", "VTE_VERSION=",
-};
-static const char* const ADDED[] = { "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=Haro" };
-
-static size_t nameLength(const char* entry) {
-	const char* eq = strchr(entry, '=');
-	return eq ? (size_t)(eq - entry) : strlen(entry);
+uint8_t** ptyEnviron(void) {
+	return (uint8_t**)environ;
 }
 
-static int sameName(const char* a, const char* b) {
-	size_t n = nameLength(a);
-	return n == nameLength(b) && strncmp(a, b, n) == 0;
-}
-
-static int replaced(const char* entry, char* const* given, size_t givenCount, int newPwd) {
-	if (newPwd && strncmp(entry, "PWD=", 4) == 0) return 1;
-	for (size_t i = 0; i < COUNT(REPLACED); i++) {
-		if (strncmp(entry, REPLACED[i], strlen(REPLACED[i])) == 0) return 1;
-	}
-	for (size_t i = 0; i < givenCount; i++) {
-		if (sameName(entry, given[i])) return 1;
-	}
-	return 0;
-}
-
-static char** entriesOf(const uint8_t* block, int64_t len, size_t* count) {
-	*count = 0;
+static char** entriesOf(const uint8_t* block, int64_t len) {
+	size_t count = 0;
 	for (int64_t i = 0; i < len; i++) {
-		if (block[i] == '\0') (*count)++;
+		if (block[i] == '\0') count++;
 	}
-	char** entries = malloc((*count + 1) * sizeof *entries);
+	char** entries = malloc((count + 1) * sizeof *entries);
 	if (entries == NULL) return NULL;
 	size_t n = 0;
 	for (int64_t at = 0; at < len; at += (int64_t)strlen((const char*)block + at) + 1) {
 		entries[n++] = (char*)block + at;
 	}
+	entries[n] = NULL;
 	return entries;
-}
-
-static char** childEnv(const char* cwd, char* const* given, size_t givenCount, char** pwd) {
-	int newPwd = cwd[0] != '\0';
-	size_t count = 0;
-	while (environ[count] != NULL) count++;
-	char** env = malloc((count + COUNT(ADDED) + givenCount + 2) * sizeof *env);
-	*pwd = newPwd ? malloc(strlen(cwd) + sizeof "PWD=") : NULL;
-	if (env == NULL || (newPwd && *pwd == NULL)) {
-		free(env);
-		free(*pwd);
-		return NULL;
-	}
-	size_t n = 0;
-	for (size_t i = 0; i < count; i++) {
-		if (!replaced(environ[i], given, givenCount, newPwd)) env[n++] = environ[i];
-	}
-	for (size_t i = 0; i < COUNT(ADDED); i++) env[n++] = (char*)ADDED[i];
-	for (size_t i = 0; i < givenCount; i++) env[n++] = given[i];
-	if (newPwd) {
-		strcpy(*pwd, "PWD=");
-		strcat(*pwd, cwd);
-		env[n++] = *pwd;
-	}
-	env[n] = NULL;
-	return env;
 }
 
 static void execChild(char** argv, char** env, const char* cwd, int failed, int fdLimit) {
@@ -375,15 +328,10 @@ static int openIn(
 	if (commandLine[strspn(commandLine, " \t\n")] == '\0') return PTY_OPEN_BLANK_COMMAND;
 	if (envLen > 0 && envBlock[envLen - 1] != '\0') return PTY_OPEN_BAD_ENV;
 	char* argv[] = { "/bin/sh", "-c", (char*)commandLine, NULL };
-	char* pwd = NULL;
-	size_t givenCount = 0;
-	char** given = entriesOf(envBlock, envLen, &givenCount);
-	char** env = given == NULL ? NULL : childEnv(cwd, given, givenCount, &pwd);
-	free(given);
+	char** env = entriesOf(envBlock, envLen);
 	int failed[2];
 	if (env == NULL || pipe(failed) != 0) {
 		free(env);
-		free(pwd);
 		return PTY_OPEN_RESOURCES;
 	}
 	closeOnExec(failed[0]);
@@ -401,7 +349,6 @@ static int openIn(
 		fcntl(master, F_SETFL, fcntl(master, F_GETFL) | O_NONBLOCK);
 	}
 	free(env);
-	free(pwd);
 	close(failed[1]);
 	if (pid < 0) {
 		close(failed[0]);

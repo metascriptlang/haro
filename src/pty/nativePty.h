@@ -27,6 +27,7 @@ void ptyClose(int id);
 int ptyMaster(int id);
 int ptyChildPid(int id);
 int ptyExitSignal(int id);
+uint8_t** ptyEnviron(void);
 #endif
 
 #endif

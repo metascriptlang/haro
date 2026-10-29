@@ -36,6 +36,8 @@ when (!windows) {
 	import { env } from "std/process";
 	import { ptyChildPid, ptyExitSignal, ptyMaster } from "./nativePty.h";
 
+	extern function ptyEnviron(): Ptr<Ptr<char>>;
+
 	@include("unistd.h");
 
 	extern function tcgetpgrp(fd: int32): int32;
@@ -51,6 +53,49 @@ function launchIn(commandLine: string, shellScripts: string | null): ShellLaunch
 		}
 	}
 	return { commandLine: commandLine, env: [] };
+}
+
+const REPLACED_NAMES: string[] = [
+	"TERM", "COLORTERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "TERM_SESSION_ID", "VTE_VERSION",
+];
+const ADDED_ENTRIES: string[] = ["TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=Haro"];
+
+function nameOf(entry: string): string {
+	const eq = entry.indexOf("=");
+	return eq < 0 ? entry : entry.slice(0, eq);
+}
+
+export function mergedEnv(inherited: Vec<string>, given: Vec<string>, cwd: string): Vec<string> {
+	const givenNames = given.map(nameOf);
+	const kept = inherited.filter((entry: string): boolean => {
+		const name = nameOf(entry);
+		return !(cwd != "" && name == "PWD") &&
+			!REPLACED_NAMES.includes(name) &&
+			!givenNames.includes(name);
+	});
+	let merged: Vec<string> = [...kept, ...ADDED_ENTRIES, ...given];
+	if (cwd != "") { merged.push(`PWD=${cwd}`); }
+	return merged;
+}
+
+when (!windows) {
+	function inheritedEnv(): Vec<string> {
+		const vars = ptyEnviron();
+		let entries: Vec<string> = [];
+		for (let i = 0; vars[i] != null; i++) {
+			const entry: cstring = vars[i] as cstring;
+			entries.push(entry as string);
+		}
+		return entries;
+	}
+}
+
+function childEnv(given: Vec<string>, cwd: string): Vec<string> {
+	when (windows) {
+		return given;
+	} else {
+		return mergedEnv(inheritedEnv(), given, cwd);
+	}
 }
 
 function envBlock(entries: Vec<string>): Vec<uint8> {
@@ -78,7 +123,7 @@ export function open(
 	const id = ptyOpen(
 		launch.commandLine,
 		dir,
-		envBlock(launch.env),
+		envBlock(childEnv(launch.env, dir)),
 		cols,
 		rows,
 		cols * cellWidth,

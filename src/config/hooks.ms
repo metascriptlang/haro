@@ -40,22 +40,18 @@ export interface HookPane {
 
 interface Running {
 	pane: HookPane | null;
-	outside: string;
-	refused: string;
 }
 
-const running: Running = { pane: null, outside: "", refused: "" };
+const running: Running = { pane: null };
 
-// A call outside a hook is reported after evaluation, not raised at the call: compiler card 2026-10-28-embed-a-host-routine-cannot-raise-an-error-into-the-script.
-function onPane(
-	name: string,
-	outside: RaiserValue,
-	act: (pane: HookPane) => RaiserValue,
-): RaiserValue {
+function onPane(name: string, act: (pane: HookPane) => RaiserValue): RaiserValue {
 	const pane = running.pane;
-	if (pane !== null) { return act(pane); }
-	if (running.outside == "") { running.outside = name; }
-	return outside;
+	if (pane === null) {
+		throw new Error(
+			`config.ms called ${name} outside a hook, and ${name} acts only on the pane a hook runs for`,
+		);
+	}
+	return act(pane);
 }
 
 const NO_DECORATION = -1;
@@ -131,20 +127,15 @@ function notedOf(d: RaiserHostValue): Result<Noted, string> {
 	return Result.ok({ at: at, note: { text: text, fg: fg, bg: bg } });
 }
 
-function refuse(error: string): RaiserValue {
-	if (running.refused == "") { running.refused = error; }
-	return boxInt(NO_DECORATION);
-}
-
 function decorated(pane: HookPane, d: RaiserHostValue): RaiserValue {
 	const asked = askedOf(d);
-	if (!asked.ok) { return refuse(asked.error); }
+	if (!asked.ok) { throw new Error(asked.error); }
 	return boxInt(pane.decorate(asked.value.from, asked.value.to, asked.value.tint));
 }
 
 function annotated(pane: HookPane, d: RaiserHostValue): RaiserValue {
 	const noted = notedOf(d);
-	if (!noted.ok) { return refuse(noted.error); }
+	if (!noted.ok) { throw new Error(noted.error); }
 	return boxInt(pane.annotate(noted.value.at, noted.value.note));
 }
 
@@ -153,10 +144,9 @@ function idOf(arg: RaiserValue): int32 {
 }
 
 export function implementRoutines(): void {
-	running.outside = "";
 	implementRoutine("haro.send", (args: RaiserValue[]): RaiserValue => {
 		const text = unboxString(args[0]);
-		return onPane("send", boxVoid(), (pane: HookPane): RaiserValue => {
+		return onPane("send", (pane: HookPane): RaiserValue => {
 			pane.send(text);
 			return boxVoid();
 		});
@@ -164,44 +154,33 @@ export function implementRoutines(): void {
 	implementRoutine("haro.notify", (args: RaiserValue[]): RaiserValue => {
 		const title = unboxString(args[0]);
 		const body = unboxString(args[1]);
-		return onPane("notify", boxVoid(), (pane: HookPane): RaiserValue => {
+		return onPane("notify", (pane: HookPane): RaiserValue => {
 			pane.notify(title, body);
 			return boxVoid();
 		});
 	});
 	implementRoutine("haro.decorate", (args: RaiserValue[]): RaiserValue => {
 		const d = unboxValue(args[0]);
-		const refused = boxInt(NO_DECORATION);
-		return onPane("decorate", refused, (pane: HookPane): RaiserValue => decorated(pane, d));
+		return onPane("decorate", (pane: HookPane): RaiserValue => decorated(pane, d));
 	});
 	implementRoutine("haro.undecorate", (args: RaiserValue[]): RaiserValue => {
 		const id = idOf(args[0]);
-		return onPane("undecorate", boxVoid(), (pane: HookPane): RaiserValue => {
+		return onPane("undecorate", (pane: HookPane): RaiserValue => {
 			pane.undecorate(id);
 			return boxVoid();
 		});
 	});
 	implementRoutine("haro.annotate", (args: RaiserValue[]): RaiserValue => {
 		const d = unboxValue(args[0]);
-		const refused = boxInt(NO_DECORATION);
-		return onPane("annotate", refused, (pane: HookPane): RaiserValue => annotated(pane, d));
+		return onPane("annotate", (pane: HookPane): RaiserValue => annotated(pane, d));
 	});
 	implementRoutine("haro.unannotate", (args: RaiserValue[]): RaiserValue => {
 		const id = idOf(args[0]);
-		return onPane("unannotate", boxVoid(), (pane: HookPane): RaiserValue => {
+		return onPane("unannotate", (pane: HookPane): RaiserValue => {
 			pane.unannotate(id);
 			return boxVoid();
 		});
 	});
-}
-
-export function calledOutsideHooks(): Result<void, string> {
-	const name = running.outside;
-	running.outside = "";
-	if (name == "") { return Result.ok(null); }
-	return Result.err(
-		`config.ms called ${name} outside a hook, and ${name} acts only on the pane a hook runs for`,
-	);
 }
 
 function runFor(
@@ -212,12 +191,8 @@ function runFor(
 ): Result<RaiserHostValue, string> {
 	const outer = running.pane;
 	running.pane = pane;
-	running.refused = "";
 	const got = callRoutine(h.interp, routine, args);
 	running.pane = outer;
-	const refused = running.refused;
-	running.refused = "";
-	if (got.ok && refused != "") { return Result.err(refused); }
 	return got;
 }
 

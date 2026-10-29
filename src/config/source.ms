@@ -13,7 +13,6 @@ import {
 	HookPane,
 	Hooks,
 	answerKey,
-	calledOutsideHooks,
 	commandDone,
 	implementRoutines,
 	prompted,
@@ -126,7 +125,6 @@ function evaluate(path: string, dir: string, api: string, metascript: string): R
 	}
 	const json = try callRoutine(interp, try selectRoutine(interp, "configJson"), []);
 	const hooked = try callRoutine(interp, try selectRoutine(interp, "hooked"), []);
-	try calledOutsideHooks();
 	const hooks: Hooks | null = unboxBool(hooked.root)
 		? {
 			interp: interp,
@@ -496,15 +494,29 @@ test "an onCommandDone that calls send and notify reaches the pane it runs for, 
 	const heard: Heard = { said: [] };
 	assert hooks.commandDone(paneHeard(heard), ran(2, "make", 1.5)).ok;
 	assert heard.said.join("|") == "send echo make\n|notify make|exit 2", heard.said.join("|");
-	assert calledOutsideHooks().ok;
 
 	assert writeFile(path, `${head}send("ls\\n");\nexport const config: HaroConfig = { fontSize: 13 };\n`).ok;
 	const outside = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
 	assert !outside.ok;
 	if (!outside.ok) {
-		assert outside.error == "config.ms called send outside a hook, and send acts only on the pane a hook runs for",
-			outside.error;
+		const named = "config.ms called send outside a hook, and send acts only on the pane a hook runs for";
+		assert outside.error.includes(named), outside.error;
 	}
+}
+
+test "a send outside a hook throws at the call, where the config can catch it" {
+	const got = hooksOf("caughtOutsideConfig",
+		`import { HaroConfig, send } from "haro";\n\n` +
+		`let said = 13;\n` +
+		`try { send("ls\\n"); } catch (e) { said = e.message.includes("send outside a hook") ? 14 : 15; }\n` +
+		`export const config: HaroConfig = { fontSize: said };\n`);
+	assert got.ok, got.ok ? "" : got.error;
+	const dir = `${cwd()}/out/caughtOutsideConfig`;
+	const evaluated = evaluate(`${dir}/config.ms`, dir, `${cwd()}/assets/haro`, INSTALLED);
+	assert evaluated.ok, evaluated.ok ? "" : evaluated.error;
+	if (!evaluated.ok) { return; }
+	const c = parse(evaluated.value.json);
+	assert c.ok && c.value.fontSize == 14;
 }
 
 test "an onCommandDone that decorates reaches the pane with its anchors and colours, and a bad colour is the hook's error" {
@@ -537,7 +549,8 @@ test "an onCommandDone that decorates reaches the pane with its anchors and colo
 	assert !refused.ok;
 	if (!refused.ok) {
 		const expected = `decorate's background: "red" is not a #rrggbb colour`;
-		assert refused.error == `onCommandDone in config.ms failed: ${expected}`, refused.error;
+		assert refused.error.includes(`onCommandDone in config.ms failed: `), refused.error;
+		assert refused.error.includes(expected), refused.error;
 	}
 
 	const topLevel = `${head}decorate({ from: 0, to: 1 });\nexport const config: HaroConfig = {};\n`;
@@ -579,7 +592,8 @@ test "an onCommandDone that annotates reaches the pane with its anchor, text and
 	assert !refused.ok;
 	if (!refused.ok) {
 		const expected = `annotate's text "a\\tb" holds a control character`;
-		assert refused.error == `onCommandDone in config.ms failed: ${expected}`, refused.error;
+		assert refused.error.includes(`onCommandDone in config.ms failed: `), refused.error;
+		assert refused.error.includes(expected), refused.error;
 	}
 }
 

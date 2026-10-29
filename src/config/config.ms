@@ -187,12 +187,16 @@ function readKeybind(v: JsonValue, key: string): Result<Keybind, string> {
 	for (let i = 0; i < v.keys.length; i++) {
 		const name = v.keys[i];
 		const value = v.values[i];
-		if (value.kind == JsonKind.Null) { continue; }
+		const given = value.kind != JsonKind.Null;
 		match (name) {
-			"keys" => { keys = try readString(value, `${key}.keys`); },
-			"text" => { sends = try readString(value, `${key}.text`); },
-			"action" => { action = try actionOf(try readString(value, `${key}.action`), key); },
-			"mode" => { screen = try screenOf(try readString(value, `${key}.mode`), key); },
+			"keys" => { if (given) { keys = try readString(value, `${key}.keys`); } },
+			"text" => { if (given) { sends = try readString(value, `${key}.text`); } },
+			"action" => {
+				if (given) { action = try actionOf(try readString(value, `${key}.action`), key); }
+			},
+			"mode" => {
+				if (given) { screen = try screenOf(try readString(value, `${key}.mode`), key); }
+			},
 			_ => {
 				return Result.err(
 					`${key}: unknown field "${name}", expected keys, text, action and mode`,
@@ -227,10 +231,11 @@ export function parse(json: string): Result<Config, string> {
 	for (let i = 0; i < root.keys.length; i++) {
 		const key = root.keys[i];
 		const v = root.values[i];
-		if (v.kind == JsonKind.Null) { continue; }
+		const given = v.kind != JsonKind.Null;
 		match (key) {
-			"fontFamily" => { c.fontFamily = try readFamilies(v, key); },
+			"fontFamily" => { if (given) { c.fontFamily = try readFamilies(v, key); } },
 			"fontSize" => {
+				if (!given) { continue; }
 				c.fontSize = try readNumber(v, key);
 				if (c.fontSize < MIN_FONT_SIZE || c.fontSize > MAX_FONT_SIZE) {
 					return Result.err(
@@ -239,17 +244,20 @@ export function parse(json: string): Result<Config, string> {
 				}
 			},
 			"padding" => {
+				if (!given) { continue; }
 				c.padding = try readNumber(v, key);
 				if (c.padding < 0) {
 					return Result.err(`padding ${c.padding} must be 0 or more`);
 				}
 			},
-			"command" => { c.command = try readString(v, key); },
+			"command" => { if (given) { c.command = try readString(v, key); } },
 			"shellIntegration" => {
+				if (!given) { continue; }
 				if (v.kind != JsonKind.Bool) { return Result.err(`${key} must be true or false`); }
 				c.shellIntegration = v.boolVal;
 			},
 			"workingDirectory" => {
+				if (!given) { continue; }
 				const text = try readString(v, key);
 				const dir = startDirOf(text);
 				if (dir === null) {
@@ -261,6 +269,7 @@ export function parse(json: string): Result<Config, string> {
 				c.workingDirectory = dir;
 			},
 			"scrollback" => {
+				if (!given) { continue; }
 				if (v.kind != JsonKind.Int || v.intVal < 0 || v.intVal > MAX_SCROLLBACK) {
 					return Result.err(
 						`scrollback must be a whole number of lines from 0 to ${MAX_SCROLLBACK}`,
@@ -268,9 +277,10 @@ export function parse(json: string): Result<Config, string> {
 				}
 				c.scrollback = v.intVal;
 			},
-			"foreground" => { c.foreground = try readColor(v, key); },
-			"background" => { c.background = try readColor(v, key); },
+			"foreground" => { if (given) { c.foreground = try readColor(v, key); } },
+			"background" => { if (given) { c.background = try readColor(v, key); } },
 			"palette" => {
+				if (!given) { continue; }
 				const list = try readArray(v, key);
 				if (list.length > PALETTE_SIZE) {
 					return Result.err(
@@ -280,9 +290,11 @@ export function parse(json: string): Result<Config, string> {
 				c.palette = try readEach(list, key, readColor);
 			},
 			"keybinds" => {
-				c.keybinds = try readEach(try readArray(v, key), key, readKeybind);
+				if (given) { c.keybinds = try readEach(try readArray(v, key), key, readKeybind); }
 			},
-			"optionAsAlt" => { c.optionAsAlt = try optionAsAltOf(try readString(v, key)); },
+			"optionAsAlt" => {
+				if (given) { c.optionAsAlt = try optionAsAltOf(try readString(v, key)); }
+			},
 			_ => { return Result.err(`unknown config field "${key}"`); },
 		}
 	}
@@ -384,6 +396,9 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"fontFamily":12}`) == "fontFamily must be a family name or a list of them";
 	assert refusal(`{"fontFamily":["Operator Saigon",12]}`) == "fontFamily[1] must be a string";
 	assert refusal(`{"fontsize":10}`) == `unknown config field "fontsize"`;
+	assert refusal(`{"fontsize":null}`) == `unknown config field "fontsize"`;
+	assert refusal(`{"keybinds":[{"keys":"a","text":"x","txt":null}]}`) ==
+		`keybinds[0]: unknown field "txt", expected keys, text, action and mode`;
 	assert refusal(`{"fontSize":"10"}`) == "fontSize must be a number";
 	assert refusal(`{"shellIntegration":"no"}`) == "shellIntegration must be true or false";
 	assert refusal(`{"fontSize":0}`) == "fontSize 0 must be from 1 to 255 points";

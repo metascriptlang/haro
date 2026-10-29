@@ -35,7 +35,7 @@ export function wellFormedPrefix(bytes: Readonly<Span<uint8>>, maxBytes: int32):
 		if (width == 0) {
 			pushAll(out, replacement);
 		} else {
-			for (let i = 0; i < width; i++) { out.push(bytes[at + i]); }
+			pushAll(out, bytes[at..at + width]);
 		}
 		at += Math.max(width, 1);
 	}

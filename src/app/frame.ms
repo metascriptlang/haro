@@ -79,8 +79,7 @@ function decorationOf(this run: LineRun): TextDecorationLine {
 
 function lineStyleOf(underline: Underline): TextDecorationStyle {
 	return match (underline) {
-		Underline.None => "solid",
-		Underline.Single => "solid",
+		Underline.None | Underline.Single => "solid",
 		Underline.Double => "double",
 		Underline.Curly => "wavy",
 		Underline.Dotted => "dotted",

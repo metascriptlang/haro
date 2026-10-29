@@ -220,6 +220,12 @@ export extern const GHOSTTY_DA_FEATURE_ANSI_COLOR: uint16;
 export extern const GHOSTTY_DA_FEATURE_CLIPBOARD: uint16;
 export extern const GHOSTTY_DA_DEVICE_TYPE_VT220: uint16;
 
+const MAX_POINT_COLUMN = 65535;
+
+function pointFits(x: int32, y: int32): boolean {
+	return x >= 0 && x <= MAX_POINT_COLUMN && y >= 0;
+}
+
 function pointAt(tag: GhosttyPointTag, x: int32, y: int32): GhosttyPoint {
 	let p: GhosttyPoint = { tag: tag };
 	p.value.coordinate.x = x as uint16;
@@ -235,7 +241,7 @@ export function vtGridRef(
 	out gridRef: GhosttyGridRef,
 ): GhosttyResult {
 	gridRef = { size: sizeof GhosttyGridRef as size_t };
-	if (x < 0 || y < 0) { return GhosttyResult.GHOSTTY_INVALID_VALUE; }
+	if (!pointFits(x, y)) { return GhosttyResult.GHOSTTY_INVALID_VALUE; }
 	return terminalGridRef(terminal, pointAt(tag, x, y), gridRef);
 }
 
@@ -256,6 +262,8 @@ export function vtTrack(
 	y: int32,
 	out ref: GhosttyTrackedGridRef,
 ): GhosttyResult {
+	ref = 0 as GhosttyTrackedGridRef;
+	if (!pointFits(x, y)) { return GhosttyResult.GHOSTTY_INVALID_VALUE; }
 	return gridRefTrack(terminal, pointAt(tag, x, y), ref);
 }
 

@@ -12,6 +12,9 @@ export enum VtError {
 	CodepointInvalid,
 	SelectFailed,
 	PaletteTooLong,
+	ScrollbackInvalid,
+	CellSizeInvalid,
+	GeometryInvalid,
 }
 
 export enum PasteError {

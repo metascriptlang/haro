@@ -116,6 +116,7 @@ function applyGraphemeWidth(terminal: GhosttyTerminal): Result<void, VtError> {
 }
 
 function applyScrollback(terminal: GhosttyTerminal, lines: int64): Result<void, VtError> {
+	if (lines < 0) { return Result.err(VtError.ScrollbackInvalid); }
 	let bytes = SCROLLBACK_MAX_BYTES;
 	let kept = lines as uint64;
 	const bytesOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES;
@@ -236,6 +237,7 @@ export function resize(
 ): Result<void, VtError> {
 	const wide = try gridSide(cols, VtError.ResizeFailed);
 	const tall = try gridSide(rows, VtError.ResizeFailed);
+	if (cellWidth < 0 || cellHeight < 0) { return Result.err(VtError.CellSizeInvalid); }
 	const r = ghostty_terminal_resize(
 		vt.terminal,
 		wide,

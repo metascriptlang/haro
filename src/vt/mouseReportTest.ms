@@ -4,6 +4,7 @@ import {
 	MouseGeometry,
 	MouseInput,
 	Vt,
+	VtError,
 	geometryOf,
 	mouseReport,
 	writeText,
@@ -111,5 +112,28 @@ test "same-cell motion is reported again once after any write, because the encod
 		vt.writeText("x");
 		assert vt.mouseBytes(MouseAction.Motion, 0, none, false) == "\x1b[<35;3;2M";
 		assert vt.mouseBytes(MouseAction.Motion, 0, none, false) == "";
+	});
+}
+
+test "a negative geometry is refused, not wrapped into a huge unsigned size" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeText("\x1b[?1000h\x1b[?1006h");
+		const e: MouseInput = { action: MouseAction.Press, button: 1, mods: 0 as BitSet<KeyMod>, x: 25.0, y: 25.0 };
+		let buf: Vec<uint8> = new Array(32);
+		const widths: MouseGeometry[] = [
+			{ ...GEOMETRY, width: -1 },
+			{ ...GEOMETRY, height: -1 },
+			{ ...GEOMETRY, cellWidth: -1 },
+			{ ...GEOMETRY, cellHeight: -1 },
+			{ ...GEOMETRY, padLeft: -1 },
+			{ ...GEOMETRY, padTop: -1 },
+			{ ...GEOMETRY, padRight: -1 },
+			{ ...GEOMETRY, padBottom: -1 },
+		];
+		for (const g of widths) {
+			const refused = vt.mouseReport(e, g, true, buf);
+			assert !refused.ok;
+			if (!refused.ok) { assert refused.error == VtError.GeometryInvalid; }
+		}
 	});
 }

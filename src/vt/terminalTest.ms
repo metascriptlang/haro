@@ -203,6 +203,31 @@ test "a palette of more than 256 colours is refused by its own error" {
 	});
 }
 
+test "a negative scrollback or cell size is refused, not wrapped into a huge unsigned value" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		const scrollback = vt.setScrollback(-1);
+		assert !scrollback.ok;
+		if (!scrollback.ok) { assert scrollback.error == VtError.ScrollbackInvalid; }
+		const cell = vt.resize(20, 4, -1, 16);
+		assert !cell.ok;
+		if (!cell.ok) { assert cell.error == VtError.CellSizeInvalid; }
+		const cellHeight = vt.resize(20, 4, 8, -16);
+		assert !cellHeight.ok;
+		if (!cellHeight.ok) { assert cellHeight.error == VtError.CellSizeInvalid; }
+		assert vt.resize(20, 4, 8, 16).ok;
+	});
+}
+
+test "a tracked point whose column does not fit sixteen bits is refused, not wrapped onto column 0" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		const viewport = GhosttyPointTag.GHOSTTY_POINT_TAG_VIEWPORT;
+		let wrapped: GhosttyTrackedGridRef;
+		assert !ok(vtTrack(vt.terminal, viewport, 65536, 0, wrapped));
+		let negative: GhosttyTrackedGridRef;
+		assert !ok(vtTrack(vt.terminal, viewport, -1, 0, negative));
+	});
+}
+
 test "a hold past its limit is released by update, not by asking whether the terminal is holding" {
 	assert withVt(20, 4, (vt: Vt): void => {
 		vt.holdLimit(0);

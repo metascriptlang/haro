@@ -72,6 +72,11 @@ export function geometryOf(cellWidth: int32, cellHeight: int32, width: int32, he
 	};
 }
 
+function isNonNegative(this g: MouseGeometry): boolean {
+	return g.cellWidth >= 0 && g.cellHeight >= 0 && g.width >= 0 && g.height >= 0 &&
+		g.padLeft >= 0 && g.padTop >= 0 && g.padRight >= 0 && g.padBottom >= 0;
+}
+
 // x and y are surface pixels with the grid at the origin.
 export function mouseReport(
 	this vt: Vt,
@@ -80,6 +85,7 @@ export function mouseReport(
 	anyPressed: boolean,
 	buf: Span<uint8>,
 ): Result<int32, VtError> {
+	if (!geometry.isNonNegative()) { return Result.err(VtError.GeometryInvalid); }
 	const m = vt.mouse;
 	const codec = try m.open();
 	const encoder = codec.encoder;

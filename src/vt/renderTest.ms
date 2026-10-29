@@ -38,6 +38,14 @@ test "an OSC 8 link with invalid UTF-8 reads back as well-formed text" {
 	});
 }
 
+test "a link at a column that does not fit sixteen bits is refused, not wrapped onto column 0" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeText("\x1b]8;;https://example.com\x1b\\link");
+		assert shown(vt.linkAt(0, 0)) == "https://example.com";
+		assert shown(vt.linkAt(65536, 0)) == "<failed>";
+	});
+}
+
 test "a styled cell carries its colour, flags and underline" {
 	assert withVt(20, 2, (vt: Vt): void => {
 		vt.writeText("\x1b[1;4;38;2;255;0;0mA\x1b[0mb");

@@ -3,7 +3,7 @@ when (!macos) {
 	import { env } from "std/process";
 }
 import { homeDir } from "std/os";
-import { changeStamp, ensureDir, exists, readFile, remove, rename, writeFile } from "std/fs";
+import { changeStamp, ensureDir, exists, readDir, readFile, remove, rename, writeFile } from "std/fs";
 import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, defaults, parse } from "./config";
 import { CommandDone, Rgb } from "../vt/vt";
@@ -51,7 +51,6 @@ function windowsCacheDir(localAppData: string, home: string): string {
 export function cacheDir(): string {
 	when (windows) {
 		return windowsCacheDir(env.get("LOCALAPPDATA"), homeDir().replaceAll("\\", "/"));
-
 	} else when (macos) {
 		return `${homeDir()}/Library/Caches/haro`;
 	} else {
@@ -194,8 +193,35 @@ function decodeCache(lines: string[], stamp: string): Loaded | null {
 	return { config: c.value, faces: faces, stamp: stamp, notice: "", hooks: null };
 }
 
+const MAX_STAMP_DEPTH = 4;
+
+function stampOf(file: string): Result<string, string> {
+	const stamp = changeStamp(file);
+	if (stamp == "") { return Result.err(`cannot read the state of ${file}`); }
+	return Result.ok(stamp);
+}
+
+function stampsUnder(dir: string, depth: int32, ref stamps: Vec<string>): Result<void, string> {
+	for (const entry of readDir(dir)) {
+		if (!entry.endsWith("/")) {
+			if (entry.endsWith(".ms")) { stamps.push(try stampOf(`${dir}/${entry}`)); }
+		} else if (depth < MAX_STAMP_DEPTH) {
+			try stampsUnder(`${dir}/${entry.slice(0, entry.length - 1)}`, depth + 1, stamps);
+		}
+	}
+	return Result.ok(null);
+}
+
+export function configStamp(path: string, api: string): Result<string, string> {
+	if (!exists(path)) { return Result.ok(""); }
+	let stamps: Vec<string> = [try stampOf(path)];
+	try stampsUnder(dirname(path), 0, stamps);
+	try stampsUnder(api, 0, stamps);
+	return Result.ok(stamps.join("|"));
+}
+
 export function load(path: string, api: string, metascript: string): Result<Loaded, string> {
-	const stamp = changeStamp(path);
+	const stamp = try configStamp(path, api);
 	if (stamp == "") { return Result.ok(Loaded.empty()); }
 	const dir = cacheDir();
 	const cacheFile = `${dir}/config.cache`;
@@ -249,6 +275,28 @@ test "a cached record gives back each family's faces in order, and not once a fa
 	assert decodeCache(encodeCache("s1", json, [faces[0]]).split("\n"), "s1") === null;
 	assert remove(`${dir}/bbi.otf`).ok;
 	assert decodeCache(encodeCache("s1", json, faces).split("\n"), "s1") === null;
+}
+
+test "the config stamp changes with a file beside the config or the haro package, and is empty for no config" {
+	const dir = `${cwd()}/out/stampConfig`;
+	const api = `${dir}/api`;
+	assert ensureDir(`${dir}/lib`).ok && ensureDir(api).ok;
+	const path = `${dir}/config.ms`;
+	assert writeFile(path, "export const config = {};\n").ok;
+	assert writeFile(`${dir}/lib/theme.ms`, "export const a = 1;\n").ok;
+	assert writeFile(`${api}/index.ms`, "export const v = 1;\n").ok;
+	const first = configStamp(path, api);
+	assert first.ok && first.value != "";
+	const again = configStamp(path, api);
+	assert again.ok && again.value == first.value;
+	assert writeFile(`${dir}/lib/theme.ms`, "export const a = 22;\n").ok;
+	const imported = configStamp(path, api);
+	assert imported.ok && imported.value != first.value;
+	assert writeFile(`${api}/index.ms`, "export const v = 22;\n").ok;
+	const bundled = configStamp(path, api);
+	assert bundled.ok && bundled.value != imported.value;
+	const none = configStamp(`${dir}/nothing.ms`, api);
+	assert none.ok && none.value == "";
 }
 
 test "Windows keeps its cache under the home directory when LOCALAPPDATA is unset" {

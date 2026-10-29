@@ -33,9 +33,14 @@ export function spotAt(
 	cols: int32,
 	rows: int32,
 ): Spot {
-	const col = Math.floor(x / cellWidth) as int32;
-	const row = Math.floor(y / rowHeight) as int32;
-	return { col: Math.max(0, Math.min(col, cols - 1)), row: Math.max(0, Math.min(row, rows - 1)) };
+	return { col: cellIndex(x, cellWidth, cols), row: cellIndex(y, rowHeight, rows) };
+}
+
+function cellIndex(offset: float64, size: float64, count: int32): int32 {
+	if (!(size > 0)) { return 0; }
+	const cell = Math.floor(offset / size);
+	if (Number.isNaN(cell)) { return 0; }
+	return Math.max(0, Math.min(cell, count - 1)) as int32;
 }
 
 const AUTOSCROLL_EDGE_PX: float64 = 1;
@@ -165,6 +170,13 @@ test "the spot under a point is its cell, held inside the grid" {
 	assert spotAt(8, 16, 8, 16, 80, 24) == spot(1, 1);
 	assert spotAt(-5, -5, 8, 16, 80, 24) == spot(0, 0);
 	assert spotAt(9999, 9999, 8, 16, 80, 24) == spot(79, 23);
+}
+
+test "a point or cell size that is not a usable number lands on the first cell" {
+	assert spotAt(NaN, 5, 8, 16, 80, 24) == spot(0, 0);
+	assert spotAt(5, 5, 0, 0, 80, 24) == spot(0, 0);
+	assert spotAt(1e30, 1e30, 8, 16, 80, 24) == spot(79, 23);
+	assert spotAt(Infinity, 5, 8, 16, 80, 24) == spot(79, 0);
 }
 
 test "a press with no drag leaves nothing selected and a drag selects the cells it crosses" {

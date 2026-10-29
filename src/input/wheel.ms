@@ -21,10 +21,12 @@ export function route(altScreen: boolean, tracking: boolean, altScroll: boolean)
 }
 
 export function notchesOf(delta: float64, pixels: boolean, rowHeight: float64): float64 {
+	if (!Number.isFinite(delta) || !(rowHeight > 0)) { return 0; }
 	return pixels ? delta / (rowHeight * ROWS_PER_NOTCH) : delta;
 }
 
 export function rows(this w: Wheel, notches: float64): int32 {
+	if (!Number.isFinite(notches)) { return 0; }
 	const total = w.pending - notches * ROWS_PER_NOTCH;
 	const whole = total < 0 ? Math.ceil(total) : Math.floor(total);
 	w.pending = total - whole;
@@ -76,4 +78,16 @@ test "scrolling the other way spends what is pending before moving" {
 	assert w.rows(0.5) == -1;
 	assert w.rows(-0.5) == 1;
 	assert w.pending > -0.0001 && w.pending < 0.0001;
+}
+
+test "a row height of zero or a delta that is not a number scrolls nothing" {
+	const w = Wheel.open();
+	assert notchesOf(5, true, 0) == 0;
+	assert notchesOf(5, true, -20) == 0;
+	assert notchesOf(Infinity, true, 20) == 0;
+	assert notchesOf(NaN, false, 20) == 0;
+	assert w.rows(NaN) == 0;
+	assert w.rows(Infinity) == 0;
+	assert w.pending == 0;
+	assert w.rows(1) == -3;
 }

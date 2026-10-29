@@ -42,7 +42,8 @@ test "a close outranks a held paste, which outranks a clipboard read" {
 test "two pendings are the same when their kind and what they show are" {
 	const held: Held = { text: "a", warning: Warning.MultiLine };
 	assert samePending(pendingOf(held, null, false), pendingOf({ ...held }, "x", false));
-	assert !samePending(pendingOf(held, null, false), pendingOf({ text: "b", warning: Warning.MultiLine }, null, false));
+	const other: Held = { text: "b", warning: Warning.MultiLine };
+	assert !samePending(pendingOf(held, null, false), pendingOf(other, null, false));
 	assert !samePending(pendingOf(null, "a", false), pendingOf(null, "b", false));
 	assert samePending(pendingOf(null, null, true), pendingOf(held, null, true));
 }

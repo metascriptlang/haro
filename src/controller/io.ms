@@ -6,18 +6,33 @@ import { Pending, pendingOf } from "./pending";
 import { KeyEvent, OptionAsAlt } from "../keys/keys";
 import { CellInk } from "../grid/lines";
 import { Config } from "../config/config";
-import { Annotation, Decoration, FrameRows, none } from "./rows";
+import {
+	Annotation,
+	Decoration,
+	FrameRows,
+	annotate as annotateRow,
+	decorate as decorateRows,
+	none,
+	unannotate as unannotateRow,
+	undecorate as undecorateRows,
+} from "./rows";
 import { Mark } from "./mark";
 import { Asks, Controls, Hit, holding, refit, takeAsks, typed, vtOf } from "./controls";
 import { cancel, clipboardAsked, clipboardText, confirm } from "./clipboard";
 import { answerClose, closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
-import { autoscrollTick, endDrag, pointerDown, pointerMove, pointerUp, roll, syncSelection } from "./mouse";
+import {
+	autoscrollTick,
+	endDrag,
+	pointerDown,
+	pointerMove,
+	pointerUp,
+	roll,
+	syncSelection,
+} from "./mouse";
 import {
 	Frame,
 	Term,
 	TermError,
-	annotate as annotateRow,
-	decorate as decorateRows,
 	exitedAbnormally,
 	drain,
 	inkCursor,
@@ -29,8 +44,6 @@ import {
 	shellExitCode,
 	shellExitSignal,
 	shutdown,
-	unannotate as unannotateRow,
-	undecorate as undecorateRows,
 } from "./term";
 
 export struct Settings {
@@ -191,7 +204,13 @@ export function configure(this io: Io, settings: Settings): void {
 	io.apply();
 }
 
-export function fit(this io: Io, cols: int32, rows: int32, cellWidth: int32, cellHeight: int32): void {
+export function fit(
+	this io: Io,
+	cols: int32,
+	rows: int32,
+	cellWidth: int32,
+	cellHeight: int32,
+): void {
 	const started = io.term.session !== null;
 	const fitted = io.controls.refit(io.term, cols, rows, cellWidth, cellHeight);
 	if (!fitted.ok) {
@@ -293,19 +312,19 @@ export function pasted(this io: Io, clipboard: string): void {
 }
 
 export function decorate(this io: Io, d: Decoration): void {
-	io.term.decorateRows(d);
+	io.term.decor.decorateRows(d);
 }
 
 export function undecorate(this io: Io, id: int32): void {
-	io.term.undecorateRows(id);
+	io.term.decor.undecorateRows(id);
 }
 
 export function annotate(this io: Io, a: Annotation): void {
-	io.term.annotateRow(a);
+	io.term.decor.annotateRow(a);
 }
 
 export function unannotate(this io: Io, id: int32): void {
-	io.term.unannotateRow(id);
+	io.term.decor.unannotateRow(id);
 }
 
 export function drain(this io: Io): void {
@@ -329,8 +348,8 @@ export function relight(this io: Io, ink: CellInk | null): FrameRows {
 function exitOf(this io: Io): Exit {
 	const t = io.term;
 	const exit: Exit = {
-		code: t.shellExitCode(),
-		signal: t.shellExitSignal(),
+		code: t.shellExitCode() ?? 0,
+		signal: t.shellExitSignal() ?? 0,
 		abnormal: t.exitedAbnormally(),
 	};
 	if (exit.abnormal || exit.signal != 0) { io.controls.ended = true; }
@@ -408,6 +427,8 @@ export function port(this io: Io): IoPort {
 		annotate: (a: Annotation): void => { io.annotate(a); },
 		unannotate: (id: int32): void => { io.unannotate(id); },
 		frame: (done: (got: IoFrame) => void): void => { done(io.frame()); },
-		relight: (ink: CellInk | null, done: (rows: FrameRows) => void): void => { done(io.relight(ink)); },
+		relight: (ink: CellInk | null, done: (rows: FrameRows) => void): void => {
+			done(io.relight(ink));
+		},
 	};
 }

@@ -57,7 +57,12 @@ function openerOf(this spec: PtySpec): OpenPty {
 	const command = spec.command;
 	const cwd = spec.cwd;
 	const scripts = spec.shellScripts;
-	return (cols: int32, rows: int32, cellWidth: int32, cellHeight: int32): Result<Pty, PtyError> => {
+	return (
+		cols: int32,
+		rows: int32,
+		cellWidth: int32,
+		cellHeight: int32,
+	): Result<Pty, PtyError> => {
 		return NativePty.spawn(command, cols, rows, cwd, cellWidth, cellHeight, scripts);
 	};
 }
@@ -128,7 +133,11 @@ async function framed(shell: Shell, done: (got: IoFrame) => void): Promise<void>
 	if (got !== null) { done(got); }
 }
 
-async function relit(shell: Shell, ink: CellInk | null, done: (rows: FrameRows) => void): Promise<void> {
+async function relit(
+	shell: Shell,
+	ink: CellInk | null,
+	done: (rows: FrameRows) => void,
+): Promise<void> {
 	done(await shell.relight(ink));
 }
 
@@ -156,7 +165,9 @@ export function portOf(shell: Shell): IoPort {
 		keyReleased: (k: KeyEvent): void => { shell.keyReleased(k); },
 		text: (typed: string, time: float64): void => { shell.text(typed, time); },
 		focus: (gained: boolean): void => { shell.focus(gained); },
-		press: (button: MouseButton, h: Hit, time: float64): void => { shell.press(button, h, time); },
+		press: (button: MouseButton, h: Hit, time: float64): void => {
+			shell.press(button, h, time);
+		},
 		move: (h: Hit, pressed: boolean): void => { shell.move(h, pressed); },
 		release: (button: MouseButton, h: Hit): void => { shell.release(button, h); },
 		wheel: (notches: float64, h: Hit): void => { shell.wheel(notches, h); },

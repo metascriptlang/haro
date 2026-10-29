@@ -17,14 +17,18 @@ import {
 	sendReplies,
 	shutdown,
 	drain,
-
+	pumpFrame,
+} from "./term";
+import {
+	FrameError,
+	RowUpdate,
 	annotate,
 	decorate,
-	pumpFrame,
+	fitShown,
+	planRows,
 	unannotate,
 	undecorate,
-} from "./term";
-import { FrameError, RowUpdate, fitShown, planRows } from "./rows";
+} from "./rows";
 import {
 	Sink,
 	boardOf,
@@ -303,7 +307,7 @@ test "a decoration tints its block's rows, moves up with them, and hides on the 
 		const rows = first.value.rows;
 		if (rows !== null) { view.paint(rows); }
 		const block = failedBlock(first.value.shell);
-		t.decorate({ id: 1, from: block[0], to: block[1], tint: { fg: null, bg: TINT } });
+		t.decor.decorate({ id: 1, from: block[0], to: block[1], tint: { fg: null, bg: TINT } });
 		assert paintedYs(view, t.pumpFrame()) == "0,1";
 		assert tintedYs(view, 5) == "0,1";
 		const s = t.session;
@@ -319,7 +323,7 @@ test "a decoration tints its block's rows, moves up with them, and hides on the 
 		s.vt.writeText("\x1b[?1049l");
 		paintedYs(view, t.pumpFrame());
 		assert tintedYs(view, 5) == "0";
-		t.undecorate(1);
+		t.decor.undecorate(1);
 		assert paintedYs(view, t.pumpFrame()) == "0";
 		assert tintedYs(view, 5) == "";
 	}).ok;
@@ -347,7 +351,7 @@ test "an annotation sits on its anchor's row, moves up with it, and hides on the
 		const rows = first.value.rows;
 		if (rows !== null) { view.paint(rows); }
 		const block = failedBlock(first.value.shell);
-		t.annotate({ id: 1, at: block[0], note: EXIT_NOTE });
+		t.decor.annotate({ id: 1, at: block[0], note: EXIT_NOTE });
 		assert paintedYs(view, t.pumpFrame()) == "1";
 		assert view.text(1) == "$ false       exit 1", view.text(1);
 		const s = t.session;
@@ -362,7 +366,7 @@ test "an annotation sits on its anchor's row, moves up with it, and hides on the
 		s.vt.writeText("\x1b[?1049l");
 		paintedYs(view, t.pumpFrame());
 		assert notedYs(view, 5) == "0";
-		t.unannotate(1);
+		t.decor.unannotate(1);
 		assert paintedYs(view, t.pumpFrame()) == "0";
 		assert notedYs(view, 5) == "";
 	}).ok;
@@ -374,7 +378,7 @@ test "copying a row that carries an annotation returns only the row's own text" 
 		const first = t.pumpFrame();
 		assert first.ok;
 		if (!first.ok) { return; }
-		t.annotate({ id: 1, at: failedBlock(first.value.shell)[0], note: EXIT_NOTE });
+		t.decor.annotate({ id: 1, at: failedBlock(first.value.shell)[0], note: EXIT_NOTE });
 		const view = View.open();
 		view.fitRows(5);
 		paintedYs(view, t.pumpFrame());
@@ -465,7 +469,7 @@ test "a failed decoration pass keeps the tints on screen and is retried by the n
 		assert first.ok;
 		if (!first.ok) { return; }
 		const block = failedBlock(first.value.shell);
-		t.decorate({ id: 1, from: block[0], to: block[1], tint: { fg: null, bg: TINT } });
+		t.decor.decorate({ id: 1, from: block[0], to: block[1], tint: { fg: null, bg: TINT } });
 		assert t.pumpFrame().ok;
 		assert t.decor.tints[0] !== null;
 		const s = t.session;
@@ -474,10 +478,14 @@ test "a failed decoration pass keeps the tints on screen and is retried by the n
 		let saved: Vec<GhosttyTrackedGridRef> = [];
 		for (const a of s.vt.effects.anchors) { saved.push(a.tracked); }
 		const bad = 0 as GhosttyTrackedGridRef;
-		for (let i = 0; i < s.vt.effects.anchors.length; i++) { s.vt.effects.anchors[i].tracked = bad; }
-		t.decorate({ id: 2, from: block[0], to: block[1], tint: { fg: null, bg: TINT } });
+		for (let i = 0; i < s.vt.effects.anchors.length; i++) {
+			s.vt.effects.anchors[i].tracked = bad;
+		}
+		t.decor.decorate({ id: 2, from: block[0], to: block[1], tint: { fg: null, bg: TINT } });
 		const failed = t.pumpFrame();
-		for (let i = 0; i < s.vt.effects.anchors.length; i++) { s.vt.effects.anchors[i].tracked = saved[i]; }
+		for (let i = 0; i < s.vt.effects.anchors.length; i++) {
+			s.vt.effects.anchors[i].tracked = saved[i];
+		}
 		assert !failed.ok;
 		assert t.decor.stale;
 		assert t.decor.tints[0] !== null;

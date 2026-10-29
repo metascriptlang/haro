@@ -26,21 +26,15 @@ import {
 	VtError,
 } from "../vt/vt";
 import {
-	Annotation,
 	Decor,
-	Decoration,
 	FrameError,
 	FrameRows,
 	Planned,
 	Shown,
-	annotate,
-	decorate,
 	empty,
 	fitShown,
 	planRows,
 	relitRows,
-	unannotate,
-	undecorate,
 } from "./rows";
 import { Mark } from "./mark";
 import { holdsButton } from "./mouseButton";
@@ -48,6 +42,7 @@ import { holdsButton } from "./mouseButton";
 const BUFFER_BYTES = 65536;
 const DRAIN_LIMIT = 16;
 const DRAIN_BUDGET_MS: float64 = 8;
+const BYTE_MAX: int32 = 255;
 
 export enum PasteCheck {
 	Checked,
@@ -177,10 +172,6 @@ export function openTerm(
 	});
 }
 
-function resizeGrid(this t: Term, rows: int32): void {
-	t.shown.fitShown(rows);
-}
-
 export function fit(
 	this t: Term,
 	cols: int32,
@@ -209,7 +200,7 @@ export function fit(
 	t.rows = rows;
 	t.cellWidth = cellWidth;
 	t.cellHeight = cellHeight;
-	t.resizeGrid(rows);
+	t.shown.fitShown(rows);
 	return Result.ok(true);
 }
 
@@ -313,22 +304,6 @@ export function inkCursor(this t: Term, ink: CellInk | null): Result<FrameRows, 
 	return Result.ok(relit.value);
 }
 
-export function decorate(this t: Term, d: Decoration): void {
-	t.decor.decorate(d);
-}
-
-export function undecorate(this t: Term, id: int32): void {
-	t.decor.undecorate(id);
-}
-
-export function annotate(this t: Term, a: Annotation): void {
-	t.decor.annotate(a);
-}
-
-export function unannotate(this t: Term, id: int32): void {
-	t.decor.unannotate(id);
-}
-
 function writeFailure(error: SessionError): TermError {
 	return error == SessionError.PtyBacklogged ? TermError.InputBacklogged : TermError.WriteFailed;
 }
@@ -425,7 +400,8 @@ export function sendMouse(
 ): Result<boolean, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(false); }
-	const n = s.vt.mouseReport(e, g, e.action != MouseAction.Release && holdsButton(e.button), t.buf);
+	const held = e.action != MouseAction.Release && holdsButton(e.button);
+	const n = s.vt.mouseReport(e, g, held, t.buf);
 	if (!n.ok) { return Result.err(TermError.MouseFailed); }
 	return t.sendBuffered(s, n.value);
 }
@@ -458,22 +434,19 @@ export function busy(this t: Term): boolean {
 export const ABNORMAL_EXIT_MS: float64 = 250;
 
 export function exitedAbnormally(this t: Term): boolean {
-	return t.shellExitCode() != 0 && t.now() - t.spawnedAt <= ABNORMAL_EXIT_MS;
+	const code = t.shellExitCode();
+	return code !== null && code != 0 && t.now() - t.spawnedAt <= ABNORMAL_EXIT_MS;
 }
 
-export function shellExitCode(this t: Term): int32 {
+export function shellExitCode(this t: Term): int32 | null {
 	const s = t.session;
-	if (s === null) { return 0; }
-	const code = s.pty.exitCode();
-	if (code === null) { return 0; }
-	return code;
+	if (s === null) { return null; }
+	return s.pty.exitCode();
 }
 
-const BYTE_MAX: int32 = 255;
-
-export function shellExitSignal(this t: Term): int32 {
+export function shellExitSignal(this t: Term): int32 | null {
 	const s = t.session;
-	if (s === null) { return 0; }
+	if (s === null) { return null; }
 	return s.pty.exitSignal();
 }
 

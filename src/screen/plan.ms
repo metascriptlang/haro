@@ -58,6 +58,7 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 		moved = scrolled;
 	}
 	let ys: Vec<int32> = [];
+	let fresh: Vec<Row> = [];
 	match (kind) {
 		PlanKind.Rows => {
 			let dirty = try vt.dirtyRows();
@@ -66,27 +67,30 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 				const row = dirty.pop();
 				if (row.sameContent(painted.rows[row.y])) { continue; }
 				ys.push(row.y);
-				painted.rows[row.y] = row;
+				fresh.push(row);
 			}
 			ys.reverse();
 		},
 		PlanKind.Scroll => {
-			const all = try vt.rows();
-			ys = changedRowsAfterScroll(all, painted.rows, moved);
-			painted.rows = all;
+			fresh = try vt.rows();
+			ys = changedRowsAfterScroll(fresh, painted.rows, moved);
 		},
 		PlanKind.Repaint => {
-			const all = try vt.rows();
-			for (let y = 0; y < (all.length as int32); y++) { ys.push(y); }
-			painted.rows = all;
+			fresh = try vt.rows();
+			for (let y = 0; y < (fresh.length as int32); y++) { ys.push(y); }
 		},
 		PlanKind.Idle => {},
 	}
-	painted.alternate = alternate;
-	painted.palette = colors;
 	if (kind != PlanKind.Idle) {
 		try vt.anchorTop();
 	}
+	if (kind == PlanKind.Rows) {
+		for (const row of fresh) { painted.rows[row.y] = row; }
+	} else if (kind != PlanKind.Idle) {
+		painted.rows = fresh;
+	}
+	painted.alternate = alternate;
+	painted.palette = colors;
 	vt.clean();
 	return Result.ok({ kind: kind, scrolled: moved, ys: ys, colors: colors });
 }

@@ -1,10 +1,10 @@
 const MIB: int32 = 1048576;
-const VTEBENCH_COLS: int32 = 120;
-const VTEBENCH_ROWS: int32 = 40;
-const VTEBENCH_MIN_BYTES: int32 = MIB;
-const GHOSTTY_COLS: int32 = 120;
-const GHOSTTY_ROWS: int32 = 80;
-const GHOSTTY_BYTES: int32 = 4 * MIB;
+const STANDARD_COLS: int32 = 120;
+const STANDARD_ROWS: int32 = 40;
+const STANDARD_MIN_BYTES: int32 = MIB;
+const FLOOD_COLS: int32 = 120;
+const FLOOD_ROWS: int32 = 80;
+const FLOOD_BYTES: int32 = 4 * MIB;
 const LETTERS: int32 = 26;
 const FIRST_LETTER: int32 = "A".code;
 const ALT_SCREEN = "\x1b[?1049h";
@@ -20,9 +20,9 @@ export const WORKLOAD_NAMES: string[] = [
 	"scrolling_top_small_region",
 	"scrolling_bottom_small_region",
 	"unicode",
-	"ghosttyAscii",
-	"ghosttyStyled",
-	"ghosttyWideMix",
+	"asciiFlood",
+	"styledFlood",
+	"wideMixFlood",
 ];
 
 export struct Workload {
@@ -196,7 +196,7 @@ function nextBelow(ref rng: Rng, bound: int32): int32 {
 	return ((x >> 32) % (bound as uint64)) as int32;
 }
 
-function ghosttyAscii(bytes: int32): Vec<uint8> {
+function asciiFlood(bytes: int32): Vec<uint8> {
 	let rng: Rng = { state: 42 };
 	let out: Vec<uint8> = [];
 	for (let i = 0; i < bytes; i++) { out.push((0x21 + nextBelow(rng, 94)) as uint8); }
@@ -258,7 +258,7 @@ function putMixChar(ref out: Vec<uint8>, ref rng: Rng, mix: TextMix): void {
 	}
 }
 
-function ghosttyStyled(bytes: int32, mix: TextMix): Vec<uint8> {
+function styledFlood(bytes: int32, mix: TextMix): Vec<uint8> {
 	let rng: Rng = { state: 42 };
 	let out: Vec<uint8> = [];
 	while ((out.length as int32) < bytes) {
@@ -279,72 +279,72 @@ function ghosttyStyled(bytes: int32, mix: TextMix): Vec<uint8> {
 	return out;
 }
 
-function vtebench(name: string, setup: Vec<uint8>, payload: Vec<uint8>): Workload {
+function standardWorkload(name: string, setup: Vec<uint8>, payload: Vec<uint8>): Workload {
 	return {
 		name: name,
-		cols: VTEBENCH_COLS,
-		rows: VTEBENCH_ROWS,
+		cols: STANDARD_COLS,
+		rows: STANDARD_ROWS,
 		setup: setup,
 		payload: payload,
 	};
 }
 
-function vtebenchScrolling(name: string, setup: Vec<uint8>): Workload {
-	return vtebench(name, setup, repeatedTo(scrollingUnit(), VTEBENCH_MIN_BYTES));
+function standardScrolling(name: string, setup: Vec<uint8>): Workload {
+	return standardWorkload(name, setup, repeatedTo(scrollingUnit(), STANDARD_MIN_BYTES));
 }
 
-function ghosttyStream(name: string, payload: Vec<uint8>): Workload {
-	return { name: name, cols: GHOSTTY_COLS, rows: GHOSTTY_ROWS, setup: [], payload: payload };
+function floodWorkload(name: string, payload: Vec<uint8>): Workload {
+	return { name: name, cols: FLOOD_COLS, rows: FLOOD_ROWS, setup: [], payload: payload };
 }
 
 export function buildWorkload(name: string): Result<Workload, WorkloadError> {
-	const cols = VTEBENCH_COLS;
-	const rows = VTEBENCH_ROWS;
+	const cols = STANDARD_COLS;
+	const rows = STANDARD_ROWS;
 	const none: Vec<uint8> = [];
 	return match (name) {
-		"cursor_motion" => Result.ok(vtebench(name, none, cursorMotion(cols, rows))),
-		"dense_cells" => Result.ok(vtebench(name, bytesOf(ALT_SCREEN), denseCells(cols, rows))),
-		"light_cells" => Result.ok(vtebench(
+		"cursor_motion" => Result.ok(standardWorkload(name, none, cursorMotion(cols, rows))),
+		"dense_cells" => Result.ok(standardWorkload(name, bytesOf(ALT_SCREEN), denseCells(cols, rows))),
+		"light_cells" => Result.ok(standardWorkload(
 			name,
 			bytesOf(ALT_SCREEN),
-			repeatedTo(lightCells(cols, rows), VTEBENCH_MIN_BYTES),
+			repeatedTo(lightCells(cols, rows), STANDARD_MIN_BYTES),
 		)),
-		"scrolling" => Result.ok(vtebenchScrolling(name, none)),
-		"scrolling_fullscreen" => Result.ok(vtebench(
+		"scrolling" => Result.ok(standardScrolling(name, none)),
+		"scrolling_fullscreen" => Result.ok(standardWorkload(
 			name,
 			none,
-			repeatedTo(scrollingFullscreen(cols), VTEBENCH_MIN_BYTES),
+			repeatedTo(scrollingFullscreen(cols), STANDARD_MIN_BYTES),
 		)),
-		"scrolling_top_region" => Result.ok(vtebenchScrolling(
+		"scrolling_top_region" => Result.ok(standardScrolling(
 			name,
 			bytesOf(`${ALT_SCREEN}\x1b[2;${rows}r`),
 		)),
-		"scrolling_bottom_region" => Result.ok(vtebenchScrolling(
+		"scrolling_bottom_region" => Result.ok(standardScrolling(
 			name,
 			bytesOf(`${ALT_SCREEN}\x1b[1;${rows - 1}r`),
 		)),
-		"scrolling_top_small_region" => Result.ok(vtebenchScrolling(
+		"scrolling_top_small_region" => Result.ok(standardScrolling(
 			name,
 			bytesOf(`${ALT_SCREEN}\x1b[${rows / 2};${rows}r`),
 		)),
-		"scrolling_bottom_small_region" => Result.ok(vtebenchScrolling(
+		"scrolling_bottom_small_region" => Result.ok(standardScrolling(
 			name,
 			bytesOf(`${ALT_SCREEN}\x1b[1;${rows / 2}r`),
 		)),
-		"unicode" => Result.ok(vtebench(
+		"unicode" => Result.ok(standardWorkload(
 			name,
 			bytesOf(ALT_SCREEN),
-			repeatedTo(unicodeSymbols(), VTEBENCH_MIN_BYTES),
+			repeatedTo(unicodeSymbols(), STANDARD_MIN_BYTES),
 		)),
-		"ghosttyAscii" => Result.ok(ghosttyStream(name, ghosttyAscii(GHOSTTY_BYTES))),
-		"ghosttyStyled" => Result.ok(ghosttyStream(name, ghosttyStyled(GHOSTTY_BYTES, {
+		"asciiFlood" => Result.ok(floodWorkload(name, asciiFlood(FLOOD_BYTES))),
+		"styledFlood" => Result.ok(floodWorkload(name, styledFlood(FLOOD_BYTES, {
 			stylePerMille: 800,
 			graphemePerMille: 0,
 			oneByteWeight: 1,
 			twoByteWeight: 0,
 			threeByteWeight: 0,
 		}))),
-		"ghosttyWideMix" => Result.ok(ghosttyStream(name, ghosttyStyled(GHOSTTY_BYTES, {
+		"wideMixFlood" => Result.ok(floodWorkload(name, styledFlood(FLOOD_BYTES, {
 			stylePerMille: 0,
 			graphemePerMille: 100,
 			oneByteWeight: 0,
@@ -377,13 +377,13 @@ test "cursor motion walks the ring of a 3x2 grid" {
 	}
 }
 
-test "a scrolling payload reaches the vtebench minimum with whole units" {
+test "a scrolling payload reaches the minimum payload size with whole units" {
 	const payload = repeatedTo(scrollingUnit(), 10);
 	assert payload.length == 12;
 	assert payload[0] == 121 && payload[1] == 13 && payload[2] == 10 && payload[3] == 121;
 }
 
-test "the unicode payload holds the vtebench symbols, its emoji and two line ends" {
+test "the unicode payload holds the symbols, its emoji and two line ends" {
 	const payload = unicodeSymbols();
 	assert payload.length == 138296 + 2;
 }
@@ -396,8 +396,8 @@ test "the generated text is the same for every call and ends every line in CR LF
 		twoByteWeight: 1,
 		threeByteWeight: 1,
 	};
-	const a = ghosttyStyled(4096, mix);
-	const b = ghosttyStyled(4096, mix);
+	const a = styledFlood(4096, mix);
+	const b = styledFlood(4096, mix);
 	assert a.length == b.length && a.length >= 4096;
 	for (let i = 0; i < (a.length as int32); i++) { assert a[i] == b[i]; }
 	const last = a.length as int32;
@@ -405,7 +405,7 @@ test "the generated text is the same for every call and ends every line in CR LF
 }
 
 test "the ascii stream holds only printable bytes other than space" {
-	const payload = ghosttyAscii(2048);
+	const payload = asciiFlood(2048);
 	assert payload.length == 2048;
 	for (let i = 0; i < 2048; i++) { assert payload[i] >= 0x21 && payload[i] <= 0x7E; }
 }

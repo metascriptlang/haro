@@ -15,10 +15,10 @@ mkdir -p "$data"
 gen=$tools/bin/ghostty-gen
 stream=$tools/bin/ghostty-bench
 
-"$gen" +ascii | head -c 4194304 > "$data/ghosttyAscii.bin"
-"$gen" +styled --seed=42 --style-rate=0.8 | head -c 4194304 > "$data/ghosttyStyled.bin"
+"$gen" +ascii | head -c 4194304 > "$data/asciiFlood.bin"
+"$gen" +styled --seed=42 --style-rate=0.8 | head -c 4194304 > "$data/styledFlood.bin"
 "$gen" +styled --seed=42 --weight-one=0 --weight-two=0.5 --weight-three=1 --grapheme-rate=0.1 |
-	head -c 4194304 > "$data/ghosttyWideMix.bin"
+	head -c 4194304 > "$data/wideMixFlood.bin"
 yes "$(printf 'y\r')" | head -c 1048578 > "$data/scrolling.bin"
 printf x > "$data/tiny.bin"
 
@@ -32,7 +32,7 @@ median() {
 
 base=$(median "$data/tiny.bin" 120 80)
 echo "process floor (tiny input): $base us"
-for name in ghosttyAscii ghosttyStyled ghosttyWideMix; do
+for name in asciiFlood styledFlood wideMixFlood; do
 	us=$(median "$data/$name.bin" 120 80)
 	echo "$name: $us us wall, $((us - base)) us above the floor, 4 MiB"
 done

@@ -7,6 +7,7 @@ const SCHEMES: string[] = ["http://", "https://"];
 const PROGRAM_EXTENSIONS: string[] = [
 	".app", ".command", ".tool", ".terminal", ".workflow", ".scpt", ".pkg", ".mpkg",
 	".exe", ".com", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".msi", ".lnk", ".scr",
+	".hta", ".wsf", ".jse", ".vbe", ".reg", ".dll", ".pif", ".jar", ".url", ".cpl", ".msc",
 ];
 
 export enum LinkRefusal {
@@ -230,6 +231,12 @@ test "a file type that launches as a program is refused by name, case aside, eve
 	removeAll(dir);
 }
 
+
+test "the Windows file types that run on a double click are refused by name" {
+	for (const ext of [".hta", ".wsf", ".jse", ".vbe", ".reg", ".dll", ".pif", ".jar", ".url", ".cpl", ".msc"]) {
+		assert refusedFor(`file:///c:/x${ext}`) == LinkRefusal.RunsAsProgram;
+	}
+}
 
 test "a file link needs a path" {
 	assert refusedFor("file://") == LinkRefusal.BadFileUri;

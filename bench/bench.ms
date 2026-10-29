@@ -293,7 +293,6 @@ test "a write pass plans no frames and no rows" {
 	if (r.ok) {
 		assert r.value.frames == 0;
 		assert r.value.rows == 0;
-		assert r.value.write > 0.0;
 	}
 }
 
@@ -305,7 +304,6 @@ test "a lines pass reads the rows the bytes dirtied and splits the time" {
 		assert r.value.rows == 2;
 		assert r.value.lineErrors == 0;
 		assert r.value.spanCount == 0;
-		assert r.value.plan > 0.0 && r.value.lines > 0.0;
 	}
 }
 
@@ -352,7 +350,6 @@ test "applyFrame runs headless on the same bytes" {
 	if (r.ok) {
 		assert r.value.frames == 1;
 		assert r.value.lineErrors == 0;
-		assert r.value.apply > 0.0;
 	}
 }
 

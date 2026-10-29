@@ -5,7 +5,7 @@ cd "$root" || exit 2
 jobs="${GATE_JOBS:-4}"
 logs="$(mktemp -d)"
 trap 'rm -rf "${logs:?}"' EXIT
-files="$(grep -rlE --include='*.ms' '^[[:space:]]*test "' src | sort)"
+files="$(grep -rlE --include='*.ms' '^[[:space:]]*test "' src bench | sort)"
 printf '%s\n' "$files" | xargs -P "$jobs" -I{} sh -c 'msc test "$1" --tests-in-dir > "$2/$(echo "$1" | tr / _)" 2>&1; echo $? >> "$2/$(echo "$1" | tr / _)"' _ {} "$logs"
 failed=""
 for f in $files; do

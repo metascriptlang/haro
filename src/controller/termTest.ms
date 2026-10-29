@@ -417,3 +417,16 @@ test "a reply refused as backlogged stays queued until a write takes it" {
 	}).ok;
 }
 
+test "a reply the program has not read past its limit is refused as backlogged, not as a broken write" {
+	const state: Pending = { blocked: true, sent: "" };
+	assert onPty(blockable(state), (): float64 => 0, 20, 5, (t: Term): void => {
+		const s = t.session;
+		assert s !== null;
+		if (s === null) { return; }
+		s.vt.writeText("\x1b[5n");
+		const sent = t.sendReplies();
+		assert !sent.ok;
+		if (!sent.ok) { assert sent.error == TermError.InputBacklogged; }
+	}).ok;
+}
+

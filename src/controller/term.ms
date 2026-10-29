@@ -322,12 +322,14 @@ export function unannotate(this t: Term, id: int32): void {
 	t.decor.unannotate(id);
 }
 
+function writeFailure(error: SessionError): TermError {
+	return error == SessionError.PtyBacklogged ? TermError.InputBacklogged : TermError.WriteFailed;
+}
+
 function sendBytes(this s: Session, bytes: Readonly<Span<uint8>>): Result<boolean, TermError> {
 	if (bytes.length == 0) { return Result.ok(false); }
 	const sent = s.send(bytes);
-	if (!sent.ok) {
-		return Result.err(sent.error == SessionError.PtyBacklogged ? TermError.InputBacklogged : TermError.WriteFailed);
-	}
+	if (!sent.ok) { return Result.err(writeFailure(sent.error)); }
 	return Result.ok(true);
 }
 
@@ -424,7 +426,8 @@ export function sendMouse(
 export function sendReplies(this t: Term): Result<void, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(null); }
-	if (!s.sendReplies().ok) { return Result.err(TermError.WriteFailed); }
+	const sent = s.sendReplies();
+	if (!sent.ok) { return Result.err(writeFailure(sent.error)); }
 	return Result.ok(null);
 }
 

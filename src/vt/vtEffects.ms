@@ -46,6 +46,7 @@ export interface Effects {
 	replies: Vec<uint8>;
 	events: VtEvents;
 	heldSinceMs: float64 | null;
+	freed: boolean;
 	holdLimitMs: float64;
 	clipboard: string | null;
 	readFrame: Vec<uint8> | null;
@@ -79,6 +80,7 @@ export function openEffects(
 		replies: [],
 		events: NO_EVENTS,
 		heldSinceMs: null,
+		freed: false,
 		holdLimitMs: HOLD_LIMIT_MS,
 		clipboard: null,
 		readFrame: null,

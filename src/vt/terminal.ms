@@ -333,6 +333,8 @@ export function clean(this vt: Vt): void {
 }
 
 export function free(this vt: Vt): void {
+	if (vt.effects.freed) { return; }
+	vt.effects.freed = true;
 	ghostty_tracked_grid_ref_free(vt.anchor);
 	vt.effects.freeAnchors();
 	closeEffects(vt.terminal);

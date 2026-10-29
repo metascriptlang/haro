@@ -203,3 +203,11 @@ test "a palette of more than 256 colours is refused by its own error" {
 	});
 }
 
+test "freeing a terminal twice releases its handles once" {
+	const created = Vt.create(10, 4);
+	assert created.ok;
+	if (created.ok) {
+		created.value.free();
+		created.value.free();
+	}
+}

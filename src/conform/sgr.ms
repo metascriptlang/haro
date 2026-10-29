@@ -66,7 +66,9 @@ test "SGR 39 and 49 return to the terminal's defaults, 0 clears everything" {
 		assert fg.run.fg == fg.defaultFg;
 		assert bg.run.bg == bg.defaultBg;
 		assert all.run.fg == all.defaultFg && all.run.bg == all.defaultBg;
-		assert !all.run.flags.has(CellFlag.Bold) && !all.run.flags.has(CellFlag.Italic) && !all.run.flags.has(CellFlag.Strikethrough);
+		assert !all.run.flags.has(CellFlag.Bold) &&
+			!all.run.flags.has(CellFlag.Italic) &&
+			!all.run.flags.has(CellFlag.Strikethrough);
 		assert all.run.underline == Underline.None;
 	}
 }
@@ -104,10 +106,18 @@ test "bold, italic and strikethrough set and reset on their own codes" {
 	const noStrike = look("1;3;9;29");
 	assert on !== null && noBold !== null && noItalic !== null && noStrike !== null;
 	if (on !== null && noBold !== null && noItalic !== null && noStrike !== null) {
-		assert on.run.flags.has(CellFlag.Bold) && on.run.flags.has(CellFlag.Italic) && on.run.flags.has(CellFlag.Strikethrough);
-		assert !noBold.run.flags.has(CellFlag.Bold) && noBold.run.flags.has(CellFlag.Italic) && noBold.run.flags.has(CellFlag.Strikethrough);
-		assert noItalic.run.flags.has(CellFlag.Bold) && !noItalic.run.flags.has(CellFlag.Italic) && noItalic.run.flags.has(CellFlag.Strikethrough);
-		assert noStrike.run.flags.has(CellFlag.Bold) && noStrike.run.flags.has(CellFlag.Italic) && !noStrike.run.flags.has(CellFlag.Strikethrough);
+		assert on.run.flags.has(CellFlag.Bold) &&
+			on.run.flags.has(CellFlag.Italic) &&
+			on.run.flags.has(CellFlag.Strikethrough);
+		assert !noBold.run.flags.has(CellFlag.Bold) &&
+			noBold.run.flags.has(CellFlag.Italic) &&
+			noBold.run.flags.has(CellFlag.Strikethrough);
+		assert noItalic.run.flags.has(CellFlag.Bold) &&
+			!noItalic.run.flags.has(CellFlag.Italic) &&
+			noItalic.run.flags.has(CellFlag.Strikethrough);
+		assert noStrike.run.flags.has(CellFlag.Bold) &&
+			noStrike.run.flags.has(CellFlag.Italic) &&
+			!noStrike.run.flags.has(CellFlag.Strikethrough);
 		assert on.style.fontWeight == "bold" && on.style.fontStyle == "italic";
 		assert on.style.textDecorationLine == "line-through";
 		assert noBold.style.fontWeight == "normal";

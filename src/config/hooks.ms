@@ -48,7 +48,8 @@ function onPane(name: string, act: (pane: HookPane) => RaiserValue): RaiserValue
 	const pane = running.pane;
 	if (pane === null) {
 		throw new Error(
-			`config.ms called ${name} outside a hook, and ${name} acts only on the pane a hook runs for`,
+			`config.ms called ${name} outside a hook, ` +
+				`and ${name} acts only on the pane a hook runs for`,
 		);
 	}
 	return act(pane);
@@ -99,7 +100,9 @@ function isControl(unit: int32): boolean {
 
 function noteText(d: RaiserHostValue): Result<string, string> {
 	const v = d.field("text");
-	if (v.root.kind != RaiserValueKind.String) { return Result.err("annotate needs a text string"); }
+	if (v.root.kind != RaiserValueKind.String) {
+		return Result.err("annotate needs a text string");
+	}
 	const text = v.text();
 	for (let i = 0; i < text.length; i++) {
 		if (isControl(text.charCodeAt(i) as int32)) {

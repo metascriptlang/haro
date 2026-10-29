@@ -139,7 +139,10 @@ export function history(this s: Screen): Result<Vec<string>, ScreenError> {
 function runText(r: LineRun): string {
 	const fg = `${r.fg.r},${r.fg.g},${r.fg.b}`;
 	const bg = `${r.bg.r},${r.bg.g},${r.bg.b}`;
-	const look = `${r.flags.has(CellFlag.Bold) ? "B" : ""}${r.flags.has(CellFlag.Italic) ? "I" : ""}${r.flags.has(CellFlag.Strikethrough) ? "S" : ""}`;
+	const bold = r.flags.has(CellFlag.Bold) ? "B" : "";
+	const italic = r.flags.has(CellFlag.Italic) ? "I" : "";
+	const strike = r.flags.has(CellFlag.Strikethrough) ? "S" : "";
+	const look = bold + italic + strike;
 	const lineColor = r.underlineColor;
 	const ul = lineColor === null ? "" : `@${lineColor.r},${lineColor.g},${lineColor.b}`;
 	return `${r.units}:${fg}/${bg}/u${r.underline as int32}${ul}${look}`;

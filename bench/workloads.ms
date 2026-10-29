@@ -303,7 +303,9 @@ export function buildWorkload(name: string): Result<Workload, WorkloadError> {
 	const none: Vec<uint8> = [];
 	return match (name) {
 		"cursor_motion" => Result.ok(standardWorkload(name, none, cursorMotion(cols, rows))),
-		"dense_cells" => Result.ok(standardWorkload(name, bytesOf(ALT_SCREEN), denseCells(cols, rows))),
+		"dense_cells" => Result.ok(
+			standardWorkload(name, bytesOf(ALT_SCREEN), denseCells(cols, rows)),
+		),
 		"light_cells" => Result.ok(standardWorkload(
 			name,
 			bytesOf(ALT_SCREEN),

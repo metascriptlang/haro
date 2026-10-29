@@ -242,7 +242,8 @@ export function parse(json: string): Result<Config, string> {
 				c.fontSize = try readNumber(v, key);
 				if (c.fontSize < MIN_FONT_SIZE || c.fontSize > MAX_FONT_SIZE) {
 					return Result.err(
-						`fontSize ${c.fontSize} must be from ${MIN_FONT_SIZE} to ${MAX_FONT_SIZE} points`,
+						`fontSize ${c.fontSize} must be from ${MIN_FONT_SIZE} to ` +
+							`${MAX_FONT_SIZE} points`,
 					);
 				}
 			},
@@ -369,7 +370,10 @@ test "a keybind runs an action or keeps to one screen when its config says so" {
 }
 
 test "a field msc prints as null is a field the config left out" {
-	const c = parse(`{"fontSize":null,"keybinds":[{"keys":"super+w","text":"x","action":null,"mode":null}]}`);
+	const c = parse(
+		`{"fontSize":null,"keybinds":[` +
+			`{"keys":"super+w","text":"x","action":null,"mode":null}]}`,
+	);
 	assert c.ok;
 	assert c.value.fontSize == DEFAULT_FONT_SIZE;
 	assert c.value.keybinds[0].action == BindAction.SendText;

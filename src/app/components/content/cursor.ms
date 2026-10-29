@@ -8,6 +8,7 @@ import { TileCell } from "../../../../../void/src/void2d/node";
 import { CellInk } from "../../../grid/lines";
 import { Cursor, CursorLook, CursorShape, Rgb } from "../../../vt/vt";
 import { BLINK_MS, blinks, drawn, resets, shapeOf } from "../../../term/cursor";
+import { Cell, outside } from "../../../term/cursorGeometry";
 import { Trail, particleAlpha } from "../../../term/trail";
 import { CURSOR_TEXT } from "../../theme";
 import { CellMetrics } from "../ui/cellText";
@@ -95,13 +96,6 @@ function cursorWidth(this c: CursorModel): float64 {
 	return shape == CursorShape.Block || shape == CursorShape.BlockHollow ? 2 * cellWidth : cellWidth;
 }
 
-interface Cell {
-	left: float32;
-	top: float32;
-	right: float32;
-	bottom: float32;
-}
-
 function litCell(this c: CursorModel): Cell {
 	const at = c.trail.destination;
 	return {
@@ -110,47 +104,6 @@ function litCell(this c: CursorModel): Cell {
 		right: (at.x + c.cursorWidth()) as float32,
 		bottom: (at.y + c.metrics.rowHeight()) as float32,
 	};
-}
-
-function cut(this polygon: Vec2[], nx: float32, ny: float32, limit: float32): Vec2[] {
-	let kept: Vec2[] = [];
-	for (let i = 0; i < polygon.length; i++) {
-		const a = polygon[i];
-		const b = polygon[(i + 1) % polygon.length];
-		const da = nx * a.x + ny * a.y - limit;
-		const db = nx * b.x + ny * b.y - limit;
-		if (da <= 0) { kept.push(a); }
-		if ((da < 0 && db > 0) || (da > 0 && db < 0)) {
-			const t = da / (da - db);
-			kept.push(vec2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t));
-		}
-	}
-	return kept;
-}
-
-function area(this polygon: Vec2[]): float32 {
-	let twice: float32 = 0;
-	for (let i = 0; i < polygon.length; i++) {
-		const a = polygon[i];
-		const b = polygon[(i + 1) % polygon.length];
-		twice += a.x * b.y - b.x * a.y;
-	}
-	return Math.abs(twice / 2) as float32;
-}
-
-function outside(this quad: Vec2[], cell: Cell): Vec2[][] {
-	const across = quad.cut(-1, 0, -cell.left).cut(1, 0, cell.right);
-	const pieces = [
-		quad.cut(1, 0, cell.left),
-		quad.cut(-1, 0, -cell.right),
-		across.cut(0, 1, cell.top),
-		across.cut(0, -1, -cell.bottom),
-	];
-	let shown: Vec2[][] = [];
-	for (const piece of pieces) {
-		if (piece.length >= 3 && piece.area() >= 0.5) { shown.push(piece); }
-	}
-	return shown;
 }
 
 function operations(this c: CursorModel): GraphicsOp[] {

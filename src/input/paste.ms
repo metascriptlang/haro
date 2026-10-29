@@ -138,7 +138,9 @@ function title(warning: Warning): string {
 }
 
 function body(warning: Warning): string {
-	if (warning == Warning.None) { throw new Error("a paste with Warning.None has no dialog body"); }
+	if (warning == Warning.None) {
+		throw new Error("a paste with Warning.None has no dialog body");
+	}
 	return match (warning) {
 		Warning.MultiLine => "You are about to paste text that contains multiple lines. " +
 			"If you paste this text into your shell, it may result in the unexpected execution " +
@@ -146,7 +148,8 @@ function body(warning: Warning): string {
 		Warning.EndMarker => "This text contains the sequence that ends a bracketed paste, " +
 			"so what follows it could run as commands the program never expected to receive. " +
 			"Do you wish to continue?",
-		Warning.Large => "You are about to paste text that is longer than 5 KiB. Do you wish to continue?",
+		Warning.Large => "You are about to paste text that is longer than 5 KiB. " +
+			"Do you wish to continue?",
 		Warning.None => "",
 	};
 }

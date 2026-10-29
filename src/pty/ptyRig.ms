@@ -37,7 +37,9 @@ export function withPty(command: string, body: (p: NativePty) => void): boolean 
 export function bash5OnPath(): string | null {
 	for (const dir of env.get("PATH").split(":")) {
 		const candidate = `${dir}/bash`;
-		if (dir != "" && isFile(candidate) && (bashMajorOf(candidate) ?? 0) >= 5) { return candidate; }
+		if (dir != "" && isFile(candidate) && (bashMajorOf(candidate) ?? 0) >= 5) {
+			return candidate;
+		}
 	}
 	console.log("skipped: no bash 5 on PATH");
 	return null;

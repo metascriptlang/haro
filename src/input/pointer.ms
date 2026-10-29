@@ -338,7 +338,8 @@ test "a selection whose start is pruned from scrollback shows what the terminal 
 		defer vt.free();
 		const bottom = (try vt.scrollOffset() catch 0) + 3;
 		const p = Pointer.open();
-		const sel = Selection.press(Unit.Cell, { start: { row: 0, col: 1 }, end: { row: 0, col: 1 } }, false)
+		const sel = Selection
+			.press(Unit.Cell, { start: { row: 0, col: 1 }, end: { row: 0, col: 1 } }, false)
 			.drag({ start: { row: bottom, col: 2 }, end: { row: bottom, col: 2 } });
 		p.sel = sel;
 		assert vt.selectionSet(sel.marked()).ok;
@@ -366,7 +367,8 @@ test "a selection pruned whole from scrollback is gone" {
 	if (vt !== null) {
 		defer vt.free();
 		const p = Pointer.open();
-		const sel = Selection.press(Unit.Cell, { start: { row: 0, col: 0 }, end: { row: 0, col: 0 } }, false)
+		const sel = Selection
+			.press(Unit.Cell, { start: { row: 0, col: 0 }, end: { row: 0, col: 0 } }, false)
 			.drag({ start: { row: 1, col: 1 }, end: { row: 1, col: 1 } });
 		p.sel = sel;
 		assert vt.selectionSet(sel.marked()).ok;

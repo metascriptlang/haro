@@ -1,5 +1,18 @@
 import { PtyError } from "./transport";
-import { NativePty, busy, close, exitCode, exitSignal, open, read, resize, spawn, toPty, wait, write } from "./pty";
+import {
+	NativePty,
+	busy,
+	close,
+	exitCode,
+	exitSignal,
+	open,
+	read,
+	resize,
+	spawn,
+	toPty,
+	wait,
+	write,
+} from "./pty";
 import { ensureDir, normalize, remove, removeAll, writeFile } from "std/fs";
 import { tmpDir } from "std/os";
 import { bash5OnPath, drainText, withPty } from "./ptyRig";
@@ -283,7 +296,8 @@ when (!windows) {
 		}
 		assert env.set("TERM_PROGRAM", "OtherTerminal");
 		assert env.set("TERM_SESSION_ID", "w0t0");
-		assert withPty("sh -c 'echo \"[$TERM_PROGRAM|$TERM_SESSION_ID|$TERM]\"'", (p: NativePty): void => {
+		const printEnv = "sh -c 'echo \"[$TERM_PROGRAM|$TERM_SESSION_ID|$TERM]\"'";
+		assert withPty(printEnv, (p: NativePty): void => {
 			const out = p.toPty().drainText(4096);
 			assert out.ok, out.error;
 			if (out.ok) { assert out.value.includes("[Haro||xterm-256color]"); }
@@ -347,7 +361,8 @@ when (!windows) {
 	}
 
 	test "closing returns at once while a job in its own session holds the terminal and reads nothing" {
-		const job = "stty raw -echo; perl -e 'use POSIX; exit 0 if fork(); POSIX::setsid(); sleep 6'";
+		const job = "stty raw -echo; " +
+			"perl -e 'use POSIX; exit 0 if fork(); POSIX::setsid(); sleep 6'";
 		const opened = NativePty.open(job, 80, 24);
 		assert opened.ok;
 		if (opened.ok) {
@@ -369,7 +384,8 @@ when (!windows) {
 	}
 
 	test "closing returns while the child writes to the terminal on its way out after hangup" {
-		const opened = NativePty.open("trap 'head -c 200000 /dev/zero; exit' HUP; while :; do sleep 0.1; done", 80, 24);
+		const trap = "trap 'head -c 200000 /dev/zero; exit' HUP; while :; do sleep 0.1; done";
+		const opened = NativePty.open(trap, 80, 24);
 		assert opened.ok;
 		if (opened.ok) {
 			const _quiet = opened.value.quietWaitMs(300);
@@ -434,7 +450,8 @@ when (!windows) {
 		const dir = `${normalize(tmpDir())}/haroStartDir${getpid()}`;
 		assert ensureDir(dir).ok;
 		assert writeFile(`${dir}/only.md`, "").ok;
-		const spawned = NativePty.spawn("cd . && echo got *.md ${HARO_UNSET_VAR:-fallback} end", 80, 24, dir);
+		const command = "cd . && echo got *.md ${HARO_UNSET_VAR:-fallback} end";
+		const spawned = NativePty.spawn(command, 80, 24, dir);
 		assert spawned.ok;
 		if (spawned.ok) {
 			const out = spawned.value.drainText(4096);

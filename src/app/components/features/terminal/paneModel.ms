@@ -465,8 +465,8 @@ function fitLayout(this m: PaneModel): void {
 	const cell = spriteCellFor(font.value, (m.metrics.fontSize() * ratio) as float32);
 	const cellPx = cell.width;
 	const rowPx = cell.height;
-	const widthPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutWidth) as int32;
-	const heightPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutHeight) as int32;
+	const widthPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutWidth as float32) as int32;
+	const heightPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutHeight as float32) as int32;
 	const size = gridSize(widthPx, heightPx, cellPx, rowPx);
 	if (!size.ok) {
 		m.failed(Where.Fit, `cell ${cellPx}x${rowPx} px is not a grid size`);
@@ -480,7 +480,7 @@ function fitLayout(this m: PaneModel): void {
 	flush();
 	m.notify(m.notice.text);
 	m.dialog.invalidate();
-	const padPx = PixelRatio.getPixelSizeForLayoutSize(m.padding()) as int32;
+	const padPx = PixelRatio.getPixelSizeForLayoutSize(m.padding() as float32) as int32;
 	m.mouseGeometry = {
 		cellWidth: cellPx,
 		cellHeight: rowPx,

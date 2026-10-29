@@ -11,6 +11,7 @@
 #include "wakeHook.h"
 
 #define PTY_MAX 16
+#define PTY_GENERATIONS (1 << 20)
 
 typedef struct {
 	int used;
@@ -38,6 +39,7 @@ typedef struct {
 } Pty;
 
 static Pty ptys[PTY_MAX];
+static unsigned generations[PTY_MAX];
 static SRWLOCK table = SRWLOCK_INIT;
 
 typedef HRESULT (WINAPI *CreateFn)(COORD, HANDLE, HANDLE, DWORD, HPCON*);
@@ -168,29 +170,38 @@ static DWORD WINAPI waitLoop(LPVOID arg) {
 }
 
 static Pty* slot(int id) {
-	if (id < 0 || id >= PTY_MAX) return NULL;
+	if (id < 0) return NULL;
+	int index = id % PTY_MAX;
 	AcquireSRWLockExclusive(&table);
-	int used = ptys[id].used;
+	int live = ptys[index].used && generations[index] == (unsigned)(id / PTY_MAX);
 	ReleaseSRWLockExclusive(&table);
-	return used ? &ptys[id] : NULL;
+	return live ? &ptys[index] : NULL;
 }
 
 static int claimSlot(void) {
-	int id = -1;
+	int index = -1;
 	AcquireSRWLockExclusive(&table);
-	for (int i = 0; id < 0 && i < PTY_MAX; i++) {
+	for (int i = 0; index < 0 && i < PTY_MAX; i++) {
 		if (!ptys[i].used) {
 			ptys[i].used = 1;
-			id = i;
+			index = i;
 		}
 	}
 	ReleaseSRWLockExclusive(&table);
-	return id;
+	return index;
 }
 
-static void releaseSlot(int id) {
+static int handleOf(int index) {
 	AcquireSRWLockExclusive(&table);
-	memset(&ptys[id], 0, sizeof ptys[id]);
+	int handle = (int)generations[index] * PTY_MAX + index;
+	ReleaseSRWLockExclusive(&table);
+	return handle;
+}
+
+static void releaseSlot(int index) {
+	AcquireSRWLockExclusive(&table);
+	memset(&ptys[index], 0, sizeof ptys[index]);
+	generations[index] = (generations[index] + 1) % PTY_GENERATIONS;
 	ReleaseSRWLockExclusive(&table);
 }
 
@@ -216,16 +227,18 @@ static wchar_t* expanded(wchar_t* text) {
 	return out;
 }
 
+static void teardown(Pty* p);
+
 static int openIn(
-	int id, const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
+	Pty* p, const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
 	int cols, int rows, int widthPx, int heightPx
 ) {
 	HANDLE inRead = NULL, inWrite = NULL, outRead = NULL, outWrite = NULL;
-	if (!CreatePipe(&inRead, &inWrite, NULL, 0)) return -1;
+	if (!CreatePipe(&inRead, &inWrite, NULL, 0)) return PTY_OPEN_RESOURCES;
 	if (!CreatePipe(&outRead, &outWrite, NULL, 0)) {
 		CloseHandle(inRead);
 		CloseHandle(inWrite);
-		return -1;
+		return PTY_OPEN_RESOURCES;
 	}
 
 	COORD size = { (SHORT)cols, (SHORT)rows };
@@ -236,7 +249,7 @@ static int openIn(
 		CloseHandle(inWrite);
 		CloseHandle(outRead);
 		CloseHandle(outWrite);
-		return -1;
+		return PTY_OPEN_RESOURCES;
 	}
 	CloseHandle(inRead);
 	CloseHandle(outWrite);
@@ -270,11 +283,10 @@ static int openIn(
 		api.close(console);
 		CloseHandle(inWrite);
 		CloseHandle(outRead);
-		return -1;
+		return PTY_OPEN_EXEC_FAILED;
 	}
 	CloseHandle(pi.hThread);
 
-	Pty* p = &ptys[id];
 	p->console = console;
 	p->input = inWrite;
 	p->output = outRead;
@@ -288,21 +300,24 @@ static int openIn(
 	if (p->reader) p->waiter = CreateThread(NULL, 0, waitLoop, p, 0, NULL);
 	if (p->waiter) p->writer = CreateThread(NULL, 0, writeLoop, p, 0, NULL);
 	if (!p->writer) {
-		ptyClose(id);
-		return -1;
+		teardown(p);
+		return PTY_OPEN_THREAD_FAILED;
 	}
-	return id;
+	return 0;
 }
 
 int ptyOpen(
 	const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
 	int cols, int rows, int widthPx, int heightPx
 ) {
-	int id = claimSlot();
-	if (id < 0) return -1;
-	int opened = openIn(id, commandLine, cwd, envBlock, envLen, cols, rows, widthPx, heightPx);
-	if (opened < 0) releaseSlot(id);
-	return opened;
+	int index = claimSlot();
+	if (index < 0) return PTY_OPEN_TABLE_FULL;
+	int failure = openIn(&ptys[index], commandLine, cwd, envBlock, envLen, cols, rows, widthPx, heightPx);
+	if (failure != 0) {
+		releaseSlot(index);
+		return failure;
+	}
+	return handleOf(index);
 }
 
 int64_t ptyRead(int id, uint8_t* buf, int64_t cap) {
@@ -380,9 +395,7 @@ int ptyExitCode(int id) {
 	return code;
 }
 
-void ptyClose(int id) {
-	Pty* p = slot(id);
-	if (!p) return;
+static void teardown(Pty* p) {
 	EnterCriticalSection(&p->lock);
 	p->stopping = 1;
 	WakeAllConditionVariable(&p->space);
@@ -406,5 +419,11 @@ void ptyClose(int id) {
 	DeleteCriticalSection(&p->lock);
 	free(p->in.data);
 	free(p->out.data);
-	releaseSlot(id);
+}
+
+void ptyClose(int id) {
+	Pty* p = slot(id);
+	if (!p) return;
+	teardown(p);
+	releaseSlot((int)(p - ptys));
 }

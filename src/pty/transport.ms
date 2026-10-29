@@ -5,6 +5,12 @@ export enum PtyError {
 	ResizeFailed,
 	WaitFailed,
 	Backlogged,
+	OpenTableFull,
+	OpenBlankCommand,
+	OpenBadEnv,
+	OpenForkFailed,
+	OpenExecFailed,
+	OpenThreadFailed,
 }
 
 export interface Pty {

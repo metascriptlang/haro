@@ -23,6 +23,7 @@
 #include "wakeHook.h"
 
 #define PTY_MAX 16
+#define PTY_GENERATIONS (1 << 20)
 #define CLOSE_GRACE_MS 1000
 #define EXIT_QUIET_MS 50
 #define EXIT_DRAIN_MS 1000
@@ -56,6 +57,7 @@ typedef struct {
 } Pty;
 
 static Pty ptys[PTY_MAX];
+static unsigned generations[PTY_MAX];
 static pthread_mutex_t table = PTHREAD_MUTEX_INITIALIZER;
 
 void ptySetWake(void (*wake)(void)) {
@@ -227,29 +229,38 @@ static struct timespec deadlineAfter(int ms) {
 }
 
 static Pty* slot(int id) {
-	if (id < 0 || id >= PTY_MAX) return NULL;
+	if (id < 0) return NULL;
+	int index = id % PTY_MAX;
 	pthread_mutex_lock(&table);
-	int used = ptys[id].used;
+	int live = ptys[index].used && generations[index] == (unsigned)(id / PTY_MAX);
 	pthread_mutex_unlock(&table);
-	return used ? &ptys[id] : NULL;
+	return live ? &ptys[index] : NULL;
 }
 
 static int claimSlot(void) {
-	int id = -1;
+	int index = -1;
 	pthread_mutex_lock(&table);
-	for (int i = 0; id < 0 && i < PTY_MAX; i++) {
+	for (int i = 0; index < 0 && i < PTY_MAX; i++) {
 		if (!ptys[i].used) {
 			ptys[i].used = 1;
-			id = i;
+			index = i;
 		}
 	}
 	pthread_mutex_unlock(&table);
-	return id;
+	return index;
 }
 
-static void releaseSlot(int id) {
+static int handleOf(int index) {
 	pthread_mutex_lock(&table);
-	memset(&ptys[id], 0, sizeof ptys[id]);
+	int handle = (int)generations[index] * PTY_MAX + index;
+	pthread_mutex_unlock(&table);
+	return handle;
+}
+
+static void releaseSlot(int index) {
+	pthread_mutex_lock(&table);
+	memset(&ptys[index], 0, sizeof ptys[index]);
+	generations[index] = (generations[index] + 1) % PTY_GENERATIONS;
 	pthread_mutex_unlock(&table);
 }
 
@@ -289,7 +300,6 @@ static int replaced(const char* entry, char* const* given, size_t givenCount, in
 
 static char** entriesOf(const uint8_t* block, int64_t len, size_t* count) {
 	*count = 0;
-	if (len > 0 && block[len - 1] != '\0') return NULL;
 	for (int64_t i = 0; i < len; i++) {
 		if (block[i] == '\0') (*count)++;
 	}
@@ -356,11 +366,14 @@ static struct winsize winsizeOf(int cols, int rows, int widthPx, int heightPx) {
 	};
 }
 
+static void teardown(Pty* p);
+
 static int openIn(
-	int id, const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
+	Pty* p, const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
 	int cols, int rows, int widthPx, int heightPx
 ) {
-	if (commandLine[strspn(commandLine, " \t\n")] == '\0') return -1;
+	if (commandLine[strspn(commandLine, " \t\n")] == '\0') return PTY_OPEN_BLANK_COMMAND;
+	if (envLen > 0 && envBlock[envLen - 1] != '\0') return PTY_OPEN_BAD_ENV;
 	char* argv[] = { "/bin/sh", "-c", (char*)commandLine, NULL };
 	char* pwd = NULL;
 	size_t givenCount = 0;
@@ -371,7 +384,7 @@ static int openIn(
 	if (env == NULL || pipe(failed) != 0) {
 		free(env);
 		free(pwd);
-		return -1;
+		return PTY_OPEN_RESOURCES;
 	}
 	closeOnExec(failed[0]);
 	closeOnExec(failed[1]);
@@ -392,7 +405,7 @@ static int openIn(
 	close(failed[1]);
 	if (pid < 0) {
 		close(failed[0]);
-		return -1;
+		return PTY_OPEN_FORK_FAILED;
 	}
 
 	int err = 0;
@@ -410,12 +423,11 @@ static int openIn(
 		if (got <= 0) kill(pid, SIGKILL);
 		waitpid(pid, NULL, 0);
 		close(master);
-		return -1;
+		return got > 0 ? PTY_OPEN_EXEC_FAILED : PTY_OPEN_RESOURCES;
 	}
 	closeOnExec(stop[0]);
 	closeOnExec(stop[1]);
 
-	Pty* p = &ptys[id];
 	p->pid = pid;
 	p->master = master;
 	p->stop[0] = stop[0];
@@ -430,23 +442,26 @@ static int openIn(
 	while (p->threads < 3) {
 		pthread_t* thread = p->threads == 0 ? &p->waiter : p->threads == 1 ? &p->reader : &p->writer;
 		if (pthread_create(thread, NULL, loops[p->threads], p) != 0) {
-			ptyClose(id);
-			return -1;
+			teardown(p);
+			return PTY_OPEN_THREAD_FAILED;
 		}
 		p->threads++;
 	}
-	return id;
+	return 0;
 }
 
 int ptyOpen(
 	const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
 	int cols, int rows, int widthPx, int heightPx
 ) {
-	int id = claimSlot();
-	if (id < 0) return -1;
-	int opened = openIn(id, commandLine, cwd, envBlock, envLen, cols, rows, widthPx, heightPx);
-	if (opened < 0) releaseSlot(id);
-	return opened;
+	int index = claimSlot();
+	if (index < 0) return PTY_OPEN_TABLE_FULL;
+	int failure = openIn(&ptys[index], commandLine, cwd, envBlock, envLen, cols, rows, widthPx, heightPx);
+	if (failure != 0) {
+		releaseSlot(index);
+		return failure;
+	}
+	return handleOf(index);
 }
 
 int64_t ptyRead(int id, uint8_t* buf, int64_t cap) {
@@ -507,13 +522,16 @@ int ptyResize(int id, int cols, int rows, int widthPx, int heightPx) {
 	return ioctl(p->master, TIOCSWINSZ, &size) == 0 ? 0 : -1;
 }
 
-int ptyExited(int id) {
-	Pty* p = slot(id);
-	if (!p) return 0;
+static int hasExited(Pty* p) {
 	pthread_mutex_lock(&p->lock);
 	int exited = p->exited;
 	pthread_mutex_unlock(&p->lock);
 	return exited;
+}
+
+int ptyExited(int id) {
+	Pty* p = slot(id);
+	return p ? hasExited(p) : 0;
 }
 
 int ptyMaster(int id) {
@@ -544,9 +562,7 @@ int ptyExitCode(int id) {
 	return code;
 }
 
-void ptyClose(int id) {
-	Pty* p = slot(id);
-	if (!p) return;
+static void teardown(Pty* p) {
 	pthread_mutex_lock(&p->lock);
 	p->stopping = 1;
 	pthread_cond_broadcast(&p->space);
@@ -560,7 +576,7 @@ void ptyClose(int id) {
 		while (!p->exited && r == 0) r = pthread_cond_timedwait(&p->changed, &p->lock, &deadline);
 		pthread_mutex_unlock(&p->lock);
 	}
-	if (!ptyExited(id)) kill(-p->pid, SIGKILL);
+	if (!hasExited(p)) kill(-p->pid, SIGKILL);
 	if (p->threads > 0) pthread_join(p->waiter, NULL);
 	waitpid(p->pid, NULL, 0);
 	if (p->threads > 2) pthread_join(p->writer, NULL);
@@ -576,5 +592,11 @@ void ptyClose(int id) {
 	pthread_mutex_destroy(&p->lock);
 	free(p->in.data);
 	free(p->out.data);
-	releaseSlot(id);
+}
+
+void ptyClose(int id) {
+	Pty* p = slot(id);
+	if (!p) return;
+	teardown(p);
+	releaseSlot((int)(p - ptys));
 }

@@ -71,6 +71,7 @@ test "a resize of a live console succeeds" {
 
 test "the table holds sixteen ptys with distinct ids and refuses a seventeenth" {
 	let held: Vec<NativePty> = [];
+	defer { for (const p of held) { p.close(); } }
 	let ids = new Set<int32>();
 	for (let i = 0; i < 16; i++) {
 		const opened = NativePty.open(QUIET_FOR_3S, 80, 24);
@@ -81,8 +82,9 @@ test "the table holds sixteen ptys with distinct ids and refuses a seventeenth" 
 		}
 	}
 	assert ids.size == 16;
-	assert !NativePty.open(QUIET_FOR_3S, 80, 24).ok;
-	for (const p of held) { p.close(); }
+	const seventeenth = NativePty.open(QUIET_FOR_3S, 80, 24);
+	assert !seventeenth.ok;
+	if (!seventeenth.ok) { assert seventeenth.error == PtyError.OpenTableFull; }
 }
 
 when (windows) {
@@ -99,8 +101,33 @@ when (windows) {
 	}
 }
 
-test "an empty command is an error" {
-	assert !NativePty.open("  ", 80, 24).ok;
+test "an empty command is refused as blank" {
+	const opened = NativePty.open("  ", 80, 24);
+	assert !opened.ok;
+	if (!opened.ok) { assert opened.error == PtyError.OpenBlankCommand; }
+}
+
+test "a closed pty's id refuses read, write and close and never reaches the pty that took its slot" {
+	const first = NativePty.open(QUIET_FOR_3S, 80, 24);
+	assert first.ok;
+	if (first.ok) {
+		const stale = first.value;
+		stale.close();
+		const second = NativePty.open(QUIET_FOR_3S, 80, 24);
+		assert second.ok;
+		if (second.ok) {
+			const live = second.value;
+			let buf: Vec<uint8> = new Array(16);
+			const bytes: Vec<uint8> = [0x78];
+			assert !stale.read(buf).ok;
+			assert !stale.write(bytes).ok;
+			assert !stale.wait(0).ok;
+			stale.close();
+			assert live.exitCode() === null;
+			assert live.write(bytes).ok;
+			live.close();
+		}
+	}
 }
 
 test "a native pty starts its command in the directory it is given" {

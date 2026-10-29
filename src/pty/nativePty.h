@@ -3,6 +3,14 @@
 
 #include <stdint.h>
 
+#define PTY_OPEN_TABLE_FULL (-1)
+#define PTY_OPEN_BLANK_COMMAND (-2)
+#define PTY_OPEN_BAD_ENV (-3)
+#define PTY_OPEN_RESOURCES (-4)
+#define PTY_OPEN_FORK_FAILED (-5)
+#define PTY_OPEN_EXEC_FAILED (-6)
+#define PTY_OPEN_THREAD_FAILED (-7)
+
 void ptySetWake(void (*wake)(void));
 int ptyOpen(
 	const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,

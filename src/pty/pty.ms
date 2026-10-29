@@ -91,8 +91,27 @@ export function open(
 		cols * cellWidth,
 		rows * cellHeight,
 	);
-	if (id < 0) { return Result.err(PtyError.OpenFailed); }
+	if (id < 0) { return Result.err(openError(id)); }
 	return Result.ok({ id: id });
+}
+
+const PTY_OPEN_TABLE_FULL: int32 = -1;
+const PTY_OPEN_BLANK_COMMAND: int32 = -2;
+const PTY_OPEN_BAD_ENV: int32 = -3;
+const PTY_OPEN_FORK_FAILED: int32 = -5;
+const PTY_OPEN_EXEC_FAILED: int32 = -6;
+const PTY_OPEN_THREAD_FAILED: int32 = -7;
+
+function openError(code: int32): PtyError {
+	return match (code) {
+		PTY_OPEN_TABLE_FULL => PtyError.OpenTableFull,
+		PTY_OPEN_BLANK_COMMAND => PtyError.OpenBlankCommand,
+		PTY_OPEN_BAD_ENV => PtyError.OpenBadEnv,
+		PTY_OPEN_FORK_FAILED => PtyError.OpenForkFailed,
+		PTY_OPEN_EXEC_FAILED => PtyError.OpenExecFailed,
+		PTY_OPEN_THREAD_FAILED => PtyError.OpenThreadFailed,
+		_ => PtyError.OpenFailed,
+	};
 }
 
 const PTY_OUT_OF_MEMORY: int64 = -2;

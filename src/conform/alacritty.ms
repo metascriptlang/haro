@@ -163,7 +163,7 @@ function conformsFramed(
 	name: string,
 	smallChunk: int32,
 	compare: Compare,
-	skipRunsRow: int32 | null = null,
+	skipRunsRow: int32 | null,
 ): string {
 	let failures = "";
 	for (const chunk of [0, 61, smallChunk]) {
@@ -176,158 +176,100 @@ function conformsFramed(
 	return failures;
 }
 
-test "alacritty alt_reset: whole, in 61-byte and in 7-byte frames" {
-	assert conformsFramed("alt_reset", 7, Compare.RunsOwnPalette) == "";
+struct Case {
+	name: string;
+	chunk: int32;
+	compare: Compare;
+	skipRunsRow: int32 | null;
 }
 
-test "alacritty clear_underline: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("clear_underline", 1, Compare.RunsOwnPalette) == "";
+const SGR_21_AFTER_CURLY_ROW: int32 = 7;
+
+const CASES: Case[] = [
+	{ name: "alt_reset", chunk: 7, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "clear_underline", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "colored_reset", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "colored_underline", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "csi_rep", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "delete_chars_reset", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "delete_lines", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "erase_chars_reset", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "fish_cc", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "grid_reset", chunk: 1, compare: Compare.RunsDefaultPalette, skipRunsRow: null },
+	{ name: "history", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "hyperlinks", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{
+		name: "indexed_256_colors",
+		chunk: 1,
+		compare: Compare.RunsDefaultPalette,
+		skipRunsRow: null,
+	},
+	{ name: "insert_blank_reset", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "issue_855", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "ll", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{
+		name: "newline_with_cursor_beyond_scroll_region",
+		chunk: 1,
+		compare: Compare.RunsOwnPalette,
+		skipRunsRow: null,
+	},
+	{ name: "origin_goto", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "region_scroll_down", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "row_reset", chunk: 7, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{
+		name: "scroll_in_region_up_preserves_history",
+		chunk: 1,
+		compare: Compare.RunsOwnPalette,
+		skipRunsRow: null,
+	},
+	{ name: "scroll_up_reset", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "sgr", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "tab_rendering", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "tmux_git_log", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "tmux_htop", chunk: 7, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{
+		name: "underline",
+		chunk: 1,
+		compare: Compare.RunsOwnPalette,
+		skipRunsRow: SGR_21_AFTER_CURLY_ROW,
+	},
+	{
+		name: "vim_24bitcolors_bce",
+		chunk: 509,
+		compare: Compare.RunsOwnPalette,
+		skipRunsRow: null,
+	},
+	{
+		name: "vim_large_window_scroll",
+		chunk: 509,
+		compare: Compare.RunsOwnPalette,
+		skipRunsRow: null,
+	},
+	{ name: "vim_simple_edit", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "vttest_origin_mode_1", chunk: 7, compare: Compare.Text, skipRunsRow: null },
+	{ name: "vttest_origin_mode_2", chunk: 1, compare: Compare.Text, skipRunsRow: null },
+	{ name: "vttest_scroll", chunk: 1, compare: Compare.Text, skipRunsRow: null },
+	{ name: "vttest_tab_clear_set", chunk: 1, compare: Compare.Text, skipRunsRow: null },
+	{ name: "wrapline_alt_toggle", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "zerowidth", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+	{ name: "zsh_tab_completion", chunk: 1, compare: Compare.RunsOwnPalette, skipRunsRow: null },
+];
+
+test "every alacritty fixture conforms: whole, in 61-byte and in its own small frames" {
+	for (const c of CASES) {
+		const failures = conformsFramed(c.name, c.chunk, c.compare, c.skipRunsRow);
+		assert failures == "", `${c.name}: ${failures}`;
+	}
 }
 
-test "alacritty colored_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("colored_reset", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty colored_underline: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("colored_underline", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty csi_rep: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("csi_rep", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty delete_chars_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("delete_chars_reset", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty delete_lines: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("delete_lines", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty erase_chars_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("erase_chars_reset", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty fish_cc: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("fish_cc", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty grid_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("grid_reset", 1, Compare.RunsDefaultPalette) == "";
-}
-
-test "alacritty history: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("history", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty hyperlinks: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("hyperlinks", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty indexed_256_colors: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("indexed_256_colors", 1, Compare.RunsDefaultPalette) == "";
-}
-
-test "alacritty insert_blank_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("insert_blank_reset", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty issue_855: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("issue_855", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty ll: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("ll", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty newline_with_cursor_beyond_scroll_region: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed(
-		"newline_with_cursor_beyond_scroll_region",
-		1,
-		Compare.RunsOwnPalette,
-	) == "";
-}
-
-test "alacritty origin_goto: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("origin_goto", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty region_scroll_down: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("region_scroll_down", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty row_reset: whole, in 61-byte and in 7-byte frames" {
-	assert conformsFramed("row_reset", 7, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty scroll_in_region_up_preserves_history: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed(
-		"scroll_in_region_up_preserves_history",
-		1,
-		Compare.RunsOwnPalette,
-	) == "";
-}
-
-test "alacritty scroll_up_reset: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("scroll_up_reset", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty sgr: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("sgr", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty tab_rendering: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("tab_rendering", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty tmux_git_log: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("tmux_git_log", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty tmux_htop: whole, in 61-byte and in 7-byte frames" {
-	assert conformsFramed("tmux_htop", 7, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty underline: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("underline", 1, Compare.RunsOwnPalette, 7) == "";
-}
-
-test "alacritty vim_24bitcolors_bce: whole, in 61-byte and in 509-byte frames" {
-	assert conformsFramed("vim_24bitcolors_bce", 509, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty vim_large_window_scroll: whole, in 61-byte and in 509-byte frames" {
-	assert conformsFramed("vim_large_window_scroll", 509, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty vim_simple_edit: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("vim_simple_edit", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty vttest_origin_mode_1: whole, in 61-byte and in 7-byte frames" {
-	assert conformsFramed("vttest_origin_mode_1", 7, Compare.Text) == "";
-}
-
-test "alacritty vttest_origin_mode_2: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("vttest_origin_mode_2", 1, Compare.Text) == "";
-}
-
-test "alacritty vttest_scroll: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("vttest_scroll", 1, Compare.Text) == "";
-}
-
-test "alacritty vttest_tab_clear_set: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("vttest_tab_clear_set", 1, Compare.Text) == "";
-}
-
-test "alacritty wrapline_alt_toggle: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("wrapline_alt_toggle", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty zerowidth: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("zerowidth", 1, Compare.RunsOwnPalette) == "";
-}
-
-test "alacritty zsh_tab_completion: whole, in 61-byte and in 1-byte frames" {
-	assert conformsFramed("zsh_tab_completion", 1, Compare.RunsOwnPalette) == "";
+test "underline row 7 ends double where the fixture records curly: SGR 21 after 4:3 replaces the style" {
+	const fixture = loadFixture("underline", Compare.RunsOwnPalette);
+	assert fixture.ok, "underline fixture";
+	const opened = Screen.open(fixture.value.cols, fixture.value.rows);
+	assert opened.ok, "open";
+	const s = opened.value;
+	defer s.close();
+	assert s.feed(palettePrelude(true)).ok, "prelude";
+	assert s.feedChunks(fixture.value.input, 0).ok, "feed";
+	assert s.runs(SGR_21_AFTER_CURLY_ROW)[0].underline == Underline.Double;
 }

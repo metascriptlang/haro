@@ -26,14 +26,14 @@ function zero(this typeof Tally): Tally {
 
 export interface Stats {
 	tally: Tally;
-	keyAt: float64;
-	wakeAt: float64;
+	keyAt: float64 | null;
+	wakeAt: float64 | null;
 	marks: Vec<Mark>;
 	recording: boolean;
 }
 
 export function empty(this typeof Stats): Stats {
-	return { tally: Tally.zero(), keyAt: -1, wakeAt: -1, marks: [], recording: false };
+	return { tally: Tally.zero(), keyAt: null, wakeAt: null, marks: [], recording: false };
 }
 
 function marked(this s: Stats, name: string): boolean {
@@ -59,7 +59,7 @@ export function launchLine(this s: Stats): string {
 }
 
 export function noteKey(this s: Stats, at: float64): void {
-	if (s.recording && s.keyAt < 0) { s.keyAt = at; }
+	if (s.recording && s.keyAt === null) { s.keyAt = at; }
 }
 
 export function noteWake(this s: Stats, at: float64): void {
@@ -78,11 +78,13 @@ export function noteApplied(
 	s.tally.scrolled += scrolled;
 	s.tally.chars += chars;
 	if (chars > 0 && !s.launched()) { s.mark("painted", Date.now()); }
-	if (rows > 0 && s.keyAt >= 0) {
-		s.tally.echoes.push(at - s.keyAt);
-		if (s.wakeAt >= s.keyAt) { s.tally.settles.push(at - s.wakeAt); }
-		s.keyAt = -1;
-		s.wakeAt = -1;
+	const keyAt = s.keyAt;
+	if (rows > 0 && keyAt !== null) {
+		s.tally.echoes.push(at - keyAt);
+		const wakeAt = s.wakeAt;
+		if (wakeAt !== null && wakeAt >= keyAt) { s.tally.settles.push(at - wakeAt); }
+		s.keyAt = null;
+		s.wakeAt = null;
 	}
 }
 

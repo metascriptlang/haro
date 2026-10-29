@@ -525,7 +525,7 @@ static void teardown(Pty* p) {
 		while (!p->exited && r == 0) r = pthread_cond_timedwait(&p->changed, &p->lock, &deadline);
 		pthread_mutex_unlock(&p->lock);
 	}
-	if (!hasExited(p)) kill(-p->pid, SIGKILL);
+	kill(-p->pid, SIGKILL);
 	if (p->threads > 0) pthread_join(p->waiter, NULL);
 	waitpid(p->pid, NULL, 0);
 	if (p->threads > 2) pthread_join(p->writer, NULL);

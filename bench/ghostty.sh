@@ -1,5 +1,10 @@
 #!/bin/sh
+# usage: bench/ghostty.sh   (Linux only: it times runs with GNU date +%s%N)
 set -e
+if [ "$(date +%N)" = N ]; then
+	echo "bench/ghostty.sh needs GNU date (+%N); run it on Linux" >&2
+	exit 2
+fi
 root=$(cd "$(dirname "$0")/.." && pwd)
 ghostty=${GHOSTTY:-$root/vendor/ghostty}
 data=$root/bench/out/ghosttyData

@@ -75,6 +75,7 @@ export enum TermError {
 	VtFailed,
 	ClipboardUnasked,
 	SettingsRefused,
+	FrameRowOutOfRange,
 }
 
 export type OpenPty = (
@@ -210,6 +211,7 @@ function frameFailure(error: FrameError): TermError {
 		FrameError.CursorFailed => TermError.FrameCursorFailed,
 		FrameError.LineFailed => TermError.FrameLineFailed,
 		FrameError.TintFailed => TermError.FrameTintFailed,
+		FrameError.RowOutOfRange => TermError.FrameRowOutOfRange,
 	};
 }
 

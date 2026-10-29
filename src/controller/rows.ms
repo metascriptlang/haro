@@ -18,6 +18,7 @@ export enum FrameError {
 	CursorFailed,
 	LineFailed,
 	TintFailed,
+	RowOutOfRange,
 }
 
 function inkOn(this ink: CellInk | null, cell: int32): CellInk | null {
@@ -165,6 +166,7 @@ function rowOf(
 	background: Rgb,
 	decor: Decor,
 ): Result<RowUpdate, FrameError> {
+	if (row.y < 0 || row.y >= (shown.length as int32)) { return Result.err(FrameError.RowOutOfRange); }
 	const cell = cursor.cellOnRow(row.y);
 	const tint = decor.tintAt(row.y);
 	const note = decor.noteAt(row.y);

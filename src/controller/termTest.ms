@@ -20,7 +20,7 @@ import {
 	unannotate,
 	undecorate,
 } from "./term";
-import { RowUpdate } from "./rows";
+import { FrameError, RowUpdate, fitShown, planRows } from "./rows";
 import {
 	Sink,
 	boardOf,
@@ -92,6 +92,19 @@ test "a frame carries what the program asked of the host: a clipboard write, bel
 			assert next.value.title === null;
 			assert next.value.notification === null;
 			assert next.value.shell.length == 0;
+		}
+	}).ok;
+}
+
+test "planning rows for a grid shorter than the screen names the row that does not fit" {
+	assert onFresh("abc", (t: Term, sink: Sink): void => {
+		const s = t.session;
+		assert s !== null;
+		if (s !== null) {
+			t.shown.pop();
+			const planned = t.shown.planRows(s.vt, null, t.decor);
+			assert !planned.ok;
+			if (!planned.ok) { assert planned.error == FrameError.RowOutOfRange; }
 		}
 	}).ok;
 }

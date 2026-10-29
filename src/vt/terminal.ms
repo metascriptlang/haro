@@ -188,6 +188,18 @@ export function takeReplies(this vt: Vt): Vec<uint8> {
 	return taken;
 }
 
+export function pendingReplies(this vt: Vt): Vec<uint8> {
+	return vt.effects.replies;
+}
+
+export function dropReplies(this vt: Vt): void {
+	vt.effects.replies = [];
+}
+
+export function titleChanged(this vt: Vt): boolean {
+	return vt.effects.events.titleChanged;
+}
+
 export function takeEvents(this vt: Vt): VtEvents {
 	const e = vt.effects;
 	const events = e.events;

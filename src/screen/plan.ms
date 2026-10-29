@@ -84,10 +84,13 @@ export function plan(this vt: Vt): Result<Plan, VtError> {
 	if (kind != PlanKind.Idle) {
 		try vt.anchorTop();
 	}
-	if (kind == PlanKind.Rows) {
-		for (const row of fresh) { painted.rows[row.y] = row; }
-	} else if (kind != PlanKind.Idle) {
-		painted.rows = fresh;
+	match (kind) {
+		PlanKind.Rows => {
+			for (const row of fresh) { painted.rows[row.y] = row; }
+		},
+		PlanKind.Scroll => { painted.rows = fresh; },
+		PlanKind.Repaint => { painted.rows = fresh; },
+		PlanKind.Idle => {},
 	}
 	painted.alternate = alternate;
 	painted.palette = colors;

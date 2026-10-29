@@ -10,8 +10,6 @@ export const PARTICLE_DENSITY: float64 = 7.0;
 export const PARTICLE_SPEED: float64 = 10.0;
 export const PARTICLE_CURL: float64 = 1.0;
 export const TICK: float64 = 0.017;
-export const STIFFNESS: float64 = 0.3;
-export const DAMPING: float64 = 0.5;
 export const ANTICIPATION: float64 = 0.2;
 export const MAX_WINDUP: float64 = 2;
 export const STOP_DISTANCE: float64 = 0.1;
@@ -25,6 +23,14 @@ export struct Point {
 	x: float64;
 	y: float64;
 }
+
+export struct Feel {
+	stiffness: float64;
+	damping: float64;
+}
+
+export const JUMP: Feel = { stiffness: 0.3, damping: 0.5 };
+export const TYPING: Feel = { stiffness: 0.5, damping: 0.9 };
 
 struct Spring {
 	position: float64;
@@ -56,6 +62,7 @@ export interface Trail {
 	destination: Point;
 	jumped: boolean;
 	placed: boolean;
+	typing: boolean;
 	travel: Point;
 	head: Point;
 	headFrom: Point;
@@ -200,6 +207,7 @@ export function start(this typeof Trail): Trail {
 		destination: point(0, 0),
 		jumped: false,
 		placed: false,
+		typing: false,
 		travel: point(0, 0),
 		head: point(0, 0),
 		headFrom: point(0, 0),
@@ -314,8 +322,9 @@ function windup(this t: Trail): Point {
 }
 
 function tick(this t: Trail): boolean {
-	const keep = 1 - DAMPING;
-	const pull = STIFFNESS / (1 + 2.5 * keep);
+	const feel = t.typing ? TYPING : JUMP;
+	const keep = 1 - feel.damping;
+	const pull = feel.stiffness / (1 + 2.5 * keep);
 	t.headFrom = t.head;
 	t.headVelocity = t.headVelocity.plus(t.destination.minus(t.head).times(pull));
 	t.head = t.head.plus(t.headVelocity);
@@ -364,7 +373,8 @@ export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float
 			const step = lead.target(center, w, h).minus(lead.previous).inCells(t.cell);
 			const short = Math.abs(step.x) <= 2.001 && Math.abs(step.y) <= 0.001;
 			t.travel = t.destination.minus(t.head);
-			if (immediate || short || !t.placed) {
+			t.typing = short;
+			if (immediate || !t.placed) {
 				t.place();
 			} else if (t.headResting()) {
 				t.headVelocity = t.windup();
@@ -385,7 +395,7 @@ export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float
 			}
 		}
 		t.spring(dt);
-		const riding = t.landing().plus(half);
+		const riding = (t.typing ? t.drawnHead() : t.landing()).plus(half);
 		for (const c of t.corners) {
 			if (c.follow(riding, w, h, dt, immediate)) { animating = true; }
 		}
@@ -482,11 +492,20 @@ test "the cursor rests with its corners on the cell it was moved to" {
 	assert shown[2] == point(40, 60);
 }
 
-test "a move of up to two cells along a row lands the head at once and uses the short animation" {
+test "a move of up to two cells along a row glides the whole cursor on the typing spring without passing the new cell" {
 	const t = placed(30, 40);
 	t.moveTo(50, 40);
-	const _moving = t.animate(FRAME, CursorShape.Block, 10, 20, false);
-	assert t.drawnHead() == point(50, 40);
+	let frames = 0;
+	while (!t.resting() || frames == 0) {
+		const _moving = t.animate(FRAME, CursorShape.Block, 10, 20, false);
+		const at = t.currents();
+		assert near(at[1].x - at[0].x, 10);
+		assert at[0].x <= 50.001;
+		if (frames == 2) { assert at[0].x > 30 && at[0].x < 49; }
+		frames += 1;
+	}
+	assert t.shownCorners()[0] == point(50, 40);
+	assert frames > 4 && frames < 20;
 	for (const c of t.corners) {
 		assert near(c.length, SHORT_ANIMATION_LENGTH);
 	}

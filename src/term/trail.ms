@@ -142,7 +142,7 @@ function relativeFor(this standard: Point, shape: CursorShape): Point {
 	return match (shape) {
 		CursorShape.Bar => point((standard.x + 0.5) * BAR_FRACTION - 0.5, standard.y),
 		CursorShape.Underline => point(standard.x, -((-standard.y + 0.5) * BAR_FRACTION - 0.5)),
-		_ => standard,
+		CursorShape.Block | CursorShape.BlockHollow => standard,
 	};
 }
 

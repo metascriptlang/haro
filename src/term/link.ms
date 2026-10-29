@@ -65,17 +65,17 @@ function runsAsProgram(path: string): boolean {
 }
 
 when (windows) {
-	function executeBits(path: string): int32 { return 0; }
+	function hasExecuteBit(path: string): Result<boolean, LinkRefusal> { return Result.ok(false); }
 } else {
 	@include("sys/stat.h");
 
 	extern struct Stat from "struct stat" { st_mode: uint32; }
 	extern function cStat(path: cstring, ref buf: Stat): int32 from "stat";
 
-	function executeBits(path: string): int32 {
+	function hasExecuteBit(path: string): Result<boolean, LinkRefusal> {
 		let st: Stat = {};
-		if (cStat(path as cstring, st) != 0) { return -1; }
-		return (st.st_mode & 0o111) as int32;
+		if (cStat(path as cstring, st) != 0) { return Result.err(LinkRefusal.StatFailed); }
+		return Result.ok((st.st_mode & 0o111) != 0);
 	}
 }
 
@@ -88,9 +88,9 @@ function fileRefusal(uri: string): LinkRefusal | null {
 	if (runsAsProgram(path)) { return LinkRefusal.RunsAsProgram; }
 	if (!exists(path)) { return LinkRefusal.Missing; }
 	if (!isFile(path) && !isDir(path)) { return LinkRefusal.NotFileOrDirectory; }
-	const bits = executeBits(path);
-	if (bits < 0) { return LinkRefusal.StatFailed; }
-	if (isFile(path) && bits != 0) { return LinkRefusal.ExecutePermission; }
+	const executable = hasExecuteBit(path);
+	if (!executable.ok) { return executable.error; }
+	if (isFile(path) && executable.value) { return LinkRefusal.ExecutePermission; }
 	return null;
 }
 

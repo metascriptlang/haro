@@ -166,8 +166,6 @@ function operations(this c: CursorModel): GraphicsOp[] {
 			ops.push({ kind: "strokePoly", points: points, width: width, closed: true, color: color });
 		} else if (shape != CursorShape.Block) {
 			ops.push({ kind: "fillConvex", points: points, color: colorOf(c.tint, 1) });
-		} else if (!c.trail.arrived) {
-			ops.push({ kind: "fillConvex", points: points, color: colorOf(c.tint, 1) });
 		} else if (!c.trail.resting()) {
 			for (const piece of points.outside(c.litCell())) {
 				ops.push({ kind: "fillConvex", points: piece, color: colorOf(c.tint, 1) });
@@ -215,7 +213,7 @@ function step(this c: CursorModel, now: number): void {
 
 function blockInk(this c: CursorModel): CellInk | null {
 	const lit = c.at !== null && c.look.drawn(c.focused, c.blinkOn) &&
-		c.look.shapeOf(c.focused) == CursorShape.Block && c.trail.arrived;
+		c.look.shapeOf(c.focused) == CursorShape.Block;
 	return lit ? { fg: CURSOR_TEXT, bg: c.tint } : null;
 }
 
@@ -331,7 +329,7 @@ function cursorFor(look: CursorLook): CursorModel {
 	return c;
 }
 
-test "a moving block is the cursor until its head reaches the new cell, then a trail that leaves the lit cell uncovered" {
+test "a moving block lights its new cell at once and draws a trail that leaves the lit cell uncovered" {
 	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: false });
 	c.trail.moveTo(34, 44);
 	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false)) {}
@@ -339,20 +337,8 @@ test "a moving block is the cursor until its head reaches the new cell, then a t
 	assert c.blockInk() !== null;
 	c.trail.moveTo(154, 44);
 	assert c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false);
-	assert c.blockInk() === null;
-	const flying = c.operations();
-	assert flying.length == 1;
-	const quad = flying[0];
-	if (quad.kind == "fillConvex") {
-		assert quad.color.a == 1;
-	} else {
-		assert false;
-	}
-	while (!c.trail.arrived) {
-		assert c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20, false);
-	}
 	assert c.blockInk() !== null;
-	assert !c.trail.resting();
+	assert c.operations().length > 0;
 	for (const op of c.operations()) {
 		if (op.kind == "fillConvex") {
 			assert op.color.a == 1;

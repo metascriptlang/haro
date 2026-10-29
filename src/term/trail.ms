@@ -17,7 +17,6 @@ export const DAMPING: float64 = 0.5;
 export const ANTICIPATION: float64 = 0.2;
 export const MAX_WINDUP: float64 = 2;
 export const STOP_DISTANCE: float64 = 0.1;
-export const ARRIVAL: float64 = 0.5;
 const MAX_TICKS_PER_FRAME = 30;
 
 const PCG_MULTIPLIER: uint64 = 6364136223846793005;
@@ -60,7 +59,7 @@ export interface Trail {
 	destination: Point;
 	jumped: boolean;
 	placed: boolean;
-	arrived: boolean;
+	travel: Point;
 	head: Point;
 	headFrom: Point;
 	headVelocity: Point;
@@ -204,7 +203,7 @@ export function start(this typeof Trail): Trail {
 		destination: point(0, 0),
 		jumped: false,
 		placed: false,
-		arrived: true,
+		travel: point(0, 0),
 		head: point(0, 0),
 		headFrom: point(0, 0),
 		headVelocity: point(0, 0),
@@ -309,7 +308,6 @@ function place(this t: Trail): void {
 	t.headFrom = t.destination;
 	t.headVelocity = point(0, 0);
 	t.lag = 0;
-	t.arrived = true;
 }
 
 function headResting(this t: Trail): boolean {
@@ -355,6 +353,12 @@ function drawnHead(this t: Trail): Point {
 	return t.headFrom.plus(t.head.minus(t.headFrom).times(t.lag / TICK));
 }
 
+function landing(this t: Trail): Point {
+	const head = t.drawnHead();
+	const past = head.minus(t.destination);
+	return past.x * t.travel.x + past.y * t.travel.y > 0 ? head : t.destination;
+}
+
 export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float64, h: float64, immediate: boolean): boolean {
 	if (t.reshape(shape)) { t.remainder = 0; }
 	t.cell = point(w, h);
@@ -366,11 +370,11 @@ export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float
 			const lead = t.corners[0];
 			const step = lead.target(center, w, h).minus(lead.previous).inCells(t.cell);
 			const short = Math.abs(step.x) <= 2.001 && Math.abs(step.y) <= 0.001;
+			t.travel = t.destination.minus(t.head);
 			if (immediate || short || !t.placed) {
 				t.place();
-			} else {
-				if (t.headResting()) { t.headVelocity = t.windup(); }
-				t.arrived = false;
+			} else if (t.headResting()) {
+				t.headVelocity = t.windup();
 			}
 			t.placed = true;
 			const aligned: float64[] = [];
@@ -388,10 +392,7 @@ export function animate(this t: Trail, dt: float64, shape: CursorShape, w: float
 			}
 		}
 		t.spring(dt);
-		const head = t.drawnHead();
-		const off = head.minus(t.destination).inCells(t.cell);
-		if (Math.abs(off.x) < ARRIVAL && Math.abs(off.y) < ARRIVAL) { t.arrived = true; }
-		const riding = head.plus(half);
+		const riding = t.landing().plus(half);
 		for (const c of t.corners) {
 			if (c.follow(riding, w, h, dt, immediate)) { animating = true; }
 		}
@@ -493,7 +494,6 @@ test "a move of up to two cells along a row lands the head at once and uses the 
 	t.moveTo(50, 40);
 	const _moving = t.animate(FRAME, CursorShape.Block, 10, 20, false);
 	assert t.drawnHead() == point(50, 40);
-	assert t.arrived;
 	for (const c of t.corners) {
 		assert near(c.length, SHORT_ANIMATION_LENGTH);
 	}
@@ -605,12 +605,14 @@ test "an immediate move snaps every corner and sprays nothing" {
 	assert t.shownCorners()[0] == point(130, 240);
 }
 
-test "a long jump's head springs past the new cell and back while the tail stays behind it" {
+test "a long jump stretches from the old cell to the new one at once, then its head springs past the new cell and back" {
 	const t = placed(30, 40);
 	t.moveTo(150, 40);
 	const _first = t.animate(FRAME, CursorShape.Block, 10, 20, false);
 	assert near(t.corners[1].length, 0) && near(t.corners[2].length, 0);
 	assert near(t.corners[0].length, ANIMATION_LENGTH);
+	assert t.currents()[1] == point(160, 40);
+	assert t.currents()[0].x < 70;
 	let farthest = 0.0;
 	let frames = 0;
 	while (!t.resting()) {
@@ -623,21 +625,4 @@ test "a long jump's head springs past the new cell and back while the tail stays
 	assert farthest > 160;
 	assert frames < 90;
 	assert t.shownCorners()[1] == point(160, 40);
-}
-
-test "the new cell counts as reached only once the head is within half a cell of it" {
-	const t = placed(30, 40);
-	assert t.arrived;
-	t.moveTo(150, 40);
-	const _first = t.animate(FRAME, CursorShape.Block, 10, 20, false);
-	assert !t.arrived;
-	let frames = 0;
-	while (!t.arrived) {
-		const _moving = t.animate(FRAME, CursorShape.Block, 10, 20, false);
-		const off = t.drawnHead().minus(t.destination);
-		if (t.arrived) { assert Math.abs(off.x) < 5 && Math.abs(off.y) < 10; }
-		frames += 1;
-	}
-	assert !t.resting();
-	assert frames < 20;
 }

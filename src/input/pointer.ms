@@ -17,6 +17,7 @@ export interface Pointer {
 	dragging: boolean;
 	last: Spot;
 	hover: Link | null;
+	over: Spot | null;
 	copyOnSelect: boolean;
 }
 
@@ -28,6 +29,7 @@ export function open(this typeof Pointer): Pointer {
 		dragging: false,
 		last: { col: 0, row: 0 },
 		hover: null,
+		over: null,
 		copyOnSelect: false,
 	};
 }

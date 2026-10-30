@@ -3,7 +3,8 @@ import { Rgb, setDefaultColors, setPalette, setScrollback } from "../vt/vt";
 import { Action, Keybind } from "../input/bindings";
 import { Reply } from "../input/paste";
 import { Pending, pendingOf } from "./pending";
-import { KeyEvent, OptionAsAlt } from "../keys/keys";
+import { KeyEvent, OptionAsAlt, modifierKey } from "../keys/keys";
+import { Link } from "../screen/linksGrid";
 import { CellInk } from "../grid/lines";
 import { Config } from "../config/config";
 import {
@@ -26,6 +27,7 @@ import {
 	pointerDown,
 	pointerMove,
 	pointerUp,
+	rehover,
 	roll,
 	syncSelection,
 } from "./mouse";
@@ -135,6 +137,8 @@ export struct IoFrame {
 	failures: Vec<Failure>;
 	keyAt: float64;
 	marks: Vec<Mark>;
+	hover: Link | null;
+	hoverChanged: boolean;
 }
 
 export interface Io {
@@ -143,6 +147,7 @@ export interface Io {
 	settings: Settings | null;
 	failures: Vec<Failure>;
 	keyAt: float64;
+	hoverSent: Link | null;
 }
 
 export interface IoPort {
@@ -177,7 +182,7 @@ export interface IoPort {
 }
 
 export function open(this typeof Io, t: Term): Io {
-	return { term: t, controls: Controls.open(), settings: null, failures: [], keyAt: -1 };
+	return { term: t, controls: Controls.open(), settings: null, failures: [], keyAt: -1, hoverSent: null };
 }
 
 export function started(this io: Io): boolean {
@@ -237,8 +242,14 @@ function input(this io: Io, sent: Result<boolean, TermError>, where: Where, time
 	io.check(Where.Typed, io.controls.typed(io.term));
 }
 
+function rehover(this io: Io, k: KeyEvent): void {
+	if (!modifierKey(k.key)) { return; }
+	io.check(Where.Move, io.controls.rehover(io.term, k.mods));
+}
+
 export function key(this io: Io, k: KeyEvent, time: float64): void {
 	if (io.controls.ended) { return; }
+	io.rehover(k);
 	const handled = io.controls.keyDown(io.term, k);
 	if (!handled.ok) {
 		io.fail(Where.Key, handled.error);
@@ -249,6 +260,7 @@ export function key(this io: Io, k: KeyEvent, time: float64): void {
 }
 
 export function keyReleased(this io: Io, k: KeyEvent): void {
+	io.rehover(k);
 	if (io.controls.keyUp(k)) { return; }
 	const sent = io.term.sendKey(k);
 	if (!sent.ok) { io.fail(Where.Key, sent.error); }
@@ -398,6 +410,9 @@ export function frame(this io: Io): IoFrame {
 	io.keyAt = -1;
 	const marks = io.term.marks;
 	io.term.marks = [];
+	const hover = c.pointer.hover;
+	const hoverChanged = hover != io.hoverSent;
+	io.hoverSent = hover;
 	return {
 		frame: frame,
 		asks: c.takeAsks(),
@@ -409,6 +424,8 @@ export function frame(this io: Io): IoFrame {
 		failures: failures,
 		keyAt: keyAt,
 		marks: marks,
+		hover: hover,
+		hoverChanged: hoverChanged,
 	};
 }
 

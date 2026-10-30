@@ -1,8 +1,9 @@
-import { Io, frame, key, open, text } from "./io";
+import { Io, frame, key, keyReleased, move, open, text } from "./io";
 import { Term } from "./term";
-import { NO_MODS } from "../keys/keys";
+import { KeyAction, NO_MODS, keyEvent, modSet } from "../keys/keys";
+import { OPEN_MOD } from "../input/pointer";
 import { MouseButton } from "./mouseButton";
-import { Sink, hitAt, key as keyOf, lines, offsetOf, onFresh, onTerm } from "./terminalRig";
+import { Sink, hitAt, hitWith, key as keyOf, lines, offsetOf, onFresh, onTerm } from "./terminalRig";
 
 test "a frame carries the time of the first input that reached the shell since the last frame, once" {
 	assert onFresh("", (t: Term, sink: Sink): void => {
@@ -69,4 +70,30 @@ test "relight returns the cursor's row in the given ink, and nothing before its 
 		assert rows.rows.length == 1;
 		assert rows.rows[0].line.text.startsWith("hello");
 	}).ok;
+}
+
+when (macos) {
+	const OPEN_KEY = "MetaLeft";
+} else {
+	const OPEN_KEY = "ControlLeft";
+}
+
+test "pressing and releasing the open modifier over a link shows and drops its hover without the pointer moving" {
+	assert onTerm("see https://b.io. ok", (t: Term, sink: Sink): void => {
+		const io = Io.open(t);
+		io.move(hitWith(8, 0, NO_MODS), false);
+		assert !io.frame().hoverChanged;
+		io.key(keyEvent(KeyAction.Press, OPEN_KEY, modSet(OPEN_MOD)), 0);
+		const shown = io.frame();
+		assert shown.hoverChanged;
+		const link = shown.hover;
+		assert link !== null;
+		if (link !== null) { assert link.uri == "https://b.io"; }
+		assert !io.frame().hoverChanged;
+		io.keyReleased(keyEvent(KeyAction.Release, OPEN_KEY, NO_MODS));
+		const gone = io.frame();
+		assert gone.hoverChanged;
+		assert gone.hover === null;
+		assert sink.sent == "";
+	}, 40, 5).ok;
 }

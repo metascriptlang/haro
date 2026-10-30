@@ -12,6 +12,8 @@ import {
 } from "../../../neon/src/platform/ion/window";
 import {
 	AttentionInformational,
+	CursorHand,
+	CursorIbeam,
 	WindowEventCloseRequested,
 	getWindow,
 	listen,
@@ -23,6 +25,7 @@ import {
 	preventClose,
 	preventExit,
 	requestUserAttention,
+	setCursor,
 } from "../../../ion/src/index";
 import { ionWakeLoop } from "../../../ion/src/platform/bridge.h";
 import { argv, exit } from "std/process";
@@ -251,6 +254,10 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 			attention: (): void => {
 				const win = getWindow("main");
 				if (win !== null) { requestUserAttention(win, AttentionInformational); }
+			},
+			setHand: (on: boolean): void => {
+				const win = getWindow("main");
+				if (win !== null) { setCursor(win, on ? CursorHand : CursorIbeam); }
 			},
 			openConfig: openConfig,
 			reloadConfig: reloadConfig,

@@ -109,6 +109,7 @@ export function pointerMove(
 	h: Hit,
 	pressed: boolean,
 ): Result<boolean, TermError> {
+	c.pointer.over = h.at;
 	if (c.holding()) { return Result.ok(false); }
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
@@ -130,6 +131,21 @@ export function pointerMove(
 	}
 	c.autoscroll = autoscrollOf(h.y * h.scale, h.cell.height);
 	return Result.ok(try c.pointer.drag(vt, h.at));
+}
+
+export function rehover(
+	this c: Controls,
+	t: Term,
+	mods: BitSet<KeyMod>,
+): Result<boolean, TermError> {
+	const at = c.pointer.over;
+	if (at === null || c.pointer.dragging || c.holding()) { return Result.ok(false); }
+	const vt = t.vtOf();
+	if (vt === null) { return Result.ok(false); }
+	const modes = try vt.modes();
+	if (claimsMouse(modes.mouseTracking, mods.has(KeyMod.Shift))) { return Result.ok(false); }
+	const over = opensLinks(mods) ? try vt.linkUnder(at.col, at.row) : null;
+	return Result.ok(c.pointer.showHover(over));
 }
 
 export function pointerUp(

@@ -51,6 +51,7 @@ export interface Desktop {
 	notify: (title: string, body: string) => void;
 	openLink: (uri: string) => void;
 	attention: () => void;
+	setHand: (on: boolean) => void;
 	openConfig: () => void;
 	reloadConfig: () => void;
 	close: () => void;
@@ -405,6 +406,10 @@ function applied(this m: PaneModel, got: IoFrame): void {
 			}
 			m.cursor.showCursor(f.cursor, f.look);
 		}
+	}
+	if (got.hoverChanged) {
+		m.view.showHover(got.hover);
+		m.desktop.setHand(got.hover !== null);
 	}
 	m.dialog.showPending(got.pending, m.metrics.cellWidth(), m.layoutWidth);
 	m.answerAsks(got.asks);

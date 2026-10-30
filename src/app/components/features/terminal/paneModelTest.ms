@@ -24,14 +24,15 @@ import {
 } from "./paneModel";
 import { Action } from "../../../../input/bindings";
 import { HookPane, KeyAnswer, UNHANDLED } from "../../../../config/hooks";
-import { KeyEvent } from "../../../../keys/keys";
+import { KeyEvent, NO_MODS, modSet } from "../../../../keys/keys";
+import { OPEN_MOD } from "../../../../input/pointer";
 import { cancelDialog, confirmDialog } from "./paneEvents";
 import { Io, Where, open, port } from "../../../../controller/io";
 import { Term, TermError } from "../../../../controller/term";
 import { View, fitRows, hexOf, open, text } from "../../../frame";
 import { holding } from "../../../../controller/controls";
 import { MouseButton } from "../../../../controller/mouseButton";
-import { Sink, exiting, hitAt, lines, offsetOf, onFresh, onPty, onRefused, onTerm } from "../../../../controller/terminalRig";
+import { Sink, exiting, hitAt, hitWith, lines, offsetOf, onFresh, onPty, onRefused, onTerm } from "../../../../controller/terminalRig";
 import { Replay } from "../../../../pty/replay";
 import { Pty, PtyError } from "../../../../pty/transport";
 
@@ -43,13 +44,15 @@ interface Calls {
 	notified: string;
 	closed: int32;
 	attentions: int32;
+	hand: boolean;
+	handSets: int32;
 	opened: int32;
 	reloaded: int32;
 	exits: string;
 }
 
 function noCalls(): Calls {
-	return { fatal: "", noted: "", title: "", titleBelled: false, notified: "", closed: 0, attentions: 0, opened: 0, reloaded: 0, exits: "" };
+	return { fatal: "", noted: "", title: "", titleBelled: false, notified: "", closed: 0, attentions: 0, hand: false, handSets: 0, opened: 0, reloaded: 0, exits: "" };
 }
 
 function desktopFor(calls: Calls): Desktop {
@@ -61,6 +64,10 @@ function desktopFor(calls: Calls): Desktop {
 		notify: (title: string, body: string): void => { calls.notified += `${title}|${body}\n`; },
 		openLink: (uri: string): void => {},
 		attention: (): void => { calls.attentions += 1; },
+		setHand: (on: boolean): void => {
+			calls.hand = on;
+			calls.handSets += 1;
+		},
 		openConfig: (): void => { calls.opened += 1; },
 		reloadConfig: (): void => { calls.reloaded += 1; },
 		close: (): void => { calls.closed += 1; },
@@ -628,6 +635,25 @@ test "the Edit and Clear Scrollback menu items run the actions their chords run"
 			assert calls.fatal == "";
 		}
 	}).ok;
+}
+
+test "a hovered link is shown and the hand cursor set when a frame reports it, and both drop with it" {
+	assert onTerm("see https://b.io. ok", (t: Term, sink: Sink): void => {
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		m.refresh();
+		assert !calls.hand && calls.handSets == 0;
+		m.io.move(hitWith(8, 0, modSet(OPEN_MOD)), false);
+		m.refresh();
+		assert calls.hand && calls.handSets == 1;
+		assert m.view.hover !== null;
+		m.refresh();
+		assert calls.handSets == 1;
+		m.io.move(hitWith(8, 0, NO_MODS), false);
+		m.refresh();
+		assert !calls.hand && calls.handSets == 2;
+		assert m.view.hover === null;
+	}, 40, 5).ok;
 }
 
 test "the host's wake drains the shell and refreshes on the scheduler; its close window menu item and close request ask to close" {

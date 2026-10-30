@@ -383,8 +383,7 @@ test "a frame held by synchronized output is counted each time, and its recheck 
 		assert timer !== null;
 		m.refresh();
 		assert m.stats.tally.held == 2;
-		const again = m.holdTimer;
-		assert again !== null && timer !== null && again == timer;
+		assert m.holdTimer == timer;
 		clearTimeout(timer);
 	}).ok;
 }
@@ -400,6 +399,7 @@ test "dragging above the grid keeps a refresh timer running for the autoscroll, 
 		const timer = m.scrollTimer;
 		assert timer !== null;
 		m.refresh();
+		// The local stands in for card 2026-10-30-equality-of-a-field-narrowed-to-null-crashes-lowering
 		const again = m.scrollTimer;
 		assert again !== null && timer !== null && again == timer;
 		clearTimeout(timer);

@@ -63,6 +63,10 @@ function poll(this w: ConfigWatch, handler: (c: Config | null, error: string) =>
 		handler(null, `${w.file} is gone; the last config it gave stays`);
 		return;
 	}
+	w.reloadWith(stamp, handler);
+}
+
+function reloadWith(this w: ConfigWatch, stamp: string, handler: (c: Config | null, error: string) => void): void {
 	const got = w.reload();
 	if (got.ok) {
 		handler(got.value, w.loaded.notice);
@@ -70,6 +74,10 @@ function poll(this w: ConfigWatch, handler: (c: Config | null, error: string) =>
 		w.loaded.stamp = stamp;
 		handler(null, got.error);
 	}
+}
+
+export function reloadNow(this w: ConfigWatch, handler: (c: Config | null, error: string) => void): void {
+	w.reloadWith(w.stampNow(), handler);
 }
 
 export function startIn(this w: ConfigWatch, probableCli: boolean, home: string): string | null {
@@ -164,4 +172,25 @@ test "a changed config file is handed over, and one with an error keeps the last
 	const fixed = handed;
 	assert fixed !== null;
 	if (fixed !== null) { assert fixed.fontSize == 21; }
+}
+
+test "a reload now hands the file over although its stamp has not changed" {
+	const dir = `${cwd()}/out/reloadedConfig`;
+	assert ensureDir(dir).ok;
+	const path = `${dir}/config.ms`;
+	const head = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = `;
+	assert writeFile(path, `${head}{ fontSize: 14 };\n`).ok;
+	const w = ConfigWatch.forFile(path);
+	w.readConfig();
+	let calls = 0;
+	let size: float64 = 0;
+	const handler = (c: Config | null, error: string): void => {
+		calls++;
+		if (c !== null) { size = c.fontSize; }
+	};
+	w.poll(handler);
+	assert calls == 0;
+	w.reloadNow(handler);
+	assert calls == 1;
+	assert size == 14;
 }

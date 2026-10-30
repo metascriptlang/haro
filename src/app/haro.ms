@@ -51,6 +51,7 @@ import {
 	ConfigWatch,
 	forFile,
 	readConfig,
+	reloadNow,
 	shellScripts,
 	startIn,
 	watchConfig,
@@ -157,8 +158,12 @@ function openConfig(): void {
 	openExternal(fileUrl(path));
 }
 
+let applyConfig: ((c: Config | null, error: string) => void) | null = null;
+
 function reloadConfig(): void {
-	config.loaded.stamp = "";
+	const apply = applyConfig;
+	if (apply === null) { fail("reload config: the window does not take a config yet"); }
+	config.reloadNow(apply);
 }
 
 function fail(message: string): never {
@@ -298,7 +303,7 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 						return null;
 					});
 				}
-				config.watchConfig((c: Config | null, error: string): void => {
+				const apply = (c: Config | null, error: string): void => {
 					if (c === null) {
 						handler({ outcome: ConfigOutcome.Refused, error: error });
 						return;
@@ -310,7 +315,9 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 						family: familyList(config.loaded.faces).join(", "),
 						error: error,
 					});
-				});
+				};
+				applyConfig = apply;
+				config.watchConfig(apply);
 			},
 		},
 		fontFamily: families.join(", "),

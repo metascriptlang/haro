@@ -86,8 +86,9 @@ export function mergedEnv(
 	return merged;
 }
 
-function inheritedEnv(): Vec<string> {
+function inheritedEnv(): Vec<string> | null {
 	const vars = ptyEnviron();
+	if (vars == null) { return null; }
 	let entries: Vec<string> = [];
 	for (let i = 0; vars[i] != null; i++) {
 		const entry: cstring = vars[i] as cstring;
@@ -104,7 +105,7 @@ export function comSpecCommand(inherited: Vec<string>): string {
 
 when (windows) {
 	export function defaultCommand(): string {
-		return comSpecCommand(inheritedEnv());
+		return comSpecCommand(inheritedEnv() ?? []);
 	}
 }
 
@@ -118,11 +119,13 @@ export function sortedByName(entries: Vec<string>): Vec<string> {
 	return sorted;
 }
 
-function childEnv(given: Vec<string>, cwd: string): Vec<string> {
+function childEnv(given: Vec<string>, cwd: string): Vec<string> | null {
+	const inherited = inheritedEnv();
+	if (inherited === null) { return null; }
 	when (windows) {
-		return sortedByName(mergedEnv(inheritedEnv(), given, "", true));
+		return sortedByName(mergedEnv(inherited, given, "", true));
 	} else {
-		return mergedEnv(inheritedEnv(), given, cwd);
+		return mergedEnv(inherited, given, cwd);
 	}
 }
 
@@ -148,10 +151,12 @@ export function open(
 	let launch = launchIn(commandLine, shellScripts);
 	const lang = langEntry();
 	if (lang != "") { launch.env.push(lang); }
+	const entries = childEnv(launch.env, dir);
+	if (entries === null) { return Result.err(PtyError.OpenBadEnv); }
 	const id = ptyOpen(
 		launch.commandLine,
 		dir,
-		envBlock(childEnv(launch.env, dir)),
+		envBlock(entries),
 		cols,
 		rows,
 		cols * cellWidth,
@@ -245,8 +250,6 @@ export function close(this p: NativePty): void {
 
 const STATELESS_SHELLS: string[] = ["bash", "sh", "zsh", "fish", "tmux", "nu", "cmd", "pwsh", "powershell"];
 const PTY_TREE_NAMES_CAPACITY = 16384;
-const PTY_TREE_UNREADABLE: int64 = -1;
-const PTY_TREE_TRUNCATED: int64 = -2;
 
 export function jobRunning(tree: string): boolean {
 	return tree.split("\n").some((name: string): boolean => {
@@ -261,7 +264,7 @@ export function busy(this p: NativePty): boolean {
 		if (ptyExited(p.id) != 0) { return false; }
 		let names: Vec<uint8> = new Array(PTY_TREE_NAMES_CAPACITY);
 		const n = ptyTreeNames(p.id, names);
-		if (n == PTY_TREE_UNREADABLE || n == PTY_TREE_TRUNCATED) { return true; }
+		if (n < 0) { return true; }
 		return jobRunning(names[0..n].asString());
 	} else {
 		if (ptyExited(p.id) != 0) { return false; }

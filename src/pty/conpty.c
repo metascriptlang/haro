@@ -244,8 +244,6 @@ static wchar_t* widenedBlock(const uint8_t* block, int64_t len) {
 
 static uint8_t** inheritedEntries = NULL;
 
-static uint8_t* noEntries[1] = { NULL };
-
 uint8_t** ptyEnviron(void) {
 	if (inheritedEntries) {
 		free(inheritedEntries[0]);
@@ -253,7 +251,7 @@ uint8_t** ptyEnviron(void) {
 		inheritedEntries = NULL;
 	}
 	wchar_t* strings = GetEnvironmentStringsW();
-	if (!strings) return noEntries;
+	if (!strings) return NULL;
 	size_t count = 0;
 	for (const wchar_t* e = strings; *e; e += wcslen(e) + 1) count++;
 	size_t bytes = 0;
@@ -261,7 +259,7 @@ uint8_t** ptyEnviron(void) {
 		int n = WideCharToMultiByte(CP_UTF8, 0, e, -1, NULL, 0, NULL, NULL);
 		if (n <= 0) {
 			FreeEnvironmentStringsW(strings);
-			return noEntries;
+			return NULL;
 		}
 		bytes += (size_t)n;
 	}
@@ -271,7 +269,7 @@ uint8_t** ptyEnviron(void) {
 		free(entries);
 		free(text);
 		FreeEnvironmentStringsW(strings);
-		return noEntries;
+		return NULL;
 	}
 	size_t used = 0;
 	size_t index = 0;

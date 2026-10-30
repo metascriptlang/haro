@@ -1,6 +1,6 @@
 import { MouseButton } from "./mouseButton";
 import { Rgb, setDefaultColors, setPalette, setScrollback } from "../vt/vt";
-import { Keybind } from "../input/bindings";
+import { Action, Keybind } from "../input/bindings";
 import { Reply } from "../input/paste";
 import { Pending, pendingOf } from "./pending";
 import { KeyEvent, OptionAsAlt } from "../keys/keys";
@@ -19,7 +19,7 @@ import {
 import { Mark } from "./mark";
 import { Asks, Controls, Hit, holding, refit, takeAsks, typed, vtOf } from "./controls";
 import { cancel, clipboardAsked, clipboardText, confirm } from "./clipboard";
-import { answerClose, closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
+import { act, answerClose, closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
 import {
 	autoscrollTick,
 	endDrag,
@@ -85,6 +85,7 @@ export enum Where {
 	Output,
 	Selection,
 	Cursor,
+	Action,
 }
 
 export function label(this w: Where): string {
@@ -107,6 +108,7 @@ export function label(this w: Where): string {
 		Where.Output => "output",
 		Where.Selection => "selection",
 		Where.Cursor => "cursor",
+		Where.Action => "action",
 	};
 }
 
@@ -156,6 +158,7 @@ export interface IoPort {
 	release: (button: MouseButton, h: Hit) => void;
 	wheel: (notches: float64, h: Hit) => void;
 	autoscroll: () => void;
+	act: (action: Action) => void;
 	closeKey: () => void;
 	closeWindow: () => void;
 	confirmDialog: () => void;
@@ -285,6 +288,10 @@ export function wheel(this io: Io, notches: float64, h: Hit): void {
 
 export function autoscroll(this io: Io): void {
 	io.check(Where.Autoscroll, io.controls.autoscrollTick(io.term));
+}
+
+export function act(this io: Io, action: Action): void {
+	io.check(Where.Action, io.controls.act(io.term, action));
 }
 
 export function closeKey(this io: Io): void {
@@ -421,6 +428,7 @@ export function port(this io: Io): IoPort {
 		release: (button: MouseButton, h: Hit): void => { io.release(button, h); },
 		wheel: (notches: float64, h: Hit): void => { io.wheel(notches, h); },
 		autoscroll: (): void => { io.autoscroll(); },
+		act: (action: Action): void => { io.act(action); },
 		closeKey: (): void => { io.closeKey(); },
 		closeWindow: (): void => { io.closeWindow(); },
 		confirmDialog: (): void => { io.confirmDialog(); },

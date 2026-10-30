@@ -31,7 +31,7 @@ import { Term, TermError } from "../../../../controller/term";
 import { View, fitRows, hexOf, open, text } from "../../../frame";
 import { holding } from "../../../../controller/controls";
 import { MouseButton } from "../../../../controller/mouseButton";
-import { Sink, exiting, hitAt, lines, onFresh, onPty, onRefused, onTerm } from "../../../../controller/terminalRig";
+import { Sink, exiting, hitAt, lines, offsetOf, onFresh, onPty, onRefused, onTerm } from "../../../../controller/terminalRig";
 import { Replay } from "../../../../pty/replay";
 import { Pty, PtyError } from "../../../../pty/transport";
 
@@ -599,6 +599,33 @@ test "a menu item runs the action it is named for, and one that names no action 
 			assert calls.fatal == "";
 			menu("quit_everything");
 			assert m.notice.text.includes("names no action");
+		}
+	}).ok;
+}
+
+test "the Edit and Clear Scrollback menu items run the actions their chords run" {
+	assert onTerm(lines(30) + "work$ ", (t: Term, sink: Sink): void => {
+		const board: Board = { copied: [], offer: "", reads: 0 };
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		const host: Host = { config: null, menu: null, closeRequest: null, wake: null };
+		m.connectHost(hostOf(host));
+		const menu = host.menu;
+		assert menu !== null;
+		if (menu !== null) {
+			withClipboard(board, (): void => {
+				menu("select_all");
+				menu("copy");
+				menu("paste");
+			});
+			assert board.copied.length == 1;
+			assert board.copied[0].startsWith("line 1\n");
+			assert board.copied[0].includes("work$");
+			assert board.reads == 1;
+			assert offsetOf(t) > 0;
+			menu("clear_scrollback");
+			assert offsetOf(t) == 0;
+			assert calls.fatal == "";
 		}
 	}).ok;
 }

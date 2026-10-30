@@ -5,12 +5,14 @@ import { NativePty, spawn } from "../pty/pty";
 import { Replay, ofText, toPty } from "../pty/replay";
 import { Pty, PtyError } from "../pty/transport";
 import { Annotation, Decoration, FrameRows, none } from "./rows";
+import { Action } from "../input/bindings";
 import { Hit } from "./controls";
 import {
 	Io,
 	IoFrame,
 	IoPort,
 	Settings,
+	act,
 	annotate,
 	autoscroll,
 	cancelDialog,
@@ -95,6 +97,7 @@ export actor Shell {
 	release(button: MouseButton, h: Hit): void { this.io?.release(button, h); }
 	wheel(notches: float64, h: Hit): void { this.io?.wheel(notches, h); }
 	autoscroll(): void { this.io?.autoscroll(); }
+	act(action: Action): void { this.io?.act(action); }
 	closeKey(): void { this.io?.closeKey(); }
 	closeWindow(): void { this.io?.closeWindow(); }
 	confirmDialog(): void { this.io?.confirmDialog(); }
@@ -178,6 +181,7 @@ export function portOf(shell: Shell): IoPort {
 		release: (button: MouseButton, h: Hit): void => { shell.release(button, h); },
 		wheel: (notches: float64, h: Hit): void => { shell.wheel(notches, h); },
 		autoscroll: (): void => { shell.autoscroll(); },
+		act: (action: Action): void => { shell.act(action); },
 		closeKey: (): void => { shell.closeKey(); },
 		closeWindow: (): void => { shell.closeWindow(); },
 		confirmDialog: (): void => { shell.confirmDialog(); },

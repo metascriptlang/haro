@@ -527,7 +527,14 @@ function menuClicked(this m: PaneModel, id: string): void {
 		m.closeKeyPressed();
 		return;
 	}
-	m.hosted(action);
+	match (action) {
+		Action.IncreaseFontSize |
+		Action.DecreaseFontSize |
+		Action.ResetFontSize |
+		Action.OpenConfig |
+		Action.ReloadConfig => { m.hosted(action); },
+		_ => { m.io.act(action); },
+	}
 	m.refresh();
 }
 

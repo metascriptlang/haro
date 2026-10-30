@@ -100,8 +100,18 @@ when (macos) {
 			},
 			{ title: "File", items: [MenuItem.action("close_window", "Close Window", "w", ModCmd)] },
 			{
+				title: "Edit",
+				items: [
+					MenuItem.action("copy", "Copy", "c", ModCmd),
+					MenuItem.action("paste", "Paste", "v", ModCmd),
+					MenuItem.action("select_all", "Select All", "a", ModCmd),
+				],
+			},
+			{
 				title: "View",
 				items: [
+					MenuItem.action("clear_scrollback", "Clear Scrollback", "k", ModCmd),
+					MenuItem.separator(),
 					MenuItem.action("increase_font_size", "Increase Font Size", "=", ModCmd),
 					MenuItem.action("decrease_font_size", "Decrease Font Size", "-", ModCmd),
 					MenuItem.action("reset_font_size", "Reset Font Size", "0", ModCmd),

@@ -34,7 +34,9 @@ extern function ptyWrite(id: int32, data: Readonly<Span<uint8>>): int64;
 
 extern function ptyEnviron(): Ptr<Ptr<char>>;
 
-when (!windows) {
+when (windows) {
+	extern function ptyTreeNames(id: int32, buf: Span<uint8>): int64;
+} else {
 	import { env } from "std/process";
 	import { ptyChildPid, ptyExitSignal, ptyMaster } from "./nativePty.h";
 
@@ -229,9 +231,26 @@ export function close(this p: NativePty): void {
 	ptyClose(p.id);
 }
 
+const STATELESS_SHELLS: string[] = ["bash", "sh", "zsh", "fish", "tmux", "nu", "cmd", "pwsh", "powershell"];
+const PTY_TREE_NAMES_CAPACITY = 16384;
+const PTY_TREE_UNREADABLE: int64 = -1;
+const PTY_TREE_TRUNCATED: int64 = -2;
+
+export function jobRunning(tree: string): boolean {
+	return tree.split("\n").some((name: string): boolean => {
+		const lower = name.toLowerCase();
+		const base = lower.endsWith(".exe") ? lower.slice(0, lower.length - 4) : lower;
+		return base != "" && !STATELESS_SHELLS.includes(base);
+	});
+}
+
 export function busy(this p: NativePty): boolean {
 	when (windows) {
-		return false;
+		if (ptyExited(p.id) != 0) { return false; }
+		let names: Vec<uint8> = new Array(PTY_TREE_NAMES_CAPACITY);
+		const n = ptyTreeNames(p.id, names);
+		if (n == PTY_TREE_UNREADABLE || n == PTY_TREE_TRUNCATED) { return true; }
+		return jobRunning(names[0..n].asString());
 	} else {
 		if (ptyExited(p.id) != 0) { return false; }
 		const group = tcgetpgrp(ptyMaster(p.id));

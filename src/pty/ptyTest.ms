@@ -6,6 +6,7 @@ import {
 	exitCode,
 	envBlock,
 	exitSignal,
+	jobRunning,
 	mergedEnv,
 	open,
 	read,
@@ -83,6 +84,16 @@ test "an environment block is each entry NUL-terminated, bytes in UTF-8" {
 	assert block.length == 3 + 1 + 4 + 1;
 	assert block[3] == 0 && block[block.length - 1] == 0;
 	assert block[4] == 0xc3 && block[5] == 0xa9;
+}
+
+test "a Windows shell tree is idle when only shells are in it and busy when anything else runs" {
+	assert !jobRunning("pwsh.exe\n");
+	assert !jobRunning("CMD.EXE\n");
+	assert !jobRunning("bash.exe\nsh\n");
+	assert !jobRunning("");
+	assert jobRunning("cmd.exe\nping.exe\n");
+	assert jobRunning("wsl.exe\n");
+	assert jobRunning("PowerShell.exe\nnode.EXE\n");
 }
 
 test "a child's output reaches read and its exit ends the stream" {

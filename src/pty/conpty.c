@@ -3,6 +3,7 @@
 #endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <tlhelp32.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -461,6 +462,69 @@ int ptyExitCode(int id) {
 	int code = p->exitCode;
 	LeaveCriticalSection(&p->lock);
 	return code;
+}
+
+int64_t ptyTreeNames(int id, uint8_t* buf, int64_t cap) {
+	Pty* p = slot(id);
+	if (!p) return PTY_TREE_FAILED;
+	DWORD rootPid = GetProcessId(p->process);
+	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	if (snapshot == INVALID_HANDLE_VALUE) return PTY_TREE_FAILED;
+	size_t count = 0, room = 256;
+	PROCESSENTRY32W* all = malloc(sizeof(PROCESSENTRY32W) * room);
+	PROCESSENTRY32W entry;
+	entry.dwSize = sizeof entry;
+	int more = all && Process32FirstW(snapshot, &entry);
+	while (more) {
+		if (count == room) {
+			PROCESSENTRY32W* grown = realloc(all, sizeof(PROCESSENTRY32W) * room * 2);
+			if (!grown) break;
+			all = grown;
+			room *= 2;
+		}
+		all[count++] = entry;
+		more = Process32NextW(snapshot, &entry);
+	}
+	CloseHandle(snapshot);
+	if (!all || GetLastError() != ERROR_NO_MORE_FILES) {
+		free(all);
+		return PTY_TREE_FAILED;
+	}
+	size_t* order = malloc(sizeof(size_t) * (count + 1));
+	char* taken = calloc(count + 1, 1);
+	if (!order || !taken) {
+		free(all);
+		free(order);
+		free(taken);
+		return PTY_TREE_FAILED;
+	}
+	size_t queued = 0;
+	for (size_t i = 0; i < count && queued == 0; i++) {
+		if (all[i].th32ProcessID == rootPid) {
+			order[queued++] = i;
+			taken[i] = 1;
+		}
+	}
+	int64_t used = 0;
+	for (size_t head = 0; head < queued; head++) {
+		for (size_t i = 0; i < count; i++) {
+			if (!taken[i] && all[i].th32ParentProcessID == all[order[head]].th32ProcessID) {
+				taken[i] = 1;
+				order[queued++] = i;
+			}
+		}
+		int n = WideCharToMultiByte(CP_UTF8, 0, all[order[head]].szExeFile, -1, (char*)buf + used, (int)(cap - used), NULL, NULL);
+		if (n <= 0) {
+			used = PTY_TREE_TRUNCATED;
+			break;
+		}
+		used += n;
+		buf[used - 1] = '\n';
+	}
+	free(all);
+	free(order);
+	free(taken);
+	return used;
 }
 
 static void teardown(Pty* p) {

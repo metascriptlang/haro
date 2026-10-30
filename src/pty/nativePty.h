@@ -23,7 +23,11 @@ int ptyResize(int id, int cols, int rows, int widthPx, int heightPx);
 int ptyExited(int id);
 int ptyExitCode(int id);
 void ptyClose(int id);
-#ifndef _WIN32
+#ifdef _WIN32
+#define PTY_TREE_FAILED (-1)
+#define PTY_TREE_TRUNCATED (-2)
+int64_t ptyTreeNames(int id, uint8_t* buf, int64_t cap);
+#else
 int ptyMaster(int id);
 int ptyChildPid(int id);
 int ptyExitSignal(int id);

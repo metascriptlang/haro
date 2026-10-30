@@ -2,6 +2,7 @@ import { List, createList } from "../../../neon/src/core/list";
 import { TextSpan } from "../../../neon/src/render/hostTypes";
 import { Style, TextDecorationLine, TextDecorationStyle } from "../../../neon/src/render/style";
 import { CellInk, GridLine, LineRun } from "../grid/lines";
+import { Link } from "../screen/linksGrid";
 import { Marked } from "../select/select";
 import { CellFlag, Cursor, Rgb, Underline, Vt } from "../vt/vt";
 import {
@@ -178,10 +179,70 @@ export function fitGrid(grid: List<RowSlot>, rows: int32): void {
 export interface View {
 	grid: List<RowSlot>;
 	styles: Styles;
+	background: Rgb;
+	hover: Link | null;
 }
 
 export function open(this typeof View): View {
-	return { grid: createList<RowSlot>([]), styles: Styles.empty() };
+	return {
+		grid: createList<RowSlot>([]),
+		styles: Styles.empty(),
+		background: { r: 0, g: 0, b: 0 },
+		hover: null,
+	};
+}
+
+export function underlined(this l: GridLine, from: int32, to: int32): GridLine {
+	let runs: Vec<LineRun> = [];
+	let at: int32 = 0;
+	for (const run of l.runs) {
+		const end = at + run.units;
+		const a = Math.max(from, at) as int32;
+		const b = Math.min(to, end) as int32;
+		if (a >= b || run.underline != Underline.None) {
+			runs.push(run);
+		} else {
+			if (a > at) { runs.push({ ...run, units: a - at }); }
+			runs.push({ ...run, units: b - a, underline: Underline.Single });
+			if (b < end) { runs.push({ ...run, units: end - b }); }
+		}
+		at = end;
+	}
+	return { ...l, runs: runs };
+}
+
+function respan(this v: View, y: int32, link: Link | null): void {
+	if (y < 0 || y >= (v.grid.length() as int32)) { return; }
+	const line = v.grid.at(y).line;
+	let shown = line;
+	if (link !== null) {
+		for (const s of link.stretches) {
+			if (s.row == y) { shown = shown.underlined(s.from, s.to); }
+		}
+	}
+	v.grid.set(y, { line: line, spans: v.styles.spansOf(shown, v.background) });
+}
+
+export function showHover(this v: View, link: Link | null): void {
+	const was = v.hover;
+	if (was == link) { return; }
+	v.hover = null;
+	if (was !== null) {
+		for (const s of was.stretches) { v.respan(s.row, null); }
+	}
+	v.hover = link;
+	if (link !== null) {
+		for (const s of link.stretches) { v.respan(s.row, link); }
+	}
+}
+
+function repaints(this link: Link, f: FrameRows): boolean {
+	for (const s of link.stretches) {
+		for (const r of f.rows) {
+			if (r.y == s.row) { return true; }
+		}
+	}
+	return false;
 }
 
 export function fitRows(this v: View, rows: int32): void {
@@ -189,10 +250,15 @@ export function fitRows(this v: View, rows: int32): void {
 }
 
 export function paint(this v: View, f: FrameRows): int32 {
+	const link = v.hover;
+	if (link !== null && (f.scrolled != 0 || link.repaints(f))) { v.showHover(null); }
+	v.background = f.background;
 	return applyRows(v.grid, v.styles, f);
 }
 
 export function repaintCursor(this v: View, f: FrameRows): void {
+	const link = v.hover;
+	if (link !== null && (f.scrolled != 0 || link.repaints(f))) { v.showHover(null); }
 	const _chars = applyRows(v.grid, v.styles, f);
 }
 
@@ -464,4 +530,76 @@ test "an underline never shares a cached style with a foreground one bit away" {
 	const spans = spansOf(styles, l, BLACK);
 	assert spans[1].style!.textDecorationLine == "none";
 	assert spans[1].style!.color == "#000001";
+}
+
+function lineOf(text: string, runs: Vec<LineRun>): GridLine {
+	return { text: text, runs: runs, widths: [], cursorCell: null, cursorInk: null };
+}
+
+test "an underline over a range splits the runs it crosses and leaves the rest and underlined runs alone" {
+	const l = lineOf("abcdef", [
+		run(3, WHITE, BLACK, Underline.None),
+		run(2, WHITE, BLACK, Underline.Double),
+		run(1, RED, BLACK, Underline.None),
+	]);
+	const u = l.underlined(1, 6);
+	assert u.runs.length == 4;
+	assert u.runs[0].units == 1 && u.runs[0].underline == Underline.None;
+	assert u.runs[1].units == 2 && u.runs[1].underline == Underline.Single;
+	assert u.runs[2].units == 2 && u.runs[2].underline == Underline.Double;
+	assert u.runs[3].units == 1 && u.runs[3].underline == Underline.Single && u.runs[3].fg == RED;
+	assert l.underlined(4, 4).runs.length == l.runs.length;
+	assert l.underlined(6, 9).runs.length == l.runs.length;
+}
+
+function hoverOn(y: int32, from: int32, to: int32): Link {
+	return { uri: "https://x.io", stretches: [{ row: y, from: from, to: to }] };
+}
+
+function rowsOf(y: int32, text: string): FrameRows {
+	const l = lineOf(text, [run(text.length as int32, WHITE, BLACK, Underline.None)]);
+	return { scrolled: 0, rows: [{ y: y, line: l }], background: BLACK };
+}
+
+function underlinedText(this v: View, y: int32): string {
+	let out = "";
+	for (const span of v.grid.at(y).spans) {
+		if (span.style!.textDecorationLine == "underline") { out += span.text; }
+	}
+	return out;
+}
+
+test "a hovered link is underlined on screen, cleared when the pointer leaves, and dropped when its row repaints" {
+	const v = View.open();
+	v.fitRows(3);
+	assert v.paint(rowsOf(0, "see https://x.io ok")) == 19;
+	v.showHover(hoverOn(0, 4, 16));
+	assert v.underlinedText(0) == "https://x.io";
+	assert v.grid.at(0).spans.length == 3;
+	v.showHover(hoverOn(1, 0, 3));
+	assert v.underlinedText(0) == "";
+	assert v.grid.at(0).spans.length == 1;
+	v.showHover(hoverOn(0, 0, 3));
+	assert v.underlinedText(0) == "see";
+	assert v.paint(rowsOf(2, "other")) == 5;
+	assert v.underlinedText(0) == "see";
+	assert v.paint(rowsOf(0, "see https://x.io ok")) == 19;
+	assert v.hover === null;
+	assert v.underlinedText(0) == "";
+	v.showHover(hoverOn(0, 0, 3));
+	v.showHover(null);
+	assert v.underlinedText(0) == "";
+}
+
+test "a scroll drops the hover before the rows move, so no underline stays on a row that left" {
+	const v = View.open();
+	v.fitRows(2);
+	assert v.paint(rowsOf(0, "link")) == 4;
+	v.showHover(hoverOn(0, 0, 4));
+	assert v.underlinedText(0) == "link";
+	const moved: FrameRows = { scrolled: 1, rows: [], background: BLACK };
+	assert v.paint(moved) == 0;
+	assert v.hover === null;
+	assert v.underlinedText(0) == "";
+	assert v.underlinedText(1) == "";
 }

@@ -396,7 +396,9 @@ test "a font size steps by the given points and stays within the sizes a config 
 	assert steppedFont(10.5, -1) == 9.5;
 	assert steppedFont(MIN_FONT_SIZE, -1) == MIN_FONT_SIZE;
 	assert steppedFont(MAX_FONT_SIZE, 1) == MAX_FONT_SIZE;
-	assert pxOf(DEFAULT_FONT_SIZE) == parse("{}").value.fontPx();
+	const c = parse("{}");
+	assert c.ok;
+	assert pxOf(DEFAULT_FONT_SIZE) == c.value.fontPx();
 }
 
 test "a field msc prints as null is a field the config left out" {

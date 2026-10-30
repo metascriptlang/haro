@@ -1,5 +1,6 @@
 import { KeyEvent, KeyMod } from "../keys/keys";
 import { Action, Keybind, bindFor, resolve } from "../input/bindings";
+import { clear } from "../input/pointer";
 import { ROWS_PER_NOTCH } from "../input/wheel";
 import { Reply, replyToClose } from "../input/paste";
 import {

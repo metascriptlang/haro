@@ -64,7 +64,6 @@ import {
 	ConfigOutcome,
 } from "./components/features/terminal/paneModel";
 
-const CLOSE_WINDOW = "close_window";
 const APP_TITLE = "Haro";
 const NOTIFICATION_ID = "haro";
 
@@ -73,7 +72,7 @@ when (!windows) {
 }
 
 when (macos) {
-	import { MenuItem, MenuRole, ModCmd, Submenu, setAppMenu } from "../../../ion/src/index";
+	import { MenuItem, MenuRole, ModCmd, ModShift, Submenu, setAppMenu } from "../../../ion/src/index";
 
 	@include("unistd.h");
 
@@ -86,6 +85,9 @@ when (macos) {
 				items: [
 					MenuItem.standard(MenuRole.About),
 					MenuItem.separator(),
+					MenuItem.action("open_config", "Settings…", ",", ModCmd),
+					MenuItem.action("reload_config", "Reload Configuration", ",", ModCmd | ModShift),
+					MenuItem.separator(),
 					MenuItem.standard(MenuRole.Hide),
 					MenuItem.standard(MenuRole.HideOthers),
 					MenuItem.standard(MenuRole.ShowAll),
@@ -93,7 +95,15 @@ when (macos) {
 					MenuItem.standard(MenuRole.Quit),
 				],
 			},
-			{ title: "File", items: [MenuItem.action(CLOSE_WINDOW, "Close Window", "w", ModCmd)] },
+			{ title: "File", items: [MenuItem.action("close_window", "Close Window", "w", ModCmd)] },
+			{
+				title: "View",
+				items: [
+					MenuItem.action("increase_font_size", "Increase Font Size", "=", ModCmd),
+					MenuItem.action("decrease_font_size", "Decrease Font Size", "-", ModCmd),
+					MenuItem.action("reset_font_size", "Reset Font Size", "0", ModCmd),
+				],
+			},
 			{
 				title: "Window",
 				items: [MenuItem.standard(MenuRole.Minimize), MenuItem.standard(MenuRole.Zoom)],
@@ -257,9 +267,9 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 					handler();
 				});
 			},
-			onCloseKey: (handler: () => void): void => {
+			onMenu: (handler: (id: string) => void): void => {
 				listen((name: string, id: string): void => {
-					if (name == "menu.click" && id == CLOSE_WINDOW) { handler(); }
+					if (name == "menu.click") { handler(id); }
 				});
 			},
 			onCloseRequest: (handler: () => void): void => {

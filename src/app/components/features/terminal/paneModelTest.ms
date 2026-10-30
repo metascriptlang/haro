@@ -123,7 +123,7 @@ function timingCounting(scheduled: Scheduled): Timing {
 
 interface Host {
 	config: ((change: ConfigChange) => void) | null;
-	closeKey: (() => void) | null;
+	menu: ((id: string) => void) | null;
 	closeRequest: (() => void) | null;
 	wake: (() => void) | null;
 }
@@ -131,7 +131,7 @@ interface Host {
 function hostOf(host: Host): HostEvents {
 	return {
 		onConfig: (handler: (change: ConfigChange) => void): void => { host.config = handler; },
-		onCloseKey: (handler: () => void): void => { host.closeKey = handler; },
+		onMenu: (handler: (id: string) => void): void => { host.menu = handler; },
 		onCloseRequest: (handler: () => void): void => { host.closeRequest = handler; },
 		onWake: (handler: () => void): void => { host.wake = handler; },
 	};
@@ -492,7 +492,7 @@ test "a clipboard read the OS refuses is told to the user" {
 test "a config change applies live except the shell it starts, which asks for a restart" {
 	assert onFresh("", (t: Term, sink: Sink): void => {
 		const m = paneOf(t, noCalls());
-		const host: Host = { config: null, closeKey: null, closeRequest: null, wake: null };
+		const host: Host = { config: null, menu: null, closeRequest: null, wake: null };
 		m.connectHost(hostOf(host));
 		const onConfig = host.config;
 		assert onConfig !== null;
@@ -520,7 +520,7 @@ test "a config change applies live except the shell it starts, which asks for a 
 test "the font size steps by a point, resets to the config's, and survives a reload until reset" {
 	assert onFresh("", (t: Term, sink: Sink): void => {
 		const m = paneOf(t, noCalls());
-		const host: Host = { config: null, closeKey: null, closeRequest: null, wake: null };
+		const host: Host = { config: null, menu: null, closeRequest: null, wake: null };
 		m.connectHost(hostOf(host));
 		const onConfig = host.config;
 		assert onConfig !== null;
@@ -559,24 +559,45 @@ test "the open and reload config actions reach the host, and an action the windo
 	}).ok;
 }
 
-test "the host's wake drains the shell and refreshes on the scheduler; its close key and close request ask to close" {
+test "a menu item runs the action it is named for, and one that names no action is reported" {
+	assert onFresh("", (t: Term, sink: Sink): void => {
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		const host: Host = { config: null, menu: null, closeRequest: null, wake: null };
+		m.connectHost(hostOf(host));
+		const menu = host.menu;
+		assert menu !== null;
+		if (menu !== null) {
+			menu("increase_font_size");
+			assert m.metrics.fontSize() == pxOf(defaults().fontSize + 1);
+			menu("open_config");
+			menu("reload_config");
+			assert calls.opened == 1 && calls.reloaded == 1;
+			assert calls.fatal == "";
+			menu("quit_everything");
+			assert calls.fatal.includes("names no action");
+		}
+	}).ok;
+}
+
+test "the host's wake drains the shell and refreshes on the scheduler; its close window menu item and close request ask to close" {
 	assert onTerm("$ ", (t: Term, sink: Sink): void => {
 		const scheduled: Scheduled = { runs: [] };
 		const calls = noCalls();
 		const m = paneWith(Io.open(t), calls, timingCounting(scheduled));
-		const host: Host = { config: null, closeKey: null, closeRequest: null, wake: null };
+		const host: Host = { config: null, menu: null, closeRequest: null, wake: null };
 		m.connectHost(hostOf(host));
 		const wake = host.wake;
-		const closeKey = host.closeKey;
-		assert wake !== null && closeKey !== null;
-		if (wake !== null && closeKey !== null) {
+		const menu = host.menu;
+		assert wake !== null && menu !== null;
+		if (wake !== null && menu !== null) {
 			wake();
 			assert scheduled.runs.length == 1;
 			assert m.stats.tally.refreshes == 0;
 			scheduled.runs[0]();
 			assert m.stats.tally.refreshes == 1;
 			assert calls.closed == 0;
-			closeKey();
+			menu("close_window");
 			assert calls.closed == 1;
 			const closeRequest = host.closeRequest;
 			assert closeRequest !== null;

@@ -14,7 +14,7 @@ import { CommandDone, MouseGeometry, ShellMark, ShellStep, geometryOf } from "..
 import { Config, fontPx, pxOf, steppedFont } from "../../../../config/config";
 import { HookPane, KeyAnswer } from "../../../../config/hooks";
 import { KeyEvent } from "../../../../keys/keys";
-import { Action } from "../../../../input/bindings";
+import { Action, actionNamed } from "../../../../input/bindings";
 import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
 import { FrameRows } from "../../../../controller/rows";
 import { Stats, mark, noteApplied, noteKey } from "../../../stats";
@@ -88,7 +88,7 @@ export interface ShellHook {
 
 export interface HostEvents {
 	onWake: (handler: () => void) => void;
-	onCloseKey: (handler: () => void) => void;
+	onMenu: (handler: (id: string) => void) => void;
 	onCloseRequest: (handler: () => void) => void;
 	onConfig: (handler: (change: ConfigChange) => void) => void;
 }
@@ -498,6 +498,20 @@ function closeKeyPressed(this m: PaneModel): void {
 	m.refresh();
 }
 
+function menuClicked(this m: PaneModel, id: string): void {
+	const action = actionNamed(id);
+	if (action === null) {
+		m.failed(Where.Key, `the menu item "${id}" names no action`);
+		return;
+	}
+	if (action == Action.CloseWindow) {
+		m.closeKeyPressed();
+		return;
+	}
+	m.hosted(action);
+	m.refresh();
+}
+
 function closeRequested(this m: PaneModel): void {
 	m.io.closeWindow();
 	m.refresh();
@@ -510,7 +524,7 @@ function woke(this m: PaneModel): void {
 
 export function connectHost(this m: PaneModel, events: HostEvents): void {
 	events.onConfig((change: ConfigChange): void => { m.reconfigure(change); });
-	events.onCloseKey((): void => { m.closeKeyPressed(); });
+	events.onMenu((id: string): void => { m.menuClicked(id); });
 	events.onCloseRequest((): void => { m.closeRequested(); });
 	events.onWake((): void => {
 		m.io.drain();

@@ -55,6 +55,7 @@ export struct Settings {
 	scrollback: int64;
 	keybinds: Vec<Keybind>;
 	optionAsAlt: OptionAsAlt;
+	copyOnSelect: boolean;
 }
 
 export function settingsOf(this c: Config): Settings {
@@ -65,6 +66,7 @@ export function settingsOf(this c: Config): Settings {
 		scrollback: c.scrollback,
 		keybinds: c.keybinds,
 		optionAsAlt: c.optionAsAlt,
+		copyOnSelect: c.copyOnSelect,
 	};
 }
 
@@ -213,6 +215,7 @@ export function configure(this io: Io, settings: Settings): void {
 	io.settings = settings;
 	io.controls.keybinds = settings.keybinds;
 	io.term.keys.optionAsAlt = settings.optionAsAlt;
+	io.controls.pointer.copyOnSelect = settings.copyOnSelect;
 	io.apply();
 }
 

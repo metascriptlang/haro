@@ -1,5 +1,6 @@
-import { Io, frame, key, keyReleased, move, open, text } from "./io";
+import { Io, configure, frame, key, keyReleased, move, open, settingsOf, text } from "./io";
 import { Term } from "./term";
+import { defaults } from "../config/config";
 import { KeyAction, NO_MODS, keyEvent, modSet } from "../keys/keys";
 import { OPEN_MOD } from "../input/pointer";
 import { MouseButton } from "./mouseButton";
@@ -96,4 +97,15 @@ test "pressing and releasing the open modifier over a link shows and drops its h
 		assert gone.hover === null;
 		assert sink.sent == "";
 	}, 40, 5).ok;
+}
+
+test "the configured copy on select reaches the pointer, and a reload turns it off again" {
+	assert onFresh("", (t: Term, sink: Sink): void => {
+		const io = Io.open(t);
+		assert !io.controls.pointer.copyOnSelect;
+		io.configure({ ...defaults().settingsOf(), copyOnSelect: true });
+		assert io.controls.pointer.copyOnSelect;
+		io.configure(defaults().settingsOf());
+		assert !io.controls.pointer.copyOnSelect;
+	}).ok;
 }

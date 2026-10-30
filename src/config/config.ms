@@ -27,6 +27,7 @@ export struct Config {
 	padding: float64;
 	command: string;
 	shellIntegration: boolean;
+	copyOnSelect: boolean;
 	workingDirectory: StartDir | null;
 	scrollback: int64;
 	foreground: Rgb;
@@ -74,6 +75,7 @@ export function defaults(): Config {
 		padding: 0,
 		command: defaultShell(),
 		shellIntegration: true,
+		copyOnSelect: false,
 		workingDirectory: null,
 		scrollback: SCROLLBACK_LINES,
 		foreground: { r: 204, g: 204, b: 204 },
@@ -277,6 +279,11 @@ export function parse(json: string): Result<Config, string> {
 				if (v.kind != JsonKind.Bool) { return Result.err(`${key} must be true or false`); }
 				c.shellIntegration = v.boolVal;
 			},
+			"copyOnSelect" => {
+				if (!given) { continue; }
+				if (v.kind != JsonKind.Bool) { return Result.err(`${key} must be true or false`); }
+				c.copyOnSelect = v.boolVal;
+			},
 			"workingDirectory" => {
 				if (!given) { continue; }
 				const text = try readString(v, key);
@@ -337,6 +344,7 @@ test "an empty config keeps every default" {
 	assert c.value.padding == 0;
 	assert c.value.command == defaultShell();
 	assert c.value.shellIntegration;
+	assert !c.value.copyOnSelect;
 	assert c.value.scrollback == SCROLLBACK_LINES;
 	assert c.value.palette.length == 0;
 	assert c.value.keybinds.length == 0;
@@ -346,7 +354,7 @@ test "an empty config keeps every default" {
 test "the fields a config gives replace the defaults" {
 	const c = parse(
 		`{"fontFamily":"Operator Saigon","fontSize":10.8,"padding":6,"command":"cmd.exe",` +
-			`"shellIntegration":false,` +
+			`"shellIntegration":false,"copyOnSelect":true,` +
 			`"scrollback":50000,"background":"#1a1b26","foreground":"#A9B1D6",` +
 			`"palette":["#32344a","#f7768e"],` +
 			`"keybinds":[{"keys":"shift+enter","text":"\\u001b[13;2u"}]}`,
@@ -358,6 +366,7 @@ test "the fields a config gives replace the defaults" {
 	assert c.value.padding == 6;
 	assert c.value.command == "cmd.exe";
 	assert !c.value.shellIntegration;
+	assert c.value.copyOnSelect;
 	assert c.value.scrollback == 50000;
 	const background: Rgb = { r: 26, g: 27, b: 38 };
 	const foreground: Rgb = { r: 169, g: 177, b: 214 };
@@ -448,6 +457,7 @@ test "a field the config cannot use is refused by name" {
 		`keybinds[0]: unknown field "txt", expected keys, text, action and mode`;
 	assert refusal(`{"fontSize":"10"}`) == "fontSize must be a number";
 	assert refusal(`{"shellIntegration":"no"}`) == "shellIntegration must be true or false";
+	assert refusal(`{"copyOnSelect":1}`) == "copyOnSelect must be true or false";
 	assert refusal(`{"fontSize":0}`) == "fontSize 0 must be from 1 to 255 points";
 	assert refusal(`{"fontSize":0.5}`) == "fontSize 0.5 must be from 1 to 255 points";
 	assert refusal(`{"fontSize":256}`) == "fontSize 256 must be from 1 to 255 points";

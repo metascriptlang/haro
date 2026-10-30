@@ -6,6 +6,7 @@ export enum Action {
 	Copy,
 	Paste,
 	SelectAll,
+	ClearScrollback,
 	LineUp,
 	LineDown,
 	PageUp,
@@ -61,6 +62,7 @@ const BINDINGS: Vec<Binding> = [
 	{ code: "KeyC", mods: CLIPBOARD_MODS, action: Action.Copy, screen: Screen.Any },
 	{ code: "KeyV", mods: CLIPBOARD_MODS, action: Action.Paste, screen: Screen.Any },
 	{ code: "KeyA", mods: CLIPBOARD_MODS, action: Action.SelectAll, screen: Screen.Any },
+	{ code: "KeyK", mods: CLIPBOARD_MODS, action: Action.ClearScrollback, screen: Screen.Any },
 	{ code: "ArrowUp", mods: CTRL | SHIFT, action: Action.LineUp, screen: Screen.Any },
 	{ code: "ArrowDown", mods: CTRL | SHIFT, action: Action.LineDown, screen: Screen.Any },
 	{ code: "PageUp", mods: CTRL | SHIFT, action: Action.PageUp, screen: Screen.Any },
@@ -91,6 +93,7 @@ const NAMED: Vec<Named> = [
 	{ name: "copy", action: Action.Copy },
 	{ name: "paste", action: Action.Paste },
 	{ name: "select_all", action: Action.SelectAll },
+	{ name: "clear_scrollback", action: Action.ClearScrollback },
 	{ name: "scroll_line_up", action: Action.LineUp },
 	{ name: "scroll_line_down", action: Action.LineDown },
 	{ name: "scroll_page_up", action: Action.PageUp },
@@ -241,6 +244,11 @@ test "select all takes cmd a on macos and ctrl shift a elsewhere" {
 	assert resolve("KeyA", CLIPBOARD_MODS, true) == Action.SelectAll;
 	assert resolve("KeyA", NO_MODS, false) === null;
 	assert resolve("KeyA", CTRL, false) === null;
+}
+
+test "clear scrollback takes cmd k on macos and ctrl shift k elsewhere" {
+	assert resolve("KeyK", CLIPBOARD_MODS, false) == Action.ClearScrollback;
+	assert resolve("KeyK", NO_MODS, false) === null;
 }
 
 test "ctrl shift with an arrow, a page key, home or end scrolls the scrollback" {

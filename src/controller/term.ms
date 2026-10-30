@@ -24,6 +24,10 @@ import {
 	Palette,
 	ShellMark,
 	VtError,
+	alternateScreen,
+	cursor,
+	scrollBottom,
+	writeText,
 } from "../vt/vt";
 import {
 	Decor,
@@ -382,6 +386,35 @@ export function sendText(this t: Term, text: string): Result<boolean, TermError>
 	const s = t.session;
 	if (s === null) { return Result.ok(false); }
 	return s.sendBytes(text.asBytes());
+}
+
+const ERASE_SCROLLBACK = "\x1b[3J";
+const ERASE_SCREEN = "\x1b[H\x1b[2J";
+const FORM_FEED = "\x0c";
+
+function eraseAbove(rows: int32): string {
+	let out = "\x1b7\x1b[H";
+	for (let i = 0; i < rows; i++) { out += "\x1b[2K\x1b[B"; }
+	return out + "\x1b8";
+}
+
+export function clearScreen(this t: Term): Result<boolean, TermError> {
+	const s = t.session;
+	if (s === null) { return Result.ok(false); }
+	const vt = s.vt;
+	if (try vt.alternateScreen()) { return Result.ok(false); }
+	const atPrompt = vt.effects.promptAt !== null;
+	if (atPrompt) {
+		vt.writeText(ERASE_SCREEN + ERASE_SCROLLBACK);
+		vt.scrollBottom();
+		try t.sendText(FORM_FEED);
+		return Result.ok(true);
+	}
+	vt.writeText(ERASE_SCROLLBACK);
+	vt.scrollBottom();
+	const at = try vt.cursor();
+	if (at !== null) { vt.writeText(eraseAbove(at.y)); }
+	return Result.ok(true);
 }
 
 export function sendPaste(

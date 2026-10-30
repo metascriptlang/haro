@@ -11,6 +11,7 @@ import { closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
 import { Warning } from "../input/paste";
 import { Action, CLIPBOARD_MODS, Keybind, Screen } from "../input/bindings";
 import {
+	Board,
 	Sink,
 	spotAt,
 	atBottomOf,
@@ -448,5 +449,48 @@ test "select all keeps the viewport where the user scrolled it" {
 		const scrolled = offsetOf(t);
 		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyA", CLIPBOARD_MODS))));
 		assert offsetOf(t) == scrolled;
+	}).ok;
+}
+
+function screenText(t: Term, c: Controls, clip: Board): string {
+	const _all = settled(clip, c, t, c.keyDown(t, key("KeyA", CLIPBOARD_MODS)));
+	clip.copied = "";
+	const _copy = settled(clip, c, t, c.keyDown(t, key("KeyC", CLIPBOARD_MODS)));
+	return clip.copied;
+}
+
+test "clear scrollback, away from a prompt, drops the history and the rows above the cursor" {
+	assert onTerm(lines(30) + "work$ ", (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const clip = boardOf("");
+		assert offsetOf(t) > 0;
+		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyK", CLIPBOARD_MODS))));
+		assert offsetOf(t) == 0;
+		assert atBottomOf(t);
+		const left = screenText(t, c, clip);
+		assert left.includes("work$");
+		assert !left.includes("line");
+		assert sink.sent == "";
+	}).ok;
+}
+
+test "clear scrollback at a prompt the shell marked blanks the screen and asks the shell to redraw" {
+	const atPrompt = lines(30) + "\x1b]133;A\x07$ ";
+	assert onTerm(atPrompt, (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const clip = boardOf("");
+		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyK", CLIPBOARD_MODS))));
+		assert offsetOf(t) == 0;
+		assert !screenText(t, c, clip).includes("line");
+		assert sink.sent == "\x0c";
+	}).ok;
+}
+
+test "clear scrollback on the alternate screen does nothing and leaves the key to the program" {
+	assert onTerm("\x1b[?1049hfull screen", (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const clip = boardOf("");
+		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyK", CLIPBOARD_MODS))));
+		assert screenText(t, c, clip).includes("full screen");
 	}).ok;
 }

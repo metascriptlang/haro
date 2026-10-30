@@ -11,7 +11,7 @@ import {
 	scrollPages,
 	scrollTop,
 } from "../vt/vt";
-import { Term, TermError, busy, cooked, vtFailed } from "./term";
+import { Term, TermError, busy, clearScreen, cooked, vtFailed } from "./term";
 import { Controls, holding, selectAll, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";
 
@@ -48,6 +48,10 @@ export function act(
 		Action.Copy => { return c.copySelection(t); },
 		Action.Paste => { c.pasteFrom(); },
 		Action.SelectAll => { try c.selectAll(vt); },
+		Action.ClearScrollback => {
+			if (!(try t.clearScreen())) { return Result.ok(false); }
+			try c.pointer.clear(vt);
+		},
 		Action.PageUp => { try vt.scrollPages(-1); },
 		Action.PageDown => { try vt.scrollPages(1); },
 		Action.PromptUp => { try vt.jumpToPrompt(PromptJump.Previous); },

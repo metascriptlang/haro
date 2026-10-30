@@ -1,3 +1,4 @@
+import { KeyMod } from "../keys/keys";
 import { Point, Selection, Unit } from "../select/select";
 import { Vt, VtError } from "../vt/vt";
 import { Clicks, unitOf } from "./clicks";
@@ -49,6 +50,18 @@ export function autoscrollOf(yPx: float64, heightPx: float64): int32 {
 	if (yPx <= AUTOSCROLL_EDGE_PX) { return -1; }
 	if (yPx > heightPx - AUTOSCROLL_EDGE_PX) { return 1; }
 	return 0;
+}
+
+when (macos) {
+	export const OPEN_MOD: KeyMod = KeyMod.Super;
+} else {
+	export const OPEN_MOD: KeyMod = KeyMod.Ctrl;
+}
+
+const CHORD: BitSet<KeyMod> = KeyMod.Shift | KeyMod.Ctrl | KeyMod.Alt | KeyMod.Super;
+
+export function opensLinks(mods: BitSet<KeyMod>): boolean {
+	return mods.intersection(CHORD) == (0 as BitSet<KeyMod>).incl(OPEN_MOD);
 }
 
 export function claimsMouse(tracking: boolean, shift: boolean): boolean {
@@ -414,6 +427,21 @@ test "a selection the terminal let go of is dropped here too" {
 		if (kept.ok) { assert !kept.value; }
 		assert !p.selected();
 		assert !p.dragging;
+	}
+}
+
+test "only the open modifier alone opens links: Cmd on macOS, Ctrl elsewhere" {
+	const none = 0 as BitSet<KeyMod>;
+	assert opensLinks(none.incl(OPEN_MOD));
+	assert opensLinks(none.incl(OPEN_MOD).incl(KeyMod.CapsLock).incl(KeyMod.NumLock));
+	assert !opensLinks(none);
+	assert !opensLinks(none.incl(OPEN_MOD).incl(KeyMod.Shift));
+	assert !opensLinks(none.incl(OPEN_MOD).incl(KeyMod.Alt));
+	assert !opensLinks(none.incl(KeyMod.Alt));
+	when (macos) {
+		assert !opensLinks(none.incl(KeyMod.Ctrl));
+	} else {
+		assert !opensLinks(none.incl(KeyMod.Super));
 	}
 }
 

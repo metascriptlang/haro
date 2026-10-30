@@ -1,6 +1,6 @@
 import { MouseButton } from "./mouseButton";
 import { KeyEvent, KeyMod } from "../keys/keys";
-import { selected } from "../input/pointer";
+import { OPEN_MOD, selected } from "../input/pointer";
 import { View, fitRows, open, paint } from "../app/frame";
 import { bounds } from "../select/select";
 import { Term, pumpFrame, releaseHeldKey, sendKey } from "./term";
@@ -20,6 +20,7 @@ import {
 import { CLIPBOARD_MODS } from "../input/bindings";
 import { KeyMod, NO_MODS, modSet } from "../keys/keys";
 const CTRL = modSet(KeyMod.Ctrl);
+const OPEN = modSet(OPEN_MOD);
 const SHIFT = modSet(KeyMod.Shift);
 import {
 	Sink,
@@ -158,21 +159,40 @@ test "shift hands the mouse back from an app that tracks it, and a wheel reporte
 	}).ok;
 }
 
-test "a ctrl click on an http link opens it, on a link to a program or on text it does not" {
+test "an open-modifier click on an http link opens it, on a link to a program or on text it does not" {
 	const text = "\x1b]8;;https://example.com/a\x07link\x1b]8;;\x07 " +
 		"\x1b]8;;file:///c:/x.exe\x07bad\x1b]8;;\x07 plain";
 	assert onTerm(text, (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const board = boardOf("");
 		const clip = board;
-		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(1, 0, CTRL), 0)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(1, 0, OPEN), 0)));
 		assert board.opened == "https://example.com/a";
 		board.opened = "";
-		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(6, 0, CTRL), 0)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(6, 0, OPEN), 0)));
 		assert board.opened == "";
-		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(12, 0, CTRL), 10000)));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(12, 0, OPEN), 10000)));
 		assert board.opened == "";
 		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(1, 0, NO_MODS), 20000)));
+		assert board.opened == "";
+	}, 30, 5).ok;
+}
+
+test "an open-modifier click on a URL written as plain text opens it, wrapped over rows too" {
+	const text = "see https://example.com/p. ok\r\n\r\nhttps://example.com/long/wrapped/path";
+	assert onTerm(text, (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const board = boardOf("");
+		const clip = board;
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(8, 0, OPEN), 0)));
+		assert board.opened == "https://example.com/p";
+		board.opened = "";
+		assert settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(1, 0, OPEN), 10000)).ok;
+		assert board.opened == "";
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(2, 3, OPEN), 20000)));
+		assert board.opened == "https://example.com/long/wrapped/path";
+		board.opened = "";
+		assert settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(8, 0, NO_MODS), 30000)).ok;
 		assert board.opened == "";
 	}, 30, 5).ok;
 }
@@ -289,8 +309,9 @@ test "a press in the padding reaches a tracking app as the nearest cell" {
 test "a press picks one plan from the button, the modifiers, mouse tracking and a link under it" {
 	const none = 0 as BitSet<KeyMod>;
 	const ctrl = none.incl(KeyMod.Ctrl);
+	const open = none.incl(OPEN_MOD);
 	const shift = none.incl(KeyMod.Shift);
-	assert planPress(MouseButton.Left, ctrl, true, true) == PressPlan.Link;
+	assert planPress(MouseButton.Left, open, true, true) == PressPlan.Link;
 	assert planPress(MouseButton.Left, ctrl, false, false) == PressPlan.Select;
 	assert planPress(MouseButton.Right, ctrl, false, true) == PressPlan.CopyOrPaste;
 	assert planPress(MouseButton.Left, none, true, true) == PressPlan.Report;

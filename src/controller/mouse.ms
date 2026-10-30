@@ -1,5 +1,6 @@
 import { KeyMod } from "../keys/keys";
-import { autoscrollOf, claimsMouse } from "../input/pointer";
+import { autoscrollOf, claimsMouse, opensLinks } from "../input/pointer";
+import { linkUnder } from "../screen/linksGrid";
 import { WheelRoute, route } from "../input/wheel";
 import { openable, refusalText } from "../term/link";
 import { MouseAction, MouseInput, Vt } from "../vt/vt";
@@ -47,7 +48,7 @@ export function planPress(
 	tracking: boolean,
 	overLink: boolean,
 ): PressPlan {
-	if (button == MouseButton.Left && mods.has(KeyMod.Ctrl) && overLink) { return PressPlan.Link; }
+	if (button == MouseButton.Left && opensLinks(mods) && overLink) { return PressPlan.Link; }
 	if (claimsMouse(tracking, mods.has(KeyMod.Shift))) { return PressPlan.Report; }
 	return match (button) {
 		MouseButton.Left => PressPlan.Select,
@@ -69,8 +70,9 @@ export function pointerDown(
 	if (vt === null) { return Result.ok(false); }
 	const modes = try vt.modes();
 	let uri: string | null = null;
-	if (button == MouseButton.Left && h.mods.has(KeyMod.Ctrl)) {
-		uri = try vt.linkAt(h.at.col, h.at.row);
+	if (button == MouseButton.Left && opensLinks(h.mods)) {
+		const link = try vt.linkUnder(h.at.col, h.at.row);
+		if (link !== null) { uri = link.uri; }
 	}
 	match (planPress(button, h.mods, modes.mouseTracking, uri !== null)) {
 		PressPlan.Link => {

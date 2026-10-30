@@ -25,11 +25,25 @@ test "a shell actor opens its recording, fits, and hands out the recorded rows i
 		}
 	}
 	let seen = false;
-	port.frame((next: IoFrame): void => { seen = next.started; });
+	let lost = "";
+	port.frame((next: IoFrame): void => { seen = next.started; }, (error: string): void => { lost = error; });
 	assert (await shell.openError()) === null;
 	assert seen;
+	assert lost == "";
 	await closed(shell);
 	assert (await shell.frame()) === null;
+}
+
+test "a frame callback that throws reaches the failure sink instead of a lost promise" {
+	const shell = new Shell({ command: "", cwd: null, recording: "x" });
+	assert (await shell.openError()) === null;
+	const port = portOf(shell);
+	port.fit(20, 3, 0, 0);
+	let lost = "";
+	port.frame((next: IoFrame): void => { throw new Error("boom"); }, (error: string): void => { lost = error; });
+	assert (await shell.relight(null)).rows.length >= 0;
+	assert lost.includes("boom"), lost;
+	await closed(shell);
 }
 
 function firstChanged(got: IoFrame | null): string {

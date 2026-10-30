@@ -200,7 +200,11 @@ export function open(
 			padding,
 			started.foreground,
 			(ink: CellInk | null): void => {
-				io.relight(ink, (rows: FrameRows): void => { view.repaintCursor(rows); });
+				io.relight(
+					ink,
+					(rows: FrameRows): void => { view.repaintCursor(rows); },
+					(error: string): void => { report.note(`cursor: ${error}`); },
+				);
 			},
 		),
 		preedit: PreeditModel.open(),
@@ -298,7 +302,10 @@ export function scheduleRefresh(this m: PaneModel): void {
 
 export function refresh(this m: PaneModel): void {
 	m.stats.tally.refreshes += 1;
-	m.io.frame((got: IoFrame): void => { m.applied(got); });
+	m.io.frame(
+		(got: IoFrame): void => { m.applied(got); },
+		(error: string): void => { m.failed(Where.Output, error); },
+	);
 }
 
 function applied(this m: PaneModel, got: IoFrame): void {

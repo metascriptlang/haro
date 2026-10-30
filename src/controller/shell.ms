@@ -128,17 +128,23 @@ export actor Shell {
 	}
 }
 
-async function framed(shell: Shell, done: (got: IoFrame) => void): Promise<void> {
-	const got = await shell.frame();
-	if (got !== null) { done(got); }
+function framed(
+	shell: Shell,
+	done: (got: IoFrame) => void,
+	failed: (error: string) => void,
+): void {
+	shell.frame().then((got: IoFrame | null): void => {
+		if (got !== null) { done(got); }
+	}).catch((e: Error): void => { failed(`${e}`); });
 }
 
-async function relit(
+function relit(
 	shell: Shell,
 	ink: CellInk | null,
 	done: (rows: FrameRows) => void,
-): Promise<void> {
-	done(await shell.relight(ink));
+	failed: (error: string) => void,
+): void {
+	shell.relight(ink).then(done).catch((e: Error): void => { failed(`${e}`); });
 }
 
 export async function closed(shell: Shell): Promise<void> {
@@ -181,9 +187,15 @@ export function portOf(shell: Shell): IoPort {
 		undecorate: (id: int32): void => { shell.undecorate(id); },
 		annotate: (a: Annotation): void => { shell.annotate(a); },
 		unannotate: (id: int32): void => { shell.unannotate(id); },
-		frame: (done: (got: IoFrame) => void): void => { const _framed = framed(shell, done); },
-		relight: (ink: CellInk | null, done: (rows: FrameRows) => void): void => {
-			const _relit = relit(shell, ink, done);
+		frame: (done: (got: IoFrame) => void, failed: (error: string) => void): void => {
+			framed(shell, done, failed);
+		},
+		relight: (
+			ink: CellInk | null,
+			done: (rows: FrameRows) => void,
+			failed: (error: string) => void,
+		): void => {
+			relit(shell, ink, done, failed);
 		},
 	};
 }

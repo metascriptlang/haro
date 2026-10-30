@@ -165,8 +165,12 @@ export interface IoPort {
 	undecorate: (id: int32) => void;
 	annotate: (a: Annotation) => void;
 	unannotate: (id: int32) => void;
-	frame: (done: (got: IoFrame) => void) => void;
-	relight: (ink: CellInk | null, done: (rows: FrameRows) => void) => void;
+	frame: (done: (got: IoFrame) => void, failed: (error: string) => void) => void;
+	relight: (
+		ink: CellInk | null,
+		done: (rows: FrameRows) => void,
+		failed: (error: string) => void,
+	) => void;
 }
 
 export function open(this typeof Io, t: Term): Io {
@@ -426,8 +430,14 @@ export function port(this io: Io): IoPort {
 		undecorate: (id: int32): void => { io.undecorate(id); },
 		annotate: (a: Annotation): void => { io.annotate(a); },
 		unannotate: (id: int32): void => { io.unannotate(id); },
-		frame: (done: (got: IoFrame) => void): void => { done(io.frame()); },
-		relight: (ink: CellInk | null, done: (rows: FrameRows) => void): void => {
+		frame: (done: (got: IoFrame) => void, failed: (error: string) => void): void => {
+			done(io.frame());
+		},
+		relight: (
+			ink: CellInk | null,
+			done: (rows: FrameRows) => void,
+			failed: (error: string) => void,
+		): void => {
 			done(io.relight(ink));
 		},
 	};

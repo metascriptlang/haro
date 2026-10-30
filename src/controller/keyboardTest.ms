@@ -9,7 +9,7 @@ import { Term, releaseHeldKey, sendKey } from "./term";
 import { Controls, holding } from "./controls";
 import { closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
 import { Warning } from "../input/paste";
-import { Action, CLIPBOARD_MODS, Keybind, Screen } from "../input/bindings";
+import { APP_MODS, Action, CLIPBOARD_MODS, Keybind, Screen } from "../input/bindings";
 import {
 	Board,
 	Sink,
@@ -492,5 +492,20 @@ test "clear scrollback on the alternate screen does nothing and leaves the key t
 		const clip = boardOf("");
 		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyK", CLIPBOARD_MODS))));
 		assert screenText(t, c, clip).includes("full screen");
+	}).ok;
+}
+
+test "the font size chords are handed to the window as asks, and a full-screen program does not get them" {
+	assert onTerm("ready", (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		assert c.keyDown(t, key("Equal", APP_MODS)).ok;
+		assert c.keyDown(t, key("Minus", APP_MODS)).ok;
+		assert c.keyDown(t, key("Digit0", APP_MODS)).ok;
+		const asks = c.takeAsks();
+		assert asks.actions.length == 3;
+		assert asks.actions[0] == Action.IncreaseFontSize;
+		assert asks.actions[1] == Action.DecreaseFontSize;
+		assert asks.actions[2] == Action.ResetFontSize;
+		assert sink.sent == "";
 	}).ok;
 }

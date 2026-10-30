@@ -1,5 +1,5 @@
 import { KeyMod } from "../keys/keys";
-import { Keybind } from "../input/bindings";
+import { Action, Keybind } from "../input/bindings";
 import { Point, Selection, Unit, drag, marked, pointRange, press } from "../select/select";
 import { Pointer, Spot } from "../input/pointer";
 import { Wheel } from "../input/wheel";
@@ -25,12 +25,13 @@ export enum ClipRead {
 export struct Asks {
 	copy: string | null;
 	opens: Vec<string>;
+	actions: Vec<Action>;
 	reads: int32;
 	close: boolean;
 }
 
 export function none(this typeof Asks): Asks {
-	return { copy: null, opens: [], reads: 0, close: false };
+	return { copy: null, opens: [], actions: [], reads: 0, close: false };
 }
 
 export struct Hit {

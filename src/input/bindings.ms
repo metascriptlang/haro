@@ -15,6 +15,9 @@ export enum Action {
 	Bottom,
 	PromptUp,
 	PromptDown,
+	IncreaseFontSize,
+	DecreaseFontSize,
+	ResetFontSize,
 }
 
 const SHIFT = modSet(KeyMod.Shift);
@@ -42,9 +45,11 @@ struct Binding {
 
 when (macos) {
 	export const CLIPBOARD_MODS: BitSet<KeyMod> = SUPER;
+	export const APP_MODS: BitSet<KeyMod> = SUPER;
 	const OS_CHORDS: Vec<Binding> = [];
 } else when (windows) {
 	export const CLIPBOARD_MODS: BitSet<KeyMod> = CTRL | SHIFT;
+	export const APP_MODS: BitSet<KeyMod> = CTRL;
 	const OS_CHORDS: Vec<Binding> = [
 		{ code: "Insert", mods: CTRL, action: Action.Copy, screen: Screen.Any },
 		{ code: "Insert", mods: SHIFT, action: Action.Paste, screen: Screen.Any },
@@ -52,6 +57,7 @@ when (macos) {
 	];
 } else {
 	export const CLIPBOARD_MODS: BitSet<KeyMod> = CTRL | SHIFT;
+	export const APP_MODS: BitSet<KeyMod> = CTRL;
 	const OS_CHORDS: Vec<Binding> = [
 		{ code: "Insert", mods: CTRL, action: Action.Copy, screen: Screen.Any },
 		{ code: "Insert", mods: SHIFT, action: Action.Paste, screen: Screen.Any },
@@ -63,6 +69,10 @@ const BINDINGS: Vec<Binding> = [
 	{ code: "KeyV", mods: CLIPBOARD_MODS, action: Action.Paste, screen: Screen.Any },
 	{ code: "KeyA", mods: CLIPBOARD_MODS, action: Action.SelectAll, screen: Screen.Any },
 	{ code: "KeyK", mods: CLIPBOARD_MODS, action: Action.ClearScrollback, screen: Screen.Any },
+	{ code: "Equal", mods: APP_MODS, action: Action.IncreaseFontSize, screen: Screen.Any },
+	{ code: "Equal", mods: APP_MODS | SHIFT, action: Action.IncreaseFontSize, screen: Screen.Any },
+	{ code: "Minus", mods: APP_MODS, action: Action.DecreaseFontSize, screen: Screen.Any },
+	{ code: "Digit0", mods: APP_MODS, action: Action.ResetFontSize, screen: Screen.Any },
 	{ code: "ArrowUp", mods: CTRL | SHIFT, action: Action.LineUp, screen: Screen.Any },
 	{ code: "ArrowDown", mods: CTRL | SHIFT, action: Action.LineDown, screen: Screen.Any },
 	{ code: "PageUp", mods: CTRL | SHIFT, action: Action.PageUp, screen: Screen.Any },
@@ -102,6 +112,9 @@ const NAMED: Vec<Named> = [
 	{ name: "scroll_to_bottom", action: Action.Bottom },
 	{ name: "prompt_up", action: Action.PromptUp },
 	{ name: "prompt_down", action: Action.PromptDown },
+	{ name: "increase_font_size", action: Action.IncreaseFontSize },
+	{ name: "decrease_font_size", action: Action.DecreaseFontSize },
+	{ name: "reset_font_size", action: Action.ResetFontSize },
 ];
 
 export function actionNamed(name: string): Action | null {
@@ -249,6 +262,15 @@ test "select all takes cmd a on macos and ctrl shift a elsewhere" {
 test "clear scrollback takes cmd k on macos and ctrl shift k elsewhere" {
 	assert resolve("KeyK", CLIPBOARD_MODS, false) == Action.ClearScrollback;
 	assert resolve("KeyK", NO_MODS, false) === null;
+}
+
+test "font size keys take cmd on macos and ctrl elsewhere, with or without shift for plus" {
+	assert resolve("Equal", APP_MODS, false) == Action.IncreaseFontSize;
+	assert resolve("Equal", APP_MODS | SHIFT, true) == Action.IncreaseFontSize;
+	assert resolve("Minus", APP_MODS, false) == Action.DecreaseFontSize;
+	assert resolve("Digit0", APP_MODS, false) == Action.ResetFontSize;
+	assert resolve("Minus", NO_MODS, false) === null;
+	assert resolve("Digit0", SHIFT, false) === null;
 }
 
 test "ctrl shift with an arrow, a page key, home or end scrolls the scrollback" {

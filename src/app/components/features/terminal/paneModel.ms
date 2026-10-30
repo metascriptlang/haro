@@ -11,9 +11,10 @@ import { spriteCellFor } from "../../../../../../void/src/void2d/font";
 import { gridSize } from "../../../../grid/size";
 import { CellInk, RowNote, RowTint } from "../../../../grid/lines";
 import { CommandDone, MouseGeometry, ShellMark, ShellStep, geometryOf } from "../../../../vt/vt";
-import { Config, fontPx } from "../../../../config/config";
+import { Config, fontPx, pxOf, steppedFont } from "../../../../config/config";
 import { HookPane, KeyAnswer } from "../../../../config/hooks";
 import { KeyEvent } from "../../../../keys/keys";
+import { Action } from "../../../../input/bindings";
 import { View, fitRows, hexOf, paint, repaintCursor } from "../../../frame";
 import { FrameRows } from "../../../../controller/rows";
 import { Stats, mark, noteApplied, noteKey } from "../../../stats";
@@ -42,6 +43,7 @@ import { TermError, exitCodeText } from "../../../../controller/term";
 
 const HOLD_RECHECK_MS = 100;
 const AUTOSCROLL_MS = 15;
+const FONT_STEP_POINTS: float64 = 1;
 const RESTART_NOTICE = "config.ms: command, workingDirectory and shellIntegration apply when Haro restarts";
 
 export interface Desktop {
@@ -109,6 +111,9 @@ export interface PaneModel {
 	shellHook: ShellHook;
 	stats: Stats;
 	started: Config;
+	fontPoints: float64;
+	configFontPoints: float64;
+	fontAdjusted: boolean;
 	shellStarted: boolean;
 	ended: Exit | null;
 	autoscrolling: boolean;
@@ -177,6 +182,9 @@ export function open(
 		shellHook: shellHook,
 		stats: stats,
 		started: started,
+		fontPoints: started.fontSize,
+		configFontPoints: started.fontSize,
+		fontAdjusted: false,
 		shellStarted: false,
 		ended: null,
 		autoscrolling: false,
@@ -291,7 +299,33 @@ function answerAsks(this m: PaneModel, asks: Asks): void {
 			m.notify(`Haro could not read the clipboard: ${e}`);
 		});
 	}
+	for (const action of asks.actions) { m.hosted(action); }
 	if (asks.close) { m.desktop.close(); }
+}
+
+function resizeFont(this m: PaneModel, points: float64): void {
+	m.fontPoints = points;
+	m.setFontSize(pxOf(points));
+	flush();
+	if (m.layoutWidth > 0) { m.fitLayout(); }
+}
+
+export function hosted(this m: PaneModel, action: Action): void {
+	match (action) {
+		Action.IncreaseFontSize => {
+			m.fontAdjusted = true;
+			m.resizeFont(steppedFont(m.fontPoints, FONT_STEP_POINTS));
+		},
+		Action.DecreaseFontSize => {
+			m.fontAdjusted = true;
+			m.resizeFont(steppedFont(m.fontPoints, -FONT_STEP_POINTS));
+		},
+		Action.ResetFontSize => {
+			m.fontAdjusted = false;
+			m.resizeFont(m.configFontPoints);
+		},
+		_ => { m.failed(Where.Key, `the window does not run ${action.toString()}`); },
+	}
 }
 
 function watchHold(this m: PaneModel): void {
@@ -441,9 +475,12 @@ function reconfigure(this m: PaneModel, change: ConfigChange): void {
 	const family = change.family;
 	const error = change.error;
 	m.io.configure(c.settingsOf());
-	const resized = c.fontPx() != m.metrics.fontSize() || family != m.metrics.fontFamily();
+	m.configFontPoints = c.fontSize;
+	const points = m.fontAdjusted ? m.fontPoints : c.fontSize;
+	const resized = pxOf(points) != m.metrics.fontSize() || family != m.metrics.fontFamily();
+	m.fontPoints = points;
 	m.setPadding(c.padding);
-	m.setFontSize(c.fontPx());
+	m.setFontSize(pxOf(points));
 	m.setFontFamily(family);
 	flush();
 	const restart = restartNeeded(c, m.started) ? RESTART_NOTICE : "";

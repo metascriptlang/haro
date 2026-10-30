@@ -1,7 +1,7 @@
 import { flush } from "../../../../../../neon/src/core/runtime";
 import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
 import { installClipboardServices } from "../../../../../../neon/src/api/clipboardServices";
-import { Config, defaults } from "../../../../config/config";
+import { Config, defaults, pxOf } from "../../../../config/config";
 import { CommandDone, writeText } from "../../../../vt/vt";
 import { RowNote, RowTint } from "../../../../grid/lines";
 import { open, NoticeModel } from "../notice/notice";
@@ -22,6 +22,7 @@ import {
 	failed,
 	refresh,
 } from "./paneModel";
+import { Action } from "../../../../input/bindings";
 import { HookPane, KeyAnswer, UNHANDLED } from "../../../../config/hooks";
 import { KeyEvent } from "../../../../keys/keys";
 import { cancelDialog, confirmDialog } from "./paneEvents";
@@ -509,6 +510,33 @@ test "a config change applies live except the shell it starts, which asks for a 
 			assert m.notice.text == "config.ms: syntax error";
 			assert m.padding() == 0;
 		}
+	}).ok;
+}
+
+test "the font size steps by a point, resets to the config's, and survives a reload until reset" {
+	assert onFresh("", (t: Term, sink: Sink): void => {
+		const m = paneOf(t, noCalls());
+		const host: Host = { config: null, closeKey: null, closeRequest: null, wake: null };
+		m.connectHost(hostOf(host));
+		const onConfig = host.config;
+		assert onConfig !== null;
+		const base = defaults().fontSize;
+		assert m.metrics.fontSize() == pxOf(base);
+		m.hosted(Action.IncreaseFontSize);
+		m.hosted(Action.IncreaseFontSize);
+		assert m.metrics.fontSize() == pxOf(base + 2);
+		m.hosted(Action.DecreaseFontSize);
+		assert m.metrics.fontSize() == pxOf(base + 1);
+		if (onConfig !== null) {
+			onConfig(loaded({ ...defaults(), fontSize: 30 }));
+			assert m.metrics.fontSize() == pxOf(base + 1);
+			m.hosted(Action.ResetFontSize);
+			assert m.metrics.fontSize() == pxOf(30);
+			onConfig(loaded({ ...defaults(), fontSize: 20 }));
+			assert m.metrics.fontSize() == pxOf(20);
+		}
+		for (let i = 0; i < 400; i++) { m.hosted(Action.DecreaseFontSize); }
+		assert m.metrics.fontSize() == pxOf(1);
 	}).ok;
 }
 

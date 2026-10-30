@@ -86,8 +86,16 @@ export function startDirectory(this c: Config, probableCli: boolean, home: strin
 	};
 }
 
+export function pxOf(points: float64): float64 {
+	return points * SCREEN_DPI / POINTS_PER_INCH;
+}
+
 export function fontPx(this c: Config): float64 {
-	return c.fontSize * SCREEN_DPI / POINTS_PER_INCH;
+	return pxOf(c.fontSize);
+}
+
+export function steppedFont(points: float64, by: float64): float64 {
+	return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, points + by));
 }
 
 function hexDigit(code: int32): int32 | null {
@@ -381,6 +389,14 @@ test "a keybind can name every built-in action by its snake_case name" {
 	assert c.ok;
 	assert c.value.keybinds[0].action == Action.Top;
 	assert c.value.keybinds[0].screen == Screen.Primary;
+}
+
+test "a font size steps by the given points and stays within the sizes a config may name" {
+	assert steppedFont(14, 1) == 15;
+	assert steppedFont(10.5, -1) == 9.5;
+	assert steppedFont(MIN_FONT_SIZE, -1) == MIN_FONT_SIZE;
+	assert steppedFont(MAX_FONT_SIZE, 1) == MAX_FONT_SIZE;
+	assert pxOf(DEFAULT_FONT_SIZE) == parse("{}").value.fontPx();
 }
 
 test "a field msc prints as null is a field the config left out" {

@@ -48,6 +48,9 @@ export function act(
 		Action.Copy => { return c.copySelection(t); },
 		Action.Paste => { c.pasteFrom(); },
 		Action.SelectAll => { try c.selectAll(vt); },
+		Action.IncreaseFontSize | Action.DecreaseFontSize | Action.ResetFontSize => {
+			c.asks.actions.push(action);
+		},
 		Action.ClearScrollback => {
 			if (!(try t.clearScreen())) { return Result.ok(false); }
 			try c.pointer.clear(vt);

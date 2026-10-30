@@ -1,4 +1,8 @@
 set +o posix
+if [ -n "${HARO_BASH_UNEXPORT_HISTFILE-}" ]; then
+	export -n HISTFILE
+	unset HARO_BASH_UNEXPORT_HISTFILE
+fi
 if [ -n "${HARO_ENV-}" ]; then
 	ENV=$HARO_ENV
 else

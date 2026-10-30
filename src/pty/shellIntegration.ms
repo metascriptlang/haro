@@ -61,10 +61,12 @@ function bashLaunch(
 ): ShellLaunch {
 	if (major >= POSIX_ENV_MAJOR) {
 		const given = flags.length > 0 ? ` ${flags.join(" ")}` : "";
-		return {
-			commandLine: `${program} --posix${given}`,
-			env: [`ENV=${scripts}/bash/posix.bash`, `HARO_ENV=${inherited("ENV")}`],
-		};
+		let env: Vec<string> = [`ENV=${scripts}/bash/posix.bash`, `HARO_ENV=${inherited("ENV")}`];
+		if (inherited("HISTFILE") == "" && inherited("HOME") != "") {
+			env.push(`HISTFILE=${inherited("HOME")}/.bash_history`);
+			env.push("HARO_BASH_UNEXPORT_HISTFILE=1");
+		}
+		return { commandLine: `${program} --posix${given}`, env: env };
 	}
 	const boot = `. ${quoted(`${scripts}/bash/prompt.bash`)}`;
 	const chain = inherited("PROMPT_COMMAND");

@@ -168,6 +168,30 @@ test "an interactive bash under Haro reads the user's bashrc and names a subshel
 	}
 }
 
+test "a bash 4 or later under Haro keeps its history in .bash_history and does not export it" {
+	const bash5 = bash5OnPath();
+	if (bash5 === null) {
+		console.log("skipped: no bash 5 on PATH");
+		return;
+	}
+	const inherited = env.get("HISTFILE");
+	defer {
+		const _back = inherited == "" ? env.delete("HISTFILE") : env.set("HISTFILE", inherited);
+	}
+	const _unset = env.delete("HISTFILE");
+	const home = homeWith([".bashrc", ""]);
+	const got = inHome(home, "", (): Run => {
+		return run(
+			bash5,
+			SCRIPTS,
+			"echo \"hist:$HISTFILE:$(sh -c 'echo ${HISTFILE-unset}')\"\r",
+			promptAfterDone,
+		);
+	});
+	assert got.reached;
+	assert times(got.seen.text, `hist:${home}/.bash_history:unset`) == 1;
+}
+
 test "a bash 3 whose bashrc replaces PROMPT_COMMAND loses the marks" {
 	const home = homeWith([".bashrc", "PROMPT_COMMAND=true\necho \"bashrc:$((40 + 2))\"\n"]);
 	const got = inHome(home, "", (): Run => {

@@ -495,17 +495,21 @@ test "clear scrollback on the alternate screen does nothing and leaves the key t
 	}).ok;
 }
 
-test "the font size chords are handed to the window as asks, and a full-screen program does not get them" {
+test "the font size and config chords are handed to the window as asks, and a full-screen program does not get them" {
 	assert onTerm("ready", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		assert c.keyDown(t, key("Equal", APP_MODS)).ok;
 		assert c.keyDown(t, key("Minus", APP_MODS)).ok;
 		assert c.keyDown(t, key("Digit0", APP_MODS)).ok;
+		assert c.keyDown(t, key("Comma", APP_MODS)).ok;
+		assert c.keyDown(t, key("Comma", APP_MODS | SHIFT)).ok;
 		const asks = c.takeAsks();
-		assert asks.actions.length == 3;
+		assert asks.actions.length == 5;
 		assert asks.actions[0] == Action.IncreaseFontSize;
 		assert asks.actions[1] == Action.DecreaseFontSize;
 		assert asks.actions[2] == Action.ResetFontSize;
+		assert asks.actions[3] == Action.OpenConfig;
+		assert asks.actions[4] == Action.ReloadConfig;
 		assert sink.sent == "";
 	}).ok;
 }

@@ -42,11 +42,13 @@ interface Calls {
 	notified: string;
 	closed: int32;
 	bells: int32;
+	opened: int32;
+	reloaded: int32;
 	exits: string;
 }
 
 function noCalls(): Calls {
-	return { fatal: "", noted: "", title: "", notified: "", closed: 0, bells: 0, exits: "" };
+	return { fatal: "", noted: "", title: "", notified: "", closed: 0, bells: 0, opened: 0, reloaded: 0, exits: "" };
 }
 
 function desktopFor(calls: Calls): Desktop {
@@ -55,6 +57,8 @@ function desktopFor(calls: Calls): Desktop {
 		notify: (title: string, body: string): void => { calls.notified += `${title}|${body}\n`; },
 		openLink: (uri: string): void => {},
 		bell: (): void => { calls.bells += 1; },
+		openConfig: (): void => { calls.opened += 1; },
+		reloadConfig: (): void => { calls.reloaded += 1; },
 		close: (): void => { calls.closed += 1; },
 		exited: (code: int32): void => { calls.exits += `${code} `; },
 	};
@@ -537,6 +541,21 @@ test "the font size steps by a point, resets to the config's, and survives a rel
 		}
 		for (let i = 0; i < 400; i++) { m.hosted(Action.DecreaseFontSize); }
 		assert m.metrics.fontSize() == pxOf(1);
+	}).ok;
+}
+
+test "the open and reload config actions reach the host, and an action the window does not run is reported" {
+	assert onFresh("", (t: Term, sink: Sink): void => {
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		m.hosted(Action.OpenConfig);
+		m.hosted(Action.ReloadConfig);
+		m.hosted(Action.ReloadConfig);
+		assert calls.opened == 1;
+		assert calls.reloaded == 2;
+		assert calls.fatal == "";
+		m.hosted(Action.Copy);
+		assert calls.fatal.includes("the window does not run Copy");
 	}).ok;
 }
 

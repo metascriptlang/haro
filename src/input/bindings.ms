@@ -18,6 +18,8 @@ export enum Action {
 	IncreaseFontSize,
 	DecreaseFontSize,
 	ResetFontSize,
+	OpenConfig,
+	ReloadConfig,
 }
 
 const SHIFT = modSet(KeyMod.Shift);
@@ -73,6 +75,8 @@ const BINDINGS: Vec<Binding> = [
 	{ code: "Equal", mods: APP_MODS | SHIFT, action: Action.IncreaseFontSize, screen: Screen.Any },
 	{ code: "Minus", mods: APP_MODS, action: Action.DecreaseFontSize, screen: Screen.Any },
 	{ code: "Digit0", mods: APP_MODS, action: Action.ResetFontSize, screen: Screen.Any },
+	{ code: "Comma", mods: APP_MODS, action: Action.OpenConfig, screen: Screen.Any },
+	{ code: "Comma", mods: APP_MODS | SHIFT, action: Action.ReloadConfig, screen: Screen.Any },
 	{ code: "ArrowUp", mods: CTRL | SHIFT, action: Action.LineUp, screen: Screen.Any },
 	{ code: "ArrowDown", mods: CTRL | SHIFT, action: Action.LineDown, screen: Screen.Any },
 	{ code: "PageUp", mods: CTRL | SHIFT, action: Action.PageUp, screen: Screen.Any },
@@ -115,6 +119,8 @@ const NAMED: Vec<Named> = [
 	{ name: "increase_font_size", action: Action.IncreaseFontSize },
 	{ name: "decrease_font_size", action: Action.DecreaseFontSize },
 	{ name: "reset_font_size", action: Action.ResetFontSize },
+	{ name: "open_config", action: Action.OpenConfig },
+	{ name: "reload_config", action: Action.ReloadConfig },
 ];
 
 export function actionNamed(name: string): Action | null {
@@ -271,6 +277,12 @@ test "font size keys take cmd on macos and ctrl elsewhere, with or without shift
 	assert resolve("Digit0", APP_MODS, false) == Action.ResetFontSize;
 	assert resolve("Minus", NO_MODS, false) === null;
 	assert resolve("Digit0", SHIFT, false) === null;
+}
+
+test "the config keys take cmd comma to open and cmd shift comma to reload, ctrl elsewhere" {
+	assert resolve("Comma", APP_MODS, false) == Action.OpenConfig;
+	assert resolve("Comma", APP_MODS | SHIFT, true) == Action.ReloadConfig;
+	assert resolve("Comma", NO_MODS, false) === null;
 }
 
 test "ctrl shift with an arrow, a page key, home or end scrolls the scrollback" {

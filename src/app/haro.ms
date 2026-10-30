@@ -24,7 +24,8 @@ import {
 } from "../../../ion/src/index";
 import { ionWakeLoop } from "../../../ion/src/platform/bridge.h";
 import { argv, exit } from "std/process";
-import { appendFile, ensureDir, exists, fileSize, readFile, rename } from "std/fs";
+import { appendFile, ensureDir, exists, fileSize, readFile, rename, writeFile } from "std/fs";
+import { dirname } from "std/fs/path";
 import { homeDir } from "std/os";
 import { App } from "./app";
 import { Pace } from "./pace";
@@ -105,6 +106,7 @@ const pace = Pace.start();
 const stats = Stats.empty();
 const config = ConfigWatch.forFile(flagValue("--config") ?? configPath());
 
+const CONFIG_STUB = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = {};\n`;
 const LOG_LIMIT_BYTES = 1048576;
 let logFailed = false;
 
@@ -126,6 +128,25 @@ function note(line: string): void {
 	}
 	const logged = appendFile(path, `${Date.now()} ${line}\n`);
 	if (!logged.ok) { logFailure(logged.error.toString()); }
+}
+
+function fileUrl(path: string): string {
+	const slashed = path.replaceAll("\\", "/").replaceAll(" ", "%20");
+	return slashed.startsWith("/") ? `file://${slashed}` : `file:///${slashed}`;
+}
+
+function openConfig(): void {
+	const path = config.file;
+	if (!exists(path)) {
+		const made = ensureDir(dirname(path));
+		if (!made.ok) { note(`open config: cannot create ${dirname(path)}`); return; }
+		if (!writeFile(path, CONFIG_STUB).ok) { note(`open config: cannot write ${path}`); return; }
+	}
+	openExternal(fileUrl(path));
+}
+
+function reloadConfig(): void {
+	config.loaded.stamp = "";
 }
 
 function fail(message: string): never {
@@ -199,6 +220,8 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 			},
 			openLink: (uri: string): void => { openExternal(uri); },
 			bell: (): void => { beep(); },
+			openConfig: openConfig,
+			reloadConfig: reloadConfig,
 			close: (): void => {
 				note("Close Window or a keybind closed the window");
 				quitWith(shell)();

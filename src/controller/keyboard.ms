@@ -48,7 +48,11 @@ export function act(
 		Action.Copy => { return c.copySelection(t); },
 		Action.Paste => { c.pasteFrom(); },
 		Action.SelectAll => { try c.selectAll(vt); },
-		Action.IncreaseFontSize | Action.DecreaseFontSize | Action.ResetFontSize => {
+		Action.IncreaseFontSize |
+		Action.DecreaseFontSize |
+		Action.ResetFontSize |
+		Action.OpenConfig |
+		Action.ReloadConfig => {
 			c.asks.actions.push(action);
 		},
 		Action.ClearScrollback => {

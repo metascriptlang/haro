@@ -51,6 +51,8 @@ export interface Desktop {
 	notify: (title: string, body: string) => void;
 	openLink: (uri: string) => void;
 	bell: () => void;
+	openConfig: () => void;
+	reloadConfig: () => void;
 	close: () => void;
 	exited: (code: int32) => void;
 }
@@ -324,6 +326,8 @@ export function hosted(this m: PaneModel, action: Action): void {
 			m.fontAdjusted = false;
 			m.resizeFont(m.configFontPoints);
 		},
+		Action.OpenConfig => { m.desktop.openConfig(); },
+		Action.ReloadConfig => { m.desktop.reloadConfig(); },
 		_ => { m.failed(Where.Key, `the window does not run ${action.toString()}`); },
 	}
 }

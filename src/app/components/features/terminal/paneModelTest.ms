@@ -598,7 +598,7 @@ test "a menu item runs the action it is named for, and one that names no action 
 			assert calls.opened == 1 && calls.reloaded == 1;
 			assert calls.fatal == "";
 			menu("quit_everything");
-			assert calls.fatal.includes("names no action");
+			assert m.notice.text.includes("names no action");
 		}
 	}).ok;
 }

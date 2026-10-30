@@ -19,6 +19,7 @@ export function CellText(props: {
 		style={{
 			fontSize: props.metrics.fontSize(),
 			fontFamily: props.metrics.fontFamily(),
+			fontSizeAdjust: "ic-width from-font",
 			height: props.metrics.rowHeight(),
 		}}
 		cellWidth={props.metrics.cellWidth()}

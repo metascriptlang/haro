@@ -37,6 +37,7 @@ export function Preedit(props: {
 				style={{
 					fontSize: m.fontSize(),
 					fontFamily: m.fontFamily(),
+					fontSizeAdjust: "ic-width from-font",
 					color: props.foreground(),
 					height: m.rowHeight(),
 					textDecorationLine: "underline",

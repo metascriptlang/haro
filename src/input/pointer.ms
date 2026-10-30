@@ -313,7 +313,7 @@ test "a later press may extend a selection, but not one that would count as a re
 		assert p.dragging;
 		assert p.copied(vt) == "ello wor";
 		assert p.drag(vt, spot(0, 0)).ok;
-		assert p.copied(vt) == "h";
+		assert p.copied(vt) == "he";
 	}
 }
 

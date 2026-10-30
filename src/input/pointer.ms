@@ -137,6 +137,16 @@ export function drag(this p: Pointer, vt: Vt, at: Spot): Result<boolean, VtError
 	return p.publish(vt);
 }
 
+export function canExtend(this p: Pointer, time: float64): boolean {
+	return p.shown() !== null && !p.clicks.recent(time);
+}
+
+export function extend(this p: Pointer, vt: Vt, at: Spot): Result<boolean, VtError> {
+	p.hover = null;
+	p.dragging = true;
+	return p.drag(vt, at);
+}
+
 export function release(this p: Pointer): void {
 	p.dragging = false;
 }
@@ -281,6 +291,27 @@ test "rectangular selection takes Option on macOS and Ctrl with Alt elsewhere" {
 		assert rectangular(none.incl(KeyMod.Ctrl).incl(KeyMod.Alt));
 		assert !rectangular(none.incl(KeyMod.Alt));
 		assert !rectangular(none.incl(KeyMod.Ctrl));
+	}
+}
+
+test "a later press may extend a selection, but not one that would count as a repeated click" {
+	const vt = viewOf(20, 3, "hello world");
+	assert vt !== null;
+	if (vt !== null) {
+		defer vt.free();
+		const p = Pointer.open();
+		assert !p.canExtend(10000);
+		assert p.click(vt, 1, 0, 0);
+		assert !p.canExtend(10000);
+		assert p.drag(vt, spot(4, 0)).ok;
+		p.release();
+		assert !p.canExtend(100);
+		assert p.canExtend(10000);
+		assert p.extend(vt, spot(8, 0)).ok;
+		assert p.dragging;
+		assert p.copied(vt) == "ello wor";
+		assert p.drag(vt, spot(0, 0)).ok;
+		assert p.copied(vt) == "h";
 	}
 }
 

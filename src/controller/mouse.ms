@@ -85,6 +85,9 @@ export function pointerDown(
 			return reportMouse(t, MouseAction.Press, button, h);
 		},
 		PressPlan.Select => {
+			if (h.mods.has(KeyMod.Shift) && c.pointer.canExtend(time)) {
+				return Result.ok(try c.pointer.extend(vt, h.at));
+			}
 			const reach = (h.cell.cellWidth as float64) / h.scale;
 			try c.pointer.press(vt, h.at, h.x, h.y, time, reach, rectangular(h.mods));
 			return Result.ok(true);

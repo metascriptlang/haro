@@ -34,6 +34,11 @@ export function register(
 	return c.count;
 }
 
+export function recent(this c: Clicks, time: float64): boolean {
+	const since = time - c.time;
+	return c.count > 0 && since >= 0 && since <= REPEAT_MS;
+}
+
 export function unitOf(count: int32): Unit {
 	return match (count) {
 		2 => Unit.Word,
@@ -91,4 +96,14 @@ test "one click selects by cell, two by word, three by line" {
 	assert unitOf(1) == Unit.Cell;
 	assert unitOf(2) == Unit.Word;
 	assert unitOf(3) == Unit.Line;
+}
+
+test "a press is recent until the repeat interval since the last one has passed" {
+	const c = Clicks.open();
+	assert !c.recent(0);
+	assert c.register(10, 10, 100, 8) == 1;
+	assert c.recent(100);
+	assert c.recent(600);
+	assert !c.recent(601);
+	assert !c.recent(99);
 }

@@ -261,6 +261,24 @@ test "dragging with the rectangle modifiers selects a block, and the same drag w
 	}, 20, 5).ok;
 }
 
+test "a shift press extends the selection from its anchor, unless it lands inside the repeat interval" {
+	assert onTerm("alpha beta", (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const board = boardOf("");
+		const clip = board;
+		assert drag(c, t, clip, spotAt(0, 0), spotAt(4, 0));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(7, 0, SHIFT), 5000)));
+		assert c.pointer.dragging;
+		assert handled(c.pointerMove(t, hitWith(8, 0, SHIFT), true));
+		assert c.pointerUp(t, MouseButton.Left, hitAt(8, 0)).ok;
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Right, hitAt(0, 0), 6000)));
+		assert board.copied == "alpha bet";
+		assert drag(c, t, clip, spotAt(0, 0), spotAt(4, 0));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(7, 0, SHIFT), 100)));
+		assert !c.pointer.selected();
+	}, 20, 5).ok;
+}
+
 test "a right click copies a selection and otherwise pastes" {
 	assert onTerm("alpha beta", (t: Term, sink: Sink): void => {
 		const c = Controls.open();

@@ -342,14 +342,15 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 	const path = `${dir}/config.ms`;
 	const api = `${cwd()}/assets/haro`;
 	const head = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = `;
-	const body = `{ fontSize: 13, keybinds: [{ keys: "super+w", text: "x", mode: "alt" }, ` +
-		`{ keys: "super+q", action: "close_window", mode: "~alt" }] };\n`;
+	const body = `{ fontSize: 13, copyOnSelect: true, keybinds: [{ keys: "super+w", text: "x", mode: "alt" }, ` +
+		`{ keys: "super+q", action: "close_window", mode: "~alt" }, ` +
+		`{ keys: "super+j", action: "increase_font_size" }] };\n`;
 	assert writeFile(path, `${head}${body}`).ok;
 	const typed = evaluate(path, dir, api, INSTALLED);
 	assert typed.ok;
 	if (typed.ok) {
 		const c = parse(typed.value.json);
-		assert c.ok && c.value.fontSize == 13 && c.value.keybinds.length == 2;
+		assert c.ok && c.value.fontSize == 13 && c.value.keybinds.length == 3 && c.value.copyOnSelect;
 	}
 	assert exists(`${dir}/build.ms`);
 	assert writeFile(path, `${head}{ fontSiz: 13 };\n`).ok;

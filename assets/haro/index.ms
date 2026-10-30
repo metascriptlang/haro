@@ -1,7 +1,25 @@
 export interface Keybind {
 	keys: string;
 	text?: string;
-	action?: "close_window";
+	action?:
+		| "close_window"
+		| "copy"
+		| "paste"
+		| "select_all"
+		| "clear_scrollback"
+		| "scroll_line_up"
+		| "scroll_line_down"
+		| "scroll_page_up"
+		| "scroll_page_down"
+		| "scroll_to_top"
+		| "scroll_to_bottom"
+		| "prompt_up"
+		| "prompt_down"
+		| "increase_font_size"
+		| "decrease_font_size"
+		| "reset_font_size"
+		| "open_config"
+		| "reload_config";
 	mode?: "alt" | "~alt";
 }
 
@@ -85,6 +103,7 @@ export interface HaroConfig {
 	palette?: string[];
 	keybinds?: Keybind[];
 	optionAsAlt?: "neither" | "left" | "right" | "both";
+	copyOnSelect?: boolean;
 	onKey?: (e: KeyPress) => KeyAnswer;
 	onPrompt?: (e: Prompt) => void;
 	onCommandDone?: (e: CommandDone) => void;

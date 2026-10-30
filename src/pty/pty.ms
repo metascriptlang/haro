@@ -96,6 +96,18 @@ function inheritedEnv(): Vec<string> {
 	return entries;
 }
 
+export function comSpecCommand(inherited: Vec<string>): string {
+	const entry = inherited.find((e: string): boolean => nameOf(e, true) == "COMSPEC");
+	const value = entry === undefined ? "" : entry.slice(entry.indexOf("=") + 1);
+	return value == "" ? "cmd.exe" : value.includes(" ") ? `"${value}"` : value;
+}
+
+when (windows) {
+	export function defaultCommand(): string {
+		return comSpecCommand(inheritedEnv());
+	}
+}
+
 export function sortedByName(entries: Vec<string>): Vec<string> {
 	let sorted: Vec<string> = [...entries];
 	sorted.sort((a: string, b: string): number => {

@@ -3,6 +3,7 @@ import {
 	NativePty,
 	busy,
 	close,
+	comSpecCommand,
 	exitCode,
 	envBlock,
 	exitSignal,
@@ -94,6 +95,14 @@ test "a Windows shell tree is idle when only shells are in it and busy when anyt
 	assert jobRunning("cmd.exe\nping.exe\n");
 	assert jobRunning("wsl.exe\n");
 	assert jobRunning("PowerShell.exe\nnode.EXE\n");
+}
+
+test "the Windows default shell is the command interpreter named by ComSpec, cmd.exe when none is set" {
+	assert comSpecCommand(["Path=x", "ComSpec=C:\\Windows\\system32\\cmd.exe"] as Vec<string>) ==
+		"C:\\Windows\\system32\\cmd.exe";
+	assert comSpecCommand(["COMSPEC=D:\\Tools X\\shell.exe"] as Vec<string>) == "\"D:\\Tools X\\shell.exe\"";
+	assert comSpecCommand(["Path=x"] as Vec<string>) == "cmd.exe";
+	assert comSpecCommand(["ComSpec="] as Vec<string>) == "cmd.exe";
 }
 
 test "a child's output reaches read and its exit ends the stream" {

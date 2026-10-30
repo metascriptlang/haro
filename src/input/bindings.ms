@@ -1,7 +1,6 @@
 import { KeyMod, NO_MODS, modSet, modsMask } from "../keys/keys";
 
 export enum Action {
-	None,
 	Copy,
 	Paste,
 	LineUp,
@@ -175,17 +174,17 @@ function lookup(
 	code: string,
 	held: BitSet<KeyMod>,
 	altScreen: boolean,
-): Action {
+): Action | null {
 	for (const b of table) {
 		if (b.code == code && b.mods == held && appliesOn(b.screen, altScreen)) { return b.action; }
 	}
-	return Action.None;
+	return null;
 }
 
-export function resolve(code: string, mods: BitSet<KeyMod>, altScreen: boolean): Action {
+export function resolve(code: string, mods: BitSet<KeyMod>, altScreen: boolean): Action | null {
 	const held = chordOf(mods);
 	const found = lookup(BINDINGS, code, held, altScreen);
-	return found != Action.None ? found : lookup(OS_CHORDS, code, held, altScreen);
+	return found !== null ? found : lookup(OS_CHORDS, code, held, altScreen);
 }
 
 const CAPS_LOCK = modSet(KeyMod.CapsLock);
@@ -196,12 +195,12 @@ test "copy and paste take cmd on macos, and ctrl shift or the insert pair elsewh
 	assert resolve("KeyC", CLIPBOARD_MODS, false) == Action.Copy;
 	assert resolve("KeyV", CLIPBOARD_MODS, false) == Action.Paste;
 	when (macos) {
-		assert resolve("KeyV", CTRL | SHIFT, false) == Action.None;
-		assert resolve("KeyC", CTRL | SHIFT, false) == Action.None;
-		assert resolve("Insert", SHIFT, false) == Action.None;
-		assert resolve("Insert", CTRL, false) == Action.None;
+		assert resolve("KeyV", CTRL | SHIFT, false) === null;
+		assert resolve("KeyC", CTRL | SHIFT, false) === null;
+		assert resolve("Insert", SHIFT, false) === null;
+		assert resolve("Insert", CTRL, false) === null;
 	} else {
-		assert resolve("KeyV", SUPER, false) == Action.None;
+		assert resolve("KeyV", SUPER, false) === null;
 		assert resolve("Insert", CTRL, false) == Action.Copy;
 		assert resolve("Insert", SHIFT, false) == Action.Paste;
 	}
@@ -217,13 +216,13 @@ test "ctrl shift with an arrow, a page key, home or end scrolls the scrollback" 
 }
 
 test "a chord needs exactly its modifiers" {
-	assert resolve("KeyC", CTRL, false) == Action.None;
-	assert resolve("KeyC", SHIFT, false) == Action.None;
-	assert resolve("KeyC", SHIFT | CTRL | ALT, false) == Action.None;
-	assert resolve("KeyV", CTRL, false) == Action.None;
-	assert resolve("Enter", SHIFT, false) == Action.None;
-	assert resolve("ArrowUp", NO_MODS, false) == Action.None;
-	assert resolve("ArrowUp", SHIFT, false) == Action.None;
+	assert resolve("KeyC", CTRL, false) === null;
+	assert resolve("KeyC", SHIFT, false) === null;
+	assert resolve("KeyC", SHIFT | CTRL | ALT, false) === null;
+	assert resolve("KeyV", CTRL, false) === null;
+	assert resolve("Enter", SHIFT, false) === null;
+	assert resolve("ArrowUp", NO_MODS, false) === null;
+	assert resolve("ArrowUp", SHIFT, false) === null;
 }
 
 test "lock and side bits do not change the chord" {
@@ -238,14 +237,14 @@ test "enter copies a selection on windows only" {
 		assert resolve("Enter", NO_MODS, false) == Action.Copy;
 		assert resolve("Enter", CAPS_LOCK, false) == Action.Copy;
 	} else {
-		assert resolve("Enter", NO_MODS, false) == Action.None;
+		assert resolve("Enter", NO_MODS, false) === null;
 	}
 }
 
 test "shift page keys scroll the primary screen and reach a full-screen app on the alternate" {
 	assert resolve("PageUp", SHIFT, false) == Action.PageUp;
 	assert resolve("PageDown", SHIFT, false) == Action.PageDown;
-	assert resolve("PageUp", SHIFT, true) == Action.None;
+	assert resolve("PageUp", SHIFT, true) === null;
 	assert resolve("PageUp", CTRL | SHIFT, true) == Action.PageUp;
 }
 
@@ -253,14 +252,14 @@ test "ctrl alt up and down jump between prompts, ctrl shift up and down scroll b
 	assert resolve("ArrowUp", CTRL | ALT, false) == Action.PromptUp;
 	assert resolve("ArrowDown", CTRL | ALT, false) == Action.PromptDown;
 	assert resolve("ArrowUp", CTRL | SHIFT, false) == Action.LineUp;
-	assert resolve("ArrowUp", ALT, false) == Action.None;
-	assert resolve("ArrowUp", CTRL, false) == Action.None;
+	assert resolve("ArrowUp", ALT, false) === null;
+	assert resolve("ArrowUp", CTRL, false) === null;
 }
 
 test "a key with no binding resolves to nothing" {
-	assert resolve("KeyA", NO_MODS, false) == Action.None;
-	assert resolve("KeyC", NO_MODS, false) == Action.None;
-	assert resolve("", NO_MODS, false) == Action.None;
+	assert resolve("KeyA", NO_MODS, false) === null;
+	assert resolve("KeyC", NO_MODS, false) === null;
+	assert resolve("", NO_MODS, false) === null;
 }
 
 function bound(keys: string): string {

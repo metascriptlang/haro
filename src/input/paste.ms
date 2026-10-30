@@ -64,7 +64,7 @@ export function replyToClose(code: string, mods: BitSet<KeyMod>): Reply {
 }
 
 export function replyTo(code: string, mods: BitSet<KeyMod>): Reply {
-	if (resolve(code, mods, false) == Action.Paste) { return Reply.Confirm; }
+	if (resolve(code, mods, false) === Action.Paste) { return Reply.Confirm; }
 	return replyToClose(code, mods);
 }
 

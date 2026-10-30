@@ -95,8 +95,8 @@ function controlKey(
 		return Result.ok(true);
 	}
 	const action = resolve(e.key, mods, alt);
+	if (action === null) { return Result.ok(false); }
 	match (action) {
-		Action.None => { return Result.ok(false); },
 		Action.Copy => { return c.copySelection(t); },
 		Action.Paste => { c.pasteFrom(); },
 		Action.PageUp => { try vt.scrollPages(-1); },

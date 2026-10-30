@@ -414,11 +414,11 @@ test "a keybind that names a built-in action runs it, and for one screen only wh
 		const clip = boardOf("");
 		c.keybinds = [
 			{ code: "KeyJ", mods: SUPER, text: "", action: Action.Top, screen: Screen.Primary },
-			{ code: "KeyK", mods: SUPER, text: "", action: Action.Top, screen: Screen.Alternate },
+			{ code: "KeyU", mods: SUPER, text: "", action: Action.Top, screen: Screen.Alternate },
 		];
 		const bottom = offsetOf(t);
 		assert bottom > 0;
-		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyK", SUPER))));
+		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyU", SUPER))));
 		assert offsetOf(t) == bottom;
 		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyJ", SUPER))));
 		assert offsetOf(t) == 0;

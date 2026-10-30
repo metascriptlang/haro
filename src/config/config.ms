@@ -44,11 +44,19 @@ const MAX_FONT_SIZE: float64 = 255;
 const MAX_PADDING: float64 = 512;
 
 when (windows) {
-	const DEFAULT_COMMAND = "pwsh.exe -NoLogo";
+	import { defaultCommand } from "../pty/pty";
+
+	function defaultShell(): string {
+		return defaultCommand();
+	}
 } else when (macos) {
-	const DEFAULT_COMMAND = "${SHELL:-/bin/zsh} -l";
+	function defaultShell(): string {
+		return "${SHELL:-/bin/zsh} -l";
+	}
 } else {
-	const DEFAULT_COMMAND = "${SHELL:-/bin/sh}";
+	function defaultShell(): string {
+		return "${SHELL:-/bin/sh}";
+	}
 }
 
 when (macos) {
@@ -64,7 +72,7 @@ export function defaults(): Config {
 		fontFamily: [],
 		fontSize: DEFAULT_FONT_SIZE,
 		padding: 0,
-		command: DEFAULT_COMMAND,
+		command: defaultShell(),
 		shellIntegration: true,
 		workingDirectory: null,
 		scrollback: SCROLLBACK_LINES,
@@ -327,7 +335,7 @@ test "an empty config keeps every default" {
 	assert c.value.fontSize == DEFAULT_FONT_SIZE;
 	assert c.value.fontPx() == 14;
 	assert c.value.padding == 0;
-	assert c.value.command == DEFAULT_COMMAND;
+	assert c.value.command == defaultShell();
 	assert c.value.shellIntegration;
 	assert c.value.scrollback == SCROLLBACK_LINES;
 	assert c.value.palette.length == 0;

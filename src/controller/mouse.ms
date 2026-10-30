@@ -7,7 +7,7 @@ import { MouseAction, MouseInput, Vt } from "../vt/vt";
 import { MouseButton } from "./mouseButton";
 import { Term, TermError, tapKey, vtFailed } from "./term";
 import { Controls, Hit, holding, vtOf } from "./controls";
-import { copySelection, pasteFrom } from "./clipboard";
+import { copyKept, copySelection, pasteFrom } from "./clipboard";
 
 function reportMouse(
 	t: Term,
@@ -139,8 +139,11 @@ export function pointerUp(
 	h: Hit,
 ): Result<boolean, TermError> {
 	const reported = c.button != MouseButton.None;
+	const selecting = button == MouseButton.Left && c.pointer.dragging;
 	c.endDrag();
-	if (!reported || c.holding()) { return Result.ok(false); }
+	if (c.holding()) { return Result.ok(false); }
+	if (selecting && c.pointer.copyOnSelect) { return c.copyKept(t); }
+	if (!reported) { return Result.ok(false); }
 	c.button = MouseButton.None;
 	return reportMouse(t, MouseAction.Release, button, h);
 }

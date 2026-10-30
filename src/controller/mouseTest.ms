@@ -279,6 +279,38 @@ test "a shift press extends the selection from its anchor, unless it lands insid
 	}, 20, 5).ok;
 }
 
+test "a finished drag copies its selection only when copy on select is on, and keeps it selected" {
+	assert onTerm("alpha beta", (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const board = boardOf("");
+		const clip = board;
+		assert drag(c, t, clip, spotAt(0, 0), spotAt(4, 0));
+		assert board.copied == "";
+		c.pointer.copyOnSelect = true;
+		assert settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(6, 0), 1000)).ok;
+		assert c.pointerMove(t, hitAt(9, 0), true).ok;
+		assert handled(settled(clip, c, t, c.pointerUp(t, MouseButton.Left, hitAt(9, 0))));
+		assert board.copied == "beta";
+		assert c.pointer.selected();
+		board.copied = "";
+		assert settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(2, 0), 5000)).ok;
+		assert !handled(settled(clip, c, t, c.pointerUp(t, MouseButton.Left, hitAt(2, 0))));
+		assert board.copied == "";
+	}, 20, 5).ok;
+}
+
+test "the middle button does nothing here: it neither pastes nor disturbs a selection" {
+	assert onTerm("alpha beta", (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const board = boardOf("pasted");
+		const clip = board;
+		assert drag(c, t, clip, spotAt(0, 0), spotAt(4, 0));
+		assert !handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Middle, hitAt(7, 0), 2000)));
+		assert board.reads == 0 && sink.sent == "";
+		assert c.pointer.selected();
+	}).ok;
+}
+
 test "a right click copies a selection and otherwise pastes" {
 	assert onTerm("alpha beta", (t: Term, sink: Sink): void => {
 		const c = Controls.open();

@@ -112,12 +112,19 @@ export function pasteFrom(this c: Controls): void {
 	c.askRead(ClipRead.Paste);
 }
 
-export function copySelection(this c: Controls, t: Term): Result<boolean, TermError> {
+export function copyKept(this c: Controls, t: Term): Result<boolean, TermError> {
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }
 	const got = try c.pointer.copyText(vt);
 	if (got === null) { return Result.ok(false); }
 	c.asks.copy = got;
-	try c.pointer.clear(vt);
+	return Result.ok(true);
+}
+
+export function copySelection(this c: Controls, t: Term): Result<boolean, TermError> {
+	const copied = try c.copyKept(t);
+	if (!copied) { return Result.ok(false); }
+	const vt = t.vtOf();
+	if (vt !== null) { try c.pointer.clear(vt); }
 	return Result.ok(true);
 }

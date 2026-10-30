@@ -16,6 +16,7 @@ export interface Pointer {
 	dragging: boolean;
 	last: Spot;
 	hover: Link | null;
+	copyOnSelect: boolean;
 }
 
 export function open(this typeof Pointer): Pointer {
@@ -26,6 +27,7 @@ export function open(this typeof Pointer): Pointer {
 		dragging: false,
 		last: { col: 0, row: 0 },
 		hover: null,
+		copyOnSelect: false,
 	};
 }
 

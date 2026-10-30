@@ -268,6 +268,21 @@ and 1.25 stalled once. During an inbox flood no process saturates a core (cmd ~3
 45–55 %, Haro ~60 %), and HighQoS on conhost changed nothing, so the flood waits on something
 other than conhost's speed.
 
+That holds for a plain stream only. Workloads that scroll, move the cursor or set a region,
+2026-10-21 night (Haro `6df5999`, grid 96x31, scrollback 10000, two to three runs each):
+
+| work | inbox conhost | OpenConsole 1.25 |
+|---|---|---|
+| termbench `074fa61` small, TermMarkV2 | 41.3–41.7 s (ManyLine 35.6 s) | 4.4–4.5 s (ManyLine 1.65 s) |
+| vtebench `ead8003` scrolling, median | 1487 ms | 170 ms |
+| vtebench scrolling_bottom_small_region | 27530 ms | 287 ms |
+| vtebench cursor_motion / medium_cells / unicode | 74 / 101 / 48 ms | 36 / 30 / 20 ms |
+
+So Haro ships 1.25: `project.ms` places `vendor/conpty/x64` beside `Haro.exe` through Ion's
+generator (`ion generate project.ms out/ion`, then MSBuild Release x64). That build, 2026-10-22,
+spawned the `OpenConsole.exe` beside it and ran termbench small in 4.5–4.7 s. `msc build` alone
+places nothing and runs on the inbox host.
+
 What the new host does carry is the sequences an app writes. `probe/recordPty.ms` recorded
 `cmd /c type` of one file holding 13 tagged sequences through each host. OpenConsole 1.25
 passed all 13 unchanged and in place. Inbox conhost re-renders its own buffer:

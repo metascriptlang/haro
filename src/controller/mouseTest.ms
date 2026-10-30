@@ -197,6 +197,48 @@ test "an open-modifier click on a URL written as plain text opens it, wrapped ov
 	}, 30, 5).ok;
 }
 
+function hoverText(this c: Controls): string {
+	const link = c.pointer.hover;
+	if (link === null) { return "none"; }
+	const s = link.stretches[0];
+	return `${link.uri} ${s.row}:${s.from}-${s.to}`;
+}
+
+test "with the open modifier held, moving over a link or a plain URL sets the hover and off it clears it" {
+	const text = "\x1b]8;;https://example.com/a\x07link\x1b]8;;\x07 see https://b.io. ok";
+	assert onTerm(text, (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		assert c.hoverText() == "none";
+		assert handled(c.pointerMove(t, hitWith(1, 0, OPEN), false));
+		assert c.hoverText() == "https://example.com/a 0:0-4";
+		assert !handled(c.pointerMove(t, hitWith(2, 0, OPEN), false));
+		assert handled(c.pointerMove(t, hitWith(12, 0, OPEN), false));
+		assert c.hoverText() == "https://b.io 0:9-21";
+		assert handled(c.pointerMove(t, hitWith(30, 0, OPEN), false));
+		assert c.hoverText() == "none";
+		assert handled(c.pointerMove(t, hitWith(1, 0, OPEN), false));
+		assert handled(c.pointerMove(t, hitWith(1, 0, NO_MODS), false));
+		assert c.hoverText() == "none";
+	}, 40, 5).ok;
+}
+
+test "a press clears the hover, and an app that tracks the mouse never gets one" {
+	const text = "https://b.io";
+	assert onTerm(text, (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const clip = boardOf("");
+		assert handled(c.pointerMove(t, hitWith(1, 0, OPEN), false));
+		assert c.hoverText() != "none";
+		assert settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(1, 0, NO_MODS), 0)).ok;
+		assert c.hoverText() == "none";
+	}, 40, 5).ok;
+	assert onTerm("\x1b[?1000h\x1b[?1006h" + text, (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		assert !handled(c.pointerMove(t, hitWith(1, 0, OPEN), false));
+		assert c.hoverText() == "none";
+	}, 40, 5).ok;
+}
+
 test "a right click copies a selection and otherwise pastes" {
 	assert onTerm("alpha beta", (t: Term, sink: Sink): void => {
 		const c = Controls.open();

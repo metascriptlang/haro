@@ -1,4 +1,5 @@
 import { KeyMod } from "../keys/keys";
+import { Link } from "../screen/linksGrid";
 import { Point, Selection, Unit } from "../select/select";
 import { Vt, VtError } from "../vt/vt";
 import { Clicks, unitOf } from "./clicks";
@@ -14,6 +15,7 @@ export interface Pointer {
 	sel: Selection | null;
 	dragging: boolean;
 	last: Spot;
+	hover: Link | null;
 }
 
 export function open(this typeof Pointer): Pointer {
@@ -23,7 +25,14 @@ export function open(this typeof Pointer): Pointer {
 		sel: null,
 		dragging: false,
 		last: { col: 0, row: 0 },
+		hover: null,
 	};
+}
+
+export function showHover(this p: Pointer, link: Link | null): boolean {
+	if (p.hover == link) { return false; }
+	p.hover = link;
+	return true;
 }
 
 export function spotAt(
@@ -97,6 +106,7 @@ export function press(
 	time: float64,
 	reach: float64,
 ): Result<boolean, VtError> {
+	p.hover = null;
 	const count = p.clicks.register(x, y, time, reach);
 	const top = try vt.scrollOffset();
 	if (count == 1) { p.anchor = { row: top + at.row, col: at.col }; }

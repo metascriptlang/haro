@@ -111,13 +111,15 @@ export function pointerMove(
 	if (vt === null) { return Result.ok(false); }
 	const modes = try vt.modes();
 	if (claimsMouse(modes.mouseTracking, h.mods.has(KeyMod.Shift))) {
+		const left = c.pointer.showHover(null);
 		if (!pressed) { c.button = MouseButton.None; }
 		try reportMouse(t, MouseAction.Motion, c.button, h);
-		return Result.ok(false);
+		return Result.ok(left);
 	}
 	if (!c.pointer.dragging) {
 		c.autoscroll = 0;
-		return Result.ok(false);
+		const over = opensLinks(h.mods) ? try vt.linkUnder(h.at.col, h.at.row) : null;
+		return Result.ok(c.pointer.showHover(over));
 	}
 	if (!pressed) {
 		c.endDrag();

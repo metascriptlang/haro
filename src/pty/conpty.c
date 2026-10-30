@@ -227,17 +227,82 @@ static wchar_t* expanded(wchar_t* text) {
 	return out;
 }
 
+static wchar_t* widenedBlock(const uint8_t* block, int64_t len) {
+	int wideLen = len > 0 ? MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, (const char*)block, (int)len, NULL, 0) : 0;
+	if (len > 0 && wideLen <= 0) return NULL;
+	wchar_t* wide = malloc(sizeof(wchar_t) * (size_t)(wideLen + 2));
+	if (!wide) return NULL;
+	if (wideLen > 0 && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, (const char*)block, (int)len, wide, wideLen)) {
+		free(wide);
+		return NULL;
+	}
+	wide[wideLen] = L'\0';
+	wide[wideLen + 1] = L'\0';
+	return wide;
+}
+
+static uint8_t** inheritedEntries = NULL;
+
+static uint8_t* noEntries[1] = { NULL };
+
+uint8_t** ptyEnviron(void) {
+	if (inheritedEntries) {
+		free(inheritedEntries[0]);
+		free(inheritedEntries);
+		inheritedEntries = NULL;
+	}
+	wchar_t* strings = GetEnvironmentStringsW();
+	if (!strings) return noEntries;
+	size_t count = 0;
+	for (const wchar_t* e = strings; *e; e += wcslen(e) + 1) count++;
+	size_t bytes = 0;
+	for (const wchar_t* e = strings; *e; e += wcslen(e) + 1) {
+		int n = WideCharToMultiByte(CP_UTF8, 0, e, -1, NULL, 0, NULL, NULL);
+		if (n <= 0) {
+			FreeEnvironmentStringsW(strings);
+			return noEntries;
+		}
+		bytes += (size_t)n;
+	}
+	uint8_t** entries = malloc(sizeof(uint8_t*) * (count + 1));
+	uint8_t* text = malloc(bytes + 1);
+	if (!entries || !text) {
+		free(entries);
+		free(text);
+		FreeEnvironmentStringsW(strings);
+		return noEntries;
+	}
+	size_t used = 0;
+	size_t index = 0;
+	for (const wchar_t* e = strings; *e; e += wcslen(e) + 1) {
+		int n = WideCharToMultiByte(CP_UTF8, 0, e, -1, (char*)text + used, (int)(bytes - used), NULL, NULL);
+		entries[index++] = text + used;
+		used += (size_t)n;
+	}
+	entries[index] = NULL;
+	FreeEnvironmentStringsW(strings);
+	inheritedEntries = entries;
+	return entries;
+}
+
 static void teardown(Pty* p);
 
 static int openIn(
 	Pty* p, const char* commandLine, const char* cwd, const uint8_t* envBlock, int64_t envLen,
 	int cols, int rows, int widthPx, int heightPx
 ) {
+	if (envLen > 0 && envBlock[envLen - 1] != '\0') return PTY_OPEN_BAD_ENV;
+	wchar_t* wideEnv = widenedBlock(envBlock, envLen);
+	if (!wideEnv) return PTY_OPEN_BAD_ENV;
 	HANDLE inRead = NULL, inWrite = NULL, outRead = NULL, outWrite = NULL;
-	if (!CreatePipe(&inRead, &inWrite, NULL, 0)) return PTY_OPEN_RESOURCES;
+	if (!CreatePipe(&inRead, &inWrite, NULL, 0)) {
+		free(wideEnv);
+		return PTY_OPEN_RESOURCES;
+	}
 	if (!CreatePipe(&outRead, &outWrite, NULL, 0)) {
 		CloseHandle(inRead);
 		CloseHandle(inWrite);
+		free(wideEnv);
 		return PTY_OPEN_RESOURCES;
 	}
 
@@ -249,6 +314,7 @@ static int openIn(
 		CloseHandle(inWrite);
 		CloseHandle(outRead);
 		CloseHandle(outWrite);
+		free(wideEnv);
 		return PTY_OPEN_RESOURCES;
 	}
 	CloseHandle(inRead);
@@ -271,7 +337,8 @@ static int openIn(
 		&& UpdateProcThreadAttribute(
 			attrs, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console, sizeof console, NULL, NULL)
 		&& CreateProcessW(
-			NULL, wide, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT, NULL, wideCwd,
+			NULL, wide, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+			wideEnv, wideCwd,
 			&si.StartupInfo, &pi);
 	if (attrs) {
 		DeleteProcThreadAttributeList(attrs);
@@ -279,6 +346,7 @@ static int openIn(
 	}
 	free(wide);
 	free(wideCwd);
+	free(wideEnv);
 	if (!ok) {
 		api.close(console);
 		CloseHandle(inWrite);

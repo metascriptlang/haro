@@ -4,11 +4,13 @@ import {
 	busy,
 	close,
 	exitCode,
+	envBlock,
 	exitSignal,
 	mergedEnv,
 	open,
 	read,
 	resize,
+	sortedByName,
 	spawn,
 	toPty,
 	wait,
@@ -60,6 +62,27 @@ test "the child's environment keeps inherited entries and applies Haro's replace
 	const keptPwd = mergedEnv(inherited, [] as Vec<string>, "");
 	assert keptPwd.includes("PWD=/old");
 	assert !keptPwd.some((entry: string): boolean => entry.startsWith("PWD=/new"));
+}
+
+test "on Windows a given or Haro entry replaces an inherited one whatever its letter case" {
+	const inherited: Vec<string> = ["Path=C:\\old", "Term=dumb", "term_program=Other", "SystemRoot=C:\\W"];
+	const got = mergedEnv(inherited, ["PATH=C:\\new"] as Vec<string>, "", true);
+	assert got.join("|") == "SystemRoot=C:\\W|TERM=xterm-256color|COLORTERM=truecolor|" +
+		"TERM_PROGRAM=Haro|PATH=C:\\new";
+	const exact = mergedEnv(["Path=1"] as Vec<string>, ["PATH=2"] as Vec<string>, "");
+	assert exact.join("|").startsWith("Path=1|");
+}
+
+test "entries are ordered by upper-cased name, as CreateProcess requires of an environment block" {
+	const got = sortedByName(["b=1", "Zed=2", "=C:=C:\\x", "alpha=3", "Beta=4", "A_=5"] as Vec<string>);
+	assert got.join("|") == "=C:=C:\\x|alpha=3|A_=5|b=1|Beta=4|Zed=2";
+}
+
+test "an environment block is each entry NUL-terminated, bytes in UTF-8" {
+	const block = envBlock(["A=1", "é=2"] as Vec<string>);
+	assert block.length == 3 + 1 + 4 + 1;
+	assert block[3] == 0 && block[block.length - 1] == 0;
+	assert block[4] == 0xc3 && block[5] == 0xa9;
 }
 
 test "a child's output reaches read and its exit ends the stream" {

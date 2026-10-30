@@ -32,11 +32,11 @@ extern function ptyOpen(
 extern function ptyRead(id: int32, buf: Span<uint8>): int64;
 extern function ptyWrite(id: int32, data: Readonly<Span<uint8>>): int64;
 
+extern function ptyEnviron(): Ptr<Ptr<char>>;
+
 when (!windows) {
 	import { env } from "std/process";
 	import { ptyChildPid, ptyExitSignal, ptyMaster } from "./nativePty.h";
-
-	extern function ptyEnviron(): Ptr<Ptr<char>>;
 
 	@include("unistd.h");
 
@@ -60,15 +60,21 @@ const REPLACED_NAMES: string[] = [
 ];
 const ADDED_ENTRIES: string[] = ["TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=Haro"];
 
-function nameOf(entry: string): string {
+function nameOf(entry: string, caseless: boolean): string {
 	const eq = entry.indexOf("=");
-	return eq < 0 ? entry : entry.slice(0, eq);
+	const name = eq < 0 ? entry : entry.slice(0, eq);
+	return caseless ? name.toUpperCase() : name;
 }
 
-export function mergedEnv(inherited: Vec<string>, given: Vec<string>, cwd: string): Vec<string> {
-	const givenNames = given.map(nameOf);
+export function mergedEnv(
+	inherited: Vec<string>,
+	given: Vec<string>,
+	cwd: string,
+	caseless: boolean = false,
+): Vec<string> {
+	const givenNames = given.map((entry: string): string => nameOf(entry, caseless));
 	const kept = inherited.filter((entry: string): boolean => {
-		const name = nameOf(entry);
+		const name = nameOf(entry, caseless);
 		return !(cwd != "" && name == "PWD") &&
 			!REPLACED_NAMES.includes(name) &&
 			!givenNames.includes(name);
@@ -78,27 +84,35 @@ export function mergedEnv(inherited: Vec<string>, given: Vec<string>, cwd: strin
 	return merged;
 }
 
-when (!windows) {
-	function inheritedEnv(): Vec<string> {
-		const vars = ptyEnviron();
-		let entries: Vec<string> = [];
-		for (let i = 0; vars[i] != null; i++) {
-			const entry: cstring = vars[i] as cstring;
-			entries.push(entry as string);
-		}
-		return entries;
+function inheritedEnv(): Vec<string> {
+	const vars = ptyEnviron();
+	let entries: Vec<string> = [];
+	for (let i = 0; vars[i] != null; i++) {
+		const entry: cstring = vars[i] as cstring;
+		entries.push(entry as string);
 	}
+	return entries;
+}
+
+export function sortedByName(entries: Vec<string>): Vec<string> {
+	let sorted: Vec<string> = [...entries];
+	sorted.sort((a: string, b: string): number => {
+		const left = nameOf(a, true);
+		const right = nameOf(b, true);
+		return left < right ? -1 : left > right ? 1 : 0;
+	});
+	return sorted;
 }
 
 function childEnv(given: Vec<string>, cwd: string): Vec<string> {
 	when (windows) {
-		return given;
+		return sortedByName(mergedEnv(inheritedEnv(), given, "", true));
 	} else {
 		return mergedEnv(inheritedEnv(), given, cwd);
 	}
 }
 
-function envBlock(entries: Vec<string>): Vec<uint8> {
+export function envBlock(entries: Vec<string>): Vec<uint8> {
 	let block: Vec<uint8> = [];
 	for (const entry of entries) {
 		block = [...block, ...entry.asBytes(), 0];

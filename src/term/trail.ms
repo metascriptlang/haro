@@ -30,7 +30,7 @@ struct Feel {
 }
 
 const JUMP: Feel = { stiffness: 0.3, damping: 0.5 };
-const TYPING: Feel = { stiffness: 0.5, damping: 0.9 };
+const TYPING: Feel = { stiffness: 0.6, damping: 0.25 };
 
 struct Spring {
 	position: float64;
@@ -496,19 +496,20 @@ test "the cursor rests with its corners on the cell it was moved to" {
 	assert shown[2] == point(40, 60);
 }
 
-test "a move of up to two cells along a row glides the whole cursor on the typing spring without passing the new cell" {
+test "a typed character bounces the whole cursor past the new cell and back onto it" {
 	const t = placed(30, 40);
-	t.moveTo(50, 40);
+	t.moveTo(40, 40);
 	let frames = 0;
+	let farthest: float64 = 30;
 	while (!t.resting() || frames == 0) {
 		const _moving = t.animate(FRAME, CursorShape.Block, 10, 20);
 		const at = t.currents();
 		assert near(at[1].x - at[0].x, 10);
-		assert at[0].x <= 50.001;
-		if (frames == 2) { assert at[0].x > 30 && at[0].x < 49; }
+		farthest = Math.max(farthest, at[0].x);
 		frames += 1;
 	}
-	assert t.shownCorners()[0] == point(50, 40);
+	assert farthest > 42 && farthest < 46;
+	assert t.shownCorners()[0] == point(40, 40);
 	assert frames > 4 && frames < 20;
 	for (const c of t.corners) {
 		assert near(c.length, SHORT_ANIMATION_LENGTH);

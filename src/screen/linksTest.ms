@@ -1,7 +1,7 @@
-import { Span, urlAt, urlSpans } from "./links";
+import { UrlRange, urlAt, urlSpans } from "./links";
 
 function found(text: string): string {
-	return urlSpans(text).map((s: Span): string => text.slice(s.from, s.to)).join(" | ");
+	return urlSpans(text).map((s: UrlRange): string => text.slice(s.from, s.to)).join(" | ");
 }
 
 const CASES: string[][] = [

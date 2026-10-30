@@ -1,4 +1,5 @@
-import { KeyMod } from "../keys/keys";
+import { KeyMod, modSet } from "../keys/keys";
+import { chordOf } from "./bindings";
 import { Link } from "../screen/linksGrid";
 import { Point, Selection, Unit } from "../select/select";
 import { Vt, VtError } from "../vt/vt";
@@ -69,10 +70,8 @@ when (macos) {
 	export const OPEN_MOD: KeyMod = KeyMod.Ctrl;
 }
 
-const CHORD: BitSet<KeyMod> = KeyMod.Shift | KeyMod.Ctrl | KeyMod.Alt | KeyMod.Super;
-
 export function opensLinks(mods: BitSet<KeyMod>): boolean {
-	return mods.intersection(CHORD) == (0 as BitSet<KeyMod>).incl(OPEN_MOD);
+	return chordOf(mods) == modSet(OPEN_MOD);
 }
 
 export function rectangular(mods: BitSet<KeyMod>): boolean {

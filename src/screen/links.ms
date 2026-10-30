@@ -1,4 +1,4 @@
-export struct Span {
+export struct UrlRange {
 	from: int32;
 	to: int32;
 }
@@ -85,8 +85,8 @@ function urlEnd(text: string, bodyFrom: int32): int32 {
 	return end > bodyFrom ? end : -1;
 }
 
-export function urlSpans(text: string): Vec<Span> {
-	let spans: Vec<Span> = [];
+export function urlSpans(text: string): Vec<UrlRange> {
+	let spans: Vec<UrlRange> = [];
 	let i = 0;
 	while (i < text.length) {
 		const scheme = schemeAt(text, i);
@@ -101,7 +101,7 @@ export function urlSpans(text: string): Vec<Span> {
 	return spans;
 }
 
-export function urlAt(text: string, at: int32): Span | null {
+export function urlAt(text: string, at: int32): UrlRange | null {
 	for (const span of urlSpans(text)) {
 		if (at >= span.from && at < span.to) { return span; }
 	}

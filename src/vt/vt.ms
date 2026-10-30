@@ -44,7 +44,6 @@ export {
 	size,
 	takeClipboard,
 	takeEvents,
-	takeReplies,
 	title,
 	titleChanged,
 	update,

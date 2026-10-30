@@ -15,7 +15,7 @@ import {
 	setPullScrollback,
 	setScrollback,
 	size,
-	takeReplies,
+	pendingReplies,
 	title,
 	update,
 	write,
@@ -168,7 +168,7 @@ test "growing the grid reveals scrollback unless the pty keeps its own screen" {
 test "text without a query leaves nothing to reply" {
 	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("hello");
-		assert vt.takeReplies().length == 0;
+		assert vt.pendingReplies().length == 0;
 	});
 }
 

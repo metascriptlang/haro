@@ -1,5 +1,5 @@
 import { NativePty, close, open, read, wait, write } from "./pty";
-import { Vt, pwd, takeEvents, takeReplies, write as feed } from "../vt/vt";
+import { Vt, dropReplies, pendingReplies, pwd, takeEvents, write as feed } from "../vt/vt";
 import { ShellMark, ShellStep } from "../vt/vtEffects";
 import { withVt } from "../vt/vtRig";
 import { cwd, env } from "std/process";
@@ -29,8 +29,11 @@ function pumpUntil(p: NativePty, vt: Vt, seen: Seen, done: (s: Seen) => boolean)
 		vt.feed(chunk);
 		seen.text += chunk.asString();
 		for (const m of vt.takeEvents().shell) { seen.marks.push(m); }
-		const replies = vt.takeReplies();
-		if (replies.length > 0) { const _sent = p.write(replies); }
+		const replies = vt.pendingReplies();
+		if (replies.length > 0) {
+			const _sent = p.write(replies);
+			vt.dropReplies();
+		}
 	}
 	return done(seen);
 }

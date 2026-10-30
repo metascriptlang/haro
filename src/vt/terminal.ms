@@ -198,12 +198,6 @@ export function writeText(this vt: Vt, text: string): void {
 	vt.mouse.stale = true;
 }
 
-export function takeReplies(this vt: Vt): Vec<uint8> {
-	const taken = vt.effects.replies;
-	vt.effects.replies = [];
-	return taken;
-}
-
 export function pendingReplies(this vt: Vt): Vec<uint8> {
 	return vt.effects.replies;
 }

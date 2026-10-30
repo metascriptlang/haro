@@ -51,10 +51,10 @@ export function pump(this s: Session, buf: Span<uint8>): Result<boolean, Session
 }
 
 export function sendReplies(this s: Session): Result<void, SessionError> {
-	const replies = s.vt.effects.replies;
+	const replies = s.vt.pendingReplies();
 	if (replies.length == 0) { return Result.ok(null); }
 	try s.send(replies);
-	s.vt.effects.replies = [];
+	s.vt.dropReplies();
 	return Result.ok(null);
 }
 

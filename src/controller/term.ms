@@ -257,7 +257,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		look = lit.value;
 	}
 	let title: string | null = null;
-	if (vt.effects.events.titleChanged) {
+	if (vt.titleChanged()) {
 		const named = vt.title();
 		if (!named.ok) { return Result.err(TermError.EventsFailed); }
 		title = named.value;

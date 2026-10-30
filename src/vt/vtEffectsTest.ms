@@ -17,7 +17,8 @@ import {
 	setScrollback,
 	takeClipboard,
 	takeEvents,
-	takeReplies,
+	dropReplies,
+	pendingReplies,
 	title,
 	update,
 	write,
@@ -285,8 +286,9 @@ test "an OSC 52 write with invalid UTF-8 reaches the host as well-formed text" {
 }
 
 function pending(this vt: Vt): string {
-	const replies = vt.takeReplies();
-	return ascii(replies);
+	const text = ascii(vt.pendingReplies());
+	vt.dropReplies();
+	return text;
 }
 
 test "a size query is answered with the terminal's own cells and pixels, as is the report mode 2048 starts with" {

@@ -21,12 +21,12 @@ export enum FrameError {
 	RowOutOfRange,
 }
 
-function inkOn(this ink: CellInk | null, cell: int32): CellInk | null {
-	return cell >= 0 ? ink : null;
+function inkOn(this ink: CellInk | null, cell: int32 | null): CellInk | null {
+	return cell !== null ? ink : null;
 }
 
 export struct Shown {
-	cell: int32;
+	cell: int32 | null;
 	ink: CellInk | null;
 	tint: RowTint | null;
 	note: RowNote | null;
@@ -159,7 +159,7 @@ export function none(this typeof FrameRows): FrameRows {
 
 export function fitShown(this ref shown: Vec<Shown>, rows: int32): void {
 	while ((shown.length as int32) < rows) {
-		shown.push({ cell: -1, ink: null, tint: null, note: null });
+		shown.push({ cell: null, ink: null, tint: null, note: null });
 	}
 	while ((shown.length as int32) > rows) { shown.pop(); }
 }

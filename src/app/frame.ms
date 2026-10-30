@@ -20,7 +20,7 @@ export interface RowSlot {
 }
 
 export function blank(this typeof RowSlot): RowSlot {
-	return { line: { text: "", runs: [], widths: [], cursorCell: -1, cursorInk: null }, spans: [] };
+	return { line: { text: "", runs: [], widths: [], cursorCell: null, cursorInk: null }, spans: [] };
 }
 
 export interface Styles {
@@ -233,7 +233,7 @@ test "each run becomes a span over its own text, sharing one style per look" {
 			run(2, RED, BLACK, Underline.None),
 		],
 		widths: [],
-		cursorCell: -1,
+		cursorCell: null,
 		cursorInk: null,
 	};
 	const spans = spansOf(styles, l, BLACK);
@@ -249,7 +249,7 @@ test "a line of one run is one span holding the whole text, wide characters incl
 		text: "h\u00e9llo \u{1F600}",
 		runs: [run(8, WHITE, BLACK, Underline.None)],
 		widths: [],
-		cursorCell: -1,
+		cursorCell: null,
 		cursorInk: null,
 	};
 	const spans = spansOf(styles, l, BLACK);
@@ -265,7 +265,7 @@ test "truecolour output that never repeats a look keeps the style cache bounded"
 			text: "x",
 			runs: [run(1, fg, BLACK, Underline.None)],
 			widths: [],
-			cursorCell: -1,
+			cursorCell: null,
 			cursorInk: null,
 		};
 		const spans = spansOf(styles, l, BLACK);
@@ -285,7 +285,7 @@ test "a screenful of truecolour looks wider than one cache generation keeps its 
 				text: "x",
 				runs: [run(1, fg, BLACK, Underline.None)],
 				widths: [],
-				cursorCell: -1,
+				cursorCell: null,
 				cursorInk: null,
 			};
 			const spans = spansOf(styles, l, BLACK);
@@ -301,7 +301,7 @@ test "a background differs from the terminal's only where a run says so" {
 		text: "xy",
 		runs: [run(1, WHITE, BLACK, Underline.Curly), run(1, WHITE, RED, Underline.None)],
 		widths: [],
-		cursorCell: -1,
+		cursorCell: null,
 		cursorInk: null,
 	};
 	const spans = spansOf(styles, l, BLACK);
@@ -320,7 +320,7 @@ test "an underline colour tints the line, and only while the run is underlined" 
 		text: "xyzw",
 		runs: [curly, plain, white, curly],
 		widths: [],
-		cursorCell: -1,
+		cursorCell: null,
 		cursorInk: null,
 	};
 	const spans = spansOf(styles, l, BLACK);
@@ -345,12 +345,12 @@ test "a cursor that moves along its row rebuilds that row, so a ligature under i
 		assert grid.at(0).spans[0].text == "a->b";
 		vt.writeText("\x1b[1;3H");
 		assert applyFrame(grid, styles, shown, vt, null).ok;
-		assert grid.at(0).line.cursorCell == 2;
+		assert grid.at(0).line.cursorCell === 2;
 		assert grid.at(0).spans.length == 3;
 		assert grid.at(0).spans[1].text == ">";
 		vt.writeText("\x1b[2;1H");
 		assert applyFrame(grid, styles, shown, vt, null).ok;
-		assert grid.at(0).line.cursorCell == -1;
+		assert grid.at(0).line.cursorCell === null;
 		assert grid.at(0).spans.length == 1;
 		vt.free();
 	}
@@ -437,7 +437,7 @@ test "each underline style and an overline reach the span's decoration" {
 			all,
 		],
 		widths: [],
-		cursorCell: -1,
+		cursorCell: null,
 		cursorInk: null,
 	};
 	const spans = spansOf(styles, l, BLACK);
@@ -458,7 +458,7 @@ test "an underline never shares a cached style with a foreground one bit away" {
 		text: "xy",
 		runs: [run(1, BLACK, WHITE, Underline.Single), run(1, near, WHITE, Underline.None)],
 		widths: [],
-		cursorCell: -1,
+		cursorCell: null,
 		cursorInk: null,
 	};
 	const spans = spansOf(styles, l, BLACK);

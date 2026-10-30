@@ -49,7 +49,7 @@ export struct GridLine {
 	text: string;
 	runs: Vec<LineRun>;
 	widths: uint8[];
-	cursorCell: int32;
+	cursorCell: int32 | null;
 	cursorInk: CellInk | null;
 }
 
@@ -123,10 +123,10 @@ function isUnligatedPair(a: uint32, b: uint32): boolean {
 	return (a == 0x66 && (b == 0x69 || b == 0x6C)) || (a == 0x73 && b == 0x74);
 }
 
-function breaksShapingBefore(this row: Row, i: int32, cursorCell: int32): boolean {
+function breaksShapingBefore(this row: Row, i: int32, cursorCell: int32 | null): boolean {
 	const cell = row.cells[i];
 	if (i == 0 || cell.extra != 0) { return false; }
-	if (i == cursorCell || i == cursorCell + 1) { return true; }
+	if (cursorCell !== null && (i == cursorCell || i == cursorCell + 1)) { return true; }
 	const prev = row.cells[i - 1];
 	return prev.extra == 0 && isUnligatedPair(prev.cp, cell.cp);
 }
@@ -165,13 +165,13 @@ function noted(this run: LineRun, note: RowNote): LineRun {
 	};
 }
 
-export function cellOnRow(this cursor: Cursor | null, y: int32): int32 {
-	return cursor !== null && cursor.y == y ? cursor.x : -1;
+export function cellOnRow(this cursor: Cursor | null, y: int32): int32 | null {
+	return cursor !== null && cursor.y == y ? cursor.x : null;
 }
 
 export function line(
 	this row: Row,
-	cursorCell: int32,
+	cursorCell: int32 | null,
 	cursorInk: CellInk | null,
 	selection: CellInk,
 	background: Rgb,
@@ -183,13 +183,14 @@ export function line(
 	let widths: uint8[] = [];
 	let extraAt = 0;
 	const count = row.cells.length as int32;
-	const cursorAt = cursorCell > 0 && cursorCell < count && row.isWideSpacer(cursorCell)
+	const cursorAt = cursorCell !== null && cursorCell > 0 && cursorCell < count &&
+		row.isWideSpacer(cursorCell)
 		? cursorCell - 1
 		: cursorCell;
 	const selected = row.selected;
 	let end = count;
 	while (end > 0 && row.cells[end - 1].isEmpty(background)) { end--; }
-	if (cursorInk !== null) { end = Math.max(end, Math.min(cursorAt + 1, count)); }
+	if (cursorInk !== null && cursorAt !== null) { end = Math.max(end, Math.min(cursorAt + 1, count)); }
 	const placedNote = note.placed(count, end);
 	if (selected !== null) { end = Math.max(end, Math.min(selected.to + 1, count)); }
 	if (tint !== null && tint.bg !== null) { end = count; }
@@ -203,7 +204,7 @@ export function line(
 		const last = cell.flags.has(CellFlag.Wide) ? i + 1 : i;
 		let run = cell.lineRun();
 		if (tint !== null) { run = run.tinted(tint); }
-		if (i == cursorAt && cursorInk !== null) {
+		if (cursorAt !== null && i == cursorAt && cursorInk !== null) {
 			run = run.inked(cursorInk);
 		} else if (selected.covers(i, last)) {
 			run = run.inked(selection);
@@ -287,7 +288,7 @@ function lineOfFirstRow(
 function inkedLine(
 	text: string,
 	cols: int32,
-	cursorCell: int32,
+	cursorCell: int32 | null,
 	cursorInk: CellInk | null,
 	selected: Marked | null,
 ): GridLine | null {
@@ -298,7 +299,7 @@ function inkedLine(
 function tintedLine(
 	text: string,
 	cols: int32,
-	cursorCell: int32,
+	cursorCell: int32 | null,
 	selected: Marked | null,
 	tint: RowTint | null,
 	note: RowNote | null = null,
@@ -308,7 +309,7 @@ function tintedLine(
 		row.line(cursorCell, cursorInk, SWAP, background, tint, note));
 }
 
-function firstLine(text: string, cols: int32, cursorCell: int32): GridLine | null {
+function firstLine(text: string, cols: int32, cursorCell: int32 | null): GridLine | null {
 	return inkedLine(text, cols, cursorCell, null, null);
 }
 
@@ -317,13 +318,13 @@ function columns(from: int32, to: int32): Marked {
 }
 
 test "a plain row is one run over its text, without the blank cells after it" {
-	const line = firstLine("hello", 10, -1);
+	const line = firstLine("hello", 10, null);
 	assert line !== null;
 	if (line !== null) {
 		assert line.text == "hello";
 		assert line.runs.length == 1;
 		assert line.runs[0].units == 5;
-		assert line.cursorCell == -1;
+		assert line.cursorCell === null;
 	}
 }
 
@@ -338,12 +339,12 @@ test "each styled stretch is its own run" {
 		assert line.runs[0].fg == RED;
 		assert line.runs[1].units == 1;
 		assert !line.runs[1].flags.has(CellFlag.Bold);
-		assert line.cursorCell == 0;
+		assert line.cursorCell === 0;
 	}
 }
 
 test "underline kinds travel through, wavy as curly" {
-	const line = firstLine("\x1b[4:2md\x1b[4:3mw\x1b[4:5mv", 20, -1);
+	const line = firstLine("\x1b[4:2md\x1b[4:3mw\x1b[4:5mv", 20, null);
 	assert line !== null;
 	if (line !== null) {
 		assert line.runs[0].underline == Underline.Double;
@@ -353,7 +354,7 @@ test "underline kinds travel through, wavy as curly" {
 }
 
 test "a wide cell carries no spacer text and holds its run" {
-	const line = firstLine("中a", 10, -1);
+	const line = firstLine("中a", 10, null);
 	assert line !== null;
 	if (line !== null) {
 		assert line.text == "中a";
@@ -363,7 +364,7 @@ test "a wide cell carries no spacer text and holds its run" {
 }
 
 test "each cell gives its width at its first UTF-8 byte and 0 after, so a wide cell takes two" {
-	const line = firstLine("你好a😀 e\u0301", 20, -1);
+	const line = firstLine("你好a😀 e\u0301", 20, null);
 	assert line !== null;
 	if (line !== null) {
 		assert line.widths.join("") == "200200120001100", "widths: " + line.widths.join("");
@@ -371,13 +372,13 @@ test "each cell gives its width at its first UTF-8 byte and 0 after, so a wide c
 }
 
 test "a concealed wide cell is two blank cells of width 1" {
-	const line = firstLine("\x1b[8m\u4e2d", 10, -1);
+	const line = firstLine("\x1b[8m\u4e2d", 10, null);
 	assert line !== null;
 	if (line !== null) { assert line.widths.join("") == "11", "widths: " + line.widths.join(""); }
 }
 
 test "an erased line keeps its background as a run" {
-	const line = firstLine("\x1b[48;2;255;0;0m\x1b[K", 10, -1);
+	const line = firstLine("\x1b[48;2;255;0;0m\x1b[K", 10, null);
 	assert line !== null;
 	if (line !== null) {
 		assert line.text == "          ";
@@ -388,7 +389,7 @@ test "an erased line keeps its background as a run" {
 }
 
 test "strikethrough is part of the run" {
-	const line = firstLine("\x1b[9mx\x1b[0my", 10, -1);
+	const line = firstLine("\x1b[9mx\x1b[0my", 10, null);
 	assert line !== null;
 	if (line !== null) {
 		assert line.runs[0].flags.has(CellFlag.Strikethrough);
@@ -397,7 +398,7 @@ test "strikethrough is part of the run" {
 }
 
 test "a concealed cell keeps its background and draws no text or line" {
-	const line = firstLine("\x1b[8;4;9;41mab\x1b[0mc\x1b[8m\u4e2d", 10, -1);
+	const line = firstLine("\x1b[8;4;9;41mab\x1b[0mc\x1b[8m\u4e2d", 10, null);
 	assert line !== null;
 	if (line !== null) {
 		assert line.text == "  c  ";
@@ -410,7 +411,7 @@ test "a concealed cell keeps its background and draws no text or line" {
 }
 
 test "a codepoint above the BMP is two UTF-16 units of its run" {
-	const line = firstLine("a😀\x1b[1mb", 10, -1);
+	const line = firstLine("a😀\x1b[1mb", 10, null);
 	assert line !== null;
 	if (line !== null) {
 		assert line.text == "a😀b";
@@ -433,7 +434,7 @@ test "an inverse cell swaps its run's colours" {
 		const rows = vt.rows();
 		assert colors.ok && rows.ok;
 		if (colors.ok && rows.ok) {
-			const line = rows.value[0].line(-1, null, SWAP, colors.value.bg);
+			const line = rows.value[0].line(null, null, SWAP, colors.value.bg);
 			assert line.ok;
 			if (line.ok) {
 				assert line.value.runs[0].fg == colors.value.bg;
@@ -445,7 +446,7 @@ test "an inverse cell swaps its run's colours" {
 }
 
 test "a faint cell draws its foreground halfway to its background" {
-	const line = firstLine("\x1b[2;38;2;200;100;0;48;2;0;0;100mx", 10, -1);
+	const line = firstLine("\x1b[2;38;2;200;100;0;48;2;0;0;100mx", 10, null);
 	assert line !== null;
 	if (line !== null) {
 		const fg = line.runs[0].fg;
@@ -468,7 +469,7 @@ test "a trailing blank that shows a background, an underline or a strikethrough 
 		if (colors.ok && rows.ok) {
 			let texts: Vec<string> = [];
 			for (const row of rows.value) {
-				const line = row.line(-1, null, SWAP, colors.value.bg);
+				const line = row.line(null, null, SWAP, colors.value.bg);
 				assert line.ok;
 				if (line.ok) { texts.push(line.value.text); }
 			}
@@ -477,7 +478,7 @@ test "a trailing blank that shows a background, an underline or a strikethrough 
 	}
 }
 
-function unitsWithCursor(text: string, cursorCell: int32): string {
+function unitsWithCursor(text: string, cursorCell: int32 | null): string {
 	const line = firstLine(text, 12, cursorCell);
 	if (line === null) { return "no line"; }
 	let out: string[] = [];
@@ -486,15 +487,15 @@ function unitsWithCursor(text: string, cursorCell: int32): string {
 }
 
 test "the cursor's cell is a run of its own, so a ligature under it shows its parts" {
-	assert unitsWithCursor("a->b", -1) == "4";
+	assert unitsWithCursor("a->b", null) == "4";
 	assert unitsWithCursor("a->b", 2) == "2,1,1";
 	assert unitsWithCursor("a->b", 0) == "1,3";
 }
 
 test "fi, fl and st never share a run, so they stay unligated" {
-	assert unitsWithCursor("fifl", -1) == "1,2,1";
-	assert unitsWithCursor("ast", -1) == "2,1";
-	assert unitsWithCursor("ft", -1) == "2";
+	assert unitsWithCursor("fifl", null) == "1,2,1";
+	assert unitsWithCursor("ast", null) == "2,1";
+	assert unitsWithCursor("ft", null) == "2";
 }
 
 test "a lit block cursor draws its cell in the cursor colour, its text in the cell's background" {
@@ -537,7 +538,7 @@ test "a lit cursor on either cell of a wide character inks the whole character" 
 }
 
 test "selected cells swap their colours, so an inverse cell selects back to plain" {
-	const line = inkedLine("ab\x1b[7mc\x1b[0md", 10, -1, null, columns(1, 2));
+	const line = inkedLine("ab\x1b[7mc\x1b[0md", 10, null, null, columns(1, 2));
 	assert line !== null;
 	if (line !== null) {
 		assert line.runs.length == 3;
@@ -551,7 +552,7 @@ test "selected cells swap their colours, so an inverse cell selects back to plai
 
 test "a selection reaching either cell of a wide character colours it whole" {
 	for (let from = 0; from < 2; from++) {
-		const line = inkedLine("中文 x", 10, -1, null, columns(from, 2));
+		const line = inkedLine("中文 x", 10, null, null, columns(from, 2));
 		assert line !== null;
 		if (line !== null) {
 			assert line.runs.length == 2;
@@ -562,7 +563,7 @@ test "a selection reaching either cell of a wide character colours it whole" {
 }
 
 test "selected blanks past the text are drawn, up to the last column" {
-	const line = inkedLine("x", 6, -1, null, columns(3, 5));
+	const line = inkedLine("x", 6, null, null, columns(3, 5));
 	assert line !== null;
 	if (line !== null) {
 		assert line.text == "x     ";
@@ -583,19 +584,19 @@ test "the cursor's ink wins over the selection on its cell" {
 }
 
 test "an overline is part of the run, and it keeps a trailing blank on the line" {
-	const line = firstLine("\x1b[53mx \x1b[0my", 10, -1);
+	const line = firstLine("\x1b[53mx \x1b[0my", 10, null);
 	assert line !== null;
 	if (line !== null) {
 		assert line.runs[0].flags.has(CellFlag.Overline);
 		assert !line.runs[1].flags.has(CellFlag.Overline);
 	}
-	const trailing = firstLine("x\x1b[53m  \x1b[0m", 10, -1);
+	const trailing = firstLine("x\x1b[53m  \x1b[0m", 10, null);
 	assert trailing !== null;
 	if (trailing !== null) { assert trailing.text == "x  "; }
 }
 
 test "a hidden cell draws no overline" {
-	const line = firstLine("\x1b[8;53mx\x1b[0m", 10, -1);
+	const line = firstLine("\x1b[8;53mx\x1b[0m", 10, null);
 	assert line !== null;
 	if (line !== null) { assert !line.runs[0].flags.has(CellFlag.Overline); }
 }
@@ -618,8 +619,8 @@ test "a row tint colours every cell to the full width, beneath the cursor and th
 }
 
 test "a row tint keeps a cell's own colour where it names none" {
-	const line = tintedLine("a\x1b[41mb\x1b[0m", 8, -1, null, { fg: GREEN, bg: null });
-	const plain = firstLine("a", 8, -1);
+	const line = tintedLine("a\x1b[41mb\x1b[0m", 8, null, null, { fg: GREEN, bg: null });
+	const plain = firstLine("a", 8, null);
 	assert line !== null && plain !== null;
 	if (line !== null && plain !== null) {
 		assert line.text == "ab";
@@ -639,8 +640,8 @@ function unitsOfLine(line: GridLine): string {
 }
 
 test "a note sits right-aligned on its row in the row's foreground drawn faint" {
-	const line = tintedLine("$ false", 24, -1, null, null, noteOf("exit 2 · 1.3s"));
-	const plain = firstLine("$ false", 24, -1);
+	const line = tintedLine("$ false", 24, null, null, null, noteOf("exit 2 · 1.3s"));
+	const plain = firstLine("$ false", 24, null);
 	assert line !== null && plain !== null;
 	if (line !== null && plain !== null) {
 		assert line.text == "$ false" + "    " + "exit 2 · 1.3s", line.text;
@@ -654,8 +655,8 @@ test "a note sits right-aligned on its row in the row's foreground drawn faint" 
 }
 
 test "a note that would overlap the row's text or its cursor is hidden" {
-	const fits = tintedLine("0123456789abc", 20, -1, null, null, noteOf("exit 2"));
-	const touches = tintedLine("0123456789abcd", 20, -1, null, null, noteOf("exit 2"));
+	const fits = tintedLine("0123456789abc", 20, null, null, null, noteOf("exit 2"));
+	const touches = tintedLine("0123456789abcd", 20, null, null, null, noteOf("exit 2"));
 	const cursor = tintedLine("$ ", 20, 15, null, null, noteOf("exit 2"));
 	assert fits !== null && touches !== null && cursor !== null;
 	if (fits !== null && touches !== null && cursor !== null) {
@@ -667,8 +668,8 @@ test "a note that would overlap the row's text or its cursor is hidden" {
 
 test "a note's own colours win over the row tint, and a wide grapheme takes two cells" {
 	const note: RowNote = { text: "中!", fg: GREEN, bg: RED };
-	const line = tintedLine("ab", 8, -1, null, { fg: null, bg: TINT }, note);
-	const under = tintedLine("ab", 8, -1, null, { fg: null, bg: TINT }, noteOf("x"));
+	const line = tintedLine("ab", 8, null, null, { fg: null, bg: TINT }, note);
+	const under = tintedLine("ab", 8, null, null, { fg: null, bg: TINT }, noteOf("x"));
 	assert line !== null && under !== null;
 	if (line !== null && under !== null) {
 		assert line.text == "ab" + "   " + "中!", line.text;

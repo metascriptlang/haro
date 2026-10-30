@@ -12,7 +12,7 @@ import {
 	scrollTop,
 } from "../vt/vt";
 import { Term, TermError, busy, cooked, vtFailed } from "./term";
-import { Controls, holding, typed, vtOf } from "./controls";
+import { Controls, holding, selectAll, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";
 
 const SUPER_ONLY: BitSet<KeyMod> = (0 as BitSet<KeyMod>).incl(KeyMod.Super);
@@ -47,6 +47,7 @@ export function act(
 		Action.CloseWindow => { c.closeWindow(t); },
 		Action.Copy => { return c.copySelection(t); },
 		Action.Paste => { c.pasteFrom(); },
+		Action.SelectAll => { try c.selectAll(vt); },
 		Action.PageUp => { try vt.scrollPages(-1); },
 		Action.PageDown => { try vt.scrollPages(1); },
 		Action.PromptUp => { try vt.jumpToPrompt(PromptJump.Previous); },

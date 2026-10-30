@@ -424,3 +424,29 @@ test "a keybind that names a built-in action runs it, and for one screen only wh
 		assert sink.sent == "";
 	}).ok;
 }
+
+test "the select all chord selects the scrollback and the screen, and the copy chord then copies them" {
+	assert onTerm(lines(12), (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const board = boardOf("");
+		const clip = board;
+		assert !c.pointer.selected();
+		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyA", CLIPBOARD_MODS))));
+		assert c.pointer.selected();
+		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyC", CLIPBOARD_MODS))));
+		assert board.copied.startsWith("line 1\nline 2\n");
+		assert board.copied.includes("line 12");
+		assert sink.sent == "";
+	}).ok;
+}
+
+test "select all keeps the viewport where the user scrolled it" {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const clip = boardOf("");
+		assert handled(settled(clip, c, t, c.keyDown(t, key("PageUp", CTRL | SHIFT))));
+		const scrolled = offsetOf(t);
+		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyA", CLIPBOARD_MODS))));
+		assert offsetOf(t) == scrolled;
+	}).ok;
+}

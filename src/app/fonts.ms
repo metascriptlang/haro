@@ -20,6 +20,8 @@ struct SystemFace {
 }
 
 when (windows) {
+	import { env } from "std/process";
+
 	function fallbackFaces(): SystemFace[] {
 		const fonts = `${env.get("WINDIR")}/Fonts`;
 		return [

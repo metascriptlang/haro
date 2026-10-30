@@ -96,7 +96,7 @@ export function refit(
 	const reflows = cols != t.cols;
 	const fitted = t.fit(cols, rows, cellWidth, cellHeight);
 	const vt = t.vtOf();
-	if (fitted.ok && reflows && vt !== null) { c.pointer.clear(vt); }
+	if (fitted.ok && reflows && vt !== null) { try c.pointer.clear(vt); }
 	return fitted;
 }
 
@@ -105,7 +105,7 @@ export function typed(this c: Controls, t: Term): Result<boolean, TermError> {
 	if (vt === null) { return Result.ok(false); }
 	const bottom = try vt.atBottom();
 	if (c.pointer.sel === null && bottom) { return Result.ok(false); }
-	c.pointer.clear(vt);
+	try c.pointer.clear(vt);
 	vt.scrollBottom();
 	return Result.ok(true);
 }

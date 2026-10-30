@@ -78,7 +78,7 @@ export function pointerDown(
 			return Result.ok(true);
 		},
 		PressPlan.Report => {
-			c.pointer.clear(vt);
+			try c.pointer.clear(vt);
 			c.button = button;
 			return reportMouse(t, MouseAction.Press, button, h);
 		},
@@ -174,7 +174,7 @@ export function roll(
 	match (where) {
 		WheelRoute.Report => {
 			const shown = c.pointer.selected();
-			c.pointer.clear(vt);
+			try c.pointer.clear(vt);
 			const button = rows < 0 ? MouseButton.WheelUp : MouseButton.WheelDown;
 			for (let i = 0; i < presses; i++) {
 				try reportMouse(t, MouseAction.Press, button, h);
@@ -183,7 +183,7 @@ export function roll(
 		},
 		WheelRoute.Arrows => {
 			const shown = c.pointer.selected();
-			c.pointer.clear(vt);
+			try c.pointer.clear(vt);
 			const code = rows < 0 ? "ArrowUp" : "ArrowDown";
 			for (let i = 0; i < presses; i++) {
 				try t.tapKey(code);

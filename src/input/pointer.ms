@@ -68,7 +68,7 @@ export function selected(this p: Pointer): boolean {
 function publish(this p: Pointer, vt: Vt): Result<boolean, VtError> {
 	const sel = p.shown();
 	if (sel === null) {
-		vt.selectionClear();
+		try vt.selectionClear();
 		return Result.ok(false);
 	}
 	const _set = try vt.selectionSet(sel.marked());
@@ -109,10 +109,10 @@ export function release(this p: Pointer): void {
 	p.dragging = false;
 }
 
-export function clear(this p: Pointer, vt: Vt): void {
+export function clear(this p: Pointer, vt: Vt): Result<void, VtError> {
 	p.sel = null;
 	p.dragging = false;
-	vt.selectionClear();
+	return vt.selectionClear();
 }
 
 export function sync(this p: Pointer, vt: Vt): Result<boolean, VtError> {
@@ -121,7 +121,7 @@ export function sync(this p: Pointer, vt: Vt): Result<boolean, VtError> {
 	const now = try vt.selection();
 	p.sel = sel.rebased(now);
 	if (p.shown() === null) {
-		p.clear(vt);
+		try p.clear(vt);
 		return Result.ok(false);
 	}
 	return Result.ok(true);
@@ -270,7 +270,7 @@ test "a click away from a selection clears it, and so does clear" {
 		if (gone.ok) { assert gone.value === null; }
 		assert p.drag(vt, spot(4, 0)).ok;
 		assert p.selected();
-		p.clear(vt);
+		assert p.clear(vt).ok;
 		assert !p.selected();
 		assert !p.dragging;
 	}
@@ -408,7 +408,7 @@ test "a selection the terminal let go of is dropped here too" {
 		const p = Pointer.open();
 		assert p.click(vt, 0, 0, 0);
 		assert p.drag(vt, spot(3, 0)).ok;
-		vt.selectionClear();
+		assert vt.selectionClear().ok;
 		const kept = p.sync(vt);
 		assert kept.ok;
 		if (kept.ok) { assert !kept.value; }

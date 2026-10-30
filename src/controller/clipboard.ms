@@ -118,6 +118,6 @@ export function copySelection(this c: Controls, t: Term): Result<boolean, TermEr
 	const got = try c.pointer.copyText(vt);
 	if (got === null) { return Result.ok(false); }
 	c.asks.copy = got;
-	c.pointer.clear(vt);
+	try c.pointer.clear(vt);
 	return Result.ok(true);
 }

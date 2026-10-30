@@ -90,6 +90,7 @@ export {
 	scrollTop,
 } from "./scroll";
 export {
+	allMarked,
 	selectedText,
 	selection,
 	selectionClear,

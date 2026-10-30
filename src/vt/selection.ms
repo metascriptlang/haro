@@ -24,6 +24,7 @@ import { Vt } from "./terminal";
 import {
 	checked,
 	pointOf,
+	selectAll,
 	selectLine,
 	selectWord,
 	selectionFormat,
@@ -115,6 +116,11 @@ function lineAt(this vt: Vt, at: Point): Result<Marked | null, VtError> {
 	};
 	let selection: GhosttySelection = { size: sizeof GhosttySelection as size_t };
 	return markedFound(vt.terminal, selectLine(vt.terminal, options, selection), selection);
+}
+
+export function allMarked(this vt: Vt): Result<Marked | null, VtError> {
+	let selection: GhosttySelection = { size: sizeof GhosttySelection as size_t };
+	return markedFound(vt.terminal, selectAll(vt.terminal, selection), selection);
 }
 
 export function unitAt(this vt: Vt, unit: Unit, at: Point): Result<Range, VtError> {

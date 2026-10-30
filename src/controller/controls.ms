@@ -1,6 +1,6 @@
 import { KeyMod } from "../keys/keys";
 import { Action, Keybind } from "../input/bindings";
-import { Point, Selection, Unit, drag, marked, pointRange, press } from "../select/select";
+import { Selection, Unit, drag, marked, pointRange, press } from "../select/select";
 import { Pointer, Spot } from "../input/pointer";
 import { Wheel } from "../input/wheel";
 import { Held } from "../input/paste";
@@ -8,11 +8,9 @@ import {
 	MouseGeometry,
 	Vt,
 	VtError,
+	allMarked,
 	scrollBottom,
-	scrollLines,
-	scrollOffset,
 	selectionSet,
-	size,
 } from "../vt/vt";
 import { MouseButton } from "./mouseButton";
 import { Term, TermError, fit, vtFailed } from "./term";
@@ -121,21 +119,10 @@ export function typed(this c: Controls, t: Term): Result<boolean, TermError> {
 	return Result.ok(true);
 }
 
-function screenRows(this vt: Vt): Result<int32, VtError> {
-	const was = try vt.scrollOffset();
-	vt.scrollBottom();
-	const bottom = try vt.scrollOffset();
-	vt.scrollLines(was - bottom);
-	const shown = try vt.size();
-	return Result.ok(bottom + shown[1]);
-}
-
 export function selectAll(this c: Controls, vt: Vt): Result<void, VtError> {
-	const rows = try vt.screenRows();
-	const shown = try vt.size();
-	const first: Point = { row: 0, col: 0 };
-	const last: Point = { row: rows - 1, col: shown[0] - 1 };
-	const sel = Selection.press(Unit.Cell, first.pointRange(), false).drag(last.pointRange());
+	const all = try vt.allMarked();
+	if (all === null) { return Result.ok(null); }
+	const sel = Selection.press(Unit.Cell, all.range.start.pointRange(), false).drag(all.range.end.pointRange());
 	c.pointer.sel = sel;
 	c.pointer.dragging = false;
 	return vt.selectionSet(sel.marked());

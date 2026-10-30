@@ -310,6 +310,10 @@ export extern function selectLine(
 	ref options: GhosttyTerminalSelectLineOptions,
 	ref selection: GhosttySelection,
 ): GhosttyResult from "ghostty_terminal_select_line";
+export extern function selectAll(
+	terminal: GhosttyTerminal,
+	ref selection: GhosttySelection,
+): GhosttyResult from "ghostty_terminal_select_all";
 export extern function selectionFormat(
 	terminal: GhosttyTerminal,
 	options: GhosttyTerminalSelectionFormatOptions,

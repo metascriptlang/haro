@@ -4,6 +4,7 @@ import {
 	create,
 	free,
 	scrollOffset,
+	allMarked,
 	selectedText,
 	selection,
 	selectionClear,
@@ -152,5 +153,24 @@ test "an erased selection is gone from the terminal" {
 		assert none.ok;
 		if (none.ok) { assert none.value === null; }
 		assert shown(vt.selectedText()) == "<none>";
+	});
+}
+
+test "select all covers the scrollback and the screen without moving the viewport" {
+	assert withVt(10, 4, (vt: Vt): void => {
+		assert vt.setScrollback(1000).ok;
+		vt.writeText(numberedLines(12));
+		assert vt.update().ok;
+		const before = vt.scrollOffset();
+		const all = vt.allMarked();
+		assert all.ok;
+		if (all.ok && all.value !== null) {
+			assert all.value.range.start == at(0, 0);
+			assert all.value.range.end.row >= 11;
+			assert !all.value.block;
+			assert vt.selectionSet(all.value).ok;
+		}
+		assert shown(vt.selectedText()).startsWith("r0");
+		assert vt.scrollOffset() == before;
 	});
 }

@@ -92,9 +92,18 @@ export enum MouseAction {
 	Motion,
 }
 
+export enum MouseButton {
+	None = 0,
+	Left = 1,
+	Right = 2,
+	Middle = 3,
+	WheelUp = 4,
+	WheelDown = 5,
+}
+
 export struct MouseInput {
 	action: MouseAction;
-	button: int32;
+	button: MouseButton;
 	mods: BitSet<KeyMod>;
 	x: float32;
 	y: float32;

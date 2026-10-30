@@ -16,7 +16,7 @@ function reportMouse(
 ): Result<boolean, TermError> {
 	const input: MouseInput = {
 		action: action,
-		button: button as int32,
+		button: button,
 		mods: h.mods,
 		x: (h.x * h.scale + h.cell.padLeft) as float32,
 		y: (h.y * h.scale + h.cell.padTop) as float32,

@@ -27,6 +27,7 @@ import {
 import {
 	Mouse,
 	MouseAction,
+	MouseButton,
 	MouseCodec,
 	MouseGeometry,
 	MouseInput,
@@ -119,10 +120,10 @@ export function mouseReport(
 	const pressedOption = GhosttyMouseEncoderOption.GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED;
 	mouseSetOption(encoder, pressedOption, pressed);
 	ghostty_mouse_event_set_action(event, mouseActionOf(input.action));
-	if (input.button == 0) {
+	if (input.button == MouseButton.None) {
 		ghostty_mouse_event_clear_button(event);
 	} else {
-		mouseSetButton(event, input.button);
+		mouseSetButton(event, input.button as int32);
 	}
 	mouseSetMods(event, modsMask(input.mods));
 	ghostty_mouse_event_set_position(event, { x: input.x, y: input.y });

@@ -82,7 +82,7 @@ function hit(this m: PaneModel, e: NeonEvent): Hit {
 
 export function pressed(this m: PaneModel, e: NeonEvent): void {
 	if (m.metrics.cellWidth() <= 0) { return; }
-	m.io.press(buttonOf(e.button), m.hit(e), m.timing.clock());
+	m.io.press(buttonOf(e.button as int32), m.hit(e), m.timing.clock());
 	m.scheduleRefresh();
 }
 
@@ -94,7 +94,7 @@ export function dragged(this m: PaneModel, e: NeonEvent): void {
 
 export function released(this m: PaneModel, e: NeonEvent): void {
 	if (m.metrics.cellWidth() <= 0) { return; }
-	m.io.release(buttonOf(e.button), m.hit(e));
+	m.io.release(buttonOf(e.button as int32), m.hit(e));
 	m.scheduleRefresh();
 }
 

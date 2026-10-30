@@ -1,6 +1,7 @@
 import { KeyMod } from "../keys/keys";
 import {
 	MouseAction,
+	MouseButton,
 	MouseInput,
 	Rgb,
 	ShellMark,
@@ -184,7 +185,7 @@ test "focus reports go out only while the program asked for them" {
 test "a mouse report is the program's encoding of the pointer, nothing while it asked for none" {
 	const geometry = geometryOf(8, 16, 160, 80);
 	const none = 0 as BitSet<KeyMod>;
-	const press: MouseInput = { action: MouseAction.Press, button: 1, mods: none, x: 17, y: 17 };
+	const press: MouseInput = { action: MouseAction.Press, button: MouseButton.Left, mods: none, x: 17, y: 17 };
 	const release: MouseInput = { ...press, action: MouseAction.Release };
 	assert onTerm("ready", (a: Term, quiet: Sink): void => {
 		assert a.sendMouse(press, geometry).ok;

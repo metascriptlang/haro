@@ -3,6 +3,7 @@ export {
 	CellFlag,
 	Mouse,
 	MouseAction,
+	MouseButton,
 	MouseGeometry,
 	MouseInput,
 	Painted,

@@ -119,7 +119,7 @@ export struct Frame {
 	asked: boolean;
 	bells: int32;
 	title: string | null;
-	notification: DesktopNotification | null;
+	notifications: Vec<DesktopNotification>;
 	shell: Vec<ShellMark>;
 }
 
@@ -138,7 +138,7 @@ function idleFrame(more: boolean, ended: boolean): Frame {
 		asked: false,
 		bells: 0,
 		title: null,
-		notification: null,
+		notifications: [],
 		shell: [],
 	};
 }
@@ -274,7 +274,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 			asked: asked,
 			bells: events.bells,
 			title: title,
-			notification: events.notification,
+			notifications: events.notifications,
 			shell: events.shell,
 		});
 	}
@@ -290,7 +290,7 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		asked: asked,
 		bells: events.bells,
 		title: title,
-		notification: events.notification,
+		notifications: events.notifications,
 		shell: events.shell,
 	});
 }

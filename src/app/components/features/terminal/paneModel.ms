@@ -312,9 +312,8 @@ function applied(this m: PaneModel, got: IoFrame): void {
 		if (copied !== null) { m.copyToClipboard(copied); }
 		const title = f.title;
 		if (title !== null) { m.desktop.setTitle(title); }
-		const notification = f.notification;
-		if (notification !== null && !m.cursor.focused) {
-			m.desktop.notify(notification.title, notification.body);
+		if (!m.cursor.focused) {
+			for (const n of f.notifications) { m.desktop.notify(n.title, n.body); }
 		}
 		if (f.bells > 0) { m.desktop.bell(); }
 		for (const mark of f.shell) { m.marked(mark); }

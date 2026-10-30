@@ -302,10 +302,10 @@ function desktopNotification(
 	notification: Readonly<Ptr<GhosttyTerminalDesktopNotification>>,
 ): void {
 	const hasBody = notification.size >= (sizeof GhosttyTerminalDesktopNotification as size_t);
-	effectsAt(effects).events.notification = {
+	effectsAt(effects).events.notifications.push({
 		title: boundedText(notification.title, NOTIFICATION_TITLE_BYTES),
 		body: hasBody ? boundedText(notification.body, NOTIFICATION_BODY_BYTES) : "",
-	};
+	});
 }
 
 const COMMAND_BYTES = 4096;
@@ -438,7 +438,7 @@ export struct VtEvents {
 	bells: int32;
 	titleChanged: boolean;
 	pwdChanged: boolean;
-	notification: DesktopNotification | null;
+	notifications: Vec<DesktopNotification>;
 	shell: Vec<ShellMark>;
 }
 
@@ -446,6 +446,6 @@ export const NO_EVENTS: VtEvents = {
 	bells: 0,
 	titleChanged: false,
 	pwdChanged: false,
-	notification: null,
+	notifications: [],
 	shell: [],
 };

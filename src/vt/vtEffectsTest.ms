@@ -67,20 +67,26 @@ test "bells, a title and a pwd reach the host as events once each" {
 test "a desktop notification reaches the host once, by OSC 9 with a body and OSC 777 with a title" {
 	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("\x1b]9;build done\x07");
-		const nine = vt.takeEvents().notification;
-		assert nine !== null;
-		if (nine !== null) {
-			assert nine.title == "";
-			assert nine.body == "build done";
-		}
+		const nine = vt.takeEvents().notifications;
+		assert nine.length == 1;
+		assert nine[0].title == "";
+		assert nine[0].body == "build done";
 		vt.writeText("\x1b]777;notify;make;all green\x07");
-		const rxvt = vt.takeEvents().notification;
-		assert rxvt !== null;
-		if (rxvt !== null) {
-			assert rxvt.title == "make";
-			assert rxvt.body == "all green";
-		}
-		assert vt.takeEvents().notification === null;
+		const rxvt = vt.takeEvents().notifications;
+		assert rxvt.length == 1;
+		assert rxvt[0].title == "make";
+		assert rxvt[0].body == "all green";
+		assert vt.takeEvents().notifications.length == 0;
+	});
+}
+
+test "two notifications in one write both reach the host, in order" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeText("\x1b]9;first\x07\x1b]9;second\x07");
+		const got = vt.takeEvents().notifications;
+		assert got.length == 2;
+		assert got[0].body == "first";
+		assert got[1].body == "second";
 	});
 }
 
@@ -179,19 +185,17 @@ test "an anchor whose row left scrollback has no value, and the table drops it a
 test "a notification's text stops at its cap on a character, and bytes that are not UTF-8 read as U+FFFD" {
 	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText(`\x1b]777;notify;${"t".repeat(300)};${"中".repeat(400)}\x07`);
-		const long = vt.takeEvents().notification;
-		assert long !== null;
-		if (long !== null) {
-			assert long.title == "t".repeat(NOTIFICATION_TITLE_BYTES);
-			assert long.body == "中".repeat(NOTIFICATION_BODY_BYTES / 3);
-		}
+		const long = vt.takeEvents().notifications;
+		assert long.length == 1;
+		assert long[0].title == "t".repeat(NOTIFICATION_TITLE_BYTES);
+		assert long[0].body == "中".repeat(NOTIFICATION_BODY_BYTES / 3);
 		let bytes: Vec<uint8> = [];
 		pushAll(bytes, "\x1b]9;a".asBytes());
 		for (const b of [0xff, 0x62, 0xe4, 0xb8, 0x63, 0xed, 0xa0, 0x80, 0x07]) { bytes.push(b as uint8); }
 		vt.write(bytes);
-		const broken = vt.takeEvents().notification;
-		assert broken !== null;
-		if (broken !== null) { assert broken.body == "a\u{fffd}b\u{fffd}\u{fffd}c\u{fffd}\u{fffd}\u{fffd}"; }
+		const broken = vt.takeEvents().notifications;
+		assert broken.length == 1;
+		assert broken[0].body == "a\u{fffd}b\u{fffd}\u{fffd}c\u{fffd}\u{fffd}\u{fffd}";
 	});
 }
 

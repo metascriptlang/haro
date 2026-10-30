@@ -86,9 +86,8 @@ test "a frame carries what the program asked of the host: a clipboard write, bel
 			assert frame.value.copied == "hi";
 			assert frame.value.bells == 2;
 			assert frame.value.title == "build done";
-			const notification = frame.value.notification;
-			assert notification !== null;
-			if (notification !== null) { assert notification.body == "tests passed"; }
+			assert frame.value.notifications.length == 1;
+			assert frame.value.notifications[0].body == "tests passed";
 			assert frame.value.shell.length == 2;
 			assert frame.value.shell[1].step === ShellStep.Prompt;
 			assert !frame.value.asked;
@@ -99,7 +98,7 @@ test "a frame carries what the program asked of the host: a clipboard write, bel
 			assert next.value.copied === null;
 			assert next.value.bells == 0;
 			assert next.value.title === null;
-			assert next.value.notification === null;
+			assert next.value.notifications.length == 0;
 			assert next.value.shell.length == 0;
 		}
 	}).ok;
@@ -118,7 +117,7 @@ test "a frame that fails keeps what the program asked of the host for the next f
 			assert frame.value.copied == "hi";
 			assert frame.value.bells == 2;
 			assert frame.value.title == "build done";
-			assert frame.value.notification !== null;
+			assert frame.value.notifications.length == 1;
 			assert frame.value.shell.length == 1;
 		}
 	}).ok;

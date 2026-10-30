@@ -21,6 +21,11 @@ import { CLIPBOARD_MODS } from "../input/bindings";
 import { KeyMod, NO_MODS, modSet } from "../keys/keys";
 const CTRL = modSet(KeyMod.Ctrl);
 const OPEN = modSet(OPEN_MOD);
+when (macos) {
+	const RECT = modSet(KeyMod.Alt);
+} else {
+	const RECT = modSet(KeyMod.Ctrl).incl(KeyMod.Alt);
+}
 const SHIFT = modSet(KeyMod.Shift);
 import {
 	Sink,
@@ -237,6 +242,23 @@ test "a press clears the hover, and an app that tracks the mouse never gets one"
 		assert !handled(c.pointerMove(t, hitWith(1, 0, OPEN), false));
 		assert c.hoverText() == "none";
 	}, 40, 5).ok;
+}
+
+test "dragging with the rectangle modifiers selects a block, and the same drag without them a run of text" {
+	assert onTerm("abcdef\r\nghijkl\r\nmnopqr", (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const board = boardOf("");
+		const clip = board;
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitWith(1, 0, RECT), 0)));
+		assert handled(c.pointerMove(t, hitWith(3, 1, RECT), true));
+		assert c.pointerUp(t, MouseButton.Left, hitAt(3, 1)).ok;
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Right, hitAt(0, 0), 1000)));
+		assert board.copied == "bcd\nhij";
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Left, hitAt(1, 0), 2000)));
+		assert handled(c.pointerMove(t, hitAt(3, 1), true));
+		assert handled(settled(clip, c, t, c.pointerDown(t, MouseButton.Right, hitAt(0, 0), 3000)));
+		assert board.copied == "bcdef\nghij";
+	}, 20, 5).ok;
 }
 
 test "a right click copies a selection and otherwise pastes" {

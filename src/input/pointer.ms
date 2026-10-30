@@ -73,6 +73,14 @@ export function opensLinks(mods: BitSet<KeyMod>): boolean {
 	return mods.intersection(CHORD) == (0 as BitSet<KeyMod>).incl(OPEN_MOD);
 }
 
+export function rectangular(mods: BitSet<KeyMod>): boolean {
+	when (macos) {
+		return mods.has(KeyMod.Alt);
+	} else {
+		return mods.has(KeyMod.Ctrl) && mods.has(KeyMod.Alt);
+	}
+}
+
 export function claimsMouse(tracking: boolean, shift: boolean): boolean {
 	return tracking && !shift;
 }
@@ -105,6 +113,7 @@ export function press(
 	y: float64,
 	time: float64,
 	reach: float64,
+	block: boolean = false,
 ): Result<boolean, VtError> {
 	p.hover = null;
 	const count = p.clicks.register(x, y, time, reach);
@@ -112,7 +121,7 @@ export function press(
 	if (count == 1) { p.anchor = { row: top + at.row, col: at.col }; }
 	const unit = unitOf(count);
 	const range = try vt.unitAt(unit, p.anchor);
-	p.sel = Selection.press(unit, range, false);
+	p.sel = Selection.press(unit, range, block && unit == Unit.Cell);
 	p.dragging = true;
 	p.last = at;
 	return p.publish(vt);
@@ -179,10 +188,17 @@ function spot(col: int32, row: int32): Spot {
 	return { col: col, row: row };
 }
 
-function click(this p: Pointer, vt: Vt, col: int32, row: int32, time: float64): boolean {
+function click(
+	this p: Pointer,
+	vt: Vt,
+	col: int32,
+	row: int32,
+	time: float64,
+	block: boolean = false,
+): boolean {
 	const x = col as float64 * CELL_WIDTH;
 	const y = row as float64 * ROW_HEIGHT;
-	return p.press(vt, spot(col, row), x, y, time, REACH).ok;
+	return p.press(vt, spot(col, row), x, y, time, REACH, block).ok;
 }
 
 function copied(this p: Pointer, vt: Vt): string {
@@ -219,6 +235,52 @@ test "a press with no drag leaves nothing selected and a drag selects the cells 
 		assert p.copied(vt) == "ello";
 		p.release();
 		assert p.selected();
+	}
+}
+
+test "a rectangular drag copies the block of cells between its corners, one line per row" {
+	const vt = viewOf(10, 3, "abcdef\r\nghijkl\r\nmnopqr");
+	assert vt !== null;
+	if (vt !== null) {
+		defer vt.free();
+		const p = Pointer.open();
+		assert p.click(vt, 1, 0, 0, true);
+		assert p.drag(vt, spot(3, 2)).ok;
+		assert p.copied(vt) == "bcd\nhij\nnop";
+		assert p.drag(vt, spot(0, 1)).ok;
+		assert p.copied(vt) == "ab\ngh";
+		const q = Pointer.open();
+		assert q.click(vt, 1, 0, 1000);
+		assert q.drag(vt, spot(3, 2)).ok;
+		assert q.copied(vt) == "bcdef\nghijkl\nmnop";
+	}
+}
+
+test "a double click stays a word selection even with the rectangle modifiers held" {
+	const vt = viewOf(20, 3, "foo bar baz");
+	assert vt !== null;
+	if (vt !== null) {
+		defer vt.free();
+		const p = Pointer.open();
+		assert p.click(vt, 5, 0, 0, true);
+		assert p.click(vt, 5, 0, 100, true);
+		assert p.copied(vt) == "bar";
+		assert p.sel !== null;
+		if (p.sel !== null) { assert !p.sel.block; }
+	}
+}
+
+test "rectangular selection takes Option on macOS and Ctrl with Alt elsewhere" {
+	const none = 0 as BitSet<KeyMod>;
+	assert !rectangular(none);
+	assert !rectangular(none.incl(KeyMod.Shift));
+	when (macos) {
+		assert rectangular(none.incl(KeyMod.Alt));
+		assert !rectangular(none.incl(KeyMod.Ctrl));
+	} else {
+		assert rectangular(none.incl(KeyMod.Ctrl).incl(KeyMod.Alt));
+		assert !rectangular(none.incl(KeyMod.Alt));
+		assert !rectangular(none.incl(KeyMod.Ctrl));
 	}
 }
 

@@ -1,5 +1,5 @@
 import { KeyMod } from "../keys/keys";
-import { autoscrollOf, claimsMouse, opensLinks } from "../input/pointer";
+import { autoscrollOf, claimsMouse, opensLinks, rectangular } from "../input/pointer";
 import { linkUnder } from "../screen/linksGrid";
 import { WheelRoute, route } from "../input/wheel";
 import { openable, refusalText } from "../term/link";
@@ -86,7 +86,7 @@ export function pointerDown(
 		},
 		PressPlan.Select => {
 			const reach = (h.cell.cellWidth as float64) / h.scale;
-			try c.pointer.press(vt, h.at, h.x, h.y, time, reach);
+			try c.pointer.press(vt, h.at, h.x, h.y, time, reach, rectangular(h.mods));
 			return Result.ok(true);
 		},
 		PressPlan.CopyOrPaste => {

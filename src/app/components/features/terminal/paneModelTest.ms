@@ -30,7 +30,7 @@ import { Term, TermError } from "../../../../controller/term";
 import { View, fitRows, hexOf, open, text } from "../../../frame";
 import { holding } from "../../../../controller/controls";
 import { MouseButton } from "../../../../controller/mouseButton";
-import { Sink, exiting, hitAt, lines, onFresh, onPty, onTerm } from "../../../../controller/terminalRig";
+import { Sink, exiting, hitAt, lines, onFresh, onPty, onRefused, onTerm } from "../../../../controller/terminalRig";
 import { Replay } from "../../../../pty/replay";
 import { Pty, PtyError } from "../../../../pty/transport";
 
@@ -254,6 +254,17 @@ test "a key event with a modifier bit outside KeyMod is dropped and reported onc
 		assert calls.noted == "key: modifier mask 4096 is not a whole number below 1024\n";
 		assert m.notice.text.endsWith("key: modifier mask 4096 is not a whole number below 1024");
 		assert t.session !== null;
+	}).ok;
+}
+
+test "a shell that did not start because its command is blank says so" {
+	assert onRefused(PtyError.OpenBlankCommand, (t: Term): void => {
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		m.io.fit(20, 3, 0, 0);
+		m.refresh();
+		assert m.notice.text.includes("command is blank"), m.notice.text;
+		assert calls.fatal == "";
 	}).ok;
 }
 

@@ -37,6 +37,7 @@ import {
 	handled,
 	onFresh,
 	onPty,
+	onRefused,
 	onTerm,
 	onUnfit,
 	settled,
@@ -252,6 +253,19 @@ test "a replayed recording fills the grid in one frame and ends the stream once"
 		if (second.ok) { assert !second.value.ended; }
 		assert !t.alive;
 		assert t.shellExitCode() == 0;
+	}).ok;
+}
+
+test "a pty that refuses to open names its cause in the error fit returns" {
+	assert onRefused(PtyError.OpenBlankCommand, (t: Term): void => {
+		const fitted = t.fit(80, 24);
+		assert !fitted.ok;
+		if (!fitted.ok) { assert fitted.error == TermError.PtyOpenBlankCommand; }
+	}).ok;
+	assert onRefused(PtyError.OpenTableFull, (t: Term): void => {
+		const fitted = t.fit(80, 24);
+		assert !fitted.ok;
+		if (!fitted.ok) { assert fitted.error == TermError.PtyOpenTableFull; }
 	}).ok;
 }
 

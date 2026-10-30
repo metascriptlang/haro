@@ -229,12 +229,27 @@ function failureText(error: TermError): string {
 	};
 }
 
+function ptyRefusal(error: TermError): string | null {
+	return match (error) {
+		TermError.PtyOpenFailed => "the terminal could not be opened",
+		TermError.PtyOpenTableFull => "too many terminals are open",
+		TermError.PtyOpenBlankCommand => "the command is blank",
+		TermError.PtyOpenBadEnv => "the environment is malformed",
+		TermError.PtyOpenForkFailed => "the process could not be forked",
+		TermError.PtyOpenExecFailed => "the command could not be run",
+		TermError.PtyOpenThreadFailed => "the terminal's reader thread could not start",
+		_ => null,
+	};
+}
+
 function reported(this m: PaneModel, f: Failure): void {
 	const error = f.error;
+	const refusal = f.where == Where.Fit ? ptyRefusal(error) : null;
+	if (refusal !== null) {
+		m.notify(`the shell did not start (${refusal}): check command in config.ms, or --shell`);
+		return;
+	}
 	match (error) {
-		TermError.PtyOpenFailed when f.where == Where.Fit => {
-			m.notify("the shell did not start: check command in config.ms, or --shell");
-		},
 		TermError.InputBacklogged => {
 			m.notify("the program has not read the last 16 MB sent to it, so this input was dropped");
 		},

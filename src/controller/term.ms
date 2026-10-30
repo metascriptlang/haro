@@ -52,6 +52,12 @@ export enum PasteCheck {
 export enum TermError {
 	KeysOpenFailed,
 	PtyOpenFailed,
+	PtyOpenTableFull,
+	PtyOpenBlankCommand,
+	PtyOpenBadEnv,
+	PtyOpenForkFailed,
+	PtyOpenExecFailed,
+	PtyOpenThreadFailed,
 	SessionStartFailed,
 	ResizeFailed,
 	PumpFailed,
@@ -77,6 +83,19 @@ export enum TermError {
 
 export converter vtFailed(e: VtError): TermError {
 	return TermError.VtFailed;
+}
+
+function ptyOpenFailure(e: PtyError): TermError {
+	return match (e) {
+		PtyError.OpenTableFull => TermError.PtyOpenTableFull,
+		PtyError.OpenBlankCommand => TermError.PtyOpenBlankCommand,
+		PtyError.OpenBadEnv => TermError.PtyOpenBadEnv,
+		PtyError.OpenForkFailed => TermError.PtyOpenForkFailed,
+		PtyError.OpenExecFailed => TermError.PtyOpenExecFailed,
+		PtyError.OpenThreadFailed => TermError.PtyOpenThreadFailed,
+		PtyError.OpenFailed | PtyError.Closed | PtyError.OutOfMemory |
+		PtyError.ResizeFailed | PtyError.WaitFailed | PtyError.Backlogged => TermError.PtyOpenFailed,
+	};
 }
 
 export type OpenPty = (
@@ -183,7 +202,7 @@ export function fit(
 	if (s === null) {
 		t.marks.push({ name: "layout", at: Date.now() });
 		const pty = t.open(cols, rows, cellWidth, cellHeight);
-		if (!pty.ok) { return Result.err(TermError.PtyOpenFailed); }
+		if (!pty.ok) { return Result.err(ptyOpenFailure(pty.error)); }
 		t.marks.push({ name: "spawned", at: Date.now() });
 		t.spawnedAt = t.now();
 		const started = Session.start(pty.value, cols, rows, cellWidth, cellHeight);

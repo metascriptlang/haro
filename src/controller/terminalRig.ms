@@ -48,6 +48,16 @@ export function onPty(
 	return Result.ok(null);
 }
 
+export function onRefused(
+	why: PtyError,
+	body: (t: Term) => void,
+): Result<void, TermError> {
+	const t = try openTerm((c: int32, r: int32): Result<Pty, PtyError> => { return Result.err(why); });
+	defer t.shutdown();
+	body(t);
+	return Result.ok(null);
+}
+
 export function onUnfit(
 	text: string,
 	body: (t: Term, sink: Sink) => void,

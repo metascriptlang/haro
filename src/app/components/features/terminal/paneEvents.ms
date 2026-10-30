@@ -6,14 +6,25 @@ import { KeyAction, KeyEvent, modifierKey, modsOf } from "../../../../keys/keys"
 import { focusCursor } from "../../content/cursor";
 import { buttonOf } from "../../../../controller/mouseButton";
 import { Hit } from "../../../../controller/controls";
-import { PaneModel, hookPane, notify, refresh, scheduleRefresh } from "./paneModel";
+import { Where } from "../../../../controller/io";
+import { PaneModel, failed, hookPane, notify, refresh, scheduleRefresh } from "./paneModel";
 
-export function keyOf(e: NeonEvent): KeyEvent {
+function keyOf(this m: PaneModel, e: NeonEvent): KeyEvent | null {
+	const mods = modsOf(e.mods);
+	if (!mods.ok) {
+		m.failed(Where.Key, mods.error);
+		return null;
+	}
+	const consumed = modsOf(e.consumedMods);
+	if (!consumed.ok) {
+		m.failed(Where.Key, consumed.error);
+		return null;
+	}
 	return {
 		action: e.type == "keyup" ? KeyAction.Release : e.repeat ? KeyAction.Repeat : KeyAction.Press,
 		key: e.code,
-		mods: modsOf(e.mods),
-		consumedMods: modsOf(e.consumedMods),
+		mods: mods.value,
+		consumedMods: consumed.value,
 		unshifted: e.unshifted as uint32,
 		text: e.text,
 	};
@@ -31,7 +42,8 @@ export function keyed(this m: PaneModel, e: NeonEvent): void {
 		if (!modifierKey(e.code)) { m.desktop.exited(ended.code); }
 		return;
 	}
-	const k = keyOf(e);
+	const k = m.keyOf(e);
+	if (k === null) { return; }
 	const answer = m.keyHook.answer(m.hookPane(), k);
 	if (!answer.ok) {
 		m.notify(answer.error);
@@ -45,7 +57,9 @@ export function keyed(this m: PaneModel, e: NeonEvent): void {
 }
 
 export function keyReleased(this m: PaneModel, e: NeonEvent): void {
-	m.io.keyReleased(keyOf(e));
+	const k = m.keyOf(e);
+	if (k === null) { return; }
+	m.io.keyReleased(k);
 	m.scheduleRefresh();
 }
 
@@ -69,39 +83,52 @@ function spot(this m: PaneModel, e: NeonEvent): Spot {
 	return spotAt(m.gridX(e), m.gridY(e), cellWidth, rowHeight, m.cols, m.rows);
 }
 
-function hit(this m: PaneModel, e: NeonEvent): Hit {
+function hit(this m: PaneModel, e: NeonEvent, where: Where): Hit | null {
+	const mods = modsOf(e.mods);
+	if (!mods.ok) {
+		m.failed(where, mods.error);
+		return null;
+	}
 	return {
 		at: m.spot(e),
 		x: m.gridX(e),
 		y: m.gridY(e),
 		scale: PixelRatio.get(),
-		mods: modsOf(e.mods),
+		mods: mods.value,
 		cell: m.mouseGeometry,
 	};
 }
 
 export function pressed(this m: PaneModel, e: NeonEvent): void {
 	if (m.metrics.cellWidth() <= 0) { return; }
-	m.io.press(buttonOf(e.button as int32), m.hit(e), m.timing.clock());
+	const h = m.hit(e, Where.Press);
+	if (h === null) { return; }
+	m.io.press(buttonOf(e.button as int32), h, m.timing.clock());
 	m.scheduleRefresh();
 }
 
 export function dragged(this m: PaneModel, e: NeonEvent): void {
 	if (m.metrics.cellWidth() <= 0) { return; }
-	m.io.move(m.hit(e), e.pressed);
+	const h = m.hit(e, Where.Move);
+	if (h === null) { return; }
+	m.io.move(h, e.pressed);
 	m.scheduleRefresh();
 }
 
 export function released(this m: PaneModel, e: NeonEvent): void {
 	if (m.metrics.cellWidth() <= 0) { return; }
-	m.io.release(buttonOf(e.button as int32), m.hit(e));
+	const h = m.hit(e, Where.Release);
+	if (h === null) { return; }
+	m.io.release(buttonOf(e.button as int32), h);
 	m.scheduleRefresh();
 }
 
 export function wheeled(this m: PaneModel, e: NeonEvent): void {
 	const rowHeight = m.metrics.rowHeight();
 	if (rowHeight <= 0) { return; }
-	m.io.wheel(notchesOf(e.deltaY, e.deltaMode == DOM_DELTA_PIXEL, rowHeight), m.hit(e));
+	const h = m.hit(e, Where.Wheel);
+	if (h === null) { return; }
+	m.io.wheel(notchesOf(e.deltaY, e.deltaMode == DOM_DELTA_PIXEL, rowHeight), h);
 	m.scheduleRefresh();
 }
 

@@ -242,6 +242,21 @@ test "an internal failure while the shell runs is a notice logged once, and the 
 	}).ok;
 }
 
+test "a key event with a modifier bit outside KeyMod is dropped and reported once, and the shell keeps running" {
+	assert onTerm("ready", (t: Term, sink: Sink): void => {
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		m.refresh();
+		const stray = pressed("KeyA");
+		stray.mods = 4096;
+		m.keyed(stray);
+		m.keyed(stray);
+		assert calls.noted == "key: modifier mask 4096 is not a whole number below 1024\n";
+		assert m.notice.text.endsWith("key: modifier mask 4096 is not a whole number below 1024");
+		assert t.session !== null;
+	}).ok;
+}
+
 test "an internal failure before the shell started is fatal" {
 	assert onFresh("", (t: Term, sink: Sink): void => {
 		const calls = noCalls();

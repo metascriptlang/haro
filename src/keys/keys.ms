@@ -126,11 +126,11 @@ export function modsMask(mods: BitSet<KeyMod>): uint16 {
 
 const MODS_LIMIT: int32 = 1 << (KeyMod.SuperRight as int32 + 1);
 
-export function modsOf(mask: number): BitSet<KeyMod> {
+export function modsOf(mask: number): Result<BitSet<KeyMod>, string> {
 	if (!(mask >= 0 && mask < MODS_LIMIT) || Math.floor(mask) != mask) {
-		throw new Error(`modifier mask ${mask} is not a set of the ${MODS_LIMIT} KeyMod bits`);
+		return Result.err(`modifier mask ${mask} is not a whole number below ${MODS_LIMIT}`);
 	}
-	return (mask as uint16) as BitSet<KeyMod>;
+	return Result.ok((mask as uint16) as BitSet<KeyMod>);
 }
 
 const DELETE: int32 = 0x7F;
@@ -215,16 +215,20 @@ test "the modifier mask keeps libghostty-vt's bit order" {
 	assert modsMask(NO_MODS.incl(KeyMod.ShiftRight)) == 0x40;
 	assert modsMask(NO_MODS.incl(KeyMod.AltRight)) == 0x100;
 	const wide = NO_MODS.incl(KeyMod.Ctrl).incl(KeyMod.AltRight);
-	assert modsOf(modsMask(wide)) == wide;
+	const round = modsOf(modsMask(wide));
+	assert round.ok;
+	if (round.ok) { assert round.value == wide; }
 }
 
-test "a modifier mask outside the KeyMod bits is refused" {
+test "a modifier mask outside the KeyMod bits is refused, naming the mask" {
 	for (const bad of [-1, 1024, 65537, 1.5]) {
-		let refused = false;
-		try { modsOf(bad); } catch (e) { refused = true; }
-		assert refused;
+		const refused = modsOf(bad);
+		assert !refused.ok;
+		if (!refused.ok) { assert refused.error == `modifier mask ${bad} is not a whole number below 1024`; }
 	}
-	assert modsOf(1023).has(KeyMod.SuperRight);
+	const widest = modsOf(1023);
+	assert widest.ok;
+	if (widest.ok) { assert widest.value.has(KeyMod.SuperRight); }
 }
 
 export function keyEvent(action: KeyAction, key: string, mods: BitSet<KeyMod>): KeyEvent {

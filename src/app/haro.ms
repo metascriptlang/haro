@@ -11,8 +11,9 @@ import {
 	OptionAsAlt as OptionSides,
 } from "../../../neon/src/platform/ion/window";
 import {
+	AttentionInformational,
 	WindowEventCloseRequested,
-	beep,
+	getWindow,
 	listen,
 	notify,
 	onExitRequested,
@@ -21,6 +22,7 @@ import {
 	openExternal,
 	preventClose,
 	preventExit,
+	requestUserAttention,
 } from "../../../ion/src/index";
 import { ionWakeLoop } from "../../../ion/src/platform/bridge.h";
 import { argv, exit } from "std/process";
@@ -224,12 +226,17 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 	const families = familyList(config.loaded.faces);
 	const host: AppHost = {
 		desktop: {
-			setTitle: (title: string): void => { setWindowTitle(titleOr(title)); },
+			setTitle: (title: string, belled: boolean): void => {
+				setWindowTitle(`${belled ? "🔔 " : ""}${titleOr(title)}`);
+			},
 			notify: (title: string, body: string): void => {
 				notify(titleOr(title), body, NOTIFICATION_ID);
 			},
 			openLink: (uri: string): void => { openExternal(uri); },
-			bell: (): void => { beep(); },
+			attention: (): void => {
+				const win = getWindow("main");
+				if (win !== null) { requestUserAttention(win, AttentionInformational); }
+			},
 			openConfig: openConfig,
 			reloadConfig: reloadConfig,
 			close: (): void => {

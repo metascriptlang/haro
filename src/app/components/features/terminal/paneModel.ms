@@ -47,10 +47,10 @@ const FONT_STEP_POINTS: float64 = 1;
 const RESTART_NOTICE = "config.ms: command, workingDirectory and shellIntegration apply when Haro restarts";
 
 export interface Desktop {
-	setTitle: (title: string) => void;
+	setTitle: (title: string, belled: boolean) => void;
 	notify: (title: string, body: string) => void;
 	openLink: (uri: string) => void;
-	bell: () => void;
+	attention: () => void;
 	openConfig: () => void;
 	reloadConfig: () => void;
 	close: () => void;
@@ -116,6 +116,8 @@ export interface PaneModel {
 	fontPoints: float64;
 	configFontPoints: float64;
 	fontAdjusted: boolean;
+	title: string;
+	belled: boolean;
 	shellStarted: boolean;
 	ended: Exit | null;
 	autoscrolling: boolean;
@@ -187,6 +189,8 @@ export function open(
 		fontPoints: started.fontSize,
 		configFontPoints: started.fontSize,
 		fontAdjusted: false,
+		title: "",
+		belled: false,
 		shellStarted: false,
 		ended: null,
 		autoscrolling: false,
@@ -370,12 +374,23 @@ function applied(this m: PaneModel, got: IoFrame): void {
 	if (f !== null) {
 		const copied = f.copied;
 		if (copied !== null) { m.copyToClipboard(copied); }
+		if (m.belled && m.cursor.focused) {
+			m.belled = false;
+			m.retitle();
+		}
 		const title = f.title;
-		if (title !== null) { m.desktop.setTitle(title); }
+		if (title !== null) {
+			m.title = title;
+			m.retitle();
+		}
 		if (!m.cursor.focused) {
 			for (const n of f.notifications) { m.desktop.notify(n.title, n.body); }
 		}
-		if (f.bells > 0) { m.desktop.bell(); }
+		if (f.bells > 0 && !m.cursor.focused) {
+			m.belled = true;
+			m.retitle();
+			m.desktop.attention();
+		}
 		for (const mark of f.shell) { m.marked(mark); }
 		if (f.held) {
 			m.stats.tally.held += 1;
@@ -402,6 +417,10 @@ function applied(this m: PaneModel, got: IoFrame): void {
 	}
 	const exit = got.exit;
 	if (exit !== null) { m.shellEnded(exit); }
+}
+
+function retitle(this m: PaneModel): void {
+	m.desktop.setTitle(m.title, m.belled);
 }
 
 function marked(this m: PaneModel, mark: ShellMark): void {

@@ -39,24 +39,28 @@ interface Calls {
 	fatal: string;
 	noted: string;
 	title: string;
+	titleBelled: boolean;
 	notified: string;
 	closed: int32;
-	bells: int32;
+	attentions: int32;
 	opened: int32;
 	reloaded: int32;
 	exits: string;
 }
 
 function noCalls(): Calls {
-	return { fatal: "", noted: "", title: "", notified: "", closed: 0, bells: 0, opened: 0, reloaded: 0, exits: "" };
+	return { fatal: "", noted: "", title: "", titleBelled: false, notified: "", closed: 0, attentions: 0, opened: 0, reloaded: 0, exits: "" };
 }
 
 function desktopFor(calls: Calls): Desktop {
 	return {
-		setTitle: (title: string): void => { calls.title = title; },
+		setTitle: (title: string, belled: boolean): void => {
+			calls.title = title;
+			calls.titleBelled = belled;
+		},
 		notify: (title: string, body: string): void => { calls.notified += `${title}|${body}\n`; },
 		openLink: (uri: string): void => {},
-		bell: (): void => { calls.bells += 1; },
+		attention: (): void => { calls.attentions += 1; },
 		openConfig: (): void => { calls.opened += 1; },
 		reloadConfig: (): void => { calls.reloaded += 1; },
 		close: (): void => { calls.closed += 1; },
@@ -207,14 +211,33 @@ test "a program's title reaches the window" {
 	}).ok;
 }
 
-test "bells rung within one frame ring the host once, and a frame without one rings nothing" {
-	assert onFresh("\x07\x07", (t: Term, sink: Sink): void => {
+test "a bell while the window is unfocused asks for attention once per frame and marks the title until focus returns" {
+	assert onFresh("\x07\x07\x1b]2;vim\x07", (t: Term, sink: Sink): void => {
+		const calls = noCalls();
+		const m = paneOf(t, calls);
+		m.cursor.focused = false;
+		m.refresh();
+		assert calls.attentions == 1, `${calls.attentions}`;
+		assert calls.title == "vim";
+		assert calls.titleBelled;
+		m.refresh();
+		assert calls.attentions == 1, `${calls.attentions}`;
+		assert calls.titleBelled;
+		m.cursor.focused = true;
+		m.refresh();
+		assert !calls.titleBelled;
+		assert calls.title == "vim";
+	}).ok;
+}
+
+test "a bell while the window is focused neither asks for attention nor marks the title" {
+	assert onFresh("\x07", (t: Term, sink: Sink): void => {
 		const calls = noCalls();
 		const m = paneOf(t, calls);
 		m.refresh();
-		assert calls.bells == 1, `${calls.bells}`;
-		m.refresh();
-		assert calls.bells == 1, `${calls.bells}`;
+		assert calls.attentions == 0;
+		assert !calls.titleBelled;
+		assert calls.title == "";
 	}).ok;
 }
 

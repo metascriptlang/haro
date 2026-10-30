@@ -1,6 +1,8 @@
 import { KeyMod, NO_MODS, modSet, modsMask } from "../keys/keys";
 
 export enum Action {
+	SendText,
+	CloseWindow,
 	Copy,
 	Paste,
 	LineUp,
@@ -69,17 +71,42 @@ const BINDINGS: Vec<Binding> = [
 	{ code: "PageDown", mods: SHIFT, action: Action.PageDown, screen: Screen.Primary },
 ];
 
-export enum BindAction {
-	SendText,
-	CloseWindow,
-}
-
 export struct Keybind {
 	code: string;
 	mods: BitSet<KeyMod>;
 	text: string;
-	action: BindAction;
+	action: Action;
 	screen: Screen;
+}
+
+struct Named {
+	name: string;
+	action: Action;
+}
+
+const NAMED: Vec<Named> = [
+	{ name: "close_window", action: Action.CloseWindow },
+	{ name: "copy", action: Action.Copy },
+	{ name: "paste", action: Action.Paste },
+	{ name: "scroll_line_up", action: Action.LineUp },
+	{ name: "scroll_line_down", action: Action.LineDown },
+	{ name: "scroll_page_up", action: Action.PageUp },
+	{ name: "scroll_page_down", action: Action.PageDown },
+	{ name: "scroll_to_top", action: Action.Top },
+	{ name: "scroll_to_bottom", action: Action.Bottom },
+	{ name: "prompt_up", action: Action.PromptUp },
+	{ name: "prompt_down", action: Action.PromptDown },
+];
+
+export function actionNamed(name: string): Action | null {
+	for (const n of NAMED) {
+		if (n.name == name) { return n.action; }
+	}
+	return null;
+}
+
+export function actionNames(): string {
+	return NAMED.map((n: Named): string => n.name).join(", ");
 }
 
 function modOf(name: string): KeyMod | null {
@@ -130,7 +157,7 @@ function codeOf(name: string): string | null {
 export function keybind(
 	keys: string,
 	text: string,
-	action: BindAction,
+	action: Action,
 	screen: Screen,
 ): Result<Keybind, string> {
 	let mods = NO_MODS;
@@ -263,7 +290,7 @@ test "a key with no binding resolves to nothing" {
 }
 
 function bound(keys: string): string {
-	const b = keybind(keys, "x", BindAction.SendText, Screen.Any);
+	const b = keybind(keys, "x", Action.SendText, Screen.Any);
 	if (!b.ok) { return b.error; }
 	return `${b.value.code} ${modsMask(b.value.mods)}`;
 }
@@ -286,18 +313,18 @@ test "a keybind that is not a trigger is refused by name" {
 	assert bound("ctrl+shift") == `"ctrl+shift" names no key`;
 	assert bound("key_5") == `"key_5": "key_5" is not a key or modifier name`;
 	assert bound("digit_a") == `"digit_a": "digit_a" is not a key or modifier name`;
-	assert !keybind("f25", "x", BindAction.SendText, Screen.Any).ok;
-	assert !keybind("f01", "x", BindAction.SendText, Screen.Any).ok;
+	assert !keybind("f25", "x", Action.SendText, Screen.Any).ok;
+	assert !keybind("f01", "x", Action.SendText, Screen.Any).ok;
 }
 
 test "a keybind's text answers exactly its chord, side and lock bits aside" {
 	const binds: Vec<Keybind> = [
-		{ code: "Enter", mods: SHIFT, text: "a", action: BindAction.SendText, screen: Screen.Any },
+		{ code: "Enter", mods: SHIFT, text: "a", action: Action.SendText, screen: Screen.Any },
 		{
 			code: "KeyH",
 			mods: CTRL | SHIFT,
 			text: "b",
-			action: BindAction.SendText,
+			action: Action.SendText,
 			screen: Screen.Any,
 		},
 	];
@@ -314,23 +341,23 @@ test "a keybind for one screen answers only on that screen" {
 			code: "KeyW",
 			mods: SUPER,
 			text: "\x1b[119;9u",
-			action: BindAction.SendText,
+			action: Action.SendText,
 			screen: Screen.Alternate,
 		},
 		{
 			code: "KeyW",
 			mods: SUPER,
 			text: "",
-			action: BindAction.CloseWindow,
+			action: Action.CloseWindow,
 			screen: Screen.Primary,
 		},
 	];
 	const inApp = bindFor(binds, "KeyW", SUPER, true);
 	assert inApp !== null;
 	if (inApp !== null) {
-		assert inApp.action == BindAction.SendText && inApp.text == "\x1b[119;9u";
+		assert inApp.action == Action.SendText && inApp.text == "\x1b[119;9u";
 	}
 	const atShell = bindFor(binds, "KeyW", SUPER, false);
 	assert atShell !== null;
-	if (atShell !== null) { assert atShell.action == BindAction.CloseWindow; }
+	if (atShell !== null) { assert atShell.action == Action.CloseWindow; }
 }

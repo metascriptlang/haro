@@ -1,7 +1,7 @@
 import { JSON, JsonKind, JsonValue } from "std/core/json";
 import { isAbsolute } from "std/fs/path";
 import { Rgb, SCROLLBACK_LINES } from "../vt/vt";
-import { BindAction, Keybind, Screen, keybind } from "../input/bindings";
+import { Action, Keybind, Screen, actionNames, actionNamed, keybind } from "../input/bindings";
 import { KeyMod, OptionAsAlt, modSet } from "../keys/keys";
 
 export enum StartKind {
@@ -152,11 +152,12 @@ function readFamilies(v: JsonValue, key: string): Result<Vec<string>, string> {
 	return readEach(v.items, key, readString);
 }
 
-function actionOf(name: string, key: string): Result<BindAction, string> {
-	return match (name) {
-		"close_window" => Result.ok(BindAction.CloseWindow),
-		_ => Result.err(`${key}.action: "${name}" is not an action; close_window is`),
-	};
+function actionOf(name: string, key: string): Result<Action, string> {
+	const action = actionNamed(name);
+	if (action === null) {
+		return Result.err(`${key}.action: "${name}" is not an action; ${actionNames()} are`);
+	}
+	return Result.ok(action);
 }
 
 function screenOf(name: string, key: string): Result<Screen, string> {
@@ -183,7 +184,7 @@ function readKeybind(v: JsonValue, key: string): Result<Keybind, string> {
 	}
 	let keys: string | null = null;
 	let sends: string | null = null;
-	let action: BindAction | null = null;
+	let action: Action | null = null;
 	let screen = Screen.Any;
 	for (let i = 0; i < v.keys.length; i++) {
 		const name = v.keys[i];
@@ -211,7 +212,7 @@ function readKeybind(v: JsonValue, key: string): Result<Keybind, string> {
 	if (keys === null || (sends === null && action === null)) {
 		return Result.err(`${key} must give keys and either text or action`);
 	}
-	const b = keybind(keys, sends ?? "", action ?? BindAction.SendText, screen);
+	const b = keybind(keys, sends ?? "", action ?? Action.SendText, screen);
 	if (!b.ok) { return Result.err(`${key}: ${b.error}`); }
 	return Result.ok(b.value);
 }
@@ -362,11 +363,24 @@ test "a keybind runs an action or keeps to one screen when its config says so" {
 	);
 	assert c.ok;
 	assert c.value.keybinds.length == 2;
-	assert c.value.keybinds[0].action == BindAction.SendText;
+	assert c.value.keybinds[0].action == Action.SendText;
 	assert c.value.keybinds[0].text == "\x1b[119;9u";
 	assert c.value.keybinds[0].screen == Screen.Alternate;
-	assert c.value.keybinds[1].action == BindAction.CloseWindow;
+	assert c.value.keybinds[1].action == Action.CloseWindow;
 	assert c.value.keybinds[1].screen == Screen.Primary;
+}
+
+test "a keybind can name every built-in action by its snake_case name" {
+	const names = ["copy", "paste", "scroll_line_up", "scroll_line_down", "scroll_page_up",
+		"scroll_page_down", "scroll_to_top", "scroll_to_bottom", "prompt_up", "prompt_down",
+		"close_window"];
+	for (const name of names) {
+		assert refusal(`{"keybinds":[{"keys":"super+j","action":"${name}"}]}`) == "";
+	}
+	const c = parse(`{"keybinds":[{"keys":"super+j","action":"scroll_to_top","mode":"~alt"}]}`);
+	assert c.ok;
+	assert c.value.keybinds[0].action == Action.Top;
+	assert c.value.keybinds[0].screen == Screen.Primary;
 }
 
 test "a field msc prints as null is a field the config left out" {
@@ -376,7 +390,7 @@ test "a field msc prints as null is a field the config left out" {
 	);
 	assert c.ok;
 	assert c.value.fontSize == DEFAULT_FONT_SIZE;
-	assert c.value.keybinds[0].action == BindAction.SendText;
+	assert c.value.keybinds[0].action == Action.SendText;
 	assert c.value.keybinds[0].screen == Screen.Any;
 }
 
@@ -426,7 +440,7 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"keybinds":[{"keys":"a","text":"x","action":"close_window"}]}`) ==
 		"keybinds[0] gives both text and action; a keybind does one";
 	assert refusal(`{"keybinds":[{"keys":"a","action":"quit"}]}`) ==
-		`keybinds[0].action: "quit" is not an action; close_window is`;
+		`keybinds[0].action: "quit" is not an action; ${actionNames()} are`;
 	assert refusal(`{"keybinds":[{"keys":"a","text":"x","mode":"Alt"}]}`) ==
 		`keybinds[0].mode: "Alt" must be alt or ~alt`;
 	assert refusal(`{"scrollback":100001}`) ==

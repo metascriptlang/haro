@@ -1,5 +1,5 @@
 import { KeyEvent, KeyMod } from "../keys/keys";
-import { Action, BindAction, Keybind, bindFor, resolve } from "../input/bindings";
+import { Action, Keybind, bindFor, resolve } from "../input/bindings";
 import { ROWS_PER_NOTCH } from "../input/wheel";
 import { Reply, replyToClose } from "../input/paste";
 import {
@@ -24,12 +24,38 @@ function runKeybind(
 	bind: Keybind | null,
 ): Result<boolean, TermError> {
 	if (bind === null) { return Result.ok(false); }
-	if (bind.action == BindAction.CloseWindow) {
+	return c.act(t, bind.action, bind.text);
+}
+
+export function act(
+	this c: Controls,
+	t: Term,
+	action: Action,
+	text: string = "",
+): Result<boolean, TermError> {
+	if (action == Action.CloseWindow) {
 		c.closeWindow(t);
 		return Result.ok(true);
 	}
-	try t.sendText(bind.text);
-	try c.typed(t);
+	const vt = t.vtOf();
+	if (vt === null) { return Result.ok(false); }
+	match (action) {
+		Action.SendText => {
+			try t.sendText(text);
+			try c.typed(t);
+		},
+		Action.CloseWindow => { c.closeWindow(t); },
+		Action.Copy => { return c.copySelection(t); },
+		Action.Paste => { c.pasteFrom(); },
+		Action.PageUp => { try vt.scrollPages(-1); },
+		Action.PageDown => { try vt.scrollPages(1); },
+		Action.PromptUp => { try vt.jumpToPrompt(PromptJump.Previous); },
+		Action.PromptDown => { try vt.jumpToPrompt(PromptJump.Next); },
+		Action.LineUp => { vt.scrollLines(-KEYBOARD_ROWS); },
+		Action.LineDown => { vt.scrollLines(KEYBOARD_ROWS); },
+		Action.Top => { vt.scrollTop(); },
+		Action.Bottom => { vt.scrollBottom(); },
+	}
 	return Result.ok(true);
 }
 
@@ -96,17 +122,5 @@ function controlKey(
 	}
 	const action = resolve(e.key, mods, alt);
 	if (action === null) { return Result.ok(false); }
-	match (action) {
-		Action.Copy => { return c.copySelection(t); },
-		Action.Paste => { c.pasteFrom(); },
-		Action.PageUp => { try vt.scrollPages(-1); },
-		Action.PageDown => { try vt.scrollPages(1); },
-		Action.PromptUp => { try vt.jumpToPrompt(PromptJump.Previous); },
-		Action.PromptDown => { try vt.jumpToPrompt(PromptJump.Next); },
-		Action.LineUp => { vt.scrollLines(-KEYBOARD_ROWS); },
-		Action.LineDown => { vt.scrollLines(KEYBOARD_ROWS); },
-		Action.Top => { vt.scrollTop(); },
-		Action.Bottom => { vt.scrollBottom(); },
-	}
-	return Result.ok(true);
+	return c.act(t, action);
 }

@@ -9,7 +9,7 @@ import { Term, releaseHeldKey, sendKey } from "./term";
 import { Controls, holding } from "./controls";
 import { closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
 import { Warning } from "../input/paste";
-import { BindAction, CLIPBOARD_MODS, Keybind, Screen } from "../input/bindings";
+import { Action, CLIPBOARD_MODS, Keybind, Screen } from "../input/bindings";
 import {
 	Sink,
 	spotAt,
@@ -167,14 +167,14 @@ test "a configured keybind sends its text, ahead of a built-in chord on the same
 				code: "Enter",
 				mods: SHIFT,
 				text: "\x1b[13;2u",
-				action: BindAction.SendText,
+				action: Action.SendText,
 				screen: Screen.Any,
 			},
 			{
 				code: "KeyC",
 				mods: CTRL | SHIFT,
 				text: "c",
-				action: BindAction.SendText,
+				action: Action.SendText,
 				screen: Screen.Any,
 			},
 		];
@@ -197,7 +197,7 @@ test "a ctrl alt keybind leaves the character AltGr types on the same key to the
 				code: "KeyQ",
 				mods: CTRL | ALT,
 				text: "x",
-				action: BindAction.SendText,
+				action: Action.SendText,
 				screen: Screen.Any,
 			},
 		];
@@ -275,14 +275,14 @@ test "a keybind with a mode sends to a full-screen program and closes the window
 			code: "KeyW",
 			mods: SUPER,
 			text: "\x1b[119;9u",
-			action: BindAction.SendText,
+			action: Action.SendText,
 			screen: Screen.Alternate,
 		},
 		{
 			code: "KeyW",
 			mods: SUPER,
 			text: "",
-			action: BindAction.CloseWindow,
+			action: Action.CloseWindow,
 			screen: Screen.Primary,
 		},
 	];
@@ -334,7 +334,7 @@ test "a close_window keybind asks first while a program runs, like the menu" {
 			code: "KeyW",
 			mods: SUPER,
 			text: "",
-			action: BindAction.CloseWindow,
+			action: Action.CloseWindow,
 			screen: Screen.Any,
 		},
 	];
@@ -358,7 +358,7 @@ test "close window from the menu runs a super w keybind for this screen and othe
 			code: "KeyW",
 			mods: SUPER,
 			text: "\x1b[119;9u",
-			action: BindAction.SendText,
+			action: Action.SendText,
 			screen: Screen.Alternate,
 		},
 	];
@@ -388,7 +388,7 @@ test "the close button and Quit close the window without running the super w key
 			code: "KeyW",
 			mods: SUPER,
 			text: "\x1b[119;9u",
-			action: BindAction.SendText,
+			action: Action.SendText,
 			screen: Screen.Alternate,
 		},
 	];
@@ -404,5 +404,23 @@ test "the close button and Quit close the window without running the super w key
 		c.closeWindow(app);
 		assert c.closing;
 		assert inApp.sent == "";
+	}).ok;
+}
+
+test "a keybind that names a built-in action runs it, and for one screen only when its mode says so" {
+	assert onTerm(lines(30), (t: Term, sink: Sink): void => {
+		const c = Controls.open();
+		const clip = boardOf("");
+		c.keybinds = [
+			{ code: "KeyJ", mods: SUPER, text: "", action: Action.Top, screen: Screen.Primary },
+			{ code: "KeyK", mods: SUPER, text: "", action: Action.Top, screen: Screen.Alternate },
+		];
+		const bottom = offsetOf(t);
+		assert bottom > 0;
+		assert !handled(settled(clip, c, t, c.keyDown(t, key("KeyK", SUPER))));
+		assert offsetOf(t) == bottom;
+		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyJ", SUPER))));
+		assert offsetOf(t) == 0;
+		assert sink.sent == "";
 	}).ok;
 }

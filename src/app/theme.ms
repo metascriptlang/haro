@@ -2,6 +2,8 @@ import { Style } from "../../../neon/src/render/style";
 import { Rgb } from "../vt/vt";
 
 export const CURSOR_TEXT: Rgb | null = null;
+export const GLITCH_RED: Rgb = { r: 255, g: 40, b: 90 };
+export const GLITCH_CYAN: Rgb = { r: 0, g: 230, b: 255 };
 
 export const NOTICE_BACKGROUND = "#5c1f24";
 const NOTICE_TEXT = "#ffffff";

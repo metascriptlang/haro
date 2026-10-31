@@ -7,15 +7,29 @@ import { Color, Vec2, rgba, vec2, whiteTile } from "../../../../../void/src/void
 import { TileCell } from "../../../../../void/src/void2d/node";
 import { CellInk } from "../../../grid/lines";
 import { Cursor, CursorLook, CursorShape, Rgb } from "../../../vt/vt";
-import { BLINK_MS, blinks, drawn, resets, shapeOf } from "../../../term/cursor";
+import {
+	BLINK_MS,
+	GLITCH_BANDS,
+	GlitchFrame,
+	blinks,
+	drawn,
+	glitchBurst,
+	glitchRest,
+	glitches,
+	resets,
+	shapeOf,
+	slotAt,
+} from "../../../term/cursor";
 import { Cell, outside } from "../../../term/cursorGeometry";
-import { Trail, particleAlpha } from "../../../term/trail";
-import { CURSOR_TEXT } from "../../theme";
+import { Trail, particleAlpha, unit } from "../../../term/trail";
+import { CURSOR_TEXT, GLITCH_CYAN, GLITCH_RED } from "../../theme";
 import { CellMetrics } from "../ui/cellText";
 
 const PARTICLE_SIDE = 0.2;
 const OUTLINE_PER_EM = 1.0 / 8;
 const TRAIL_ALPHA = 0.6;
+const GLITCH_SPLIT = 0.18;
+const GLITCH_ALPHA = 0.75;
 
 export interface CursorModel {
 	metrics: CellMetrics;
@@ -41,6 +55,9 @@ export interface CursorModel {
 	blinkOn: boolean;
 	blinkTimer: number | null;
 	lastReset: float64;
+	burst: GlitchFrame[];
+	burstStart: number;
+	glitch: GlitchFrame | null;
 }
 
 export function open(
@@ -78,6 +95,9 @@ export function open(
 		blinkOn: true,
 		blinkTimer: null,
 		lastReset: 0.0,
+		burst: [],
+		burstStart: 0,
+		glitch: null,
 	};
 }
 
@@ -107,7 +127,41 @@ function litCell(this c: CursorModel): Cell {
 	};
 }
 
+function bandQuad(cell: Cell, top: float32, bottom: float32, dx: float32): Vec2[] {
+	return [
+		vec2(cell.left + dx, top),
+		vec2(cell.right + dx, top),
+		vec2(cell.right + dx, bottom),
+		vec2(cell.left + dx, bottom),
+	];
+}
+
+function glitchOps(this c: CursorModel, frame: GlitchFrame): GraphicsOp[] {
+	const cell = c.litCell();
+	const width = cell.right - cell.left;
+	const band = (cell.bottom - cell.top) / (GLITCH_BANDS as float32);
+	const split = width * (GLITCH_SPLIT as float32);
+	let ops: GraphicsOp[] = [];
+	for (let b: int32 = 0; b < GLITCH_BANDS; b++) {
+		const top = cell.top + band * (b as float32);
+		const shift = width * (frame.shifts[b] as float32);
+		const red = bandQuad(cell, top, top + band, shift - split);
+		const cyan = bandQuad(cell, top, top + band, shift + split);
+		const redPieces = frame.lit ? red.outside(cell) : [red];
+		const cyanPieces = frame.lit ? cyan.outside(cell) : [cyan];
+		for (const piece of redPieces) {
+			ops.push({ kind: "fillConvex", points: piece, color: colorOf(GLITCH_RED, GLITCH_ALPHA) });
+		}
+		for (const piece of cyanPieces) {
+			ops.push({ kind: "fillConvex", points: piece, color: colorOf(GLITCH_CYAN, GLITCH_ALPHA) });
+		}
+	}
+	return ops;
+}
+
 function operations(this c: CursorModel): GraphicsOp[] {
+	const glitch = c.glitch;
+	if (glitch !== null && c.at !== null && c.trail.resting()) { return c.glitchOps(glitch); }
 	let ops: GraphicsOp[] = [];
 	if (c.at !== null && c.look.drawn(c.focused, c.blinkOn)) {
 		let points: Vec2[] = [];
@@ -169,12 +223,13 @@ function step(this c: CursorModel, now: number): void {
 	} else if (c.blinkTimer === null) {
 		c.syncBlink();
 	}
+	const glitching = c.playBurst(now);
 	c.inkCell();
 	const ops = c.operations();
 	if (ops.length > 0 || c.drawing().length > 0) { c.setDrawing(ops); }
 	const cells = c.dustCells();
 	if (cells.length > 0 || c.dust().length > 0) { c.setDust(cells); }
-	c.frame = moving ? requestFrame((next: number): void => { c.step(next); }) : null;
+	c.frame = moving || glitching ? requestFrame((next: number): void => { c.step(next); }) : null;
 }
 
 function blockInk(this c: CursorModel): CellInk | null {
@@ -208,15 +263,48 @@ function stopBlink(this c: CursorModel): void {
 	if (timer !== null) { clearTimeout(timer); }
 	c.blinkTimer = null;
 	c.blinkOn = true;
+	c.burst = [];
+	c.glitch = null;
 }
 
 function holdBlink(this c: CursorModel): void {
-	if (c.blinkTimer === null && c.blinkOn) { return; }
+	if (c.blinkTimer === null && c.blinkOn && c.burst.length == 0) { return; }
 	c.stopBlink();
 	c.inkCell();
 }
 
+function draw(this c: CursorModel): () => float64 {
+	return (): float64 => c.trail.unit();
+}
+
+function startBurst(this c: CursorModel): void {
+	c.burst = glitchBurst(c.draw());
+	c.burstStart = frameNow();
+	c.paintCursor();
+}
+
+function playBurst(this c: CursorModel, now: number): boolean {
+	if (c.burst.length == 0) { return false; }
+	const frame = c.burst.slotAt(now - c.burstStart);
+	c.glitch = frame;
+	if (frame === null) {
+		c.burst = [];
+		c.blinkOn = true;
+		c.syncBlink();
+		return false;
+	}
+	c.blinkOn = frame.lit;
+	return true;
+}
+
 function armBlink(this c: CursorModel): void {
+	if (c.look.glitches(c.focused)) {
+		c.blinkTimer = setTimeout((): void => {
+			c.blinkTimer = null;
+			c.startBurst();
+		}, glitchRest(c.draw()));
+		return;
+	}
 	c.blinkTimer = setTimeout((): void => {
 		c.blinkTimer = null;
 		c.blinkOn = !c.blinkOn;
@@ -228,7 +316,7 @@ function armBlink(this c: CursorModel): void {
 function syncBlink(this c: CursorModel): void {
 	if (!c.look.blinks(c.focused)) {
 		c.stopBlink();
-	} else if (c.blinkTimer === null) {
+	} else if (c.blinkTimer === null && c.burst.length == 0) {
 		c.armBlink();
 	}
 }
@@ -348,6 +436,32 @@ test "the cursor hands over its cell's ink while a focused block is drawn, and n
 	c.look = { visible: true, shape: CursorShape.Underline, blinking: false };
 	c.paintCursor();
 	assert seen.count == 4 && seen.last === null;
+}
+
+test "a glitching block splits into red and cyan beside its lit cell, into bands of both while dark, and ends lit" {
+	const c = cursorFor({ visible: true, shape: CursorShape.Block, blinking: true });
+	c.trail.moveTo(34, 44);
+	while (c.trail.animate(1.0 / 60, CursorShape.Block, 10, 20)) {}
+	c.burst = [{ lit: true, shifts: [0.3, 0, -0.3] }, { lit: false, shifts: [0, 0, 0] }];
+	c.burstStart = 1000;
+	assert c.playBurst(1000);
+	assert c.blockInk() !== null;
+	const fringes = c.operations();
+	assert fringes.length == 6;
+	for (const op of fringes) {
+		if (op.kind == "fillConvex") {
+			for (const p of op.points) { assert p.x <= 34 || p.x >= 44; }
+		} else {
+			assert false;
+		}
+	}
+	assert c.playBurst(1030);
+	assert c.blockInk() === null;
+	assert c.operations().length == 6;
+	assert !c.playBurst(1060);
+	assert c.glitch === null && c.blinkOn && c.burst.length == 0;
+	assert c.operations().length == 0;
+	c.stopBlink();
 }
 
 test "an unfocused cursor is an outline an eighth of an em wide, and a hidden one draws nothing" {

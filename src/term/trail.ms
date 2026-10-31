@@ -223,7 +223,7 @@ function next(this t: Trail): uint32 {
 	return (shifted >> rot) | (shifted << ((0 - rot) & 31));
 }
 
-function unit(this t: Trail): float64 {
+export function unit(this t: Trail): float64 {
 	return (t.next() as float64) / 4294967296;
 }
 

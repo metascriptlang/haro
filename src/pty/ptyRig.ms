@@ -8,20 +8,20 @@ const DRAIN_TIMEOUT_MS: int32 = 10000;
 
 export function drainText(this p: Pty, chunk: int32): Result<string, string> {
 	let buf: Vec<uint8> = new Array(chunk);
-	let text = "";
+	let drained: Vec<uint8> = [];
 	while (true) {
 		const ready = p.wait(DRAIN_TIMEOUT_MS);
 		if (!ready.ok) {
-			if (ready.error == PtyError.Closed) { return Result.ok(text); }
+			if (ready.error == PtyError.Closed) { return Result.ok(drained.asString()); }
 			return Result.err(`wait failed: ${ready.error.toString()}`);
 		}
 		if (!ready.value) { return Result.err(`no output for ${DRAIN_TIMEOUT_MS} ms`); }
 		const r = p.read(buf);
 		if (!r.ok) {
-			if (r.error == PtyError.Closed) { return Result.ok(text); }
+			if (r.error == PtyError.Closed) { return Result.ok(drained.asString()); }
 			return Result.err(`read failed: ${r.error.toString()}`);
 		}
-		text += buf[0..r.value].asString();
+		for (const b of buf[0..r.value]) { drained.push(b); }
 	}
 }
 

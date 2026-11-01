@@ -176,9 +176,7 @@ export function copyText(this p: Pointer, vt: Vt): Result<string | null, VtError
 	if (!p.selected()) { return Result.ok(null); }
 	const text = try vt.selectedText();
 	if (text === null || text == "") { return Result.ok(null); }
-	// Typed local until card 2026-10-28-result-ok-of-a-struct-is-not-assignable-to-a-nullable-result.md
-	const found: string | null = text;
-	return Result.ok(found);
+	return Result.ok(text);
 }
 
 const CELL_WIDTH: float64 = 8;

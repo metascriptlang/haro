@@ -39,13 +39,16 @@ import {
 } from "./vtEffects";
 import {
 	Colors256,
+	MODE_COLOR_SCHEME_REPORT,
 	MODE_CURSOR_BLINKING,
 	MODE_GRAPHEME_CLUSTER,
 	MODE_SYNC_OUTPUT,
 	checked,
 	ghosttyColor,
 	gridRefLink,
+	modeOn,
 	ok,
+	pushAll,
 	stateGet,
 	terminalGet,
 	terminalSet,
@@ -276,8 +279,17 @@ export function resize(
 	return Result.ok(null);
 }
 
+function dark(this c: Rgb): boolean {
+	return 0.2126 * (c.r as float64) + 0.7152 * (c.g as float64) + 0.0722 * (c.b as float64) < 128;
+}
+
 export function setDefaultColors(this vt: Vt, fg: Rgb, bg: Rgb): Result<void, VtError> {
-	return applyColors(vt.terminal, fg, bg);
+	try applyColors(vt.terminal, fg, bg);
+	vt.effects.dark = bg.dark();
+	if (try modeOn(vt.terminal, MODE_COLOR_SCHEME_REPORT)) {
+		pushAll(vt.effects.replies, (vt.effects.dark ? "\x1b[?997;1n" : "\x1b[?997;2n").asBytes());
+	}
+	return Result.ok(null);
 }
 
 export function setPalette(this vt: Vt, colors: Readonly<Span<Rgb>>): Result<void, VtError> {

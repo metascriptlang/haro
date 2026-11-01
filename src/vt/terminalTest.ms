@@ -16,6 +16,8 @@ import {
 	setScrollback,
 	size,
 	pendingReplies,
+	dropReplies,
+	setDefaultColors,
 	title,
 	update,
 	write,
@@ -169,6 +171,30 @@ test "text without a query leaves nothing to reply" {
 	assert withVt(20, 4, (vt: Vt): void => {
 		vt.writeText("hello");
 		assert vt.pendingReplies().length == 0;
+	});
+}
+
+test "a colour scheme query answers dark or light from the background's brightness" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		vt.writeText("\x1b[?996n");
+		assert vt.pendingReplies().asString() == "\x1b[?997;1n";
+		vt.dropReplies();
+		assert vt.setDefaultColors({ r: 40, g: 40, b: 40 }, { r: 250, g: 250, b: 240 }).ok;
+		vt.writeText("\x1b[?996n");
+		assert vt.pendingReplies().asString() == "\x1b[?997;2n";
+	});
+}
+
+test "new colours report the scheme only to a program that asked with mode 2031" {
+	assert withVt(20, 4, (vt: Vt): void => {
+		assert vt.setDefaultColors({ r: 192, g: 202, b: 245 }, { r: 26, g: 27, b: 38 }).ok;
+		assert vt.pendingReplies().length == 0;
+		vt.writeText("\x1b[?2031h");
+		assert vt.setDefaultColors({ r: 192, g: 202, b: 245 }, { r: 26, g: 27, b: 38 }).ok;
+		assert vt.pendingReplies().asString() == "\x1b[?997;1n";
+		vt.dropReplies();
+		assert vt.setDefaultColors({ r: 40, g: 40, b: 40 }, { r: 250, g: 250, b: 240 }).ok;
+		assert vt.pendingReplies().asString() == "\x1b[?997;2n";
 	});
 }
 

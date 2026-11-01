@@ -352,6 +352,7 @@ export const MODE_ALT_SCROLL: uint16 = 1007;
 export const MODE_BRACKETED_PASTE: uint16 = 2004;
 export const MODE_SYNC_OUTPUT: uint16 = 2026;
 export const MODE_GRAPHEME_CLUSTER: uint16 = 2027;
+export const MODE_COLOR_SCHEME_REPORT: uint16 = 2031;
 export const MODE_WIN32_INPUT: uint16 = 9001;
 
 export function modeOn(terminal: GhosttyTerminal, mode: uint16): Result<boolean, VtError> {

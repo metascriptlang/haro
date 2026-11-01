@@ -13,6 +13,7 @@ int vtEffectsWire(GhosttyTerminal terminal, void* effects) {
 		{ GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, (const void*)haroVtDeviceAttributes },
 		{ GHOSTTY_TERMINAL_OPT_SIZE, (const void*)haroVtSize },
 		{ GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*)haroVtXtversion },
+		{ GHOSTTY_TERMINAL_OPT_COLOR_SCHEME, (const void*)haroVtColorScheme },
 		{ GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, (const void*)haroVtDesktopNotification },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*)haroVtClipboardWrite },
 		{ GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ, (const void*)haroVtClipboardRead },

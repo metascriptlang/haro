@@ -16,6 +16,7 @@ bool haroVtDeviceAttributes(GhosttyTerminal terminal, void* effects, GhosttyDevi
 bool haroVtSize(GhosttyTerminal terminal, void* effects, GhosttySizeReportSize* out);
 void haroVtClipboardWrite(GhosttyTerminal terminal, void* effects, GhosttyClipboardWrite* write);
 void haroVtClipboardRead(GhosttyTerminal terminal, void* effects, GhosttyClipboardRead* read);
+bool haroVtColorScheme(GhosttyTerminal terminal, void* effects, GhosttyColorScheme* out);
 GhosttyString haroVtXtversion(GhosttyTerminal terminal, void* effects);
 void haroVtDesktopNotification(GhosttyTerminal terminal, void* effects, const GhosttyTerminalDesktopNotification* notification);
 void haroVtSemanticPrompt(GhosttyTerminal terminal, void* effects, const GhosttyTerminalSemanticPrompt* event);

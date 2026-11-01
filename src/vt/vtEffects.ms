@@ -6,6 +6,7 @@ import {
 	GhosttyClipboardWrite,
 	GhosttyClipboardWriteReply,
 	GhosttyClipboardWriteResult,
+	GhosttyColorScheme,
 	GhosttyDeviceAttributes,
 	GhosttyPointTag,
 	GhosttyRenderState,
@@ -57,6 +58,7 @@ export interface Effects {
 	promptAt: int32 | null;
 	anchors: Vec<TrackedAnchor>;
 	nextAnchor: int32;
+	dark: boolean;
 }
 
 struct Running {
@@ -92,6 +94,7 @@ export function openEffects(
 		promptAt: null,
 		anchors: [],
 		nextAnchor: 0,
+		dark: true,
 	};
 	if (vtEffectsWire(terminal, Handle.borrow(e).ptr) != 0) {
 		closeEffects(terminal);
@@ -278,6 +281,14 @@ function sizeReport(
 		cell_height: read ? height / (rows as uint32) : 0,
 	};
 	return read;
+}
+
+@exportName("haroVtColorScheme")
+function colorScheme(terminal: GhosttyTerminal, effects: Ptr<void>, out scheme: GhosttyColorScheme): boolean {
+	scheme = effectsAt(effects).dark ?
+		GhosttyColorScheme.GHOSTTY_COLOR_SCHEME_DARK :
+		GhosttyColorScheme.GHOSTTY_COLOR_SCHEME_LIGHT;
+	return true;
 }
 
 @exportName("haroVtXtversion")

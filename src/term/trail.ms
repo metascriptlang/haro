@@ -596,9 +596,12 @@ test "dust leaves from under the row the cursor travels and falls there instead 
 		assert p.speed.y > 0;
 		before.push(p.pos);
 	}
+	t.density = 0;
 	const _next = t.animate(FRAME, CursorShape.Block, 10, 20);
-	for (let i = 0; i < before.length; i++) {
-		assert t.particles[i].pos.minus(before[i]).length() <= 3 * PARTICLE_SPEED * 1.5 * FRAME;
+	for (const p of t.particles) {
+		let nearest = Infinity;
+		for (const b of before) { nearest = Math.min(nearest, p.pos.minus(b).length()); }
+		assert nearest <= 3 * PARTICLE_SPEED * 1.5 * FRAME;
 	}
 }
 

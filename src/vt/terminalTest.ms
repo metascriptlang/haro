@@ -1,9 +1,19 @@
-import { GhosttyPointTag, GhosttyTrackedGridRef } from "../../vendor/ghostty/include/ghostty/vt.h";
+import {
+	GhosttyPointTag,
+	GhosttyResult,
+	GhosttyTerminal,
+	GhosttyTerminalData,
+	GhosttyTerminalMemoryUsage,
+	GhosttyTrackedGridRef,
+	size_t,
+} from "../../vendor/ghostty/include/ghostty/vt.h";
 import {
 	Rgb,
 	SCROLLBACK_LINES,
 	Vt,
 	VtError,
+	compressStep,
+	compressionActivity,
 	create,
 	free,
 	holdLimit,
@@ -160,6 +170,46 @@ test "scrollback keeps about ten thousand lines by default, and a set limit repl
 	assert byDefault > 7500 && byDefault <= 10000;
 	const set = keptAfter(30000, 5000);
 	assert set > 2500 && set <= 5000;
+}
+
+extern function terminalRead<T>(
+	terminal: GhosttyTerminal,
+	key: GhosttyTerminalData,
+	ref value: T,
+): GhosttyResult from "ghostty_terminal_get";
+
+function compressedPages(vt: Vt): int64 {
+	let usage: GhosttyTerminalMemoryUsage = { size: sizeof GhosttyTerminalMemoryUsage as size_t };
+	const key = GhosttyTerminalData.GHOSTTY_TERMINAL_DATA_MEMORY_USAGE;
+	if (!ok(terminalRead(vt.terminal, key, usage)) || !usage.compression_supported) { return -1; }
+	return usage.primary_compressed_pages as int64;
+}
+
+test "idle compression shrinks old scrollback in bounded steps and keeps its text" {
+	const created = Vt.create(80, 24);
+	assert created.ok;
+	const vt = created.value;
+	defer vt.free();
+	const before = vt.compressionActivity();
+	vt.writeText(numberedLines(20000));
+	const after = vt.compressionActivity();
+	assert before.ok && after.ok && before.value != after.value;
+	assert compressedPages(vt) == 0;
+	vt.scrollTop();
+	assert vt.update().ok;
+	const oldest = vt.topLine();
+	let steps = 0;
+	while (true) {
+		const pending = vt.compressStep();
+		assert pending.ok;
+		steps++;
+		if (!pending.value) { break; }
+		assert steps < 100000;
+	}
+	assert steps > 1;
+	assert compressedPages(vt) > 0;
+	assert vt.update().ok;
+	assert vt.topLine() == oldest;
 }
 
 test "growing the grid reveals scrollback unless the pty keeps its own screen" {

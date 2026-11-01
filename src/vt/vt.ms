@@ -29,6 +29,8 @@ export {
 	answerClipboard,
 	clean,
 	clipboardAsked,
+	compressStep,
+	compressionActivity,
 	create,
 	dropReplies,
 	free,

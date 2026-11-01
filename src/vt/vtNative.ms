@@ -42,6 +42,8 @@ import {
 	GhosttySelection,
 	GhosttySelectionOrder,
 	GhosttyTerminal,
+	GhosttyTerminalCompressionMode,
+	GhosttyTerminalCompressionResult,
 	GhosttyTerminalData,
 	GhosttyTerminalModeConfig,
 	GhosttyTerminalOption,
@@ -110,6 +112,13 @@ when (emcc) {
 	export function vtAllocator(): Ptr<GhosttyAllocator> | null { return null; }
 }
 export extern function vtEffectsWire(terminal: GhosttyTerminal, effects: Ptr<void> | null): int32;
+export extern function vtCompressionActivity(terminal: GhosttyTerminal, out activity: uint64): GhosttyResult
+	from "ghostty_terminal_compression_activity";
+export extern function vtCompress(
+	terminal: GhosttyTerminal,
+	mode: GhosttyTerminalCompressionMode,
+	out result: GhosttyTerminalCompressionResult,
+): GhosttyResult from "ghostty_terminal_compress";
 export extern function terminalGet<T>(
 	terminal: GhosttyTerminal,
 	key: GhosttyTerminalData,

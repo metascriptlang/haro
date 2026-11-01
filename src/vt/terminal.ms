@@ -8,6 +8,8 @@ import {
 	GhosttyResult,
 	GhosttyString,
 	GhosttyTerminal,
+	GhosttyTerminalCompressionMode,
+	GhosttyTerminalCompressionResult,
 	GhosttyTerminalData,
 	GhosttyTerminalModeConfig,
 	GhosttyTerminalOption,
@@ -54,6 +56,8 @@ import {
 	terminalSet,
 	unset,
 	vtAllocator,
+	vtCompress,
+	vtCompressionActivity,
 	vtGridRef,
 	vtTopTrack,
 	vtWriteBytes,
@@ -370,6 +374,19 @@ export function update(this vt: Vt): Result<void, VtError> {
 	try vt.releaseExpiredHold();
 	try checked(ghostty_render_state_update(vt.state, vt.terminal), VtError.UpdateFailed);
 	return Result.ok(null);
+}
+
+export function compressionActivity(this vt: Vt): Result<uint64, VtError> {
+	let activity: uint64 = 0;
+	try checked(vtCompressionActivity(vt.terminal, activity), VtError.ReadFailed);
+	return Result.ok(activity);
+}
+
+export function compressStep(this vt: Vt): Result<boolean, VtError> {
+	const incremental = GhosttyTerminalCompressionMode.GHOSTTY_TERMINAL_COMPRESSION_MODE_INCREMENTAL;
+	let result = GhosttyTerminalCompressionResult.GHOSTTY_TERMINAL_COMPRESSION_RESULT_UNSUPPORTED;
+	try checked(vtCompress(vt.terminal, incremental, result), VtError.WriteFailed);
+	return Result.ok(result == GhosttyTerminalCompressionResult.GHOSTTY_TERMINAL_COMPRESSION_RESULT_PENDING);
 }
 
 export function size(this vt: Vt): Result<[int32, int32], VtError> {

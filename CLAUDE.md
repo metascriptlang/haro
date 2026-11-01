@@ -25,10 +25,15 @@ of that feature in `.ms`:
   and move the code into `.ms` when the card lands, because a shim with no card outlives its
   reason.
 
-## Land gate
+## Landing and the full suite
 
-`scripts/gate.sh` is the gate every land passes: it runs `msc test --tests-in-dir` on each file
-under `src` that holds a test. It finds those files itself, because a hand-kept list left out
-`src/conform` and let a crash in libghostty-vt reach `main`. `--tests-in-dir` keeps the count to
-Haro's own tests: `src/config` embeds the compiler, whose own tests fail when run inside Haro's
-test binary and leave its state broken for the tests after them.
+Land a slice after the tests of the files it changed pass, with `wt.sh land <name> --no-gate`,
+because those tests observed each changed contract and Haro has no land gate. Run
+`scripts/gate.sh`, the full suite, before the land only when those tests cannot observe what the
+change reaches: a module most tests import, a libghostty-vt update or a toolchain sync.
+
+`scripts/gate.sh` runs `msc test --tests-in-dir` on each file under `src` that holds a test. It
+finds those files itself, because a hand-kept list left out `src/conform` and let a crash in
+libghostty-vt reach `main`. `--tests-in-dir` keeps the count to Haro's own tests: `src/config`
+embeds the compiler, whose own tests fail when run inside Haro's test binary and leave its state
+broken for the tests after them.

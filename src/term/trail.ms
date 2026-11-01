@@ -6,7 +6,7 @@ const TRAIL_SIZE: float64 = 1.0;
 const BAR_FRACTION: float64 = 1.0 / 8;
 const PARTICLE_OPACITY: float64 = 200.0 / 255;
 const PARTICLE_LIFETIME: float64 = 0.5;
-const PARTICLE_DENSITY: float64 = 0.7;
+export const PARTICLE_DENSITY: float64 = 0.7;
 const PARTICLE_SPEED: float64 = 10.0;
 const PARTICLE_CURL: float64 = 1.0;
 const TICK: float64 = 0.017;
@@ -73,6 +73,8 @@ export interface Trail {
 	spawnedFrom: Point;
 	remainder: float64;
 	rng: uint64;
+	smear: boolean;
+	density: float64;
 }
 
 function point(x: float64, y: float64): Point {
@@ -169,6 +171,14 @@ function alignment(this c: Corner, center: Point, w: float64, h: float64): float
 	return travel.x * facing.x + travel.y * facing.y;
 }
 
+function snap(this c: Corner, center: Point, w: float64, h: float64): void {
+	const to = c.target(center, w, h);
+	c.current = to;
+	c.previous = to;
+	c.x = AT_REST;
+	c.y = AT_REST;
+}
+
 function jump(this c: Corner, center: Point, w: float64, h: float64, aligned: float64): void {
 	const to = c.target(center, w, h);
 	const jx = (to.x - c.previous.x) / w;
@@ -212,6 +222,8 @@ export function start(this typeof Trail): Trail {
 		spawnedFrom: point(0, 0),
 		remainder: 0,
 		rng: PCG_STATE,
+		smear: true,
+		density: PARTICLE_DENSITY,
 	};
 }
 
@@ -279,7 +291,7 @@ function spray(this t: Trail, h: float64, dt: float64): boolean {
 	if (center == t.spawnedFrom) { return t.particles.length > 0; }
 	const from = t.spawnedFrom;
 	const travel = center.minus(from);
-	const wanted = (travel.length() / h) * PARTICLE_DENSITY + t.remainder;
+	const wanted = (travel.length() / h) * t.density + t.remainder;
 	const count = Math.floor(wanted) as int32;
 	t.remainder = wanted - (count as float64);
 	for (let n = 0; n < count; n++) {
@@ -371,7 +383,11 @@ export function animate(
 	const center = t.destination.plus(half);
 	let animating = false;
 	if (center.x != 0 || center.y != 0) {
-		if (t.jumped) {
+		if (t.jumped && !t.smear) {
+			t.place();
+			t.placed = true;
+			for (const c of t.corners) { c.snap(center, w, h); }
+		} else if (t.jumped) {
 			const lead = t.corners[0];
 			const step = lead.target(center, w, h).minus(lead.previous).inCells(t.cell);
 			const short = Math.abs(step.x) <= 2.001 && Math.abs(step.y) <= 0.001;
@@ -628,4 +644,25 @@ test "a long jump stretches from the old cell to the new one at once, then its h
 	assert farthest > 160;
 	assert frames < 90;
 	assert t.shownCorners()[1] == point(160, 40);
+}
+
+test "a trail with its smear off lands on the new cell in the frame it moves" {
+	const t = placed(30, 40);
+	t.smear = false;
+	t.moveTo(130, 80);
+	const _moving = t.animate(FRAME, CursorShape.Block, 10, 20);
+	assert t.resting();
+	const shown = t.shownCorners();
+	assert shown[0] == point(130, 80);
+	assert shown[2] == point(140, 100);
+}
+
+test "a trail with no dust leaves none behind a long move" {
+	const t = placed(30, 40);
+	t.density = 0;
+	t.moveTo(330, 240);
+	for (let f = 0; f < 30; f++) {
+		const _moving = t.animate(FRAME, CursorShape.Block, 10, 20);
+	}
+	assert t.particles.length == 0;
 }

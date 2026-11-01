@@ -18,6 +18,7 @@ import {
 	undecorate as undecorateRows,
 } from "./rows";
 import { Mark } from "./mark";
+import { sendReplies } from "../session/session";
 import { Asks, Controls, Hit, holding, refit, takeAsks, typed, vtOf } from "./controls";
 import { cancel, clipboardAsked, clipboardText, confirm } from "./clipboard";
 import { act, answerClose, closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
@@ -209,6 +210,7 @@ function apply(this io: Io): void {
 		!vt.setScrollback(settings.scrollback).ok) {
 		io.fail(Where.Settings, TermError.SettingsRefused);
 	}
+	if (!s.sendReplies().ok) { io.fail(Where.Settings, TermError.SettingsRefused); }
 }
 
 export function configure(this io: Io, settings: Settings): void {

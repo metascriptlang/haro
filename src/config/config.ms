@@ -2,6 +2,7 @@ import { JSON, JsonKind, JsonValue } from "std/core/json";
 import { isAbsolute } from "std/fs/path";
 import { Rgb, SCROLLBACK_LINES } from "../vt/vt";
 import { Action, Keybind, Screen, actionNames, actionNamed, keybind } from "../input/bindings";
+import { PARTICLE_DENSITY } from "../term/trail";
 import { KeyMod, OptionAsAlt, modSet } from "../keys/keys";
 
 export enum StartKind {
@@ -21,6 +22,12 @@ export function `==`(this a: StartDir, b: StartDir): boolean {
 	return a.kind == b.kind;
 }
 
+export struct CursorEffects {
+	glitch: boolean;
+	trail: boolean;
+	dust: float64;
+}
+
 export struct Config {
 	fontFamily: Vec<string>;
 	fontSize: float64;
@@ -28,6 +35,7 @@ export struct Config {
 	command: string;
 	shellIntegration: boolean;
 	copyOnSelect: boolean;
+	cursor: CursorEffects;
 	workingDirectory: StartDir | null;
 	scrollback: int64;
 	foreground: Rgb;
@@ -43,6 +51,7 @@ const MAX_SCROLLBACK: int64 = 100000;
 const MIN_FONT_SIZE: float64 = 1;
 const MAX_FONT_SIZE: float64 = 255;
 const MAX_PADDING: float64 = 512;
+const MAX_CURSOR_DUST: float64 = 10;
 
 when (windows) {
 	import { defaultCommand } from "../pty/pty";
@@ -76,6 +85,7 @@ export function defaults(): Config {
 		command: defaultShell(),
 		shellIntegration: true,
 		copyOnSelect: false,
+		cursor: { glitch: true, trail: true, dust: PARTICLE_DENSITY },
 		workingDirectory: null,
 		scrollback: SCROLLBACK_LINES,
 		foreground: { r: 204, g: 204, b: 204 },
@@ -145,6 +155,11 @@ function readNumber(v: JsonValue, key: string): Result<float64, string> {
 		JsonKind.Number | JsonKind.Int => Result.ok(v.asNumber()),
 		_ => Result.err(`${key} must be a number`),
 	};
+}
+
+function readBool(v: JsonValue, key: string): Result<boolean, string> {
+	if (v.kind != JsonKind.Bool) { return Result.err(`${key} must be true or false`); }
+	return Result.ok(v.boolVal);
 }
 
 function readArray(v: JsonValue, key: string): Result<JsonValue[], string> {
@@ -235,6 +250,32 @@ function readKeybind(v: JsonValue, key: string): Result<Keybind, string> {
 	return Result.ok(b.value);
 }
 
+function readCursor(v: JsonValue, key: string): Result<CursorEffects, string> {
+	if (v.kind != JsonKind.Object) { return Result.err(`${key} must be { glitch, trail, dust }`); }
+	let effects = defaults().cursor;
+	for (let i = 0; i < v.keys.length; i++) {
+		const name = v.keys[i];
+		const value = v.values[i];
+		if (value.kind == JsonKind.Null) { continue; }
+		match (name) {
+			"glitch" => { effects.glitch = try readBool(value, `${key}.glitch`); },
+			"trail" => { effects.trail = try readBool(value, `${key}.trail`); },
+			"dust" => {
+				effects.dust = try readNumber(value, `${key}.dust`);
+				if (effects.dust < 0 || effects.dust > MAX_CURSOR_DUST) {
+					return Result.err(
+						`${key}.dust ${effects.dust} must be from 0 to ${MAX_CURSOR_DUST} particles a line`,
+					);
+				}
+			},
+			_ => {
+				return Result.err(`${key}: unknown field "${name}", expected glitch, trail and dust`);
+			},
+		}
+	}
+	return Result.ok(effects);
+}
+
 function startDirOf(text: string): StartDir | null {
 	if (text.startsWith("~/") || isAbsolute(text)) { return { kind: StartKind.Path, path: text }; }
 	return match (text) {
@@ -274,16 +315,9 @@ export function parse(json: string): Result<Config, string> {
 				}
 			},
 			"command" => { if (given) { c.command = try readString(v, key); } },
-			"shellIntegration" => {
-				if (!given) { continue; }
-				if (v.kind != JsonKind.Bool) { return Result.err(`${key} must be true or false`); }
-				c.shellIntegration = v.boolVal;
-			},
-			"copyOnSelect" => {
-				if (!given) { continue; }
-				if (v.kind != JsonKind.Bool) { return Result.err(`${key} must be true or false`); }
-				c.copyOnSelect = v.boolVal;
-			},
+			"shellIntegration" => { if (given) { c.shellIntegration = try readBool(v, key); } },
+			"copyOnSelect" => { if (given) { c.copyOnSelect = try readBool(v, key); } },
+			"cursor" => { if (given) { c.cursor = try readCursor(v, key); } },
 			"workingDirectory" => {
 				if (!given) { continue; }
 				const text = try readString(v, key);
@@ -345,6 +379,7 @@ test "an empty config keeps every default" {
 	assert c.value.command == defaultShell();
 	assert c.value.shellIntegration;
 	assert !c.value.copyOnSelect;
+	assert c.value.cursor.glitch && c.value.cursor.trail && c.value.cursor.dust == PARTICLE_DENSITY;
 	assert c.value.scrollback == SCROLLBACK_LINES;
 	assert c.value.palette.length == 0;
 	assert c.value.keybinds.length == 0;
@@ -355,6 +390,7 @@ test "the fields a config gives replace the defaults" {
 	const c = parse(
 		`{"fontFamily":"Operator Saigon","fontSize":10.8,"padding":6,"command":"cmd.exe",` +
 			`"shellIntegration":false,"copyOnSelect":true,` +
+			`"cursor":{"glitch":false,"trail":false,"dust":0},` +
 			`"scrollback":50000,"background":"#1a1b26","foreground":"#A9B1D6",` +
 			`"palette":["#32344a","#f7768e"],` +
 			`"keybinds":[{"keys":"shift+enter","text":"\\u001b[13;2u"}]}`,
@@ -367,6 +403,7 @@ test "the fields a config gives replace the defaults" {
 	assert c.value.command == "cmd.exe";
 	assert !c.value.shellIntegration;
 	assert c.value.copyOnSelect;
+	assert !c.value.cursor.glitch && !c.value.cursor.trail && c.value.cursor.dust == 0;
 	assert c.value.scrollback == 50000;
 	const background: Rgb = { r: 26, g: 27, b: 38 };
 	const foreground: Rgb = { r: 169, g: 177, b: 214 };
@@ -458,6 +495,12 @@ test "a field the config cannot use is refused by name" {
 	assert refusal(`{"fontSize":"10"}`) == "fontSize must be a number";
 	assert refusal(`{"shellIntegration":"no"}`) == "shellIntegration must be true or false";
 	assert refusal(`{"copyOnSelect":1}`) == "copyOnSelect must be true or false";
+	assert refusal(`{"cursor":{"glitch":"on"}}`) == "cursor.glitch must be true or false";
+	assert refusal(`{"cursor":{"dust":-1}}`) == "cursor.dust -1 must be from 0 to 10 particles a line";
+	assert refusal(`{"cursor":{"dust":11}}`) == "cursor.dust 11 must be from 0 to 10 particles a line";
+	assert refusal(`{"cursor":{"blink":true}}`) ==
+		`cursor: unknown field "blink", expected glitch, trail and dust`;
+	assert refusal(`{"cursor":true}`) == "cursor must be { glitch, trail, dust }";
 	assert refusal(`{"fontSize":0}`) == "fontSize 0 must be from 1 to 255 points";
 	assert refusal(`{"fontSize":0.5}`) == "fontSize 0.5 must be from 1 to 255 points";
 	assert refusal(`{"fontSize":256}`) == "fontSize 256 must be from 1 to 255 points";

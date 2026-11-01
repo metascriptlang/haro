@@ -90,6 +90,12 @@ export function markFailed(e: CommandDone): void {
 	annotate({ at: prompt, text: `exit ${code}${tookText(e.durationMs)}` });
 }
 
+export interface CursorEffects {
+	glitch?: boolean;
+	trail?: boolean;
+	dust?: number;
+}
+
 export interface HaroConfig {
 	fontFamily?: string[];
 	fontSize?: number;
@@ -104,6 +110,7 @@ export interface HaroConfig {
 	keybinds?: Keybind[];
 	optionAsAlt?: "neither" | "left" | "right" | "both";
 	copyOnSelect?: boolean;
+	cursor?: CursorEffects;
 	onKey?: (e: KeyPress) => KeyAnswer;
 	onPrompt?: (e: Prompt) => void;
 	onCommandDone?: (e: CommandDone) => void;

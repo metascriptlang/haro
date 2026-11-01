@@ -366,11 +366,11 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 	if (!wrongMode.ok) { assert wrongMode.error.includes("/config.ms:3:"), wrongMode.error; }
 }
 
-test "a config spreads saigonNight from the haro package and keeps its own fields over it" {
+test "a config spreads saigonNight from the haro package and keeps its own fields over it, a cursor field among them" {
 	const dir = `${cwd()}/out/themedConfig`;
 	assert ensureDir(dir).ok;
 	const path = `${dir}/config.ms`;
-	const config = `import { HaroConfig, saigonNight } from "haro";\n\nexport const config: HaroConfig = { ...saigonNight, fontSize: 13 };\n`;
+	const config = `import { HaroConfig, saigonNight } from "haro";\n\nexport const config: HaroConfig = { ...saigonNight, fontSize: 13, cursor: { dust: 0 } };\n`;
 	assert writeFile(path, config).ok;
 	const themed = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
 	assert themed.ok;
@@ -380,6 +380,7 @@ test "a config spreads saigonNight from the haro package and keeps its own field
 		const brightWhite: Rgb = { r: 172, g: 176, b: 208 };
 		assert c.ok && c.value.fontSize == 13 && c.value.background == background;
 		assert c.ok && c.value.palette.length == 16 && c.value.palette[15] == brightWhite;
+		assert c.ok && c.value.cursor.dust == 0 && c.value.cursor.glitch && c.value.cursor.trail;
 	}
 }
 

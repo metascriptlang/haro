@@ -142,6 +142,7 @@ export interface PaneModel {
 	grid: ViewHandle | null;
 	holdTimer: number | null;
 	scrollTimer: number | null;
+	compressTimer: number | null;
 	decorations: int32;
 	mouseGeometry: MouseGeometry;
 	layoutWidth: number;
@@ -226,6 +227,7 @@ export function open(
 		grid: null,
 		holdTimer: null,
 		scrollTimer: null,
+		compressTimer: null,
 		decorations: 0,
 		mouseGeometry: geometryOf(1, 1, 1, 1),
 		layoutWidth: 0,
@@ -356,6 +358,20 @@ function autoscrollSoon(this m: PaneModel): void {
 	}, AUTOSCROLL_MS);
 }
 
+function compressAfter(this m: PaneModel, delayMs: number): void {
+	const pending = m.compressTimer;
+	if (pending !== null) { clearTimeout(pending); }
+	m.compressTimer = setTimeout((): void => {
+		m.compressTimer = null;
+		m.io.compress(
+			(nextMs: number | null): void => {
+				if (nextMs !== null) { m.compressAfter(nextMs); }
+			},
+			(error: string): void => { m.failed(Where.Output, error); },
+		);
+	}, delayMs);
+}
+
 export function scheduleRefresh(this m: PaneModel): void {
 	m.timing.schedule((): void => { m.refresh(); });
 }
@@ -417,6 +433,8 @@ function applied(this m: PaneModel, got: IoFrame): void {
 	m.answerAsks(got.asks);
 	m.autoscrolling = got.autoscroll;
 	m.autoscrollSoon();
+	const compressAfterMs = got.compressAfterMs;
+	if (compressAfterMs !== null) { m.compressAfter(compressAfterMs); }
 	if (got.again) { m.scheduleRefresh(); }
 	if (f?.more ?? false) {
 		m.stats.tally.more += 1;

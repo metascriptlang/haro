@@ -1,5 +1,13 @@
 import { MouseButton } from "./mouseButton";
-import { Rgb, setDefaultColors, setPalette, setScrollback } from "../vt/vt";
+import {
+	Rgb,
+	Vt,
+	compressStep,
+	compressionActivity,
+	setDefaultColors,
+	setPalette,
+	setScrollback,
+} from "../vt/vt";
 import { Action, Keybind } from "../input/bindings";
 import { Reply } from "../input/paste";
 import { Pending, pendingOf } from "./pending";
@@ -142,6 +150,7 @@ export struct IoFrame {
 	marks: Vec<Mark>;
 	hover: Link | null;
 	hoverChanged: boolean;
+	compressAfterMs: number | null;
 }
 
 export interface Io {
@@ -151,6 +160,7 @@ export interface Io {
 	failures: Vec<Failure>;
 	keyAt: float64;
 	hoverSent: Link | null;
+	compressedAt: uint64 | null;
 }
 
 export interface IoPort {
@@ -176,6 +186,7 @@ export interface IoPort {
 	undecorate: (id: int32) => void;
 	annotate: (a: Annotation) => void;
 	unannotate: (id: int32) => void;
+	compress: (done: (nextMs: number | null) => void, failed: (error: string) => void) => void;
 	frame: (done: (got: IoFrame) => void, failed: (error: string) => void) => void;
 	relight: (
 		ink: CellInk | null,
@@ -185,7 +196,7 @@ export interface IoPort {
 }
 
 export function open(this typeof Io, t: Term): Io {
-	return { term: t, controls: Controls.open(), settings: null, failures: [], keyAt: -1, hoverSent: null };
+	return { term: t, controls: Controls.open(), settings: null, failures: [], keyAt: -1, hoverSent: null, compressedAt: null };
 }
 
 export function started(this io: Io): boolean {
@@ -373,6 +384,32 @@ export function relight(this io: Io, ink: CellInk | null): FrameRows {
 	return relit.value;
 }
 
+const COMPRESS_IDLE_MS = 250;
+const COMPRESS_STEP_MS = 1;
+
+function compressionMoved(this io: Io, vt: Vt): boolean {
+	const activity = vt.compressionActivity();
+	if (!activity.ok) {
+		io.fail(Where.Output, TermError.VtFailed);
+		return false;
+	}
+	if (activity.value == io.compressedAt) { return false; }
+	io.compressedAt = activity.value;
+	return true;
+}
+
+export function compress(this io: Io): number | null {
+	const vt = vtOf(io.term);
+	if (vt === null) { return null; }
+	if (io.compressionMoved(vt)) { return COMPRESS_IDLE_MS; }
+	const pending = vt.compressStep();
+	if (!pending.ok) {
+		io.fail(Where.Output, TermError.VtFailed);
+		return null;
+	}
+	return pending.value ? COMPRESS_STEP_MS : null;
+}
+
 function exitOf(this io: Io): Exit {
 	const t = io.term;
 	const exit: Exit = {
@@ -388,6 +425,7 @@ export function frame(this io: Io): IoFrame {
 	const pumped = io.term.pumpFrame();
 	let frame: Frame | null = null;
 	let again = false;
+	let compressAfterMs: number | null = null;
 	let exit: Exit | null = null;
 	if (!pumped.ok) {
 		io.fail(Where.Output, pumped.error);
@@ -406,6 +444,7 @@ export function frame(this io: Io): IoFrame {
 				again = dropped.value;
 			}
 		}
+		if (vt !== null && io.compressionMoved(vt)) { compressAfterMs = COMPRESS_IDLE_MS; }
 		if (ended) { exit = io.exitOf(); }
 	}
 	const c = io.controls;
@@ -431,6 +470,7 @@ export function frame(this io: Io): IoFrame {
 		marks: marks,
 		hover: hover,
 		hoverChanged: hoverChanged,
+		compressAfterMs: compressAfterMs,
 	};
 }
 
@@ -460,6 +500,9 @@ export function port(this io: Io): IoPort {
 		undecorate: (id: int32): void => { io.undecorate(id); },
 		annotate: (a: Annotation): void => { io.annotate(a); },
 		unannotate: (id: int32): void => { io.unannotate(id); },
+		compress: (done: (nextMs: number | null) => void, failed: (error: string) => void): void => {
+			done(io.compress());
+		},
 		frame: (done: (got: IoFrame) => void, failed: (error: string) => void): void => {
 			done(io.frame());
 		},

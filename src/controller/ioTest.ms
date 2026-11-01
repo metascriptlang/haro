@@ -1,4 +1,4 @@
-import { Io, configure, frame, key, keyReleased, move, open, settingsOf, text } from "./io";
+import { Io, compress, configure, frame, key, keyReleased, move, open, settingsOf, text } from "./io";
 import { Term } from "./term";
 import { defaults } from "../config/config";
 import { KeyAction, NO_MODS, keyEvent, modSet } from "../keys/keys";
@@ -41,6 +41,22 @@ test "a frame after a drain shows the output the shell wrote" {
 			assert rows !== null;
 			if (rows !== null) { assert rows.rows[0].line.text.startsWith("hello"); }
 		}
+	}).ok;
+}
+
+test "new output asks for compression once the terminal idles, and compressing runs in steps without asking again" {
+	assert onTerm(lines(3000), (t: Term, sink: Sink): void => {
+		const io = Io.open(t);
+		assert io.frame().compressAfterMs == 250;
+		assert io.frame().compressAfterMs === null;
+		let steps = 0;
+		while (io.compress() !== null) {
+			steps++;
+			assert steps < 100000;
+		}
+		assert steps > 0;
+		assert io.frame().compressAfterMs === null;
+		assert io.frame().failures.length == 0;
 	}).ok;
 }
 

@@ -17,6 +17,7 @@ import {
 	autoscroll,
 	cancelDialog,
 	closeKey,
+	compress,
 	closeWindow,
 	configure,
 	confirmDialog,
@@ -115,6 +116,12 @@ export actor Shell {
 		return move got;
 	}
 
+	compress(): number | null {
+		const io = this.io;
+		if (io === null) { return null; }
+		return io.compress();
+	}
+
 	relight(ink: CellInk | null): FrameRows {
 		const io = this.io;
 		if (io === null) { return FrameRows.none(); }
@@ -139,6 +146,14 @@ function framed(
 	shell.frame().then((got: IoFrame | null): void => {
 		if (got !== null) { done(got); }
 	}).catch((e: Error): void => { failed(`${e}`); });
+}
+
+function compressed(
+	shell: Shell,
+	done: (nextMs: number | null) => void,
+	failed: (error: string) => void,
+): void {
+	shell.compress().then(done).catch((e: Error): void => { failed(`${e}`); });
 }
 
 function relit(
@@ -191,6 +206,9 @@ export function portOf(shell: Shell): IoPort {
 		undecorate: (id: int32): void => { shell.undecorate(id); },
 		annotate: (a: Annotation): void => { shell.annotate(a); },
 		unannotate: (id: int32): void => { shell.unannotate(id); },
+		compress: (done: (nextMs: number | null) => void, failed: (error: string) => void): void => {
+			compressed(shell, done, failed);
+		},
 		frame: (done: (got: IoFrame) => void, failed: (error: string) => void): void => {
 			framed(shell, done, failed);
 		},

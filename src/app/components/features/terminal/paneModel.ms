@@ -177,7 +177,7 @@ export function open(
 		rowHeight: rowHeight,
 	};
 	io.configure(started.settingsOf());
-	return {
+	const pane: PaneModel = {
 		io: io,
 		view: view,
 		desktop: desktop,
@@ -231,6 +231,8 @@ export function open(
 		layoutWidth: 0,
 		layoutHeight: 0,
 	};
+	pane.cursor.useEffects(started.cursor);
+	return pane;
 }
 
 export function failed(this m: PaneModel, where: Where, error: string): void {
@@ -503,6 +505,7 @@ function reconfigure(this m: PaneModel, change: ConfigChange): void {
 	const family = change.family;
 	const error = change.error;
 	m.io.configure(c.settingsOf());
+	m.cursor.useEffects(c.cursor);
 	m.configFontPoints = c.fontSize;
 	const points = m.fontAdjusted ? m.fontPoints : c.fontSize;
 	const resized = pxOf(points) != m.metrics.fontSize() || family != m.metrics.fontFamily();

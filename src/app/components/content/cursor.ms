@@ -24,6 +24,7 @@ import { Cell, outside } from "../../../term/cursorGeometry";
 import { Trail, particleAlpha, unit } from "../../../term/trail";
 import { CURSOR_TEXT, GLITCH_CYAN, GLITCH_RED } from "../../theme";
 import { CellMetrics } from "../ui/cellText";
+import { CursorEffects } from "../../../config/config";
 
 const PARTICLE_SIDE = 0.2;
 const OUTLINE_PER_EM = 1.0 / 8;
@@ -58,6 +59,7 @@ export interface CursorModel {
 	burst: GlitchFrame[];
 	burstStart: number;
 	glitch: GlitchFrame | null;
+	glitchOn: boolean;
 }
 
 export function open(
@@ -98,6 +100,7 @@ export function open(
 		burst: [],
 		burstStart: 0,
 		glitch: null,
+		glitchOn: true,
 	};
 }
 
@@ -298,7 +301,7 @@ function playBurst(this c: CursorModel, now: number): boolean {
 }
 
 function armBlink(this c: CursorModel): void {
-	if (c.look.glitches(c.focused)) {
+	if (c.glitchOn && c.look.glitches(c.focused)) {
 		c.blinkTimer = setTimeout((): void => {
 			c.blinkTimer = null;
 			c.startBurst();
@@ -339,6 +342,14 @@ export function showCursor(this c: CursorModel, at: Cursor | null, look: CursorL
 	c.look = look;
 	c.syncBlink();
 	c.paintCursor();
+}
+
+export function useEffects(this c: CursorModel, effects: CursorEffects): void {
+	c.trail.smear = effects.trail;
+	c.trail.density = effects.dust;
+	if (effects.glitch == c.glitchOn) { return; }
+	c.glitchOn = effects.glitch;
+	c.restartBlink();
 }
 
 export function focusCursor(this c: CursorModel, focused: boolean): void {

@@ -376,8 +376,8 @@ test "a config spreads saigonNight from the haro package and keeps its own field
 	assert themed.ok;
 	if (themed.ok) {
 		const c = parse(themed.value.json);
-		const background: Rgb = { r: 22, g: 22, b: 30 };
-		const brightWhite: Rgb = { r: 172, g: 176, b: 208 };
+		const background: Rgb = { r: 26, g: 27, b: 38 };
+		const brightWhite: Rgb = { r: 192, g: 202, b: 245 };
 		assert c.ok && c.value.fontSize == 13 && c.value.background == background;
 		assert c.ok && c.value.palette.length == 16 && c.value.palette[15] == brightWhite;
 		assert c.ok && c.value.cursor.dust == 0 && c.value.cursor.glitch && c.value.cursor.trail;

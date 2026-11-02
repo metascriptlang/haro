@@ -1,8 +1,8 @@
 import { argv } from "std/process";
-import { createList } from "../../neon/src/core/list";
-import { RowSlot, Styles, applyFrame, spansOf } from "../src/app/frame";
-import { SELECTION, Shown, fitShown } from "../src/controller/rows";
-import { GridLine } from "../src/grid/lines";
+import { List, createList } from "../../neon/src/core/list";
+import { RowSlot, Styles, applyFrame, applyRows, spansOf } from "../src/app/frame";
+import { Decor, SELECTION, Shown, empty, fitShown, relitRows } from "../src/controller/rows";
+import { CellInk, GridLine } from "../src/grid/lines";
 import { plan } from "../src/screen/plan";
 import { Cursor, Vt } from "../src/vt/vt";
 import {
@@ -17,6 +17,8 @@ const DEFAULT_REPS: int32 = 7;
 const DEFAULT_FRAME_KIB: int32 = 64;
 const FRAME_MS: float64 = 16.0;
 const MIB: float64 = 1048576.0;
+const BLINKS: int32 = 2000;
+const LIT: CellInk = { fg: null, bg: { r: 255, g: 0, b: 0 } };
 const USAGE =
 	"usage: haroBench [--list] [--only name,name] [--reps N] [--frame-kib N] [--paced]";
 
@@ -25,6 +27,7 @@ enum Stage {
 	Lines,
 	Spans,
 	Apply,
+	Blink,
 }
 
 enum BenchError {
@@ -32,6 +35,7 @@ enum BenchError {
 	Plan,
 	Cursor,
 	Palette,
+	Relight,
 }
 
 struct Totals {
@@ -73,6 +77,7 @@ function stageName(stage: Stage): string {
 		Stage.Lines => "plan+lines",
 		Stage.Spans => "plan+lines+spans",
 		Stage.Apply => "applyFrame",
+		Stage.Blink => "blink",
 	};
 }
 
@@ -115,6 +120,23 @@ function framePass(
 	return Result.ok(null);
 }
 
+function blinkPass(
+	vt: Vt, grid: List<RowSlot>, styles: Styles, ref shown: Vec<Shown>,
+): Result<Totals, BenchError> {
+	let totals = Totals.zero();
+	const decor = Decor.empty();
+	for (let i = 0; i < BLINKS; i++) {
+		const start: float64 = performance.now();
+		const relit = shown.relitRows(vt, i % 2 == 0 ? LIT : null, decor);
+		if (!relit.ok) { return Result.err(BenchError.Relight); }
+		const _chars = applyRows(grid, styles, relit.value);
+		totals.apply += performance.now() - start;
+		totals.frames += 1;
+		totals.rows += relit.value.rows.length as int32;
+	}
+	return Result.ok(totals);
+}
+
 function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, BenchError> {
 	const created = Vt.create(w.cols, w.rows);
 	if (!created.ok) { return Result.err(BenchError.VtCreate); }
@@ -151,7 +173,7 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 		sinceFrame = 0;
 		if (stage == Stage.Write) { continue; }
 		totals.frames += 1;
-		if (stage == Stage.Apply) {
+		if (stage == Stage.Apply || stage == Stage.Blink) {
 			const applied = applyFrame(grid, styles, shown, vt, null);
 			totals.apply += performance.now() - writeEnd;
 			if (!applied.ok) { totals.lineErrors += 1; }
@@ -160,6 +182,7 @@ function runPass(w: Workload, stage: Stage, cadence: Cadence): Result<Totals, Be
 		}
 		lastFrame = performance.now();
 	}
+	if (stage == Stage.Blink) { return blinkPass(vt, grid, styles, shown); }
 	return Result.ok(totals);
 }
 
@@ -220,7 +243,7 @@ function describe(w: Workload, stage: Stage, m: Measured): string {
 		split += ` plan ${fixed(t.plan, 2)} lines ${fixed(t.lines, 2)}`;
 	}
 	if (stage == Stage.Spans) { split += ` spans ${fixed(t.spans, 2)}`; }
-	if (stage == Stage.Apply) { split += ` apply ${fixed(t.apply, 2)}`; }
+	if (stage == Stage.Apply || stage == Stage.Blink) { split += ` apply ${fixed(t.apply, 2)}`; }
 	const failures = t.lineErrors > 0 ? ` lineErrors ${t.lineErrors}` : "";
 	return (
 		`${pad(w.name, 30)} ${pad(stageName(stage), 17)} ${pad(fixed(bytes / MIB, 2), 6)} MiB ` +
@@ -292,7 +315,7 @@ function main(): int32 {
 		frameBytes: frameKibAsked.value * 1024,
 		gapMs: paced ? FRAME_MS : 0.0,
 	};
-	const stages = [Stage.Write, Stage.Lines, Stage.Spans, Stage.Apply];
+	const stages = [Stage.Write, Stage.Lines, Stage.Spans, Stage.Apply, Stage.Blink];
 	const frames = paced
 		? `a frame every ${fixed(FRAME_MS, 0)} ms, one apply per window frame (src/app/pace.ms)`
 		: `a frame every ${cadence.frameBytes / 1024} KiB`;
@@ -389,6 +412,16 @@ test "applyFrame runs headless on the same bytes" {
 	if (r.ok) {
 		assert r.value.frames == 1;
 		assert r.value.lineErrors == 0;
+	}
+}
+
+test "a blink pass relights the cursor's cell a fixed number of times" {
+	const r = runPass(tiny(10, 3, "hello\nworld"), Stage.Blink, once());
+	assert r.ok;
+	if (r.ok) {
+		assert r.value.frames == BLINKS;
+		assert r.value.rows == BLINKS;
+		assert r.value.write == 0.0;
 	}
 }
 

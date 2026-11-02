@@ -24,6 +24,7 @@ import {
 	decorate,
 	drain,
 	fit,
+	settleSize,
 	focus,
 	frame,
 	key,
@@ -88,6 +89,7 @@ export actor Shell {
 	fit(cols: int32, rows: int32, cellWidth: int32, cellHeight: int32): void {
 		this.io?.fit(cols, rows, cellWidth, cellHeight);
 	}
+	settleSize(): void { this.io?.settleSize(); }
 	drain(): void { this.io?.drain(); }
 	key(k: KeyEvent, time: float64): void { this.io?.key(k, time); }
 	keyReleased(k: KeyEvent): void { this.io?.keyReleased(k); }
@@ -184,6 +186,7 @@ export function portOf(shell: Shell): IoPort {
 		fit: (cols: int32, rows: int32, cellWidth: int32, cellHeight: int32): void => {
 			shell.fit(cols, rows, cellWidth, cellHeight);
 		},
+		settleSize: (): void => { shell.settleSize(); },
 		drain: (): void => { shell.drain(); },
 		key: (k: KeyEvent, time: float64): void => { shell.key(k, time); },
 		keyReleased: (k: KeyEvent): void => { shell.keyReleased(k); },

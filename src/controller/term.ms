@@ -128,6 +128,14 @@ export interface Term {
 	closed: boolean;
 	spawnedAt: float64;
 	marks: Vec<Mark>;
+	unsettled: PtySize | null;
+}
+
+export struct PtySize {
+	cols: int32;
+	rows: int32;
+	cellWidth: int32;
+	cellHeight: int32;
 }
 
 export struct Frame {
@@ -192,6 +200,7 @@ export function openTerm(
 		closed: false,
 		spawnedAt: -1,
 		marks: [],
+		unsettled: null,
 	});
 }
 
@@ -215,15 +224,27 @@ export function fit(
 	} else {
 		const sameCell = cellWidth == t.cellWidth && cellHeight == t.cellHeight;
 		if (cols == t.cols && rows == t.rows && sameCell) { return Result.ok(false); }
-		if (!s.resize(cols, rows, cellWidth, cellHeight).ok) {
+		if (!s.resizeScreen(cols, rows, cellWidth, cellHeight).ok) {
 			return Result.err(TermError.ResizeFailed);
 		}
+		t.unsettled = { cols: cols, rows: rows, cellWidth: cellWidth, cellHeight: cellHeight };
 	}
 	t.cols = cols;
 	t.rows = rows;
 	t.cellWidth = cellWidth;
 	t.cellHeight = cellHeight;
 	t.shown.fitShown(rows);
+	return Result.ok(true);
+}
+
+export function settleSize(this t: Term): Result<boolean, TermError> {
+	const size = t.unsettled;
+	const s = t.session;
+	if (size === null || s === null) { return Result.ok(false); }
+	t.unsettled = null;
+	if (!s.resizePty(size.cols, size.rows, size.cellWidth, size.cellHeight).ok) {
+		return Result.err(TermError.ResizeFailed);
+	}
 	return Result.ok(true);
 }
 
@@ -559,5 +580,42 @@ test "a shell that fails as it starts ended abnormally; a clean or a late exit d
 			assert !t.exitedAbnormally();
 			t.shutdown();
 		}
+	}
+}
+
+interface Resizes {
+	count: int32;
+	cols: int32;
+	rows: int32;
+}
+
+test "a burst of resizes reflows the screen at once and reaches the pty once, at the last size, when settled" {
+	const seen: Resizes = { count: 0, cols: 0, rows: 0 };
+	const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+		return Result.ok({
+			...Replay.ofText("").toPty(),
+			resize: (c: int32, r: int32, w: int32, h: int32): Result<void, PtyError> => {
+				seen.count += 1;
+				seen.cols = c;
+				seen.rows = r;
+				return Result.ok(null);
+			},
+		});
+	});
+	assert opened.ok;
+	if (opened.ok) {
+		const t = opened.value;
+		assert t.fit(20, 3).ok;
+		assert t.fit(30, 4).ok;
+		assert t.fit(40, 6).ok;
+		assert seen.count == 0;
+		assert t.shown.length == 6;
+		const settled = t.settleSize();
+		assert settled.ok && settled.value;
+		assert seen.count == 1 && seen.cols == 40 && seen.rows == 6;
+		const again = t.settleSize();
+		assert again.ok && !again.value;
+		assert seen.count == 1;
+		t.shutdown();
 	}
 }

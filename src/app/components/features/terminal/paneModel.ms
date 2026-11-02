@@ -43,6 +43,7 @@ import { TermError, exitCodeText } from "../../../../controller/term";
 
 const HOLD_RECHECK_MS = 100;
 const AUTOSCROLL_MS = 15;
+const RESIZE_SETTLE_MS = 25;
 const FONT_STEP_POINTS: float64 = 1;
 const RESTART_NOTICE = "config.ms: command, workingDirectory and shellIntegration apply when Haro restarts";
 
@@ -143,6 +144,7 @@ export interface PaneModel {
 	holdTimer: number | null;
 	scrollTimer: number | null;
 	compressTimer: number | null;
+	sizeTimer: number | null;
 	decorations: int32;
 	mouseGeometry: MouseGeometry;
 	layoutWidth: number;
@@ -228,6 +230,7 @@ export function open(
 		holdTimer: null,
 		scrollTimer: null,
 		compressTimer: null,
+		sizeTimer: null,
 		decorations: 0,
 		mouseGeometry: geometryOf(1, 1, 1, 1),
 		layoutWidth: 0,
@@ -370,6 +373,14 @@ function compressAfter(this m: PaneModel, delayMs: number): void {
 			(error: string): void => { m.failed(Where.Output, error); },
 		);
 	}, delayMs);
+}
+
+function settleSizeSoon(this m: PaneModel): void {
+	if (m.sizeTimer !== null) { return; }
+	m.sizeTimer = setTimeout((): void => {
+		m.sizeTimer = null;
+		m.io.settleSize();
+	}, RESIZE_SETTLE_MS);
 }
 
 export function scheduleRefresh(this m: PaneModel): void {
@@ -638,6 +649,7 @@ function fitLayout(this m: PaneModel): void {
 	m.cols = cols;
 	m.rows = rows;
 	m.io.fit(cols, rows, cellPx, rowPx);
+	m.settleSizeSoon();
 	m.view.fitRows(rows);
 	m.refresh();
 }

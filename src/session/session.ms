@@ -72,13 +72,34 @@ export function resize(
 	cellWidth: int32 = 0,
 	cellHeight: int32 = 0,
 ): Result<void, SessionError> {
+	try s.resizeScreen(cols, rows, cellWidth, cellHeight);
+	return s.resizePty(cols, rows, cellWidth, cellHeight);
+}
+
+export function resizeScreen(
+	this s: Session,
+	cols: int32,
+	rows: int32,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
+): Result<void, SessionError> {
 	const resizedVt = s.vt.resize(cols, rows, cellWidth, cellHeight);
 	if (!resizedVt.ok) { return Result.err(SessionError.ResizeFailed); }
+	return s.sendReplies();
+}
+
+export function resizePty(
+	this s: Session,
+	cols: int32,
+	rows: int32,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
+): Result<void, SessionError> {
 	const resizedPty = s.pty.resize(cols, rows, cellWidth, cellHeight);
 	if (!resizedPty.ok && s.pty.exitCode() === null) {
 		return Result.err(SessionError.ResizeFailed);
 	}
-	return s.sendReplies();
+	return Result.ok(null);
 }
 
 export function close(this s: Session): void {

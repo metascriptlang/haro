@@ -166,6 +166,7 @@ export interface Io {
 export interface IoPort {
 	configure: (settings: Settings) => void;
 	fit: (cols: int32, rows: int32, cellWidth: int32, cellHeight: int32) => void;
+	settleSize: () => void;
 	drain: () => void;
 	key: (k: KeyEvent, time: float64) => void;
 	keyReleased: (k: KeyEvent) => void;
@@ -246,6 +247,11 @@ export function fit(
 		return;
 	}
 	if (!started) { io.apply(); }
+}
+
+export function settleSize(this io: Io): void {
+	const settled = io.term.settleSize();
+	if (!settled.ok) { io.fail(Where.Fit, settled.error); }
 }
 
 function input(this io: Io, sent: Result<boolean, TermError>, where: Where, time: float64): void {
@@ -480,6 +486,7 @@ export function port(this io: Io): IoPort {
 		fit: (cols: int32, rows: int32, cellWidth: int32, cellHeight: int32): void => {
 			io.fit(cols, rows, cellWidth, cellHeight);
 		},
+		settleSize: (): void => { io.settleSize(); },
 		drain: (): void => { io.drain(); },
 		key: (k: KeyEvent, time: float64): void => { io.key(k, time); },
 		keyReleased: (k: KeyEvent): void => { io.keyReleased(k); },

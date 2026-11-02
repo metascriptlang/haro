@@ -8,10 +8,12 @@ const FLOOD_BYTES: int32 = 4 * MIB;
 const LETTERS: int32 = 26;
 const FIRST_LETTER: int32 = "A".code;
 const ALT_SCREEN = "\x1b[?1049h";
+const BOX_FIRST: int32 = 0x2500;
 
 export const WORKLOAD_NAMES: string[] = [
 	"cursor_motion",
 	"dense_cells",
+	"dense_box_cells",
 	"light_cells",
 	"scrolling",
 	"scrolling_fullscreen",
@@ -123,10 +125,10 @@ function cursorMotion(cols: int32, rows: int32): Vec<uint8> {
 	return out;
 }
 
-function denseCells(cols: int32, rows: int32): Vec<uint8> {
+function denseCells(cols: int32, rows: int32, first: int32 = FIRST_LETTER): Vec<uint8> {
 	let out: Vec<uint8> = [];
-	for (let letter = FIRST_LETTER; letter < FIRST_LETTER + LETTERS; letter++) {
-		const offset = letter - FIRST_LETTER;
+	for (let letter = first; letter < first + LETTERS; letter++) {
+		const offset = letter - first;
 		putText(out, "\x1b[H");
 		for (let line = 1; line <= rows; line++) {
 			for (let column = 1; column <= cols; column++) {
@@ -134,7 +136,7 @@ function denseCells(cols: int32, rows: int32): Vec<uint8> {
 				const fg = index % 156 + 100;
 				const bg = 255 - index % 156 + 100;
 				putText(out, `\x1b[38;5;${fg};48;5;${bg};1;3;4m`);
-				out.push(letter as uint8);
+				putCodepoint(out, letter);
 			}
 		}
 	}
@@ -305,6 +307,9 @@ export function buildWorkload(name: string): Result<Workload, WorkloadError> {
 		"cursor_motion" => Result.ok(standardWorkload(name, none, cursorMotion(cols, rows))),
 		"dense_cells" => Result.ok(
 			standardWorkload(name, bytesOf(ALT_SCREEN), denseCells(cols, rows)),
+		),
+		"dense_box_cells" => Result.ok(
+			standardWorkload(name, bytesOf(ALT_SCREEN), denseCells(cols, rows, BOX_FIRST)),
 		),
 		"light_cells" => Result.ok(standardWorkload(
 			name,

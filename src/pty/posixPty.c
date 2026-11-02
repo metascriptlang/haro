@@ -44,6 +44,7 @@ typedef struct {
 	pthread_cond_t space;
 	pthread_cond_t pending;
 	int ready;
+	int woken;
 	ByteQueue in;
 	ByteQueue out;
 	int64_t sending;
@@ -86,8 +87,10 @@ static int append(Pty* p, const uint8_t* bytes, int64_t n) {
 		return 0;
 	}
 	signalReady(p);
+	int rouse = !p->woken;
+	p->woken = 1;
 	pthread_mutex_unlock(&p->lock);
-	wake();
+	if (rouse) wake();
 	return 1;
 }
 
@@ -422,7 +425,10 @@ int64_t ptyRead(int id, uint8_t* buf, int64_t cap) {
 		return -2;
 	}
 	int64_t n = queueTake(&p->in, buf, cap);
-	if (n > 0) pthread_cond_signal(&p->space);
+	if (n > 0) {
+		pthread_cond_signal(&p->space);
+		p->woken = 0;
+	}
 	int ended = p->closed && p->in.len == 0;
 	if (p->in.len == 0 && !p->closed) p->ready = 0;
 	pthread_mutex_unlock(&p->lock);

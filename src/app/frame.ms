@@ -149,11 +149,18 @@ export function spansOf(this styles: Styles, l: GridLine, background: Rgb): Text
 		return [{ text: l.text, style: styles.styleOf(l.runs[0], background) }];
 	}
 	let spans: TextSpan[] = [];
+	const bytes = l.text.asBytes();
 	let at = 0;
 	for (const run of l.runs) {
-		const text = l.text.slice(at, at + run.units);
-		spans.push({ text: text, style: styles.styleOf(run, background) });
-		at += run.units;
+		const from = at;
+		let units = 0;
+		while (units < run.units && at < bytes.length) {
+			const lead = bytes[at];
+			const width = lead < 0x80 ? 1 : lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
+			units += width == 4 ? 2 : 1;
+			at += width;
+		}
+		spans.push({ text: l.text.byteSlice(from, at), style: styles.styleOf(run, background) });
 	}
 	return spans;
 }
@@ -515,6 +522,20 @@ test "each underline style and an overline reach the span's decoration" {
 	assert spans[4].style!.textDecorationLine == "underline";
 	assert spans[5].style!.textDecorationLine == "overline";
 	assert spans[6].style!.textDecorationLine == "underline overline line-through";
+}
+
+test "each span is its run's own text, whatever the width of its characters" {
+	const styles = Styles.empty();
+	const l = lineOf("a中😀é─b", [
+		run(1, WHITE, BLACK, Underline.None),
+		run(1, RED, BLACK, Underline.None),
+		run(2, WHITE, BLACK, Underline.None),
+		run(2, RED, BLACK, Underline.None),
+		run(1, WHITE, BLACK, Underline.None),
+	]);
+	let texts: string[] = [];
+	for (const span of spansOf(styles, l, BLACK)) { texts.push(span.text); }
+	assert texts.join("|") == "a|中|😀|é─|b", texts.join("|");
 }
 
 test "an underline never shares a cached style with a foreground one bit away" {

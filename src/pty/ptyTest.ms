@@ -686,9 +686,33 @@ test "output past the read buffer's limit arrives whole and in order while the a
 		}
 		const inOrder = `${check.linesInOrder} of ${count} lines in order`;
 		console.log(`flood: ${check.byteCount} bytes, ${inOrder}`);
-		const readLimit = 4 << 20;
+		const readLimit = 1 << 20;
 		assert check.byteCount > readLimit;
 		assert check.linesInOrder == count;
 	});
 	assert remove(path).ok;
+}
+
+when (!windows) {
+	test "an interrupt during a flood the app reads late leaves at most the read limit to read" {
+		assert withPty("yes 0123456789abcdefghijklmnopqrstuvwxyz", (p: NativePty): void => {
+			const late: float64 = performance.now();
+			while (performance.now() - late < 500) {}
+			let interrupt: Vec<uint8> = [0x03];
+			assert p.write(interrupt).ok;
+			let buf: Vec<uint8> = new Array(65536);
+			let stale = 0;
+			while (true) {
+				const ready = p.wait(5000);
+				if (!ready.ok || !ready.value) { break; }
+				const r = p.read(buf);
+				if (!r.ok) { break; }
+				stale += r.value;
+			}
+			console.log(`interrupt: ${stale} bytes read after it`);
+			const readLimit = 1 << 20;
+			const inFlight = 128 << 10;
+			assert stale <= readLimit + inFlight;
+		});
+	}
 }

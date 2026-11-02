@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define READ_LIMIT (4 << 20)
+#define READ_LIMIT (1 << 20)
 #define BATCH_KEEP (4 << 20)
 #define WRITE_LIMIT (16 << 20)
 

@@ -33,7 +33,7 @@ import { appendFile, ensureDir, exists, fileSize, readFile, rename, writeFile } 
 import { dirname } from "std/fs/path";
 import { homeDir } from "std/os";
 import { App } from "./app";
-import { Pace } from "./pace";
+import { Pace, Slot } from "./pace";
 import { Stats, empty, mark, noteWake } from "./stats";
 import { logStatsEverySecond } from "./statsLog";
 import { familyList, registerFallbacks } from "./fonts";
@@ -129,6 +129,7 @@ when (macos) {
 }
 
 const pace = Pace.start();
+let waiting: () => void = (): void => {};
 const stats = Stats.empty();
 const config = ConfigWatch.forFile(flagValue("--config") ?? configPath());
 
@@ -222,12 +223,20 @@ function probableCli(): boolean {
 	}
 }
 
-function inFrame(run: () => void): void {
-	if (!pace.asksFrame()) { return; }
+function ranNow(run: () => void): void {
+	pace.applied();
 	const _id = requestFrame((time: number): void => {
-		pace.applied();
-		run();
+		if (pace.ticked()) { ranNow(waiting); }
 	});
+	run();
+}
+
+function inFrame(run: () => void): void {
+	match (pace.asksFrame()) {
+		Slot.Now => { ranNow(run); },
+		Slot.Tick => { waiting = run; },
+		Slot.Taken => {},
+	}
 }
 
 function quitWith(shell: Shell): () => void {

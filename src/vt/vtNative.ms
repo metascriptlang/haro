@@ -144,6 +144,11 @@ export extern function rowGet<T>(
 	key: GhosttyRenderStateRowData,
 	ref value: T,
 ): GhosttyResult from "ghostty_render_state_row_get";
+export extern function rowRead<T>(
+	it: GhosttyRenderStateRowIterator,
+	key: GhosttyRenderStateRowData,
+	out value: T,
+): GhosttyResult from "ghostty_render_state_row_get";
 export extern function mouseSetOption<T>(
 	encoder: GhosttyMouseEncoder,
 	option: GhosttyMouseEncoderOption,

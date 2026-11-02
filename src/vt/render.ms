@@ -1,6 +1,7 @@
 import {
 	GhosttyCell,
 	GhosttyCellContentTag,
+	GhosttyCellsView,
 	GhosttyCellData,
 	GhosttyCellWide,
 	GhosttyColorRgb,
@@ -15,7 +16,7 @@ import {
 	GhosttySgrUnderline,
 	GhosttyStyle,
 	GhosttyStyleColorTag,
-	ghostty_render_state_row_cells_next,
+	ghostty_render_state_row_cells_select,
 	ghostty_render_state_row_iterator_next,
 	ghostty_render_state_row_iterator_next_dirty,
 	size_t,
@@ -35,6 +36,7 @@ import {
 	pushAll,
 	rgb,
 	rowGet,
+	rowRead,
 	stateGet,
 } from "./vtNative";
 import {
@@ -199,16 +201,18 @@ function rawFacts(raw: GhosttyCell): Result<RawFacts, VtError> {
 function readCell(
 	state: GhosttyRenderState,
 	cells: GhosttyRenderStateRowCells,
+	x: int32,
+	raw: GhosttyCell,
 	colors: Palette,
 	ref extra: Vec<uint32>,
 ): Result<Cell, VtError> {
-	let raw: GhosttyCell = 0;
-	const rawKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW;
-	try checked(cellsGet(cells, rawKey, raw), VtError.ReadFailed);
 	const facts = try rawFacts(raw);
 	const grapheme = facts.tag == GhosttyCellContentTag.GHOSTTY_CELL_CONTENT_CODEPOINT_GRAPHEME;
 	const codepointTag = GhosttyCellContentTag.GHOSTTY_CELL_CONTENT_CODEPOINT;
 	const plain = facts.tag == codepointTag && !facts.styled;
+	if (!plain) {
+		try checked(ghostty_render_state_row_cells_select(cells, x as uint16), VtError.ReadFailed);
+	}
 	const bgKey = GhosttyRenderStateRowCellsData.GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_BG_COLOR;
 	const bg = plain ? colors.bg : colorOr(cells, bgKey, colors.bg);
 	const none = 0 as BitSet<CellFlag>;
@@ -267,14 +271,17 @@ function readRow(
 	let cells = vt.cells;
 	const cellsKey = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_CELLS;
 	try checked(rowGet(iterator, cellsKey, cells), VtError.ReadFailed);
-	let row: Row = { y: y, cells: new Array(cols), extra: [], selected: try selectedIn(iterator) };
-	let at = 0;
-	while (ghostty_render_state_row_cells_next(cells)) {
-		if (at == cols) { return Result.err(VtError.ReadFailed); }
-		row.cells[at] = try readCell(vt.state, cells, colors, row.extra);
-		at++;
+	let raws: GhosttyCellsView;
+	const rawsKey = GhosttyRenderStateRowData.GHOSTTY_RENDER_STATE_ROW_DATA_CELLS_RAW;
+	try checked(rowRead(iterator, rawsKey, raws), VtError.ReadFailed);
+	const count = raws.len as int32;
+	if (count > cols) { return Result.err(VtError.ReadFailed); }
+	let row: Row = { y: y, cells: new Array(count), extra: [], selected: try selectedIn(iterator) };
+	if (count == 0) { return Result.ok(row); }
+	const raw = raws.ptr[0..count];
+	for (let x = 0; x < count; x++) {
+		row.cells[x] = try readCell(vt.state, cells, x, raw[x], colors, row.extra);
 	}
-	if (at < cols) { row.cells.shrink(at); }
 	return Result.ok(row);
 }
 

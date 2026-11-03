@@ -1,6 +1,7 @@
 import {
 	Axis,
 	CellRect,
+	Frame,
 	MIN_PANE_CELLS,
 	Node,
 	NodeKind,
@@ -56,6 +57,7 @@ export enum WorkspaceError {
 	UnknownTab,
 	NoTabAtIndex,
 	NoRoomToSplit,
+	NoDivider,
 	EmptyWorkspace,
 }
 
@@ -72,6 +74,7 @@ export enum CommandKind {
 	FocusDirection,
 	CyclePane,
 	Resize,
+	MoveDivider,
 	ToggleZoom,
 	Fit,
 }
@@ -89,6 +92,7 @@ export struct WorkspaceCommand = match (kind: CommandKind) {
 	CommandKind.FocusDirection => { direction: Direction },
 	CommandKind.CyclePane => { by: int32 },
 	CommandKind.Resize => { direction: Direction, cells: int32 },
+	CommandKind.MoveDivider => { pane: PaneId, axis: Axis, by: int32 },
 	CommandKind.ToggleZoom => {},
 	CommandKind.Fit => {},
 };
@@ -452,6 +456,17 @@ function axisOf(d: Direction): Axis {
 	};
 }
 
+function shift(this w: Workspace, tab: Tab, frame: Frame, by: int32): void {
+	const divider = w.dividerCells;
+	const size = frame.rect.along(frame.split.axis);
+	const [low, high] = frame.split.resizeLimits(size, divider);
+	if (low > high) { return; }
+	const current = frame.split.firstCells(size, divider);
+	const moved = Math.min(Math.max(current + by, low), high);
+	tab.zoomed = null;
+	frame.split.setFirstCells(moved, size, divider);
+}
+
 function resize(
 	this w: Workspace,
 	tab: Tab,
@@ -461,22 +476,36 @@ function resize(
 	rows: int32,
 ): void {
 	const axis = axisOf(d);
-	const divider = w.dividerCells;
 	const whole = cellRect(0, 0, cols, rows);
-	const frames = tab.root.ancestors(tab.focused, whole, divider);
+	const frames = tab.root.ancestors(tab.focused, whole, w.dividerCells);
 	if (frames === null) { return; }
 	for (const frame of frames) {
 		if (frame.split.axis != axis) { continue; }
-		const size = frame.rect.along(axis);
-		const [low, high] = frame.split.resizeLimits(size, divider);
-		if (low > high) { return; }
-		const current = frame.split.firstCells(size, divider);
-		const delta = d == Direction.Left || d == Direction.Up ? -cells : cells;
-		const moved = Math.min(Math.max(current + delta, low), high);
-		tab.zoomed = null;
-		frame.split.setFirstCells(moved, size, divider);
+		const back = d == Direction.Left || d == Direction.Up;
+		w.shift(tab, frame, back ? -cells : cells);
 		return;
 	}
+}
+
+function moveDivider(
+	this w: Workspace,
+	id: PaneId,
+	axis: Axis,
+	by: int32,
+	cols: int32,
+	rows: int32,
+): Result<void, WorkspaceError> {
+	const tab = w.tabOf(id);
+	if (tab === null) { return Result.err(WorkspaceError.UnknownPane); }
+	if (by == 0) { return Result.err(WorkspaceError.CellsOutOfRange); }
+	const whole = cellRect(0, 0, cols, rows);
+	for (const frame of tab.root.ancestors(id, whole, w.dividerCells) ?? []) {
+		if (frame.split.axis != axis) { continue; }
+		if (frame.split.first.paneWith(id) === null) { continue; }
+		w.shift(tab, frame, by);
+		return Result.ok(null);
+	}
+	return Result.err(WorkspaceError.NoDivider);
 }
 
 function toggleZoom(this w: Workspace, tab: Tab): void {
@@ -511,6 +540,9 @@ function run(
 		return w.closePane(c.pane, cols, rows);
 	}
 	if (c.kind == CommandKind.FocusPane) { return w.focusPane(c.pane); }
+	if (c.kind == CommandKind.MoveDivider) {
+		return w.moveDivider(c.pane, c.axis, c.by, cols, rows);
+	}
 	if (c.kind == CommandKind.Fit) { return Result.ok(null); }
 	if (c.kind == CommandKind.GotoTab) {
 		if (c.index < 0 || c.index >= w.tabs.length) {

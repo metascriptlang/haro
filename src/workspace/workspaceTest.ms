@@ -281,6 +281,52 @@ test "a resize moves the divider nearest to the focused pane" {
 	assert rectOf(w, 3).rows == 7;
 }
 
+function divider(n: int32, axis: Axis, by: int32): WorkspaceCommand {
+	return { kind: CommandKind.MoveDivider, pane: pane(n), axis: axis, by: by };
+}
+
+function moved(w: Workspace, n: int32, axis: Axis, by: int32): WorkspaceEvent[] {
+	return must(w, divider(n, axis, by));
+}
+
+test "moving a divider names it by the pane before it, so a middle divider is reachable" {
+	const w = opened();
+	split(w, 1, Axis.SideBySide);
+	focus(w, 1);
+	split(w, 1, Axis.SideBySide);
+	focus(w, 2);
+	split(w, 2, Axis.SideBySide);
+	focus(w, 1);
+	assert rectOf(w, 3).x + rectOf(w, 3).cols == 40;
+	const events = moved(w, 3, Axis.SideBySide, 4);
+	assert kinds(events) == "PaneResized,PaneResized,PaneResized,PaneResized";
+	assert rectOf(w, 3).x + rectOf(w, 3).cols == 44;
+	assert rectOf(w, 2).x == 45;
+	assert focused(w) == 1;
+	moved(w, 1, Axis.SideBySide, -3);
+	assert rectOf(w, 1).cols == 19;
+	assert rectOf(w, 3).x + rectOf(w, 3).cols == 44;
+	moved(w, 3, Axis.SideBySide, -1000);
+	assert rectOf(w, 1).cols == MIN_PANE_CELLS;
+	assert rectOf(w, 3).cols == MIN_PANE_CELLS;
+	assert focused(w) == 1;
+}
+
+test "moving a divider leaves zoom and refuses a pane with no divider after it" {
+	const w = opened();
+	split(w, 1, Axis.Stacked);
+	must(w, { kind: CommandKind.ToggleZoom });
+	const events = moved(w, 1, Axis.Stacked, 2);
+	assert kinds(events) == "PaneResized,PaneResized,ZoomChanged";
+	assert rectOf(w, 1).rows == 14;
+	assert refusal(w, divider(2, Axis.Stacked, 1)) == WorkspaceError.NoDivider;
+	assert refusal(w, divider(1, Axis.SideBySide, 1)) == WorkspaceError.NoDivider;
+	assert refusal(w, divider(1, Axis.Stacked, 0)) ==
+		WorkspaceError.CellsOutOfRange;
+	assert refusal(w, divider(9, Axis.Stacked, 1)) == WorkspaceError.UnknownPane;
+	assert rectOf(w, 1).rows == 14;
+}
+
 test "zoom fills the tab with the focused pane until toggled off" {
 	const w = opened();
 	split(w, 1, Axis.SideBySide);

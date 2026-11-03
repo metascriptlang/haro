@@ -19,7 +19,7 @@ export function Button(props: {
 			paddingRight: 16,
 			paddingTop: 6,
 			paddingBottom: 6,
-			borderRadius: 4,
+			borderRadius: props.look.radius,
 		}}
 		onPressIn={(): void => { setHeld(true); }}
 		onPressOut={(): void => { setHeld(false); }}

@@ -63,8 +63,8 @@ const PASTE_CANCEL = "Cancel (Esc)";
 const PASTE_CONFIRM = "Paste anyway (Enter)";
 const READ_CANCEL = "Deny (Esc)";
 const READ_CONFIRM = "Allow (Ctrl+Enter)";
-const CLOSE_CANCEL = "Cancel (Esc)";
-const CLOSE_CONFIRM = "Close (Enter)";
+export const CLOSE_CANCEL = "Cancel (Esc)";
+export const CLOSE_CONFIRM = "Close (Enter)";
 
 export function dialogCols(viewWidth: float64, cellWidth: float64): int32 {
 	if (cellWidth <= 0) { return MIN_COLS; }
@@ -85,7 +85,7 @@ function shownLine(this line: Line): ShownLine {
 	return { spans: [{ text: line.text, style: styleOf(line.tone) }] };
 }
 
-function fill(list: List<ShownLine>, lines: Readonly<Span<Line>>): void {
+export function fill(list: List<ShownLine>, lines: Readonly<Span<Line>>): void {
 	while (list.length() > 0) { list.remove(list.length() - 1); }
 	for (const line of lines) { list.push(line.shownLine()); }
 }

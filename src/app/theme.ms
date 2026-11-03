@@ -36,16 +36,19 @@ export struct ButtonLook {
 	background: string;
 	heldBackground: string;
 	text: Style;
+	radius: float64;
 }
 
 export const PRIMARY_BUTTON: ButtonLook = {
 	background: "#cccccc",
 	heldBackground: "#ffffff",
 	text: { color: ON_PRIMARY, fontWeight: "bold" },
+	radius: 4,
 };
 
 export const SECONDARY_BUTTON: ButtonLook = {
 	background: "#2d2d2d",
 	heldBackground: "#454545",
 	text: { color: TEXT },
+	radius: 4,
 };

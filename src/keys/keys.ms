@@ -91,7 +91,7 @@ struct ModifierKeys {
 	left: string;
 }
 
-const MODIFIER_KEYS: Vec<ModifierKeys> = [
+const MODIFIER_KEYS: Readonly<Vec<ModifierKeys>> = [
 	{ mod: KeyMod.Shift, side: KeyMod.ShiftRight, right: "ShiftRight", left: "ShiftLeft" },
 	{ mod: KeyMod.Ctrl, side: KeyMod.CtrlRight, right: "ControlRight", left: "ControlLeft" },
 	{ mod: KeyMod.Alt, side: KeyMod.AltRight, right: "AltRight", left: "AltLeft" },

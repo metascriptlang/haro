@@ -13,8 +13,8 @@ import { hostname, tmpDir } from "std/os";
 import { fileUri, isLocalHost } from "./pwd";
 
 const MAX_URI_LENGTH: int32 = 2048;
-const SCHEMES: string[] = ["http://", "https://"];
-const PROGRAM_EXTENSIONS: string[] = [
+const SCHEMES: Readonly<string[]> = ["http://", "https://"];
+const PROGRAM_EXTENSIONS: Readonly<string[]> = [
 	".app", ".command", ".tool", ".terminal", ".workflow", ".scpt", ".pkg", ".mpkg",
 	".exe", ".com", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".msi", ".lnk", ".scr",
 	".hta", ".wsf", ".jse", ".vbe", ".reg", ".dll", ".pif", ".jar", ".url", ".cpl", ".msc",
@@ -69,9 +69,15 @@ function extensionOf(path: string): string {
 	return dot < 0 ? "" : path.slice(start + dot, end).toLowerCase();
 }
 
+function programExtension(extension: string): boolean {
+	for (const listed of PROGRAM_EXTENSIONS) {
+		if (listed == extension) { return true; }
+	}
+	return false;
+}
+
 function runsAsProgram(path: string): boolean {
-	return PROGRAM_EXTENSIONS.includes(extensionOf(path)) ||
-		PROGRAM_EXTENSIONS.includes(extensionOf(realpath(path)));
+	return programExtension(extensionOf(path)) || programExtension(extensionOf(realpath(path)));
 }
 
 when (windows) {

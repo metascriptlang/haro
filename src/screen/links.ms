@@ -3,13 +3,13 @@ export struct UrlRange {
 	to: int32;
 }
 
-const SCHEMES: string[] = [
+const SCHEMES: Readonly<string[]> = [
 	"https://", "http://", "mailto:", "ftp://", "file:", "ssh:", "git://", "tel:", "magnet:",
 	"ipfs://", "ipns://", "gemini://", "gopher://", "news:",
 ];
 
 const URL_PUNCTUATION = "-.~:/?#@!$&*+,;=%";
-const NON_WORD_RANGES: int32[] = [0xA0, 0xA0, 0x2000, 0x206F, 0x3000, 0x303F];
+const NON_WORD_RANGES: Readonly<int32[]> = [0xA0, 0xA0, 0x2000, 0x206F, 0x3000, 0x303F];
 
 function isWord(c: int32): boolean {
 	if (c >= 0x80) {

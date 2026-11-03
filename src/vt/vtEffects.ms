@@ -82,7 +82,7 @@ export function openEffects(
 	const e: Effects = {
 		state: state,
 		replies: [],
-		events: NO_EVENTS,
+		events: noEvents(),
 		heldSinceMs: null,
 		holdFailed: false,
 		freed: false,
@@ -453,10 +453,6 @@ export struct VtEvents {
 	shell: Vec<ShellMark>;
 }
 
-export const NO_EVENTS: VtEvents = {
-	bells: 0,
-	titleChanged: false,
-	pwdChanged: false,
-	notifications: [],
-	shell: [],
-};
+export function noEvents(): VtEvents {
+	return { bells: 0, titleChanged: false, pwdChanged: false, notifications: [], shell: [] };
+}

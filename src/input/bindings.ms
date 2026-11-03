@@ -48,11 +48,11 @@ struct Binding {
 when (macos) {
 	export const CLIPBOARD_MODS: BitSet<KeyMod> = SUPER;
 	export const APP_MODS: BitSet<KeyMod> = SUPER;
-	const OS_CHORDS: Vec<Binding> = [];
+	const OS_CHORDS: Readonly<Vec<Binding>> = [];
 } else when (windows) {
 	export const CLIPBOARD_MODS: BitSet<KeyMod> = CTRL | SHIFT;
 	export const APP_MODS: BitSet<KeyMod> = CTRL;
-	const OS_CHORDS: Vec<Binding> = [
+	const OS_CHORDS: Readonly<Vec<Binding>> = [
 		{ code: "Insert", mods: CTRL, action: Action.Copy, screen: Screen.Any },
 		{ code: "Insert", mods: SHIFT, action: Action.Paste, screen: Screen.Any },
 		{ code: "Enter", mods: NO_MODS, action: Action.Copy, screen: Screen.Any },
@@ -60,13 +60,13 @@ when (macos) {
 } else {
 	export const CLIPBOARD_MODS: BitSet<KeyMod> = CTRL | SHIFT;
 	export const APP_MODS: BitSet<KeyMod> = CTRL;
-	const OS_CHORDS: Vec<Binding> = [
+	const OS_CHORDS: Readonly<Vec<Binding>> = [
 		{ code: "Insert", mods: CTRL, action: Action.Copy, screen: Screen.Any },
 		{ code: "Insert", mods: SHIFT, action: Action.Paste, screen: Screen.Any },
 	];
 }
 
-const BINDINGS: Vec<Binding> = [
+const BINDINGS: Readonly<Vec<Binding>> = [
 	{ code: "KeyC", mods: CLIPBOARD_MODS, action: Action.Copy, screen: Screen.Any },
 	{ code: "KeyV", mods: CLIPBOARD_MODS, action: Action.Paste, screen: Screen.Any },
 	{ code: "KeyA", mods: CLIPBOARD_MODS, action: Action.SelectAll, screen: Screen.Any },

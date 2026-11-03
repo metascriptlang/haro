@@ -32,7 +32,7 @@ import {
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import {
 	Effects,
-	NO_EVENTS,
+	noEvents,
 	VtEvents,
 	answerRead,
 	closeEffects,
@@ -220,7 +220,7 @@ export function titleChanged(this vt: Vt): boolean {
 export function takeEvents(this vt: Vt): VtEvents {
 	const e = vt.effects;
 	const events = e.events;
-	e.events = NO_EVENTS;
+	e.events = noEvents();
 	return events;
 }
 

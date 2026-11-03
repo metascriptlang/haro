@@ -13,6 +13,7 @@ const TICK: float64 = 0.017;
 const ANTICIPATION: float64 = 0.2;
 const MAX_WINDUP: float64 = 2;
 const STOP_DISTANCE: float64 = 0.1;
+const REST_PIXELS: float64 = 0.5;
 const MAX_TICKS_PER_FRAME: int32 = 30;
 
 const PCG_MULTIPLIER: uint64 = 6364136223846793005;
@@ -136,7 +137,7 @@ function settle(this s: Spring, dt: float64, span: float64): Spring {
 	const b = s.position * omega + s.velocity;
 	const c = Math.exp(-omega * dt);
 	const position = (a + b * dt) * c;
-	if (Math.abs(position) < 0.01) { return AT_REST; }
+	if (Math.abs(position) < REST_PIXELS) { return AT_REST; }
 	return { position: position, velocity: c * (-a * omega - b * dt * omega + b) };
 }
 
@@ -510,6 +511,16 @@ test "the cursor rests with its corners on the cell it was moved to" {
 	const shown = t.shownCorners();
 	assert shown[0] == point(30, 40);
 	assert shown[2] == point(40, 60);
+}
+
+test "a long jump without dust stops asking for frames within half a pixel and still shows the cursor on its cell" {
+	const t = placed(30, 40);
+	t.density = 0;
+	t.moveTo(1030, 640);
+	const frames = t.settled(CursorShape.Block, 10, 20);
+	assert frames > 0 && frames <= 28;
+	assert t.shownCorners()[0] == point(1030, 640);
+	assert t.shownCorners()[2] == point(1040, 660);
 }
 
 test "a typed character bounces the whole cursor past the new cell and back onto it" {

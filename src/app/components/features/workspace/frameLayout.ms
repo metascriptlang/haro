@@ -2,7 +2,7 @@ import { visible } from "../../../../input/paste";
 import {
 	Axis,
 	CellRect,
-	Frame,
+	Node,
 	PaneId,
 	Placed,
 	Split,
@@ -10,8 +10,9 @@ import {
 	ancestors,
 	cellRect,
 	firstCells,
+	panes,
 } from "../../../../workspace/tree";
-import { Direction, Tab, layout } from "../../../../workspace/workspace";
+import { Tab, layout } from "../../../../workspace/workspace";
 
 export enum DividerStyle {
 	Cell,
@@ -22,7 +23,7 @@ export struct DividerLine {
 	split: Split;
 	rect: CellRect;
 	at: int32;
-	handle: PaneId | null;
+	before: PaneId;
 }
 
 export struct Segment {
@@ -54,11 +55,6 @@ export struct FrameLayout {
 	lines: DividerLine[];
 	segments: Segment[];
 	titles: TitleSpot[];
-}
-
-export struct ResizeStep {
-	direction: Direction;
-	cells: int32;
 }
 
 export struct Box {
@@ -163,6 +159,11 @@ function titled(titles: TitleSpot[], x: int32, y: int32): boolean {
 	return false;
 }
 
+function lastPane(n: Node): PaneId {
+	const order = n.panes();
+	return order[order.length - 1].id;
+}
+
 function linesOf(
 	tab: Tab,
 	placed: Placed[],
@@ -170,7 +171,6 @@ function linesOf(
 	divider: int32,
 ): DividerLine[] {
 	const lines: DividerLine[] = [];
-	const nearest: Frame[][] = [];
 	const ids: PaneId[] = [tab.focused];
 	for (const p of placed) {
 		if (!(p.pane.id == tab.focused)) { ids.push(p.pane.id); }
@@ -189,23 +189,8 @@ function linesOf(
 				split: f.split,
 				rect: f.rect,
 				at: start(f.rect, f.split.axis) + f.split.firstCells(size, divider),
-				handle: null,
+				before: lastPane(f.split.first),
 			});
-		}
-		nearest.push(frames);
-	}
-	for (let n: int32 = 0; n < ids.length; n++) {
-		let sideBySide = false;
-		let stacked = false;
-		for (const f of nearest[n]) {
-			const vertical = f.split.axis == Axis.SideBySide;
-			if (vertical ? sideBySide : stacked) { continue; }
-			if (vertical) { sideBySide = true; } else { stacked = true; }
-			for (let i: int32 = 0; i < lines.length; i++) {
-				if (lines[i].split === f.split && lines[i].handle === null) {
-					lines[i].handle = ids[n];
-				}
-			}
 		}
 	}
 	return lines;
@@ -334,17 +319,11 @@ export function dragStep(
 	this l: DividerLine,
 	pointerCells: float64,
 	divider: int32,
-): ResizeStep | null {
+): int32 {
 	const target = divider > 0
 		? Math.floor(pointerCells) as int32
 		: Math.floor(pointerCells + 0.5) as int32;
-	const delta = target - l.currentAt(divider);
-	if (delta == 0) { return null; }
-	const grows = delta > 0;
-	const direction = l.split.axis == Axis.SideBySide
-		? (grows ? Direction.Right : Direction.Left)
-		: (grows ? Direction.Down : Direction.Up);
-	return { direction: direction, cells: Math.abs(delta) as int32 };
+	return target - l.currentAt(divider);
 }
 
 export function paneBox(

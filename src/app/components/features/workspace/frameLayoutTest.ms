@@ -1,7 +1,6 @@
 import { Axis, PaneId, cellRect } from "../../../../workspace/tree";
 import {
 	CommandKind,
-	Direction,
 	Tab,
 	Workspace,
 	WorkspaceCommand,
@@ -207,53 +206,50 @@ test "the junction characters follow the cells around them" {
 	assert rowGlyphs(frame(left)) == repeated("─", 40);
 }
 
-test "the drag handle is a pane whose nearest split on that axis owns the divider" {
+test "every divider names the last pane before it, the middle one of four columns too" {
 	const w = opened(1);
 	split(w, 1, Axis.SideBySide);
-	split(w, 2, Axis.SideBySide);
 	focus(w, 1);
 	split(w, 1, Axis.SideBySide);
+	focus(w, 2);
+	split(w, 2, Axis.SideBySide);
 	const f = frame(w);
 	assert f.lines.length == 3;
-	let unreachable: int32 = 0;
-	for (const l of f.lines) {
-		const handle = l.handle;
-		if (handle === null) { unreachable += 1; }
-	}
-	assert unreachable == 1;
-	const outer = f.lines[0];
-	assert outer.handle === null;
-	const inner = frame(w).lines[1];
-	const handle = inner.handle;
-	assert handle !== null && handle == pane(4);
+	assert lineAt(f, Axis.SideBySide, 40).before == pane(3);
+	assert lineAt(f, Axis.SideBySide, 20).before == pane(1);
+	assert lineAt(f, Axis.SideBySide, 61).before == pane(2);
+	const stacked = opened(1);
+	split(stacked, 1, Axis.Stacked);
+	focus(stacked, 1);
+	split(stacked, 1, Axis.SideBySide);
+	const below = frame(stacked);
+	assert lineAt(below, Axis.Stacked, 12).before == pane(3);
 }
 
-test "dragging a divider resizes by whole cells in the model's direction" {
+test "dragging a divider moves it by whole cells, negative toward the start" {
 	const w = opened(1);
 	split(w, 1, Axis.SideBySide);
 	const l = frame(w).lines[0];
-	assert l.dragStep(40.9, 1) === null;
+	assert l.dragStep(40.9, 1) == 0;
 	const right = l.dragStep(43.2, 1);
-	assert right !== null && right.direction == Direction.Right;
-	assert right !== null && right.cells == 3;
-	if (right !== null) {
-		must(w, { kind: CommandKind.Resize, direction: right.direction, cells: right.cells });
-	}
+	assert right == 3;
+	must(w, {
+		kind: CommandKind.MoveDivider,
+		pane: l.before,
+		axis: Axis.SideBySide,
+		by: right,
+	});
 	assert l.currentAt(1) == 43;
 	assert frame(w).lines[0].at == 43;
-	const left = l.dragStep(41.0, 1);
-	assert left !== null && left.direction == Direction.Left && left.cells == 2;
-	const down = frame(splitOnce(1, Axis.Stacked)).lines[0].dragStep(14.0, 1);
-	assert down !== null && down.direction == Direction.Down && down.cells == 2;
-	const up = frame(splitOnce(1, Axis.Stacked)).lines[0].dragStep(3.5, 1);
-	assert up !== null && up.direction == Direction.Up && up.cells == 9;
+	assert l.dragStep(41.0, 1) == -2;
+	assert frame(splitOnce(1, Axis.Stacked)).lines[0].dragStep(14.0, 1) == 2;
+	assert frame(splitOnce(1, Axis.Stacked)).lines[0].dragStep(3.5, 1) == -9;
 }
 
 test "without divider cells a drag snaps to the nearest cell boundary" {
 	const l = frame(splitOnce(0, Axis.SideBySide)).lines[0];
-	assert l.dragStep(41.4, 0) === null;
-	const step = l.dragStep(41.6, 0);
-	assert step !== null && step.direction == Direction.Right && step.cells == 1;
+	assert l.dragStep(41.4, 0) == 0;
+	assert l.dragStep(41.6, 0) == 1;
 }
 
 test "a title sits on the border row above its pane, clipped to the pane's width" {

@@ -12,7 +12,6 @@ import { DEFAULT_FONT, FontStyle, registerFace } from "../../../../../../void/sr
 import { Axis, PaneId } from "../../../../workspace/tree";
 import {
 	CommandKind,
-	Direction,
 	Workspace,
 	WorkspaceCommand,
 	activeTab,
@@ -91,9 +90,9 @@ function rigWith(divider: int32, look: FrameLook): Rig {
 			r.log.push(`focus ${id as int32}`);
 			run(r, { kind: CommandKind.FocusPane, pane: id });
 		}}
-		onResize={(direction: Direction, cells: int32): void => {
-			r.log.push(`resize ${direction.toString()} ${cells}`);
-			run(r, { kind: CommandKind.Resize, direction: direction, cells: cells });
+		onMoveDivider={(before: PaneId, axis: Axis, by: int32): void => {
+			r.log.push(`move ${before as int32} ${by}`);
+			run(r, { kind: CommandKind.MoveDivider, pane: before, axis: axis, by: by });
 		}}
 	/>), vh.host, vh.root);
 	laidOutView(vh);
@@ -127,21 +126,21 @@ test "dragging the divider resizes cell by cell from where the model left it" {
 	assert r.log.length == 0;
 	r.vh.pointerMove(431.0, 100.0, 1, true);
 	flush();
-	assert r.log.join("|") == "resize Right 3", r.log.join("|");
+	assert r.log.join("|") == "move 1 3", r.log.join("|");
 	assert laidOut(r.w).lines[0].at == 43;
 	r.vh.pointerMove(395.0, 100.0, 1, true);
 	flush();
-	assert r.log.join("|") == "resize Right 3|resize Left 4", r.log.join("|");
+	assert r.log.join("|") == "move 1 3|move 1 -4", r.log.join("|");
 	r.vh.pointerMove(5.0, 100.0, 1, true);
 	flush();
-	assert r.log[2] == "resize Left 39";
+	assert r.log[2] == "move 1 -39";
 	assert laidOut(r.w).lines[0].at == 1;
 	r.vh.pointerMove(15.0, 100.0, 1, true);
 	flush();
 	assert r.log.length == 3;
 	r.vh.pointerMove(395.0, 100.0, 1, true);
 	flush();
-	assert r.log[3] == "resize Right 38";
+	assert r.log[3] == "move 1 38";
 	r.vh.pointerUp(395.0, 100.0, 1);
 	flush();
 	r.vh.pointerMove(500.0, 100.0, 0, false);
@@ -150,7 +149,7 @@ test "dragging the divider resizes cell by cell from where the model left it" {
 	assert laidOut(r.w).lines[0].at == 39;
 }
 
-test "dragging a divider through an unfocused pane focuses its handle first" {
+test "dragging a divider away from the focused pane moves it and keeps the focus" {
 	const r = rig();
 	settle(r, { kind: CommandKind.FocusPane, pane: 1 as PaneId });
 	settle(r, { kind: CommandKind.Split, pane: 1 as PaneId, axis: Axis.Stacked });
@@ -161,7 +160,24 @@ test "dragging a divider through an unfocused pane focuses its handle first" {
 	flush();
 	r.vh.pointerUp(100.0, 290.0, 1);
 	flush();
-	assert r.log.join("|") == "focus 1|resize Down 2", r.log.join("|");
+	assert r.log.join("|") == "move 1 2", r.log.join("|");
+	assert laidOut(r.w).focused == (2 as PaneId);
+}
+
+test "the middle divider of four columns can be dragged" {
+	const r = rig();
+	settle(r, { kind: CommandKind.FocusPane, pane: 1 as PaneId });
+	settle(r, { kind: CommandKind.Split, pane: 1 as PaneId, axis: Axis.SideBySide });
+	settle(r, { kind: CommandKind.FocusPane, pane: 2 as PaneId });
+	settle(r, { kind: CommandKind.Split, pane: 2 as PaneId, axis: Axis.SideBySide });
+	r.vh.pointerDown(405.0, 100.0, 1);
+	flush();
+	r.vh.pointerMove(431.0, 100.0, 1, true);
+	flush();
+	r.vh.pointerUp(431.0, 100.0, 1);
+	flush();
+	assert r.log.join("|") == "move 3 3", r.log.join("|");
+	assert laidOut(r.w).focused == (4 as PaneId);
 }
 
 test "a thin line without divider cells is grabbed around it and snaps to cell boundaries" {
@@ -173,6 +189,6 @@ test "a thin line without divider cells is grabbed around it and snaps to cell b
 	flush();
 	r.vh.pointerUp(436.0, 100.0, 1);
 	flush();
-	assert r.log.join("|") == "resize Right 3", r.log.join("|");
+	assert r.log.join("|") == "move 1 3", r.log.join("|");
 	assert laidOut(r.w).lines[0].at == 44;
 }

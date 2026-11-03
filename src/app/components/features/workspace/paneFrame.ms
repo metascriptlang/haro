@@ -4,7 +4,6 @@ import { NeonNode } from "../../../../../../neon/src/render/node";
 import { NeonEvent } from "../../../../../../neon/src/render/event";
 import { View } from "../../../../../../neon/src/components/primitives";
 import { Axis, PaneId, Placed } from "../../../../workspace/tree";
-import { Direction } from "../../../../workspace/workspace";
 import { CellMetrics, CellText } from "../../ui/cellText";
 import {
 	Box,
@@ -42,7 +41,7 @@ export interface PaneFrameProps {
 	look: Accessor<FrameLook>;
 	pane: (id: PaneId) => NeonNode;
 	onFocusPane: (id: PaneId) => void;
-	onResize: (direction: Direction, cells: int32) => void;
+	onMoveDivider: (before: PaneId, axis: Axis, by: int32) => void;
 }
 
 interface Drag {
@@ -84,15 +83,12 @@ function grabbed(
 ): void {
 	const f = props.layout();
 	const line = f.lines[s.line];
-	const handle = line.handle;
-	if (handle === null) { return; }
 	const box = segmentBox(s, f, props.look(), props.metrics);
 	const vertical = s.axis == Axis.SideBySide;
 	d.origin = vertical
 		? e.x - e.locationX - box.left
 		: e.y - e.locationY - box.top;
 	d.line = line;
-	if (!(handle == f.focused)) { props.onFocusPane(handle); }
 }
 
 function dragged(this d: Drag, props: PaneFrameProps, e: NeonEvent): void {
@@ -108,8 +104,8 @@ function dragged(this d: Drag, props: PaneFrameProps, e: NeonEvent): void {
 		: props.metrics.rowHeight();
 	if (cell <= 0) { return; }
 	const at = vertical ? e.x : e.y;
-	const step = line.dragStep((at - d.origin) / cell, props.layout().divider);
-	if (step !== null) { props.onResize(step.direction, step.cells); }
+	const by = line.dragStep((at - d.origin) / cell, props.layout().divider);
+	if (by != 0) { props.onMoveDivider(line.before, line.split.axis, by); }
 }
 
 function CellSegment(props: {

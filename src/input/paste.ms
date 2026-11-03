@@ -77,7 +77,7 @@ export function replyToRead(code: string, mods: BitSet<KeyMod>): Reply {
 	};
 }
 
-function wrap(text: string, cols: int32): Vec<string> {
+export function wrap(text: string, cols: int32): Vec<string> {
 	let out: Vec<string> = [];
 	let line = "";
 	for (const word of text.split(" ")) {

@@ -427,6 +427,19 @@ export function animate(
 	return animating;
 }
 
+export function rest(this t: Trail, shape: CursorShape, w: float64, h: float64): boolean {
+	if (t.reshape(shape)) { t.remainder = 0; }
+	t.cell = point(w, h);
+	const center = t.destination.plus(point(w * 0.5, h * 0.5));
+	t.place();
+	t.placed = true;
+	t.jumped = false;
+	for (const c of t.corners) { c.snap(center, w, h); }
+	t.particles = [];
+	t.spawnedFrom = t.currents().middle();
+	return false;
+}
+
 export function resting(this t: Trail): boolean {
 	if (!t.headResting()) { return false; }
 	for (const c of t.corners) {
@@ -511,6 +524,17 @@ test "the cursor rests with its corners on the cell it was moved to" {
 	const shown = t.shownCorners();
 	assert shown[0] == point(30, 40);
 	assert shown[2] == point(40, 60);
+}
+
+test "an unfocused cursor rests at once on its cell, drops its particles and asks for no frame" {
+	const t = placed(30, 40);
+	t.moveTo(130, 140);
+	assert t.animate(FRAME, CursorShape.Block, 10, 20);
+	assert !t.rest(CursorShape.Block, 10, 20);
+	assert t.resting();
+	assert t.particles.length == 0;
+	assert t.shownCorners()[0] == point(130, 140);
+	assert !t.animate(FRAME, CursorShape.Block, 10, 20);
 }
 
 test "a long jump without dust stops asking for frames within half a pixel and still shows the cursor on its cell" {

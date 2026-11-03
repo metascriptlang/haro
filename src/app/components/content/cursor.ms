@@ -220,7 +220,9 @@ function step(this c: CursorModel, now: number): void {
 	const dt = Math.max(0, (now - c.last) / 1000);
 	c.last = now;
 	const shape = c.look.shapeOf(c.focused);
-	const moving = c.trail.animate(dt, shape, c.cursorWidth(), c.metrics.rowHeight());
+	const w = c.cursorWidth();
+	const h = c.metrics.rowHeight();
+	const moving = c.focused ? c.trail.animate(dt, shape, w, h) : c.trail.rest(shape, w, h);
 	if (!c.trail.resting()) {
 		c.holdBlink();
 	} else if (c.blinkTimer === null) {

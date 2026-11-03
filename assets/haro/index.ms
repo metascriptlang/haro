@@ -142,6 +142,17 @@ export interface HaroConfig {
 	optionAsAlt?: "neither" | "left" | "right" | "both";
 	copyOnSelect?: boolean;
 	cursor?: CursorEffects;
+	dividerStyle?: "cell" | "line";
+	dividerColor?: string;
+	focusedDividerColor?: string;
+	paneGap?: number;
+	paneTitle?: "border" | "none";
+	paneResizeStep?: int32;
+	sidebarPosition?: "left" | "right";
+	sidebarVisible?: boolean;
+	sidebarWidth?: int32;
+	confirmClose?: boolean;
+	newPaneCwd?: "focused" | "start";
 	onKey?: (e: KeyPress) => KeyAnswer;
 	onPrompt?: (e: Prompt) => void;
 	onCommandDone?: (e: CommandDone) => void;

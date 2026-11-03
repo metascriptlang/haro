@@ -59,16 +59,12 @@ import {
 	startIn,
 	watchConfig,
 } from "./configWatch";
-import { smoke, smokeFlood, smokeReplay, smokeTyping } from "./smoke";
-import { exitCodeText } from "../controller/term";
-import { Shell, closeThen, closed, opened, portOf } from "../controller/shell";
-import { View, open } from "./frame";
+import { smoke, smokeFlood, smokePanes, smokeReplay, smokeTyping } from "./smoke";
+import { portOf } from "../controller/shell";
 import { ptySetWake } from "../pty/nativePty.h";
-import {
-	AppHost,
-	ConfigChange,
-	ConfigOutcome,
-} from "./components/features/terminal/paneModel";
+import { ConfigChange, ConfigOutcome } from "./components/features/terminal/paneModel";
+import { RunningPane } from "./panes";
+import { WindowHost, WorkspaceView, closeShells, open, quit } from "./workspaceView";
 
 const APP_TITLE = "Haro";
 const NOTIFICATION_ID = "haro";
@@ -101,7 +97,13 @@ when (macos) {
 					MenuItem.standard(MenuRole.Quit),
 				],
 			},
-			{ title: "File", items: [MenuItem.action("close_window", "Close Window", "w", ModCmd)] },
+			{
+				title: "File",
+				items: [
+					MenuItem.action("close_pane", "Close Pane", "w", ModCmd),
+					MenuItem.action("close_window", "Close Window", "w", ModCmd | ModShift),
+				],
+			},
 			{
 				title: "Edit",
 				items: [
@@ -129,7 +131,7 @@ when (macos) {
 }
 
 const pace = Pace.start();
-let waiting: () => void = (): void => {};
+let waiting: Vec<() => void> = [];
 const stats = Stats.empty();
 const config = ConfigWatch.forFile(flagValue("--config") ?? configPath());
 
@@ -223,24 +225,22 @@ function probableCli(): boolean {
 	}
 }
 
-function ranNow(run: () => void): void {
+function ranNow(runs: Vec<() => void>): void {
 	pace.applied();
 	const _id = requestFrame((time: number): void => {
-		if (pace.ticked()) { ranNow(waiting); }
+		if (!pace.ticked()) { return; }
+		const next = waiting;
+		waiting = [];
+		ranNow(next);
 	});
-	run();
+	for (const run of runs) { run(); }
 }
 
 function inFrame(run: () => void): void {
 	match (pace.asksFrame()) {
-		Slot.Now => { ranNow(run); },
-		Slot.Tick => { waiting = run; },
-		Slot.Taken => {},
+		Slot.Now => { ranNow([run]); },
+		Slot.Tick | Slot.Taken => { waiting.push(run); },
 	}
-}
-
-function quitWith(shell: Shell): () => void {
-	return (): void => { const _closing = closeThen(shell, (): void => { exit(0); }); };
 }
 
 function withHooks<R>(absent: R, use: (hooks: Hooks) => R): R {
@@ -248,34 +248,38 @@ function withHooks<R>(absent: R, use: (hooks: Hooks) => R): R {
 	return hooks === null ? absent : use(hooks);
 }
 
-async function openWindow(shell: Shell, view: View, exited: (code: int32) => void): Promise<int32> {
+interface Launch {
+	command: string;
+	startIn: string | null;
+	shellScripts: string | null;
+	recording: string | null;
+}
+
+async function openWindow(
+	launch: Launch,
+	started: (v: WorkspaceView, first: RunningPane) => void,
+): Promise<int32> {
 	registerFallbacks();
 	const families = familyList(config.loaded.faces);
-	const host: AppHost = {
-		desktop: {
-			setTitle: (title: string, belled: boolean): void => {
-				setWindowTitle(`${belled ? "🔔 " : ""}${titleOr(title)}`);
-			},
-			notify: (title: string, body: string): void => {
-				notify(titleOr(title), body, NOTIFICATION_ID);
-			},
-			openLink: (uri: string): void => { openExternal(uri); },
-			attention: (): void => {
-				const win = getWindow("main");
-				if (win !== null) { requestUserAttention(win, AttentionInformational); }
-			},
-			setHand: (on: boolean): void => {
-				const win = getWindow("main");
-				if (win !== null) { setCursor(win, on ? CursorHand : CursorIbeam); }
-			},
-			openConfig: openConfig,
-			reloadConfig: reloadConfig,
-			close: (): void => {
-				note("Close Window or a keybind closed the window");
-				quitWith(shell)();
-			},
-			exited: exited,
+	const host: WindowHost = {
+		setTitle: (title: string, belled: boolean): void => {
+			setWindowTitle(`${belled ? "🔔 " : ""}${titleOr(title)}`);
 		},
+		notify: (title: string, body: string): void => {
+			notify(titleOr(title), body, NOTIFICATION_ID);
+		},
+		openLink: (uri: string): void => { openExternal(uri); },
+		attention: (): void => {
+			const win = getWindow("main");
+			if (win !== null) { requestUserAttention(win, AttentionInformational); }
+		},
+		setHand: (on: boolean): void => {
+			const win = getWindow("main");
+			if (win !== null) { setCursor(win, on ? CursorHand : CursorIbeam); }
+		},
+		openConfig: openConfig,
+		reloadConfig: reloadConfig,
+		quit: (): void => { exit(0); },
 		report: { note: note, fail: fail },
 		timing: { clock: (): float64 => performance.now(), schedule: inFrame },
 		keyHook: {
@@ -346,8 +350,18 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 				config.watchConfig(apply);
 			},
 		},
+		stats: stats,
 		fontFamily: families.join(", "),
 	};
+	const view = WorkspaceView.open(
+		host,
+		config.loaded.config,
+		launch.command,
+		launch.shellScripts,
+		launch.startIn,
+		launch.recording,
+	);
+	view.started = (first: RunningPane): void => { started(view, first); };
 	if (hasFlag("--stats")) { logStatsEverySecond(pace, stats); }
 	when (macos) {
 		const bar = setAppMenu(menuBar());
@@ -359,36 +373,31 @@ async function openWindow(shell: Shell, view: View, exited: (code: int32) => voi
 		font: families[0],
 		fontFamily: families.join(", "),
 	};
-	const code = runWindow(opts, (): NeonNode => {
-		return App(portOf(shell), view, host, config.loaded.config, stats);
-	});
+	const code = runWindow(opts, (): NeonNode => App(view));
 	note("the window closed");
-	await closed(shell);
+	await view.closeShells();
 	return code;
 }
 
-async function started(shell: Shell): Promise<void> {
-	const refused = await opened(shell);
-	if (refused !== null) { fail(`open: ${refused.toString()}`); }
+function quitter(v: WorkspaceView): () => void {
+	return (): void => { const _quit = v.quit(); };
 }
 
 async function runShell(command: string): Promise<int32> {
-	const cwd = config.startIn(probableCli(), homeDir());
-	const shell = new Shell({
-		command: command,
-		cwd: cwd,
-		recording: null,
-		shellScripts: config.shellScripts(),
-	});
-	await started(shell);
-	const view = View.open();
 	ptySetWake(ionWakeLoop);
-	if (hasFlag("--smoke")) { smoke(portOf(shell), view, quitWith(shell)); }
-	if (hasFlag("--flood")) { smokeFlood(portOf(shell), view, pace, quitWith(shell)); }
-	if (hasFlag("--typing")) { smokeTyping(portOf(shell), quitWith(shell)); }
-	return await openWindow(shell, view, (code: int32): void => {
-		note(`the shell exited with code ${exitCodeText(code)}`);
-		quitWith(shell)();
+	const launch: Launch = {
+		command: command,
+		startIn: config.startIn(probableCli(), homeDir()),
+		shellScripts: config.shellScripts(),
+		recording: null,
+	};
+	return await openWindow(launch, (v: WorkspaceView, first: RunningPane): void => {
+		const io = portOf(first.shell);
+		const rows = first.model.view;
+		if (hasFlag("--smoke")) { smoke(io, rows, quitter(v)); }
+		if (hasFlag("--flood")) { smokeFlood(io, rows, pace, quitter(v)); }
+		if (hasFlag("--typing")) { smokeTyping(io, quitter(v)); }
+		if (hasFlag("--smoke-panes")) { smokePanes(v); }
 	});
 }
 
@@ -397,12 +406,14 @@ async function runReplay(path: string): Promise<int32> {
 	if (!recording.ok) {
 		fail(`the recording ${path} did not read`);
 	}
-	const shell = new Shell({ command: "", cwd: null, recording: recording.value });
-	await started(shell);
-	const view = View.open();
-	if (hasFlag("--smoke")) { smokeReplay(view, quitWith(shell)); }
-	return await openWindow(shell, view, (code: int32): void => {
-		console.log(`haro: the recording ended with code ${exitCodeText(code)}`);
+	const launch: Launch = {
+		command: "",
+		startIn: null,
+		shellScripts: null,
+		recording: recording.value,
+	};
+	return await openWindow(launch, (v: WorkspaceView, first: RunningPane): void => {
+		if (hasFlag("--smoke")) { smokeReplay(first.model.view, quitter(v)); }
 	});
 }
 

@@ -6,7 +6,8 @@ import { Replay, ofText, toPty } from "../pty/replay";
 import { Pty, PtyError } from "../pty/transport";
 import { Annotation, Decoration, FrameRows, none } from "./rows";
 import { Action } from "../input/bindings";
-import { Hit } from "./controls";
+import { Hit, vtOf } from "./controls";
+import { pwd } from "../vt/vt";
 import {
 	Io,
 	IoFrame,
@@ -41,7 +42,7 @@ import {
 	undecorate,
 	wheel,
 } from "./io";
-import { OpenPty, TermError, openTerm } from "./term";
+import { OpenPty, TermError, busy, openTerm } from "./term";
 
 export struct PtySpec {
 	command: string;
@@ -129,6 +130,20 @@ export actor Shell {
 		if (io === null) { return FrameRows.none(); }
 		let got = io.relight(ink);
 		return move got;
+	}
+
+	busy(): boolean {
+		const io = this.io;
+		return io !== null && io.term.busy();
+	}
+
+	pwd(): string | null {
+		const io = this.io;
+		if (io === null) { return null; }
+		const vt = io.term.vtOf();
+		if (vt === null) { return null; }
+		const got = vt.pwd();
+		return got.ok && got.value != "" ? got.value : null;
 	}
 
 	shutdown(): boolean {

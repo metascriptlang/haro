@@ -9,7 +9,6 @@ import {
 	setScrollback,
 } from "../vt/vt";
 import { Action, Keybind } from "../input/bindings";
-import { Reply } from "../input/paste";
 import { Pending, pendingOf } from "./pending";
 import { KeyEvent, OptionAsAlt, modifierKey } from "../keys/keys";
 import { Link } from "../screen/linksGrid";
@@ -29,7 +28,7 @@ import { Mark } from "./mark";
 import { sendReplies } from "../session/session";
 import { Asks, Controls, Hit, holding, refit, takeAsks, typed, vtOf } from "./controls";
 import { cancel, clipboardAsked, clipboardText, confirm } from "./clipboard";
-import { act, answerClose, closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
+import { act, closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
 import {
 	autoscrollTick,
 	endDrag,
@@ -333,22 +332,14 @@ export function closeKey(this io: Io): void {
 }
 
 export function closeWindow(this io: Io): void {
-	io.controls.closeWindow(io.term);
+	io.controls.closeWindow();
 }
 
 export function confirmDialog(this io: Io): void {
-	if (io.controls.closing) {
-		io.controls.answerClose(Reply.Confirm);
-		return;
-	}
 	io.check(Where.Paste, io.controls.confirm(io.term));
 }
 
 export function cancelDialog(this io: Io): void {
-	if (io.controls.closing) {
-		io.controls.answerClose(Reply.Cancel);
-		return;
-	}
 	io.check(Where.Clipboard, io.controls.cancel(io.term));
 }
 
@@ -466,7 +457,7 @@ export function frame(this io: Io): IoFrame {
 	return {
 		frame: frame,
 		asks: c.takeAsks(),
-		pending: pendingOf(c.held, c.reading, c.closing),
+		pending: pendingOf(c.held, c.reading),
 		exit: exit,
 		autoscroll: c.autoscroll != 0,
 		again: again,

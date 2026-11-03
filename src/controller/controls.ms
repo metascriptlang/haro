@@ -50,7 +50,6 @@ export interface Controls {
 	autoscroll: int32;
 	keybinds: Vec<Keybind>;
 	consumedKey: string;
-	closing: boolean;
 	ended: boolean;
 	asks: Asks;
 	waiting: Vec<ClipRead>;
@@ -66,7 +65,6 @@ export function open(this typeof Controls): Controls {
 		autoscroll: 0,
 		keybinds: [],
 		consumedKey: "",
-		closing: false,
 		ended: false,
 		asks: Asks.none(),
 		waiting: [],
@@ -91,7 +89,7 @@ export function askRead(this c: Controls, kind: ClipRead): void {
 }
 
 export function holding(this c: Controls): boolean {
-	return c.held !== null || c.reading !== null || c.closing || c.ended;
+	return c.held !== null || c.reading !== null || c.ended;
 }
 
 export function refit(

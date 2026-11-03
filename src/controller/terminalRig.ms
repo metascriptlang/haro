@@ -111,10 +111,18 @@ export interface Board {
 	offer: string;
 	reads: int32;
 	closed: int32;
+	actions: string;
 }
 
 export function boardOf(offer: string): Board {
-	return { opened: "", copied: "", offer: offer, reads: 0, closed: 0 };
+	return {
+		opened: "",
+		copied: "",
+		offer: offer,
+		reads: 0,
+		closed: 0,
+		actions: "",
+	};
 }
 
 export function settle(this board: Board, c: Controls, t: Term): Result<void, TermError> {
@@ -123,6 +131,7 @@ export function settle(this board: Board, c: Controls, t: Term): Result<void, Te
 	if (copy !== null) { board.copied = copy; }
 	for (const uri of asks.opens) { board.opened = uri; }
 	if (asks.close) { board.closed += 1; }
+	for (const action of asks.actions) { board.actions += `${action.toString()} `; }
 	for (let i = 0; i < asks.reads; i++) {
 		board.reads += 1;
 		const _answered = try c.clipboardText(t, board.offer);

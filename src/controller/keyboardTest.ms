@@ -303,33 +303,22 @@ test "a keybind with a mode sends to a full-screen program and closes the window
 	}).ok;
 }
 
-test "closing while a program runs asks first: escape keeps the window and enter closes it" {
+test "close window asks the window at once, a program running or not, and holds no key" {
 	assert onTerm("$ ", (t: Term, sink: Sink): void => {
 		const c = Controls.open();
 		const board = boardOf("");
 		const clip = board;
 		sink.busy = true;
-		assert handled(settled(clip, c, t, c.closeKey(t)));
-		assert c.closing;
-		assert c.holding();
-		assert board.closed == 0;
-		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyX", NO_MODS))));
-		assert handled(settled(clip, c, t, c.keyDown(t, key("Escape", NO_MODS))));
-		assert !c.closing;
-		assert board.closed == 0;
-		assert sink.sent == "";
-		assert handled(settled(clip, c, t, c.closeKey(t)));
-		assert handled(settled(clip, c, t, c.keyDown(t, key("Enter", NO_MODS))));
-		assert !c.closing;
+		assert handled(settled(clip, c, t, c.act(t, Action.CloseWindow)));
+		assert !c.holding();
 		assert board.closed == 1;
 		sink.busy = false;
-		assert handled(settled(clip, c, t, c.closeKey(t)));
-		assert !c.closing;
+		assert handled(settled(clip, c, t, c.act(t, Action.CloseWindow)));
 		assert board.closed == 2;
 	}).ok;
 }
 
-test "a close_window keybind asks first while a program runs, like the menu" {
+test "a close_window keybind asks the window to close, like the menu" {
 	const binds: Vec<Keybind> = [
 		{
 			code: "KeyW",
@@ -346,14 +335,11 @@ test "a close_window keybind asks first while a program runs, like the menu" {
 		const clip = board;
 		sink.busy = true;
 		assert handled(settled(clip, c, t, c.keyDown(t, key("KeyW", SUPER))));
-		assert c.closing;
-		assert board.closed == 0;
-		assert handled(settled(clip, c, t, c.keyDown(t, key("Enter", NO_MODS))));
 		assert board.closed == 1;
 	}).ok;
 }
 
-test "close window from the menu runs a super w keybind for this screen and otherwise closes" {
+test "close pane from the menu runs a super w keybind for this screen and otherwise closes the pane" {
 	const binds: Vec<Keybind> = [
 		{
 			code: "KeyW",
@@ -374,11 +360,12 @@ test "close window from the menu runs a super w keybind for this screen and othe
 			assert board.closed == 0;
 			assert handled(settled(clip, c, shell, c.closeKey(shell)));
 			assert atShell.sent == "";
-			assert board.closed == 1;
+			assert board.actions == "ClosePane ";
 			c.keybinds = [];
 			assert handled(settled(clip, c, app, c.closeKey(app)));
 			assert inApp.sent == "\x1b[119;9u";
-			assert board.closed == 2;
+			assert board.actions == "ClosePane ClosePane ";
+			assert board.closed == 0;
 		}).ok;
 	}).ok;
 }
@@ -397,14 +384,10 @@ test "the close button and Quit close the window without running the super w key
 		const c = Controls.open();
 		c.keybinds = binds;
 		const board = boardOf("");
-		c.closeWindow(app);
+		c.closeWindow();
 		assert handled(settled(board, c, app, Result.ok(true)));
 		assert inApp.sent == "";
 		assert board.closed == 1;
-		inApp.busy = true;
-		c.closeWindow(app);
-		assert c.closing;
-		assert inApp.sent == "";
 	}).ok;
 }
 

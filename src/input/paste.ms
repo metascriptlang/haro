@@ -39,8 +39,6 @@ export struct Held {
 const LARGE_UNITS: int32 = 5 * 1024;
 const END_MARKER = "\x1b[201~";
 const TAB = "    ";
-const CLOSE_TITLE = "A program is still running";
-const CLOSE_BODY = "Close the window and end it?";
 const ASK_BODY = "A program is attempting to read from the clipboard. " +
 	"The current clipboard contents are shown below.";
 
@@ -205,12 +203,6 @@ export function askDialogOf(text: string, cols: int32, maxCode: int32): Dialog {
 	return dialogWith("Authorize clipboard access", ASK_BODY, text, cols, maxCode);
 }
 
-export function closeDialogOf(cols: int32): Dialog {
-	let top: Vec<Line> = [{ text: CLOSE_TITLE, tone: Tone.Title }];
-	for (const row of wrap(CLOSE_BODY, cols)) { top.push({ text: row, tone: Tone.Body }); }
-	return { top: top, code: [] };
-}
-
 test "a line break is a warning only when the program has not asked for bracketed paste" {
 	assert warningFor("one line", false) == Warning.None;
 	assert warningFor("a\nb", false) == Warning.MultiLine;
@@ -336,14 +328,6 @@ test "a close is confirmed by enter alone and cancelled by escape alone" {
 	assert replyToClose("KeyV", CLIPBOARD_MODS) == Reply.Ignore;
 	assert replyToClose("Enter", SHIFT) == Reply.Ignore;
 	assert replyToClose("KeyW", NO_MODS) == Reply.Ignore;
-}
-
-test "the close dialog says a program runs and asks to end it, with nothing to preview" {
-	const d = closeDialogOf(40);
-	assert d.top.length == 2;
-	assert d.top[0] == ({ text: "A program is still running", tone: Tone.Title } as Line);
-	assert d.top[1] == ({ text: "Close the window and end it?", tone: Tone.Body } as Line);
-	assert d.code.length == 0;
 }
 
 test "the read dialog names the access, says how big the clipboard is and previews it" {

@@ -2,7 +2,6 @@ import { KeyEvent, KeyMod } from "../keys/keys";
 import { Action, Keybind, bindFor, resolve } from "../input/bindings";
 import { clear } from "../input/pointer";
 import { ROWS_PER_NOTCH } from "../input/wheel";
-import { Reply, replyToClose } from "../input/paste";
 import {
 	PromptJump,
 	alternateScreen,
@@ -12,7 +11,7 @@ import {
 	scrollPages,
 	scrollTop,
 } from "../vt/vt";
-import { Term, TermError, busy, clearScreen, cooked, vtFailed } from "./term";
+import { Term, TermError, clearScreen, cooked, vtFailed } from "./term";
 import { Controls, holding, selectAll, typed, vtOf } from "./controls";
 import { answerHeld, copySelection, pasteFrom } from "./clipboard";
 
@@ -35,7 +34,7 @@ export function act(
 	text: string = "",
 ): Result<boolean, TermError> {
 	if (action == Action.CloseWindow) {
-		c.closeWindow(t);
+		c.closeWindow();
 		return Result.ok(true);
 	}
 	const vt = t.vtOf();
@@ -45,7 +44,7 @@ export function act(
 			try t.sendText(text);
 			try c.typed(t);
 		},
-		Action.CloseWindow => { c.closeWindow(t); },
+		Action.CloseWindow => { c.closeWindow(); },
 		Action.Copy => { return c.copySelection(t); },
 		Action.Paste => { c.pasteFrom(); },
 		Action.SelectAll => { try c.selectAll(vt); },
@@ -110,27 +109,12 @@ export function closeKey(this c: Controls, t: Term): Result<boolean, TermError> 
 		const bind = bindFor(c.keybinds, "KeyW", SUPER_ONLY, alt);
 		if (try c.runKeybind(t, bind)) { return Result.ok(true); }
 	}
-	c.closeWindow(t);
+	c.asks.actions.push(Action.ClosePane);
 	return Result.ok(true);
 }
 
-export function closeWindow(this c: Controls, t: Term): void {
-	if (t.busy()) {
-		c.closing = true;
-		return;
-	}
+export function closeWindow(this c: Controls): void {
 	c.asks.close = true;
-}
-
-export function answerClose(this c: Controls, reply: Reply): void {
-	match (reply) {
-		Reply.Confirm => {
-			c.closing = false;
-			c.asks.close = true;
-		},
-		Reply.Cancel => { c.closing = false; },
-		Reply.Ignore => {},
-	}
 }
 
 export function keyDown(
@@ -152,10 +136,6 @@ function controlKey(
 	t: Term,
 	e: KeyEvent,
 ): Result<boolean, TermError> {
-	if (c.closing) {
-		c.answerClose(replyToClose(e.key, e.mods));
-		return Result.ok(true);
-	}
 	if (c.holding()) { return c.answerHeld(t, e); }
 	const vt = t.vtOf();
 	if (vt === null) { return Result.ok(false); }

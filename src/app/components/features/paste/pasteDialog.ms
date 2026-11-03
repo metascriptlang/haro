@@ -13,7 +13,6 @@ import {
 	Tone,
 	Warning,
 	askDialogOf,
-	closeDialogOf,
 	dialogOf,
 } from "../../../../input/paste";
 import {
@@ -119,9 +118,6 @@ export function showPending(
 	if (samePending(d.shown, pending)) { return; }
 	d.shown = pending;
 	match (pending.kind) {
-		PendingKind.Close => {
-			d.present(closeDialogOf(cols), cols, CLOSE_CONFIRM, CLOSE_CANCEL);
-		},
 		PendingKind.Paste => {
 			const held = pending.held;
 			const dialog = dialogOf(held.warning, held.text, cols, PREVIEW_ROWS);
@@ -217,7 +213,7 @@ test "a held paste opens the view with its lines and cancelling closes it" {
 	const v = PasteDialogModel.open();
 	assert !v.visible();
 	const held: Held = { text: "ls\ncd ..\nrm x", warning: Warning.MultiLine };
-	v.showPending(pendingOf(held, null, false), 8.4, 960);
+	v.showPending(pendingOf(held, null), 8.4, 960);
 	flush();
 	assert v.visible();
 	assert v.cols() == 88;
@@ -225,45 +221,22 @@ test "a held paste opens the view with its lines and cancelling closes it" {
 	assert v.top.length() >= 3;
 	assert v.top.at(0).spans[0].text == "Warning: potentially unsafe paste";
 	assert v.code.at(1).spans[0].text == "cd ..";
-	v.showPending(pendingOf(held, null, false), 8.4, 960);
+	v.showPending(pendingOf(held, null), 8.4, 960);
 	flush();
 	assert v.code.length() == 3;
 	const next: Held = { text: "a\nb", warning: Warning.MultiLine };
-	v.showPending(pendingOf(next, null, false), 8.4, 400);
+	v.showPending(pendingOf(next, null), 8.4, 400);
 	flush();
 	assert v.code.length() == 2;
 	assert v.cols() == 37;
-	v.showPending(pendingOf(null, null, false), 8.4, 960);
-	flush();
-	assert !v.visible();
-}
-
-test "a close asked over a held paste shows first, and the paste shows again once it is answered" {
-	const v = PasteDialogModel.open();
-	const held: Held = { text: "a\nb", warning: Warning.MultiLine };
-	v.showPending(pendingOf(held, null, true), 8.4, 960);
-	flush();
-	assert v.visible();
-	assert v.top.at(0).spans[0].text == "A program is still running";
-	assert v.code.length() == 0;
-	assert v.confirmLabel() == "Close (Enter)";
-	assert v.cancelLabel() == "Cancel (Esc)";
-	v.showPending(pendingOf(held, null, false), 8.4, 960);
-	flush();
-	assert v.visible();
-	assert v.code.length() == 2;
-	assert v.confirmLabel() == "Paste anyway (Enter)";
-	v.showPending(pendingOf(null, null, true), 8.4, 960);
-	flush();
-	assert v.confirmLabel() == "Close (Enter)";
-	v.showPending(pendingOf(null, null, false), 8.4, 960);
+	v.showPending(pendingOf(null, null), 8.4, 960);
 	flush();
 	assert !v.visible();
 }
 
 test "a clipboard read opens the view with its own labels and closes it again" {
 	const v = PasteDialogModel.open();
-	v.showPending(pendingOf(null, "secret\ntoken", false), 8.4, 960);
+	v.showPending(pendingOf(null, "secret\ntoken"), 8.4, 960);
 	flush();
 	assert v.visible();
 	assert v.top.at(0).spans[0].text == "Authorize clipboard access";
@@ -271,10 +244,10 @@ test "a clipboard read opens the view with its own labels and closes it again" {
 	assert v.confirmLabel() == "Allow (Ctrl+Enter)";
 	assert v.cancelLabel() == "Deny (Esc)";
 	const held: Held = { text: "a\nb", warning: Warning.MultiLine };
-	v.showPending(pendingOf(held, "secret", false), 8.4, 960);
+	v.showPending(pendingOf(held, "secret"), 8.4, 960);
 	flush();
 	assert v.confirmLabel() == "Paste anyway (Enter)";
-	v.showPending(pendingOf(null, null, false), 8.4, 960);
+	v.showPending(pendingOf(null, null), 8.4, 960);
 	flush();
 	assert !v.visible();
 }

@@ -6,19 +6,22 @@ import { TermError } from "../controller/term";
 import { fileUri, isLocalHost } from "../term/pwd";
 import { CellRect, PaneId } from "../workspace/tree";
 import { EventKind, WorkspaceEvent } from "../workspace/workspace";
-import { View, fitRows, open } from "./frame";
+import { View, open } from "./frame";
 import { Stats } from "./stats";
 import { NoticeModel, open } from "./components/features/notice/notice";
 import { PasteDialogModel, open } from "./components/features/paste/pasteDialog";
+import { CellMetrics } from "./components/ui/cellText";
 import {
 	Desktop,
+	HostEvents,
 	KeyHook,
 	PaneModel,
 	Report,
 	ShellHook,
 	Timing,
+	connectHost,
+	fitGrid,
 	open,
-	refresh,
 } from "./components/features/terminal/paneModel";
 
 export enum NewPaneCwd {
@@ -31,15 +34,17 @@ export interface PaneLaunch {
 	shellScripts: string | null;
 	startIn: string | null;
 	cwd: NewPaneCwd;
+	recording: string | null;
 }
 
 export interface PaneHost {
 	desktopFor: (pane: PaneId) => Desktop;
+	eventsFor: (pane: PaneId) => HostEvents;
 	report: Report;
 	timing: Timing;
 	keyHook: KeyHook;
 	shellHook: ShellHook;
-	fontFamily: string;
+	metrics: CellMetrics;
 	started: Config;
 	stats: Stats;
 }
@@ -103,12 +108,29 @@ async function cwdFor(this p: Panes, origin: PaneId | null): Promise<string | nu
 	return (await from.reportedCwd()) ?? start;
 }
 
-function fit(this pane: RunningPane, rect: CellRect, cellWidth: int32, cellHeight: int32): void {
-	const m = pane.model;
-	m.io.fit(rect.cols, rect.rows, cellWidth, cellHeight);
-	m.io.settleSize();
-	m.view.fitRows(rect.rows);
-	m.refresh();
+export function refit(this p: Panes, id: PaneId, rect: CellRect): void {
+	p.paneOf(id)?.model.fitGrid(rect.cols, rect.rows, p.cellWidth, p.cellHeight);
+}
+
+interface Waiting {
+	run: (() => void) | null;
+}
+
+export function paneTiming(shared: Timing): Timing {
+	const slot: Waiting = { run: null };
+	return {
+		clock: shared.clock,
+		schedule: (run: () => void): void => {
+			const queued = slot.run !== null;
+			slot.run = run;
+			if (queued) { return; }
+			shared.schedule((): void => {
+				const latest = slot.run;
+				slot.run = null;
+				if (latest !== null) { latest(); }
+			});
+		},
+	};
 }
 
 async function start(
@@ -120,7 +142,7 @@ async function start(
 	const shell = new Shell({
 		command: p.launch.command,
 		cwd: await p.cwdFor(origin ?? p.focused),
-		recording: null,
+		recording: p.launch.recording,
 		shellScripts: p.launch.shellScripts,
 	});
 	const refused = await opened(shell);
@@ -131,10 +153,10 @@ async function start(
 		View.open(),
 		h.desktopFor(id),
 		h.report,
-		h.timing,
+		paneTiming(h.timing),
 		h.keyHook,
 		h.shellHook,
-		h.fontFamily,
+		h.metrics,
 		h.started,
 		NoticeModel.open(),
 		PasteDialogModel.open(),
@@ -142,7 +164,8 @@ async function start(
 	);
 	const pane: RunningPane = { id: id, shell: shell, model: model };
 	p.running.push(pane);
-	pane.fit(rect, p.cellWidth, p.cellHeight);
+	model.connectHost(h.eventsFor(id));
+	p.refit(id, rect);
 	return null;
 }
 
@@ -158,7 +181,7 @@ export async function apply(this p: Panes, e: WorkspaceEvent): Promise<TermError
 		return await p.start(e.pane, e.origin, e.rect);
 	}
 	if (e.kind == EventKind.PaneResized) {
-		p.paneOf(e.pane)?.fit(e.rect, p.cellWidth, p.cellHeight);
+		p.refit(e.pane, e.rect);
 	} else if (e.kind == EventKind.PaneClosed) {
 		await p.stop(e.pane);
 	} else if (e.kind == EventKind.FocusChanged) {

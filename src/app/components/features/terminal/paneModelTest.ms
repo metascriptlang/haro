@@ -1,7 +1,9 @@
 import { flush } from "../../../../../../neon/src/core/runtime";
+import { accessor } from "../../../../../../neon/src/core/signal";
+import { CellMetrics } from "../../ui/cellText";
 import { NeonEvent, neonEvent } from "../../../../../../neon/src/render/event";
 import { installClipboardServices } from "../../../../../../neon/src/api/clipboardServices";
-import { Config, defaults, pxOf } from "../../../../config/config";
+import { Config, defaults } from "../../../../config/config";
 import { CommandDone, writeText } from "../../../../vt/vt";
 import { RowNote, RowTint } from "../../../../grid/lines";
 import { open, NoticeModel } from "../notice/notice";
@@ -49,10 +51,11 @@ interface Calls {
 	opened: int32;
 	reloaded: int32;
 	exits: string;
+	actions: string;
 }
 
 function noCalls(): Calls {
-	return { fatal: "", noted: "", title: "", titleBelled: false, notified: "", closed: 0, attentions: 0, hand: false, handSets: 0, opened: 0, reloaded: 0, exits: "" };
+	return { fatal: "", noted: "", title: "", titleBelled: false, notified: "", closed: 0, attentions: 0, hand: false, handSets: 0, opened: 0, reloaded: 0, exits: "", actions: "" };
 }
 
 function desktopFor(calls: Calls): Desktop {
@@ -72,8 +75,16 @@ function desktopFor(calls: Calls): Desktop {
 		reloadConfig: (): void => { calls.reloaded += 1; },
 		close: (): void => { calls.closed += 1; },
 		exited: (code: int32): void => { calls.exits += `${code} `; },
+		windowAction: (action: Action): void => { calls.actions += `${action.toString()} `; },
 	};
 }
+
+const TEST_METRICS: CellMetrics = {
+	fontSize: accessor((): number => 14),
+	fontFamily: accessor((): string => ""),
+	cellWidth: accessor((): number => 0),
+	rowHeight: accessor((): number => 0),
+};
 
 function reportFor(calls: Calls): Report {
 	return {
@@ -112,7 +123,7 @@ function paneWith(
 		timing,
 		keyHook,
 		shellHook,
-		"",
+		TEST_METRICS,
 		defaults(),
 		NoticeModel.open(),
 		PasteDialogModel.open(),
@@ -198,7 +209,7 @@ test "an applied frame is stamped by the host's clock into the stats the pane wa
 			timingAt(15.5),
 			NO_HOOK,
 			NO_SHELL_HOOK,
-			"",
+			TEST_METRICS,
 			defaults(),
 			NoticeModel.open(),
 			PasteDialogModel.open(),
@@ -320,30 +331,17 @@ function closeAsked(this m: PaneModel): boolean {
 	return m.dialog.visible();
 }
 
-test "closing while a program runs shows the dialog: cancel keeps the window, confirm closes it" {
+test "a close reaches the window as close pane with no pane dialog, a program running or not" {
 	assert onTerm("$ ", (t: Term, sink: Sink): void => {
 		const calls = noCalls();
 		const m = paneOf(t, calls);
 		sink.busy = true;
-		assert m.closeAsked();
-		assert m.dialog.confirmLabel() == "Close (Enter)";
-		assert calls.closed == 0;
-		m.cancelDialog();
-		flush();
-		assert !m.dialog.visible();
-		assert calls.closed == 0;
-		assert m.closeAsked();
-		m.confirmDialog();
-		assert calls.closed == 1;
-	}).ok;
-}
-
-test "closing while only the shell runs closes at once with no dialog" {
-	assert onTerm("$ ", (t: Term, sink: Sink): void => {
-		const calls = noCalls();
-		const m = paneOf(t, calls);
 		assert !m.closeAsked();
-		assert calls.closed == 1;
+		assert calls.actions == "ClosePane ";
+		sink.busy = false;
+		assert !m.closeAsked();
+		assert calls.actions == "ClosePane ClosePane ";
+		assert calls.closed == 0;
 	}).ok;
 }
 
@@ -404,10 +402,10 @@ test "a shell that fails as it starts keeps its own notice and also closes on a 
 	}).ok;
 }
 
-test "the close window command closes a dead shell at once, with no confirmation" {
+test "the close pane command closes a dead shell's pane at once, with no confirmation" {
 	assert afterExit(137, 9, 1000, (m: PaneModel, calls: Calls): void => {
 		assert !m.closeAsked();
-		assert calls.closed == 1;
+		assert calls.actions == "ClosePane ";
 	}).ok;
 }
 
@@ -525,8 +523,7 @@ test "a config change applies live except the shell it starts, which asks for a 
 		const onConfig = host.config;
 		assert onConfig !== null;
 		if (onConfig !== null) {
-			onConfig(loaded({ ...defaults(), padding: 6, background: { r: 1, g: 2, b: 3 } }));
-			assert m.padding() == 6;
+			onConfig(loaded({ ...defaults(), background: { r: 1, g: 2, b: 3 } }));
 			assert m.notice.text == "";
 			flush();
 			assert m.background() == hexOf({ r: 1, g: 2, b: 3 });
@@ -540,35 +537,22 @@ test "a config change applies live except the shell it starts, which asks for a 
 			assert m.notice.text == "config.ms: bad key";
 			onConfig({ outcome: ConfigOutcome.Refused, error: "syntax error" });
 			assert m.notice.text == "config.ms: syntax error";
-			assert m.padding() == 0;
 		}
 	}).ok;
 }
 
-test "the font size steps by a point, resets to the config's, and survives a reload until reset" {
+test "font size, split, tab and sidebar actions go to the window" {
 	assert onFresh("", (t: Term, sink: Sink): void => {
-		const m = paneOf(t, noCalls());
-		const host: Host = { config: null, menu: null, closeRequest: null, wake: null };
-		m.connectHost(hostOf(host));
-		const onConfig = host.config;
-		assert onConfig !== null;
-		const base = defaults().fontSize;
-		assert m.metrics.fontSize() == pxOf(base);
+		const calls = noCalls();
+		const m = paneOf(t, calls);
 		m.hosted(Action.IncreaseFontSize);
-		m.hosted(Action.IncreaseFontSize);
-		assert m.metrics.fontSize() == pxOf(base + 2);
-		m.hosted(Action.DecreaseFontSize);
-		assert m.metrics.fontSize() == pxOf(base + 1);
-		if (onConfig !== null) {
-			onConfig(loaded({ ...defaults(), fontSize: 30 }));
-			assert m.metrics.fontSize() == pxOf(base + 1);
-			m.hosted(Action.ResetFontSize);
-			assert m.metrics.fontSize() == pxOf(30);
-			onConfig(loaded({ ...defaults(), fontSize: 20 }));
-			assert m.metrics.fontSize() == pxOf(20);
-		}
-		for (let i = 0; i < 400; i++) { m.hosted(Action.DecreaseFontSize); }
-		assert m.metrics.fontSize() == pxOf(1);
+		m.hosted(Action.ResetFontSize);
+		m.hosted(Action.SplitRight);
+		m.hosted(Action.GotoTab9);
+		m.hosted(Action.ToggleSidebar);
+		assert calls.actions ==
+			"IncreaseFontSize ResetFontSize SplitRight GotoTab9 ToggleSidebar ";
+		assert calls.fatal == "" && m.notice.text == "";
 	}).ok;
 }
 
@@ -597,7 +581,7 @@ test "a menu item runs the action it is named for, and one that names no action 
 		assert menu !== null;
 		if (menu !== null) {
 			menu("increase_font_size");
-			assert m.metrics.fontSize() == pxOf(defaults().fontSize + 1);
+			assert calls.actions == "IncreaseFontSize ";
 			menu("open_config");
 			menu("reload_config");
 			assert calls.opened == 1 && calls.reloaded == 1;

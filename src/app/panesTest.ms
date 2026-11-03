@@ -17,7 +17,14 @@ import {
 	apply,
 	create,
 } from "../workspace/workspace";
-import { Desktop } from "./components/features/terminal/paneModel";
+import { accessor } from "../../../neon/src/core/signal";
+import { Action } from "../input/bindings";
+import { CellMetrics } from "./components/ui/cellText";
+import {
+	ConfigChange,
+	Desktop,
+	HostEvents,
+} from "./components/features/terminal/paneModel";
 import {
 	NewPaneCwd,
 	PaneHost,
@@ -27,8 +34,31 @@ import {
 	foregroundIsShell,
 	open,
 	paneOf,
+	paneTiming,
 	reportedCwd,
 } from "./panes";
+
+interface Frames {
+	runs: (() => void)[];
+}
+
+test "a pane asks the window's frame once and runs only its latest scheduled run" {
+	const frames: Frames = { runs: [] };
+	const timing = paneTiming({
+		clock: (): float64 => 0,
+		schedule: (run: () => void): void => { frames.runs.push(run); },
+	});
+	let ran = "";
+	timing.schedule((): void => { ran += "a"; });
+	timing.schedule((): void => { ran += "b"; });
+	assert frames.runs.length == 1;
+	frames.runs[0]();
+	assert ran == "b";
+	timing.schedule((): void => { ran += "c"; });
+	assert frames.runs.length == 2;
+	frames.runs[1]();
+	assert ran == "bc";
+}
 
 when (!windows) {
 	const COLS: int32 = 81;
@@ -52,12 +82,28 @@ when (!windows) {
 			reloadConfig: (): void => {},
 			close: (): void => {},
 			exited: (code: int32): void => { seen.exits += `${pane as int32}:${code} `; },
+			windowAction: (action: Action): void => {},
 		};
 	}
+
+	const QUIET: HostEvents = {
+		onWake: (handler: () => void): void => {},
+		onMenu: (handler: (id: string) => void): void => {},
+		onCloseRequest: (handler: () => void): void => {},
+		onConfig: (handler: (change: ConfigChange) => void): void => {},
+	};
+
+	const METRICS: CellMetrics = {
+		fontSize: accessor((): number => 14),
+		fontFamily: accessor((): string => ""),
+		cellWidth: accessor((): number => 0),
+		rowHeight: accessor((): number => 0),
+	};
 
 	function hostOf(seen: Seen): PaneHost {
 		return {
 			desktopFor: (pane: PaneId): Desktop => desktopOf(pane, seen),
+			eventsFor: (pane: PaneId): HostEvents => QUIET,
 			report: {
 				note: (message: string): void => {},
 				fail: (message: string): void => { seen.fatal = message; },
@@ -73,7 +119,7 @@ when (!windows) {
 				prompted: (pane: HookPane, at: int32): Result<void, string> => Result.ok(null),
 				commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => Result.ok(null),
 			},
-			fontFamily: "",
+			metrics: METRICS,
 			started: defaults(),
 			stats: Stats.empty(),
 		};
@@ -87,7 +133,13 @@ when (!windows) {
 
 	function panesIn(start: string, seen: Seen): Panes {
 		return Panes.open(
-			{ command: "sh", shellScripts: null, startIn: start, cwd: NewPaneCwd.Origin },
+			{
+				command: "sh",
+				shellScripts: null,
+				startIn: start,
+				cwd: NewPaneCwd.Origin,
+				recording: null,
+			},
 			hostOf(seen),
 			0,
 			0,

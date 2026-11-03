@@ -1,4 +1,5 @@
 import { Accessor } from "../../../../../../neon/src/core/signal";
+import { onCleanup } from "../../../../../../neon/src/core/cleanup";
 import { ForList } from "../../../../../../neon/src/macros/ui/flow";
 import { NeonNode } from "../../../../../../neon/src/render/node";
 import { NeonEvent } from "../../../../../../neon/src/render/event";
@@ -18,7 +19,10 @@ import {
 	wheeled,
 } from "./paneEvents";
 
-export function TerminalPane(props: { model: PaneModel }): NeonNode {
+export function TerminalPane(props: {
+	model: PaneModel;
+	focused: Accessor<boolean>;
+}): NeonNode {
 	const m = props.model;
 	const metrics = m.metrics;
 	const row = (item: Accessor<RowSlot>): NeonNode => <CellText
@@ -26,16 +30,23 @@ export function TerminalPane(props: { model: PaneModel }): NeonNode {
 		spans={item().spans}
 		widths={item().line.widths}
 	/>;
+	onCleanup((): void => { m.grid = null; });
 	return <View
-		style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: m.padding(), pointerEvents: "box-only" }}
+		style={{
+			flexGrow: 1,
+			flexShrink: 1,
+			flexBasis: 0,
+			backgroundColor: m.background(),
+			pointerEvents: "box-only",
+		}}
 		focusable
 		ref={(h: ViewHandle): void => {
 			m.grid = h;
-			h.focus();
+			if (props.focused()) { h.focus(); }
 		}}
 		imeRect={{
-			x: m.padding() + m.cursor.col() * metrics.cellWidth(),
-			y: m.padding() + m.cursor.row() * metrics.rowHeight(),
+			x: m.cursor.col() * metrics.cellWidth(),
+			y: m.cursor.row() * metrics.rowHeight(),
 			width: metrics.cellWidth(),
 			height: metrics.rowHeight(),
 		}}

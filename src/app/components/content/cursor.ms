@@ -34,7 +34,8 @@ const GLITCH_ALPHA = 0.75;
 
 export interface CursorModel {
 	metrics: CellMetrics;
-	padding: Accessor<number>;
+	left: Accessor<number>;
+	top: Accessor<number>;
 	col: Accessor<number>;
 	setCol: Setter<number>;
 	row: Accessor<number>;
@@ -65,7 +66,8 @@ export interface CursorModel {
 export function open(
 	this typeof CursorModel,
 	metrics: CellMetrics,
-	padding: Accessor<number>,
+	left: Accessor<number>,
+	top: Accessor<number>,
 	tint: Rgb,
 	inked: (ink: CellInk | null) => void,
 ): CursorModel {
@@ -75,7 +77,8 @@ export function open(
 	const [dust, setDust] = createSignal<TileCell[]>([]);
 	return {
 		metrics: metrics,
-		padding: padding,
+		left: left,
+		top: top,
 		col: col,
 		setCol: setCol,
 		row: row,
@@ -255,8 +258,10 @@ export function paintCursor(this c: CursorModel): void {
 	c.inkCell();
 	const at = c.at;
 	if (at !== null && c.look.visible) {
-		const pad = c.padding();
-		c.trail.moveTo(pad + at.x * c.metrics.cellWidth(), pad + at.y * c.metrics.rowHeight());
+		c.trail.moveTo(
+			c.left() + at.x * c.metrics.cellWidth(),
+			c.top() + at.y * c.metrics.rowHeight(),
+		);
 	}
 	if (c.frame !== null) { return; }
 	c.last = frameNow();
@@ -391,7 +396,7 @@ function cursorFor(look: CursorLook): CursorModel {
 		cellWidth: cellWidth,
 		rowHeight: rowHeight,
 	};
-	const c = CursorModel.open(metrics, padding, RED, (ink: CellInk | null): void => {});
+	const c = CursorModel.open(metrics, padding, padding, RED, (ink: CellInk | null): void => {});
 	c.at = { x: 3, y: 2, wide: false };
 	c.look = look;
 	return c;

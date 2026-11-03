@@ -69,18 +69,10 @@ export function committed(this m: PaneModel, e: NeonEvent): void {
 	m.scheduleRefresh();
 }
 
-function gridX(this m: PaneModel, e: NeonEvent): float64 {
-	return e.locationX - m.padding();
-}
-
-function gridY(this m: PaneModel, e: NeonEvent): float64 {
-	return e.locationY - m.padding();
-}
-
 function spot(this m: PaneModel, e: NeonEvent): Spot {
 	const cellWidth = m.metrics.cellWidth();
 	const rowHeight = m.metrics.rowHeight();
-	return spotAt(m.gridX(e), m.gridY(e), cellWidth, rowHeight, m.cols, m.rows);
+	return spotAt(e.locationX, e.locationY, cellWidth, rowHeight, m.cols, m.rows);
 }
 
 function hit(this m: PaneModel, e: NeonEvent, where: Where): Hit | null {
@@ -91,8 +83,8 @@ function hit(this m: PaneModel, e: NeonEvent, where: Where): Hit | null {
 	}
 	return {
 		at: m.spot(e),
-		x: m.gridX(e),
-		y: m.gridY(e),
+		x: e.locationX,
+		y: e.locationY,
 		scale: PixelRatio.get(),
 		mods: mods.value,
 		cell: m.mouseGeometry,

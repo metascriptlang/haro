@@ -1,17 +1,11 @@
 import { Accessor, Setter, createSignal } from "../../../../../../neon/src/core/signal";
 import { flush } from "../../../../../../neon/src/core/runtime";
-import { createEffect } from "../../../../../../neon/src/core/effect";
-import { Cleanup } from "../../../../../../neon/src/core/types";
 import { NeonEvent } from "../../../../../../neon/src/render/event";
-import { PixelRatio } from "../../../../../../neon/src/api/pixelRatio";
 import { Clipboard } from "../../../../../../neon/src/api/clipboard";
 import { ViewHandle } from "../../../../../../neon/src/components/primitives";
-import { familyFont } from "../../../../../../neon/src/platform/void/host";
-import { spriteCellFor } from "../../../../../../void/src/void2d/font";
-import { gridSize } from "../../../../grid/size";
 import { CellInk, RowNote, RowTint } from "../../../../grid/lines";
 import { CommandDone, MouseGeometry, ShellMark, ShellStep, geometryOf } from "../../../../vt/vt";
-import { Config, fontPx, pxOf, steppedFont } from "../../../../config/config";
+import { Config } from "../../../../config/config";
 import { HookPane, KeyAnswer } from "../../../../config/hooks";
 import { KeyEvent } from "../../../../keys/keys";
 import { Action, actionNamed } from "../../../../input/bindings";
@@ -44,7 +38,6 @@ import { TermError, exitCodeText } from "../../../../controller/term";
 const HOLD_RECHECK_MS = 100;
 const AUTOSCROLL_MS = 15;
 const RESIZE_SETTLE_MS = 25;
-const FONT_STEP_POINTS: float64 = 1;
 const RESTART_NOTICE = "config.ms: command, workingDirectory and shellIntegration apply when Haro restarts";
 
 export interface Desktop {
@@ -57,6 +50,7 @@ export interface Desktop {
 	reloadConfig: () => void;
 	close: () => void;
 	exited: (code: int32) => void;
+	windowAction: (action: Action) => void;
 }
 
 export interface Report {
@@ -95,16 +89,6 @@ export interface HostEvents {
 	onConfig: (handler: (change: ConfigChange) => void) => void;
 }
 
-export interface AppHost {
-	desktop: Desktop;
-	report: Report;
-	timing: Timing;
-	keyHook: KeyHook;
-	shellHook: ShellHook;
-	events: HostEvents;
-	fontFamily: string;
-}
-
 export interface PaneModel {
 	io: IoPort;
 	view: View;
@@ -115,9 +99,6 @@ export interface PaneModel {
 	shellHook: ShellHook;
 	stats: Stats;
 	started: Config;
-	fontPoints: float64;
-	configFontPoints: float64;
-	fontAdjusted: boolean;
 	title: string;
 	belled: boolean;
 	shellStarted: boolean;
@@ -128,16 +109,14 @@ export interface PaneModel {
 	notice: NoticeModel;
 	dialog: PasteDialogModel;
 	metrics: CellMetrics;
-	setFontSize: Setter<number>;
-	setFontFamily: Setter<string>;
-	setCellWidth: Setter<number>;
-	setRowHeight: Setter<number>;
+	left: Accessor<number>;
+	setLeft: Setter<number>;
+	top: Accessor<number>;
+	setTop: Setter<number>;
 	background: Accessor<string>;
 	setBackground: Setter<string>;
 	foreground: Accessor<string>;
 	setForeground: Setter<string>;
-	padding: Accessor<number>;
-	setPadding: Setter<number>;
 	cursor: CursorModel;
 	preedit: PreeditModel;
 	grid: ViewHandle | null;
@@ -160,25 +139,16 @@ export function open(
 	timing: Timing,
 	keyHook: KeyHook,
 	shellHook: ShellHook,
-	fontFamily: string,
+	metrics: CellMetrics,
 	started: Config,
 	notice: NoticeModel,
 	dialog: PasteDialogModel,
 	stats: Stats,
 ): PaneModel {
-	const [fontSize, setFontSize] = createSignal<number>(started.fontPx());
-	const [fontFamily, setFontFamily] = createSignal<string>(fontFamily);
-	const [cellWidth, setCellWidth] = createSignal<number>(0);
-	const [rowHeight, setRowHeight] = createSignal<number>(0);
+	const [left, setLeft] = createSignal<number>(0);
+	const [top, setTop] = createSignal<number>(0);
 	const [background, setBackground] = createSignal<string>(started.background.hexOf());
 	const [foreground, setForeground] = createSignal<string>(started.foreground.hexOf());
-	const [padding, setPadding] = createSignal<number>(started.padding);
-	const metrics: CellMetrics = {
-		fontSize: fontSize,
-		fontFamily: fontFamily,
-		cellWidth: cellWidth,
-		rowHeight: rowHeight,
-	};
 	io.configure(started.settingsOf());
 	const pane: PaneModel = {
 		io: io,
@@ -190,9 +160,6 @@ export function open(
 		shellHook: shellHook,
 		stats: stats,
 		started: started,
-		fontPoints: started.fontSize,
-		configFontPoints: started.fontSize,
-		fontAdjusted: false,
 		title: "",
 		belled: false,
 		shellStarted: false,
@@ -203,19 +170,18 @@ export function open(
 		notice: notice,
 		dialog: dialog,
 		metrics: metrics,
-		setFontSize: setFontSize,
-		setFontFamily: setFontFamily,
-		setCellWidth: setCellWidth,
-		setRowHeight: setRowHeight,
+		left: left,
+		setLeft: setLeft,
+		top: top,
+		setTop: setTop,
 		background: background,
 		setBackground: setBackground,
 		foreground: foreground,
 		setForeground: setForeground,
-		padding: padding,
-		setPadding: setPadding,
 		cursor: CursorModel.open(
 			metrics,
-			padding,
+			left,
+			top,
 			started.foreground,
 			(ink: CellInk | null): void => {
 				io.relight(
@@ -317,29 +283,13 @@ function answerAsks(this m: PaneModel, asks: Asks): void {
 	if (asks.close) { m.desktop.close(); }
 }
 
-function resizeFont(this m: PaneModel, points: float64): void {
-	m.fontPoints = points;
-	m.setFontSize(pxOf(points));
-	flush();
-	if (m.layoutWidth > 0) { m.fitLayout(); }
-}
-
 export function hosted(this m: PaneModel, action: Action): void {
 	match (action) {
-		Action.IncreaseFontSize => {
-			m.fontAdjusted = true;
-			m.resizeFont(steppedFont(m.fontPoints, FONT_STEP_POINTS));
-		},
-		Action.DecreaseFontSize => {
-			m.fontAdjusted = true;
-			m.resizeFont(steppedFont(m.fontPoints, -FONT_STEP_POINTS));
-		},
-		Action.ResetFontSize => {
-			m.fontAdjusted = false;
-			m.resizeFont(m.configFontPoints);
-		},
 		Action.OpenConfig => { m.desktop.openConfig(); },
 		Action.ReloadConfig => { m.desktop.reloadConfig(); },
+		Action.IncreaseFontSize |
+		Action.DecreaseFontSize |
+		Action.ResetFontSize |
 		Action.SplitRight |
 		Action.SplitDown |
 		Action.ClosePane |
@@ -370,13 +320,9 @@ export function hosted(this m: PaneModel, action: Action): void {
 		Action.MoveTabLeft |
 		Action.MoveTabRight |
 		Action.RenameTab |
-		Action.ToggleSidebar => { m.workspaceAction(action); },
+		Action.ToggleSidebar => { m.desktop.windowAction(action); },
 		_ => { m.failed(Where.Key, `the window does not run ${action.toString()}`); },
 	}
-}
-
-function workspaceAction(this m: PaneModel, action: Action): void {
-	m.failed(Where.Key, `${action.toString()} is not wired yet`);
 }
 
 function watchHold(this m: PaneModel): void {
@@ -550,7 +496,7 @@ function shellEnded(this m: PaneModel, exit: Exit): void {
 }
 
 export function notify(this m: PaneModel, text: string): void {
-	const cols = noticeCols(m.layoutWidth, m.padding(), m.metrics.cellWidth());
+	const cols = noticeCols(m.layoutWidth, 0, m.metrics.cellWidth());
 	m.notice.showNotice(text, cols);
 }
 
@@ -566,21 +512,11 @@ function reconfigure(this m: PaneModel, change: ConfigChange): void {
 		return;
 	}
 	const c = change.config;
-	const family = change.family;
 	const error = change.error;
 	m.io.configure(c.settingsOf());
 	m.cursor.useEffects(c.cursor);
-	m.configFontPoints = c.fontSize;
-	const points = m.fontAdjusted ? m.fontPoints : c.fontSize;
-	const resized = pxOf(points) != m.metrics.fontSize() || family != m.metrics.fontFamily();
-	m.fontPoints = points;
-	m.setPadding(c.padding);
-	m.setFontSize(pxOf(points));
-	m.setFontFamily(family);
-	flush();
 	const restart = restartNeeded(c, m.started) ? RESTART_NOTICE : "";
 	m.notify(error != "" ? `config.ms: ${error}` : restart);
-	if (resized && m.layoutWidth > 0) { m.fitLayout(); }
 	m.refresh();
 }
 
@@ -595,8 +531,12 @@ function menuClicked(this m: PaneModel, id: string): void {
 		m.failed(Where.Key, `the menu item "${id}" names no action`);
 		return;
 	}
-	if (action == Action.CloseWindow) {
+	if (action == Action.ClosePane) {
 		m.closeKeyPressed();
+		return;
+	}
+	if (action == Action.CloseWindow) {
+		m.desktop.close();
 		return;
 	}
 	match (action) {
@@ -610,7 +550,7 @@ function menuClicked(this m: PaneModel, id: string): void {
 	m.refresh();
 }
 
-function closeRequested(this m: PaneModel): void {
+export function closeRequested(this m: PaneModel): void {
 	m.io.closeWindow();
 	m.refresh();
 }
@@ -628,57 +568,41 @@ export function connectHost(this m: PaneModel, events: HostEvents): void {
 		m.io.drain();
 		m.timing.schedule((): void => { m.woke(); });
 	});
-	createEffect(
-		(): number => PixelRatio.get(),
-		(ratio: number, was: number | null): Cleanup | null => {
-			if (was !== null && m.layoutWidth > 0) { m.fitLayout(); }
-			return null;
-		},
-	);
 }
 
 export function laidOut(this m: PaneModel, e: NeonEvent): void {
 	if (e.width <= 0 || e.height <= 0) { return; }
 	m.layoutWidth = e.width;
 	m.layoutHeight = e.height;
-	m.fitLayout();
-}
-
-function fitLayout(this m: PaneModel): void {
-	const font = familyFont(m.metrics.fontFamily(), 400, false);
-	if (!font.ok) {
-		const reason = font.error.toString();
-		m.failed(Where.Font, `family "${m.metrics.fontFamily()}" has no face: ${reason}`);
-		return;
-	}
-	const ratio = PixelRatio.get();
-	const cell = spriteCellFor(font.value, (m.metrics.fontSize() * ratio) as float32);
-	const cellPx = cell.width;
-	const rowPx = cell.height;
-	const widthPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutWidth as float32) as int32;
-	const heightPx = PixelRatio.getPixelSizeForLayoutSize(m.layoutHeight as float32) as int32;
-	const size = gridSize(widthPx, heightPx, cellPx, rowPx);
-	if (!size.ok) {
-		m.failed(Where.Fit, `cell ${cellPx}x${rowPx} px is not a grid size`);
-		return;
-	}
-	const cols = size.value[0];
-	const rows = size.value[1];
-	m.setCellWidth(cellPx / ratio);
-	m.setRowHeight(rowPx / ratio);
-	flush();
 	m.notify(m.notice.text);
 	m.dialog.invalidate();
-	const padPx = PixelRatio.getPixelSizeForLayoutSize(m.padding() as float32) as int32;
+	m.refresh();
+}
+
+export function placeAt(this m: PaneModel, left: number, top: number): void {
+	if (left == m.left() && top == m.top()) { return; }
+	m.setLeft(left);
+	m.setTop(top);
+	flush();
+	m.cursor.paintCursor();
+}
+
+export function fitGrid(
+	this m: PaneModel,
+	cols: int32,
+	rows: int32,
+	cellPx: int32,
+	rowPx: int32,
+): void {
 	m.mouseGeometry = {
 		cellWidth: cellPx,
 		cellHeight: rowPx,
-		width: widthPx + 2 * padPx,
-		height: heightPx + 2 * padPx,
-		padLeft: padPx,
-		padTop: padPx,
-		padRight: widthPx - cols * cellPx + padPx,
-		padBottom: heightPx - rows * rowPx + padPx,
+		width: cols * cellPx,
+		height: rows * rowPx,
+		padLeft: 0,
+		padTop: 0,
+		padRight: 0,
+		padBottom: 0,
 	};
 	m.cursor.paintCursor();
 	m.cols = cols;

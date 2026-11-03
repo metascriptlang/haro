@@ -340,8 +340,43 @@ export function hosted(this m: PaneModel, action: Action): void {
 		},
 		Action.OpenConfig => { m.desktop.openConfig(); },
 		Action.ReloadConfig => { m.desktop.reloadConfig(); },
+		Action.SplitRight |
+		Action.SplitDown |
+		Action.ClosePane |
+		Action.FocusPaneLeft |
+		Action.FocusPaneRight |
+		Action.FocusPaneUp |
+		Action.FocusPaneDown |
+		Action.FocusPanePrevious |
+		Action.FocusPaneNext |
+		Action.ResizePaneLeft |
+		Action.ResizePaneRight |
+		Action.ResizePaneUp |
+		Action.ResizePaneDown |
+		Action.TogglePaneZoom |
+		Action.NewTab |
+		Action.CloseTab |
+		Action.PreviousTab |
+		Action.NextTab |
+		Action.GotoTab1 |
+		Action.GotoTab2 |
+		Action.GotoTab3 |
+		Action.GotoTab4 |
+		Action.GotoTab5 |
+		Action.GotoTab6 |
+		Action.GotoTab7 |
+		Action.GotoTab8 |
+		Action.GotoTab9 |
+		Action.MoveTabLeft |
+		Action.MoveTabRight |
+		Action.RenameTab |
+		Action.ToggleSidebar => { m.workspaceAction(action); },
 		_ => { m.failed(Where.Key, `the window does not run ${action.toString()}`); },
 	}
+}
+
+function workspaceAction(this m: PaneModel, action: Action): void {
+	m.failed(Where.Key, `${action.toString()} is not wired yet`);
 }
 
 function watchHold(this m: PaneModel): void {

@@ -53,7 +53,38 @@ export function act(
 		Action.DecreaseFontSize |
 		Action.ResetFontSize |
 		Action.OpenConfig |
-		Action.ReloadConfig => {
+		Action.ReloadConfig |
+		Action.SplitRight |
+		Action.SplitDown |
+		Action.ClosePane |
+		Action.FocusPaneLeft |
+		Action.FocusPaneRight |
+		Action.FocusPaneUp |
+		Action.FocusPaneDown |
+		Action.FocusPanePrevious |
+		Action.FocusPaneNext |
+		Action.ResizePaneLeft |
+		Action.ResizePaneRight |
+		Action.ResizePaneUp |
+		Action.ResizePaneDown |
+		Action.TogglePaneZoom |
+		Action.NewTab |
+		Action.CloseTab |
+		Action.PreviousTab |
+		Action.NextTab |
+		Action.GotoTab1 |
+		Action.GotoTab2 |
+		Action.GotoTab3 |
+		Action.GotoTab4 |
+		Action.GotoTab5 |
+		Action.GotoTab6 |
+		Action.GotoTab7 |
+		Action.GotoTab8 |
+		Action.GotoTab9 |
+		Action.MoveTabLeft |
+		Action.MoveTabRight |
+		Action.RenameTab |
+		Action.ToggleSidebar => {
 			c.asks.actions.push(action);
 		},
 		Action.ClearScrollback => {

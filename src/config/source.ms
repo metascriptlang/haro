@@ -5,7 +5,8 @@ when (!macos) {
 import { homeDir } from "std/os";
 import { changeStamp, ensureDir, exists, readDir, readFile, remove, rename, writeFile } from "std/fs";
 import { dirname, isAbsolute, relative } from "std/fs/path";
-import { Config, defaults, parse } from "./config";
+import { Config, DividerStyle, PaneCwd, SidebarSide, defaults, parse } from "./config";
+import { Action } from "../input/bindings";
 import { CommandDone, Rgb } from "../vt/vt";
 import { RowNote, RowTint } from "../grid/lines";
 import { Faces, installedFaces } from "./fonts";
@@ -364,6 +365,29 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 	const wrongMode = evaluate(path, dir, api, INSTALLED);
 	assert !wrongMode.ok;
 	if (!wrongMode.ok) { assert wrongMode.error.includes("/config.ms:3:"), wrongMode.error; }
+}
+
+test "a config typed with HaroConfig sets the pane and sidebar fields and binds a workspace action" {
+	const dir = `${cwd()}/out/workspaceConfig`;
+	assert ensureDir(dir).ok;
+	const path = `${dir}/config.ms`;
+	const config = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = {\n` +
+		`\tdividerStyle: "line", focusedDividerColor: "#7aa2f7", paneGap: 2, paneTitle: "none",\n` +
+		`\tpaneResizeStep: 4, sidebarPosition: "right", sidebarVisible: false, sidebarWidth: 30,\n` +
+		`\tconfirmClose: false, newPaneCwd: "start",\n` +
+		`\tkeybinds: [{ keys: "ctrl+shift+backslash", action: "split_right" }],\n};\n`;
+	assert writeFile(path, config).ok;
+	const typed = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
+	assert typed.ok, typed.ok ? "" : typed.error;
+	if (!typed.ok) { return; }
+	const c = parse(typed.value.json);
+	assert c.ok, c.ok ? "" : c.error;
+	if (!c.ok) { return; }
+	assert c.value.dividerStyle == DividerStyle.Line && c.value.dividerColor === null;
+	assert c.value.paneGap == 2 && c.value.paneResizeStep == 4 && c.value.sidebarWidth == 30;
+	assert c.value.sidebarPosition == SidebarSide.Right && !c.value.sidebarVisible;
+	assert !c.value.confirmClose && c.value.newPaneCwd == PaneCwd.Start;
+	assert c.value.keybinds[0].action == Action.SplitRight;
 }
 
 test "a config spreads saigonNight from the haro package and keeps its own fields over it, a cursor field among them" {

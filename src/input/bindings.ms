@@ -20,6 +20,37 @@ export enum Action {
 	ResetFontSize,
 	OpenConfig,
 	ReloadConfig,
+	SplitRight,
+	SplitDown,
+	ClosePane,
+	FocusPaneLeft,
+	FocusPaneRight,
+	FocusPaneUp,
+	FocusPaneDown,
+	FocusPanePrevious,
+	FocusPaneNext,
+	ResizePaneLeft,
+	ResizePaneRight,
+	ResizePaneUp,
+	ResizePaneDown,
+	TogglePaneZoom,
+	NewTab,
+	CloseTab,
+	PreviousTab,
+	NextTab,
+	GotoTab1,
+	GotoTab2,
+	GotoTab3,
+	GotoTab4,
+	GotoTab5,
+	GotoTab6,
+	GotoTab7,
+	GotoTab8,
+	GotoTab9,
+	MoveTabLeft,
+	MoveTabRight,
+	RenameTab,
+	ToggleSidebar,
 }
 
 const SHIFT = modSet(KeyMod.Shift);
@@ -66,6 +97,52 @@ when (macos) {
 	];
 }
 
+when (macos) {
+	const TAB_DIGIT_MODS: BitSet<KeyMod> = SUPER;
+	const WORKSPACE: Readonly<Vec<Binding>> = [
+		{ code: "KeyD", mods: SUPER, action: Action.SplitRight, screen: Screen.Any },
+		{ code: "KeyD", mods: SUPER | SHIFT, action: Action.SplitDown, screen: Screen.Any },
+		{ code: "KeyW", mods: SUPER, action: Action.ClosePane, screen: Screen.Any },
+		{ code: "BracketLeft", mods: SUPER, action: Action.FocusPanePrevious, screen: Screen.Any },
+		{ code: "BracketRight", mods: SUPER, action: Action.FocusPaneNext, screen: Screen.Any },
+		{ code: "ArrowLeft", mods: SUPER | ALT, action: Action.FocusPaneLeft, screen: Screen.Any },
+		{ code: "ArrowRight", mods: SUPER | ALT, action: Action.FocusPaneRight, screen: Screen.Any },
+		{ code: "ArrowUp", mods: SUPER | ALT, action: Action.FocusPaneUp, screen: Screen.Any },
+		{ code: "ArrowDown", mods: SUPER | ALT, action: Action.FocusPaneDown, screen: Screen.Any },
+		{ code: "ArrowLeft", mods: SUPER | CTRL, action: Action.ResizePaneLeft, screen: Screen.Any },
+		{ code: "ArrowRight", mods: SUPER | CTRL, action: Action.ResizePaneRight, screen: Screen.Any },
+		{ code: "ArrowUp", mods: SUPER | CTRL, action: Action.ResizePaneUp, screen: Screen.Any },
+		{ code: "ArrowDown", mods: SUPER | CTRL, action: Action.ResizePaneDown, screen: Screen.Any },
+		{ code: "Enter", mods: SUPER | SHIFT, action: Action.TogglePaneZoom, screen: Screen.Any },
+		{ code: "KeyT", mods: SUPER, action: Action.NewTab, screen: Screen.Any },
+		{ code: "KeyW", mods: SUPER | ALT, action: Action.CloseTab, screen: Screen.Any },
+		{ code: "BracketLeft", mods: SUPER | SHIFT, action: Action.PreviousTab, screen: Screen.Any },
+		{ code: "BracketRight", mods: SUPER | SHIFT, action: Action.NextTab, screen: Screen.Any },
+		{ code: "KeyS", mods: SUPER | SHIFT, action: Action.ToggleSidebar, screen: Screen.Any },
+	];
+} else {
+	const TAB_DIGIT_MODS: BitSet<KeyMod> = ALT;
+	const RESIZE_MODS: BitSet<KeyMod> = CTRL | SUPER | SHIFT;
+	const WORKSPACE: Readonly<Vec<Binding>> = [
+		{ code: "KeyO", mods: CTRL | SHIFT, action: Action.SplitRight, screen: Screen.Any },
+		{ code: "KeyE", mods: CTRL | SHIFT, action: Action.SplitDown, screen: Screen.Any },
+		{ code: "KeyW", mods: CTRL | SHIFT, action: Action.ClosePane, screen: Screen.Any },
+		{ code: "BracketLeft", mods: CTRL | SUPER, action: Action.FocusPanePrevious, screen: Screen.Any },
+		{ code: "BracketRight", mods: CTRL | SUPER, action: Action.FocusPaneNext, screen: Screen.Any },
+		{ code: "ArrowLeft", mods: CTRL | ALT, action: Action.FocusPaneLeft, screen: Screen.Any },
+		{ code: "ArrowRight", mods: CTRL | ALT, action: Action.FocusPaneRight, screen: Screen.Any },
+		{ code: "ArrowLeft", mods: RESIZE_MODS, action: Action.ResizePaneLeft, screen: Screen.Any },
+		{ code: "ArrowRight", mods: RESIZE_MODS, action: Action.ResizePaneRight, screen: Screen.Any },
+		{ code: "ArrowUp", mods: RESIZE_MODS, action: Action.ResizePaneUp, screen: Screen.Any },
+		{ code: "ArrowDown", mods: RESIZE_MODS, action: Action.ResizePaneDown, screen: Screen.Any },
+		{ code: "Enter", mods: CTRL | SHIFT, action: Action.TogglePaneZoom, screen: Screen.Any },
+		{ code: "KeyT", mods: CTRL | SHIFT, action: Action.NewTab, screen: Screen.Any },
+		{ code: "PageUp", mods: CTRL, action: Action.PreviousTab, screen: Screen.Any },
+		{ code: "PageDown", mods: CTRL, action: Action.NextTab, screen: Screen.Any },
+		{ code: "KeyS", mods: CTRL | SHIFT, action: Action.ToggleSidebar, screen: Screen.Any },
+	];
+}
+
 const BINDINGS: Readonly<Vec<Binding>> = [
 	{ code: "KeyC", mods: CLIPBOARD_MODS, action: Action.Copy, screen: Screen.Any },
 	{ code: "KeyV", mods: CLIPBOARD_MODS, action: Action.Paste, screen: Screen.Any },
@@ -87,6 +164,15 @@ const BINDINGS: Readonly<Vec<Binding>> = [
 	{ code: "ArrowDown", mods: CTRL | ALT, action: Action.PromptDown, screen: Screen.Any },
 	{ code: "PageUp", mods: SHIFT, action: Action.PageUp, screen: Screen.Primary },
 	{ code: "PageDown", mods: SHIFT, action: Action.PageDown, screen: Screen.Primary },
+	{ code: "Digit1", mods: TAB_DIGIT_MODS, action: Action.GotoTab1, screen: Screen.Any },
+	{ code: "Digit2", mods: TAB_DIGIT_MODS, action: Action.GotoTab2, screen: Screen.Any },
+	{ code: "Digit3", mods: TAB_DIGIT_MODS, action: Action.GotoTab3, screen: Screen.Any },
+	{ code: "Digit4", mods: TAB_DIGIT_MODS, action: Action.GotoTab4, screen: Screen.Any },
+	{ code: "Digit5", mods: TAB_DIGIT_MODS, action: Action.GotoTab5, screen: Screen.Any },
+	{ code: "Digit6", mods: TAB_DIGIT_MODS, action: Action.GotoTab6, screen: Screen.Any },
+	{ code: "Digit7", mods: TAB_DIGIT_MODS, action: Action.GotoTab7, screen: Screen.Any },
+	{ code: "Digit8", mods: TAB_DIGIT_MODS, action: Action.GotoTab8, screen: Screen.Any },
+	{ code: "Digit9", mods: TAB_DIGIT_MODS, action: Action.GotoTab9, screen: Screen.Any },
 ];
 
 export struct Keybind {
@@ -121,6 +207,37 @@ const NAMED: Vec<Named> = [
 	{ name: "reset_font_size", action: Action.ResetFontSize },
 	{ name: "open_config", action: Action.OpenConfig },
 	{ name: "reload_config", action: Action.ReloadConfig },
+	{ name: "split_right", action: Action.SplitRight },
+	{ name: "split_down", action: Action.SplitDown },
+	{ name: "close_pane", action: Action.ClosePane },
+	{ name: "focus_pane_left", action: Action.FocusPaneLeft },
+	{ name: "focus_pane_right", action: Action.FocusPaneRight },
+	{ name: "focus_pane_up", action: Action.FocusPaneUp },
+	{ name: "focus_pane_down", action: Action.FocusPaneDown },
+	{ name: "focus_pane_previous", action: Action.FocusPanePrevious },
+	{ name: "focus_pane_next", action: Action.FocusPaneNext },
+	{ name: "resize_pane_left", action: Action.ResizePaneLeft },
+	{ name: "resize_pane_right", action: Action.ResizePaneRight },
+	{ name: "resize_pane_up", action: Action.ResizePaneUp },
+	{ name: "resize_pane_down", action: Action.ResizePaneDown },
+	{ name: "toggle_pane_zoom", action: Action.TogglePaneZoom },
+	{ name: "new_tab", action: Action.NewTab },
+	{ name: "close_tab", action: Action.CloseTab },
+	{ name: "previous_tab", action: Action.PreviousTab },
+	{ name: "next_tab", action: Action.NextTab },
+	{ name: "goto_tab_1", action: Action.GotoTab1 },
+	{ name: "goto_tab_2", action: Action.GotoTab2 },
+	{ name: "goto_tab_3", action: Action.GotoTab3 },
+	{ name: "goto_tab_4", action: Action.GotoTab4 },
+	{ name: "goto_tab_5", action: Action.GotoTab5 },
+	{ name: "goto_tab_6", action: Action.GotoTab6 },
+	{ name: "goto_tab_7", action: Action.GotoTab7 },
+	{ name: "goto_tab_8", action: Action.GotoTab8 },
+	{ name: "goto_tab_9", action: Action.GotoTab9 },
+	{ name: "move_tab_left", action: Action.MoveTabLeft },
+	{ name: "move_tab_right", action: Action.MoveTabRight },
+	{ name: "rename_tab", action: Action.RenameTab },
+	{ name: "toggle_sidebar", action: Action.ToggleSidebar },
 ];
 
 export function actionNamed(name: string): Action | null {
@@ -235,8 +352,9 @@ function lookup(
 
 export function resolve(code: string, mods: BitSet<KeyMod>, altScreen: boolean): Action | null {
 	const held = chordOf(mods);
-	const found = lookup(BINDINGS, code, held, altScreen);
-	return found !== null ? found : lookup(OS_CHORDS, code, held, altScreen);
+	return lookup(BINDINGS, code, held, altScreen) ??
+		lookup(OS_CHORDS, code, held, altScreen) ??
+		lookup(WORKSPACE, code, held, altScreen);
 }
 
 const CAPS_LOCK = modSet(KeyMod.CapsLock);
@@ -412,4 +530,83 @@ test "a keybind for one screen answers only on that screen" {
 	const atShell = bindFor(binds, "KeyW", SUPER, false);
 	assert atShell !== null;
 	if (atShell !== null) { assert atShell.action == Action.CloseWindow; }
+}
+
+test "the split, pane and tab keys take cmd on macos and ctrl with shift, alt or super elsewhere" {
+	when (macos) {
+		assert resolve("KeyD", SUPER, false) == Action.SplitRight;
+		assert resolve("KeyD", SUPER | SHIFT, false) == Action.SplitDown;
+		assert resolve("KeyW", SUPER, false) == Action.ClosePane;
+		assert resolve("KeyW", SUPER | ALT, false) == Action.CloseTab;
+		assert resolve("BracketLeft", SUPER, false) == Action.FocusPanePrevious;
+		assert resolve("BracketRight", SUPER, false) == Action.FocusPaneNext;
+		assert resolve("ArrowLeft", SUPER | ALT, false) == Action.FocusPaneLeft;
+		assert resolve("ArrowRight", SUPER | ALT, false) == Action.FocusPaneRight;
+		assert resolve("ArrowUp", SUPER | ALT, false) == Action.FocusPaneUp;
+		assert resolve("ArrowDown", SUPER | ALT, false) == Action.FocusPaneDown;
+		assert resolve("ArrowLeft", SUPER | CTRL, false) == Action.ResizePaneLeft;
+		assert resolve("ArrowRight", SUPER | CTRL, false) == Action.ResizePaneRight;
+		assert resolve("ArrowUp", SUPER | CTRL, false) == Action.ResizePaneUp;
+		assert resolve("ArrowDown", SUPER | CTRL, false) == Action.ResizePaneDown;
+		assert resolve("Enter", SUPER | SHIFT, false) == Action.TogglePaneZoom;
+		assert resolve("KeyT", SUPER, false) == Action.NewTab;
+		assert resolve("BracketLeft", SUPER | SHIFT, false) == Action.PreviousTab;
+		assert resolve("BracketRight", SUPER | SHIFT, false) == Action.NextTab;
+		assert resolve("KeyS", SUPER | SHIFT, false) == Action.ToggleSidebar;
+		assert resolve("KeyO", CTRL | SHIFT, false) === null;
+	} else {
+		assert resolve("KeyO", CTRL | SHIFT, false) == Action.SplitRight;
+		assert resolve("KeyE", CTRL | SHIFT, false) == Action.SplitDown;
+		assert resolve("KeyW", CTRL | SHIFT, false) == Action.ClosePane;
+		assert resolve("BracketLeft", CTRL | SUPER, false) == Action.FocusPanePrevious;
+		assert resolve("BracketRight", CTRL | SUPER, false) == Action.FocusPaneNext;
+		assert resolve("ArrowLeft", CTRL | ALT, false) == Action.FocusPaneLeft;
+		assert resolve("ArrowRight", CTRL | ALT, false) == Action.FocusPaneRight;
+		assert resolve("ArrowLeft", CTRL | SUPER | SHIFT, false) == Action.ResizePaneLeft;
+		assert resolve("ArrowRight", CTRL | SUPER | SHIFT, false) == Action.ResizePaneRight;
+		assert resolve("ArrowUp", CTRL | SUPER | SHIFT, false) == Action.ResizePaneUp;
+		assert resolve("ArrowDown", CTRL | SUPER | SHIFT, false) == Action.ResizePaneDown;
+		assert resolve("Enter", CTRL | SHIFT, false) == Action.TogglePaneZoom;
+		assert resolve("KeyT", CTRL | SHIFT, false) == Action.NewTab;
+		assert resolve("PageUp", CTRL, false) == Action.PreviousTab;
+		assert resolve("PageDown", CTRL, true) == Action.NextTab;
+		assert resolve("KeyS", CTRL | SHIFT, false) == Action.ToggleSidebar;
+		assert resolve("KeyD", SUPER, false) === null;
+	}
+}
+
+test "the tab digits go to tabs one to nine and leave zero to the font size" {
+	assert resolve("Digit1", TAB_DIGIT_MODS, false) == Action.GotoTab1;
+	assert resolve("Digit5", TAB_DIGIT_MODS, true) == Action.GotoTab5;
+	assert resolve("Digit9", TAB_DIGIT_MODS, false) == Action.GotoTab9;
+	when (macos) {
+		assert resolve("Digit0", SUPER, false) == Action.ResetFontSize;
+	} else {
+		assert resolve("Digit1", ALT, false) == Action.GotoTab1;
+		assert resolve("Digit0", ALT, false) === null;
+	}
+}
+
+test "the pane keys leave the earlier scroll and prompt keys where they were" {
+	assert resolve("ArrowUp", CTRL | ALT, false) == Action.PromptUp;
+	assert resolve("ArrowDown", CTRL | ALT, false) == Action.PromptDown;
+	assert resolve("PageUp", CTRL | SHIFT, false) == Action.PageUp;
+	assert resolve("ArrowUp", CTRL | SHIFT, false) == Action.LineUp;
+}
+
+test "every workspace action has a name a keybind can give, and no default moves or renames a tab" {
+	const names = ["split_right", "split_down", "close_pane", "focus_pane_left", "focus_pane_right",
+		"focus_pane_up", "focus_pane_down", "focus_pane_previous", "focus_pane_next",
+		"resize_pane_left", "resize_pane_right", "resize_pane_up", "resize_pane_down",
+		"toggle_pane_zoom", "new_tab", "close_tab", "previous_tab", "next_tab", "goto_tab_1",
+		"goto_tab_9", "move_tab_left", "move_tab_right", "rename_tab", "toggle_sidebar"];
+	for (const name of names) { assert actionNamed(name) !== null; }
+	assert actionNamed("goto_tab_9") == Action.GotoTab9;
+	assert actionNamed("goto_tab_0") === null;
+	for (const b of BINDINGS) {
+		assert b.action != Action.MoveTabLeft && b.action != Action.RenameTab;
+	}
+	for (const b of WORKSPACE) {
+		assert b.action != Action.MoveTabRight && b.action != Action.RenameTab;
+	}
 }

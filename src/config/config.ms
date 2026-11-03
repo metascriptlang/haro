@@ -22,6 +22,26 @@ export function `==`(this a: StartDir, b: StartDir): boolean {
 	return a.kind == b.kind;
 }
 
+export enum DividerStyle {
+	Cell,
+	Line,
+}
+
+export enum PaneTitle {
+	Border,
+	None,
+}
+
+export enum SidebarSide {
+	Left,
+	Right,
+}
+
+export enum PaneCwd {
+	Focused,
+	Start,
+}
+
 export struct CursorEffects {
 	glitch: boolean;
 	trail: boolean;
@@ -43,6 +63,17 @@ export struct Config {
 	palette: Vec<Rgb>;
 	keybinds: Vec<Keybind>;
 	optionAsAlt: OptionAsAlt;
+	dividerStyle: DividerStyle;
+	dividerColor: Rgb | null;
+	focusedDividerColor: Rgb | null;
+	paneGap: float64;
+	paneTitle: PaneTitle;
+	paneResizeStep: int64;
+	sidebarPosition: SidebarSide;
+	sidebarVisible: boolean;
+	sidebarWidth: int64;
+	confirmClose: boolean;
+	newPaneCwd: PaneCwd;
 }
 
 const POINTS_PER_INCH: float64 = 72;
@@ -52,6 +83,12 @@ const MIN_FONT_SIZE: float64 = 1;
 const MAX_FONT_SIZE: float64 = 255;
 const MAX_PADDING: float64 = 512;
 const MAX_CURSOR_DUST: float64 = 10;
+const MAX_PANE_GAP: float64 = 64;
+const PANE_RESIZE_STEP: int64 = 10;
+const MAX_PANE_RESIZE_STEP: int64 = 1000;
+const SIDEBAR_WIDTH: int64 = 24;
+const MIN_SIDEBAR_WIDTH: int64 = 8;
+const MAX_SIDEBAR_WIDTH: int64 = 200;
 
 when (windows) {
 	import { defaultCommand } from "../pty/pty";
@@ -93,6 +130,17 @@ export function defaults(): Config {
 		palette: [],
 		keybinds: [],
 		optionAsAlt: OptionAsAlt.Neither,
+		dividerStyle: DividerStyle.Cell,
+		dividerColor: null,
+		focusedDividerColor: null,
+		paneGap: 0,
+		paneTitle: PaneTitle.Border,
+		paneResizeStep: PANE_RESIZE_STEP,
+		sidebarPosition: SidebarSide.Left,
+		sidebarVisible: true,
+		sidebarWidth: SIDEBAR_WIDTH,
+		confirmClose: true,
+		newPaneCwd: PaneCwd.Focused,
 	};
 }
 
@@ -209,6 +257,51 @@ function optionAsAltOf(name: string): Result<OptionAsAlt, string> {
 		"both" => Result.ok(OptionAsAlt.Both),
 		_ => Result.err(`optionAsAlt: "${name}" must be neither, left, right or both`),
 	};
+}
+
+function dividerStyleOf(name: string): Result<DividerStyle, string> {
+	return match (name) {
+		"cell" => Result.ok(DividerStyle.Cell),
+		"line" => Result.ok(DividerStyle.Line),
+		_ => Result.err(`dividerStyle: "${name}" must be cell or line`),
+	};
+}
+
+function paneTitleOf(name: string): Result<PaneTitle, string> {
+	return match (name) {
+		"border" => Result.ok(PaneTitle.Border),
+		"none" => Result.ok(PaneTitle.None),
+		_ => Result.err(`paneTitle: "${name}" must be border or none`),
+	};
+}
+
+function sidebarSideOf(name: string): Result<SidebarSide, string> {
+	return match (name) {
+		"left" => Result.ok(SidebarSide.Left),
+		"right" => Result.ok(SidebarSide.Right),
+		_ => Result.err(`sidebarPosition: "${name}" must be left or right`),
+	};
+}
+
+function paneCwdOf(name: string): Result<PaneCwd, string> {
+	return match (name) {
+		"focused" => Result.ok(PaneCwd.Focused),
+		"start" => Result.ok(PaneCwd.Start),
+		_ => Result.err(`newPaneCwd: "${name}" must be focused or start`),
+	};
+}
+
+function readWhole(
+	v: JsonValue,
+	key: string,
+	min: int64,
+	max: int64,
+	unit: string,
+): Result<int64, string> {
+	if (v.kind != JsonKind.Int || v.intVal < min || v.intVal > max) {
+		return Result.err(`${key} must be a whole number of ${unit} from ${min} to ${max}`);
+	}
+	return Result.ok(v.intVal);
 }
 
 function readKeybind(v: JsonValue, key: string): Result<Keybind, string> {
@@ -357,6 +450,35 @@ export function parse(json: string): Result<Config, string> {
 			"optionAsAlt" => {
 				if (given) { c.optionAsAlt = try optionAsAltOf(try readString(v, key)); }
 			},
+			"dividerStyle" => {
+				if (given) { c.dividerStyle = try dividerStyleOf(try readString(v, key)); }
+			},
+			"dividerColor" => { if (given) { c.dividerColor = try readColor(v, key); } },
+			"focusedDividerColor" => {
+				if (given) { c.focusedDividerColor = try readColor(v, key); }
+			},
+			"paneGap" => {
+				if (!given) { continue; }
+				c.paneGap = try readNumber(v, key);
+				if (c.paneGap < 0 || c.paneGap > MAX_PANE_GAP) {
+					return Result.err(`paneGap ${c.paneGap} must be from 0 to ${MAX_PANE_GAP} pixels`);
+				}
+			},
+			"paneTitle" => { if (given) { c.paneTitle = try paneTitleOf(try readString(v, key)); } },
+			"paneResizeStep" => {
+				if (given) { c.paneResizeStep = try readWhole(v, key, 1, MAX_PANE_RESIZE_STEP, "cells"); }
+			},
+			"sidebarPosition" => {
+				if (given) { c.sidebarPosition = try sidebarSideOf(try readString(v, key)); }
+			},
+			"sidebarVisible" => { if (given) { c.sidebarVisible = try readBool(v, key); } },
+			"sidebarWidth" => {
+				if (given) {
+					c.sidebarWidth = try readWhole(v, key, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, "cells");
+				}
+			},
+			"confirmClose" => { if (given) { c.confirmClose = try readBool(v, key); } },
+			"newPaneCwd" => { if (given) { c.newPaneCwd = try paneCwdOf(try readString(v, key)); } },
 			_ => { return Result.err(`unknown config field "${key}"`); },
 		}
 	}
@@ -384,6 +506,60 @@ test "an empty config keeps every default" {
 	assert c.value.palette.length == 0;
 	assert c.value.keybinds.length == 0;
 	assert c.value.optionAsAlt == OptionAsAlt.Neither;
+	assert c.value.dividerStyle == DividerStyle.Cell;
+	assert c.value.dividerColor === null && c.value.focusedDividerColor === null;
+	assert c.value.paneGap == 0;
+	assert c.value.paneTitle == PaneTitle.Border;
+	assert c.value.paneResizeStep == 10;
+	assert c.value.sidebarPosition == SidebarSide.Left;
+	assert c.value.sidebarVisible;
+	assert c.value.sidebarWidth == 24;
+	assert c.value.confirmClose;
+	assert c.value.newPaneCwd == PaneCwd.Focused;
+}
+
+test "the pane, sidebar and close fields a config gives replace the defaults" {
+	const c = parse(
+		`{"dividerStyle":"line","dividerColor":"#414868","focusedDividerColor":"#7aa2f7",` +
+			`"paneGap":4,"paneTitle":"none","paneResizeStep":5,"sidebarPosition":"right",` +
+			`"sidebarVisible":false,"sidebarWidth":30,"confirmClose":false,"newPaneCwd":"start"}`,
+	);
+	assert c.ok;
+	const divider: Rgb = { r: 65, g: 72, b: 104 };
+	const focused: Rgb = { r: 122, g: 162, b: 247 };
+	assert c.value.dividerStyle == DividerStyle.Line;
+	assert c.value.dividerColor == divider;
+	assert c.value.focusedDividerColor == focused;
+	assert c.value.paneGap == 4;
+	assert c.value.paneTitle == PaneTitle.None;
+	assert c.value.paneResizeStep == 5;
+	assert c.value.sidebarPosition == SidebarSide.Right;
+	assert !c.value.sidebarVisible;
+	assert c.value.sidebarWidth == 30;
+	assert !c.value.confirmClose;
+	assert c.value.newPaneCwd == PaneCwd.Start;
+}
+
+test "a pane, sidebar or close field the config cannot use is refused by name" {
+	assert refusal(`{"dividerStyle":"dashed"}`) == `dividerStyle: "dashed" must be cell or line`;
+	assert refusal(`{"dividerColor":"blue"}`) == `dividerColor: "blue" is not a #rrggbb colour`;
+	assert refusal(`{"focusedDividerColor":1}`) == "focusedDividerColor must be a string";
+	assert refusal(`{"paneGap":-1}`) == "paneGap -1 must be from 0 to 64 pixels";
+	assert refusal(`{"paneGap":65}`) == "paneGap 65 must be from 0 to 64 pixels";
+	assert refusal(`{"paneGap":64}`) == "";
+	assert refusal(`{"paneTitle":"top"}`) == `paneTitle: "top" must be border or none`;
+	assert refusal(`{"paneResizeStep":0}`) ==
+		"paneResizeStep must be a whole number of cells from 1 to 1000";
+	assert refusal(`{"paneResizeStep":2.5}`) ==
+		"paneResizeStep must be a whole number of cells from 1 to 1000";
+	assert refusal(`{"sidebarPosition":"top"}`) == `sidebarPosition: "top" must be left or right`;
+	assert refusal(`{"sidebarVisible":"yes"}`) == "sidebarVisible must be true or false";
+	assert refusal(`{"sidebarWidth":7}`) ==
+		"sidebarWidth must be a whole number of cells from 8 to 200";
+	assert refusal(`{"sidebarWidth":201}`) ==
+		"sidebarWidth must be a whole number of cells from 8 to 200";
+	assert refusal(`{"confirmClose":0}`) == "confirmClose must be true or false";
+	assert refusal(`{"newPaneCwd":"home"}`) == `newPaneCwd: "home" must be focused or start`;
 }
 
 test "the fields a config gives replace the defaults" {
@@ -435,7 +611,7 @@ test "a keybind runs an action or keeps to one screen when its config says so" {
 test "a keybind can name every built-in action by its snake_case name" {
 	const names = ["copy", "paste", "scroll_line_up", "scroll_line_down", "scroll_page_up",
 		"scroll_page_down", "scroll_to_top", "scroll_to_bottom", "prompt_up", "prompt_down",
-		"close_window"];
+		"close_window", "split_right", "close_pane", "goto_tab_3", "toggle_sidebar"];
 	for (const name of names) {
 		assert refusal(`{"keybinds":[{"keys":"super+j","action":"${name}"}]}`) == "";
 	}

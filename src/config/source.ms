@@ -375,7 +375,8 @@ test "a config typed with HaroConfig sets the pane, sidebar and server fields an
 		`\tdividerStyle: "line", focusedDividerColor: "#7aa2f7", paneGap: 2, paneTitle: "none",\n` +
 		`\tpaneResizeStep: 4, sidebarPosition: "right", sidebarVisible: false, sidebarWidth: 30,\n` +
 		`\tconfirmClose: false, newPaneCwd: "start", serverTailnet: true, serverTailnetPort: 9001,\n` +
-		`\tkeybinds: [{ keys: "ctrl+shift+backslash", action: "split_right" }],\n};\n`;
+		`\tremoteHosts: [{ label: "build", address: "me@build" }],\n` +
+		`\tkeybinds: [{ keys: "ctrl+shift+backslash", action: "new_tab_on_host" }],\n};\n`;
 	assert writeFile(path, config).ok;
 	const typed = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
 	assert typed.ok, typed.ok ? "" : typed.error;
@@ -388,7 +389,9 @@ test "a config typed with HaroConfig sets the pane, sidebar and server fields an
 	assert c.value.sidebarPosition == SidebarSide.Right && !c.value.sidebarVisible;
 	assert !c.value.confirmClose && c.value.newPaneCwd == PaneCwd.Start;
 	assert c.value.serverTailnet && c.value.serverTailnetPort == 9001;
-	assert c.value.keybinds[0].action == Action.SplitRight;
+	assert c.value.remoteHosts.length == 1 && c.value.remoteHosts[0].label == "build";
+	assert c.value.remoteHosts[0].address == "me@build";
+	assert c.value.keybinds[0].action == Action.NewTabOnHost;
 }
 
 test "a config spreads saigonNight from the haro package and keeps its own fields over it, a cursor field among them" {

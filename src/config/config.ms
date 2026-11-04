@@ -4,6 +4,7 @@ import { Rgb, SCROLLBACK_LINES } from "../vt/vt";
 import { Action, Keybind, Screen, actionNames, actionNamed, keybind } from "../input/bindings";
 import { PARTICLE_DENSITY } from "../term/trail";
 import { KeyMod, OptionAsAlt, modSet } from "../keys/keys";
+import { destinationOf } from "../client/destination";
 
 export enum StartKind {
 	Inherit,
@@ -42,6 +43,11 @@ export enum PaneCwd {
 	Start,
 }
 
+export struct RemoteHost {
+	label: string;
+	address: string;
+}
+
 export struct CursorEffects {
 	glitch: boolean;
 	trail: boolean;
@@ -76,6 +82,7 @@ export struct Config {
 	newPaneCwd: PaneCwd;
 	serverTailnet: boolean;
 	serverTailnetPort: int32;
+	remoteHosts: Vec<RemoteHost>;
 }
 
 const POINTS_PER_INCH: float64 = 72;
@@ -147,6 +154,7 @@ export function defaults(): Config {
 		newPaneCwd: PaneCwd.Focused,
 		serverTailnet: false,
 		serverTailnetPort: SERVER_TAILNET_PORT,
+		remoteHosts: [],
 	};
 }
 
@@ -375,6 +383,44 @@ function readCursor(v: JsonValue, key: string): Result<CursorEffects, string> {
 	return Result.ok(effects);
 }
 
+function readRemoteHost(v: JsonValue, key: string): Result<RemoteHost, string> {
+	if (v.kind != JsonKind.Object) { return Result.err(`${key} must be { label, address }`); }
+	let label: string | null = null;
+	let address: string | null = null;
+	for (let i = 0; i < v.keys.length; i++) {
+		const name = v.keys[i];
+		const value = v.values[i];
+		if (value.kind == JsonKind.Null) { continue; }
+		match (name) {
+			"label" => { label = try readString(value, `${key}.label`); },
+			"address" => {
+				const parsed = destinationOf(try readString(value, `${key}.address`));
+				if (!parsed.ok) { return Result.err(`${key}.address: ${parsed.error}`); }
+				address = parsed.value;
+			},
+			_ => {
+				return Result.err(`${key}: unknown field "${name}", expected label and address`);
+			},
+		}
+	}
+	if (label === null || label == "" || address === null) {
+		return Result.err(`${key} must give a label and an address`);
+	}
+	return Result.ok({ label: label, address: address });
+}
+
+function readRemoteHosts(v: JsonValue, key: string): Result<Vec<RemoteHost>, string> {
+	const hosts = try readEach(try readArray(v, key), key, readRemoteHost);
+	for (let i = 0; i < hosts.length; i++) {
+		for (let j = 0; j < i; j++) {
+			if (hosts[i].label == hosts[j].label) {
+				return Result.err(`${key}[${i}]: the label "${hosts[i].label}" is taken by ${key}[${j}]`);
+			}
+		}
+	}
+	return Result.ok(hosts);
+}
+
 function startDirOf(text: string): StartDir | null {
 	if (text.startsWith("~/") || isAbsolute(text)) { return { kind: StartKind.Path, path: text }; }
 	return match (text) {
@@ -493,6 +539,7 @@ export function parse(json: string): Result<Config, string> {
 				}
 				c.serverTailnetPort = v.intVal as int32;
 			},
+			"remoteHosts" => { if (given) { c.remoteHosts = try readRemoteHosts(v, key); } },
 			_ => { return Result.err(`unknown config field "${key}"`); },
 		}
 	}
@@ -564,6 +611,38 @@ test "the server listens on the tailnet only when the config turns it on, at its
 	assert refusal(`{"serverTailnetPort":65536}`) ==
 		"serverTailnetPort must be a port from 1 to 65535";
 	assert refusal(`{"serverTailnet":"yes"}`) != "";
+}
+
+test "a remote host is a label and the ssh destination that reaches it" {
+	const none = parse("{}");
+	assert none.ok && none.value.remoteHosts.length == 0;
+	const two = parse(
+		`{"remoteHosts":[{"label":"build","address":"build.example.ts.net"},` +
+			`{"label":"gpu","address":"me@gpu"}]}`,
+	);
+	assert two.ok;
+	if (two.ok) {
+		const hosts = two.value.remoteHosts;
+		assert hosts.length == 2;
+		assert hosts[0].label == "build" && hosts[0].address == "build.example.ts.net";
+		assert hosts[1].label == "gpu" && hosts[1].address == "me@gpu";
+	}
+}
+
+test "a remote host without a label or with a bad address or a taken label is refused by name" {
+	assert refusal(`{"remoteHosts":{}}`) == "remoteHosts must be an array";
+	assert refusal(`{"remoteHosts":["box"]}`) == "remoteHosts[0] must be { label, address }";
+	assert refusal(`{"remoteHosts":[{"address":"box"}]}`) ==
+		"remoteHosts[0] must give a label and an address";
+	assert refusal(`{"remoteHosts":[{"label":"","address":"box"}]}`) ==
+		"remoteHosts[0] must give a label and an address";
+	assert refusal(`{"remoteHosts":[{"label":"b","address":"-x"}]}`) ==
+		`remoteHosts[0].address: "-x" starts with -, which ssh reads as an option`;
+	assert refusal(`{"remoteHosts":[{"label":"b","address":"box","port":1}]}`) ==
+		`remoteHosts[0]: unknown field "port", expected label and address`;
+	assert refusal(
+		`{"remoteHosts":[{"label":"b","address":"x"},{"label":"b","address":"y"}]}`,
+	) == `remoteHosts[1]: the label "b" is taken by remoteHosts[0]`;
 }
 
 test "a pane, sidebar or close field the config cannot use is refused by name" {

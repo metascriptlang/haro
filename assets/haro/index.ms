@@ -50,7 +50,9 @@ export interface Keybind {
 		| "move_tab_left"
 		| "move_tab_right"
 		| "rename_tab"
-		| "toggle_sidebar";
+		| "toggle_sidebar"
+		| "new_tab_on_host"
+		| "add_remote_host";
 	mode?: "alt" | "~alt";
 }
 
@@ -127,6 +129,11 @@ export interface CursorEffects {
 	dust?: number;
 }
 
+export interface RemoteHost {
+	label: string;
+	address: string;
+}
+
 export interface HaroConfig {
 	fontFamily?: string[];
 	fontSize?: number;
@@ -155,6 +162,7 @@ export interface HaroConfig {
 	newPaneCwd?: "focused" | "start";
 	serverTailnet?: boolean;
 	serverTailnetPort?: int32;
+	remoteHosts?: RemoteHost[];
 	onKey?: (e: KeyPress) => KeyAnswer;
 	onPrompt?: (e: Prompt) => void;
 	onCommandDone?: (e: CommandDone) => void;

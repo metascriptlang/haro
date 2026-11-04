@@ -51,6 +51,8 @@ export enum Action {
 	MoveTabRight,
 	RenameTab,
 	ToggleSidebar,
+	NewTabOnHost,
+	AddRemoteHost,
 }
 
 const SHIFT = modSet(KeyMod.Shift);
@@ -115,6 +117,7 @@ when (macos) {
 		{ code: "ArrowDown", mods: SUPER | CTRL, action: Action.ResizePaneDown, screen: Screen.Any },
 		{ code: "Enter", mods: SUPER | SHIFT, action: Action.TogglePaneZoom, screen: Screen.Any },
 		{ code: "KeyT", mods: SUPER, action: Action.NewTab, screen: Screen.Any },
+		{ code: "KeyT", mods: SUPER | ALT, action: Action.NewTabOnHost, screen: Screen.Any },
 		{ code: "KeyW", mods: SUPER | ALT, action: Action.CloseTab, screen: Screen.Any },
 		{ code: "BracketLeft", mods: SUPER | SHIFT, action: Action.PreviousTab, screen: Screen.Any },
 		{ code: "BracketRight", mods: SUPER | SHIFT, action: Action.NextTab, screen: Screen.Any },
@@ -137,6 +140,7 @@ when (macos) {
 		{ code: "ArrowDown", mods: RESIZE_MODS, action: Action.ResizePaneDown, screen: Screen.Any },
 		{ code: "Enter", mods: CTRL | SHIFT, action: Action.TogglePaneZoom, screen: Screen.Any },
 		{ code: "KeyT", mods: CTRL | SHIFT, action: Action.NewTab, screen: Screen.Any },
+		{ code: "KeyT", mods: CTRL | SHIFT | ALT, action: Action.NewTabOnHost, screen: Screen.Any },
 		{ code: "PageUp", mods: CTRL, action: Action.PreviousTab, screen: Screen.Any },
 		{ code: "PageDown", mods: CTRL, action: Action.NextTab, screen: Screen.Any },
 		{ code: "KeyS", mods: CTRL | SHIFT, action: Action.ToggleSidebar, screen: Screen.Any },
@@ -238,6 +242,8 @@ const NAMED: Vec<Named> = [
 	{ name: "move_tab_right", action: Action.MoveTabRight },
 	{ name: "rename_tab", action: Action.RenameTab },
 	{ name: "toggle_sidebar", action: Action.ToggleSidebar },
+	{ name: "new_tab_on_host", action: Action.NewTabOnHost },
+	{ name: "add_remote_host", action: Action.AddRemoteHost },
 ];
 
 export function actionNamed(name: string): Action | null {
@@ -550,6 +556,7 @@ test "the split, pane and tab keys take cmd on macos and ctrl with shift, alt or
 		assert resolve("ArrowDown", SUPER | CTRL, false) == Action.ResizePaneDown;
 		assert resolve("Enter", SUPER | SHIFT, false) == Action.TogglePaneZoom;
 		assert resolve("KeyT", SUPER, false) == Action.NewTab;
+		assert resolve("KeyT", SUPER | ALT, false) == Action.NewTabOnHost;
 		assert resolve("BracketLeft", SUPER | SHIFT, false) == Action.PreviousTab;
 		assert resolve("BracketRight", SUPER | SHIFT, false) == Action.NextTab;
 		assert resolve("KeyS", SUPER | SHIFT, false) == Action.ToggleSidebar;
@@ -568,6 +575,7 @@ test "the split, pane and tab keys take cmd on macos and ctrl with shift, alt or
 		assert resolve("ArrowDown", CTRL | SUPER | SHIFT, false) == Action.ResizePaneDown;
 		assert resolve("Enter", CTRL | SHIFT, false) == Action.TogglePaneZoom;
 		assert resolve("KeyT", CTRL | SHIFT, false) == Action.NewTab;
+		assert resolve("KeyT", CTRL | SHIFT | ALT, false) == Action.NewTabOnHost;
 		assert resolve("PageUp", CTRL, false) == Action.PreviousTab;
 		assert resolve("PageDown", CTRL, true) == Action.NextTab;
 		assert resolve("KeyS", CTRL | SHIFT, false) == Action.ToggleSidebar;
@@ -594,19 +602,22 @@ test "the pane keys leave the earlier scroll and prompt keys where they were" {
 	assert resolve("ArrowUp", CTRL | SHIFT, false) == Action.LineUp;
 }
 
-test "every workspace action has a name a keybind can give, and no default moves or renames a tab" {
+test "every workspace action has a name a keybind can give, and no default moves or renames a tab or adds a host" {
 	const names = ["split_right", "split_down", "close_pane", "focus_pane_left", "focus_pane_right",
 		"focus_pane_up", "focus_pane_down", "focus_pane_previous", "focus_pane_next",
 		"resize_pane_left", "resize_pane_right", "resize_pane_up", "resize_pane_down",
 		"toggle_pane_zoom", "new_tab", "close_tab", "previous_tab", "next_tab", "goto_tab_1",
-		"goto_tab_9", "move_tab_left", "move_tab_right", "rename_tab", "toggle_sidebar"];
+		"goto_tab_9", "move_tab_left", "move_tab_right", "rename_tab", "toggle_sidebar",
+		"new_tab_on_host", "add_remote_host"];
 	for (const name of names) { assert actionNamed(name) !== null; }
 	assert actionNamed("goto_tab_9") == Action.GotoTab9;
 	assert actionNamed("goto_tab_0") === null;
 	for (const b of BINDINGS) {
 		assert b.action != Action.MoveTabLeft && b.action != Action.RenameTab;
+		assert b.action != Action.AddRemoteHost;
 	}
 	for (const b of WORKSPACE) {
 		assert b.action != Action.MoveTabRight && b.action != Action.RenameTab;
+		assert b.action != Action.AddRemoteHost;
 	}
 }

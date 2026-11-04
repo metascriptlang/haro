@@ -83,7 +83,9 @@ export function act(
 		Action.MoveTabLeft |
 		Action.MoveTabRight |
 		Action.RenameTab |
-		Action.ToggleSidebar => {
+		Action.ToggleSidebar |
+		Action.NewTabOnHost |
+		Action.AddRemoteHost => {
 			c.asks.actions.push(action);
 		},
 		Action.ClearScrollback => {

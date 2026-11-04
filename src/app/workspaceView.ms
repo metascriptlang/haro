@@ -532,11 +532,14 @@ function notStarted(this v: WorkspaceView, id: PaneId, error: TermError): void {
 		v.host.report.fail(`open: ${error.toString()}`);
 		return;
 	}
-	const why = error.toString();
+	v.shellFailed(error.toString());
+	v.queue.push({ kind: CommandKind.ClosePane, pane: id });
+}
+
+function shellFailed(this v: WorkspaceView, why: string): void {
 	v.focusedModel()?.notify(
 		`The shell did not start (${why}): check command in config.ms, or --shell`,
 	);
-	v.queue.push({ kind: CommandKind.ClosePane, pane: id });
 }
 
 async function run(this v: WorkspaceView, c: WorkspaceCommand): Promise<void> {
@@ -697,7 +700,7 @@ export function redraw(this v: WorkspaceView): void {
 
 function exited(this v: WorkspaceView, id: PaneId, code: int32): void {
 	v.host.report.note(`pane ${id as int32}: the shell exited with code ${code}`);
-	if (v.keepsEnded) { return; }
+	if (v.keepsEnded || v.link !== null) { return; }
 	v.send({ kind: CommandKind.ClosePane, pane: id });
 }
 
@@ -994,6 +997,11 @@ async function receive(this v: WorkspaceView, m: Message): Promise<void> {
 		await v.applyEvents([m.event]);
 	} else if (m.kind == MessageKind.Output) {
 		v.output(m.pane, m.seq, m.bytes);
+	} else if (m.kind == MessageKind.Exited) {
+		v.exited(m.pane, m.code);
+	} else if (m.kind == MessageKind.Failed) {
+		v.host.report.note(`pane ${m.pane as int32}: ${m.reason}`);
+		v.shellFailed(m.reason);
 	} else if (m.kind == MessageKind.Refused) {
 		v.lost(`the server refused: ${m.reason}`);
 	} else if (m.kind == MessageKind.Bye) {

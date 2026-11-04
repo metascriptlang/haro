@@ -2,7 +2,7 @@ import { removeAll } from "std/fs";
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { connectToUnix } from "../server/transport";
-import { ScreenFormat } from "../server/protocol";
+import { MessageKind, ScreenFormat } from "../server/protocol";
 import { defaults } from "../config/config";
 import { HookPane, KeyAnswer, UNHANDLED } from "../config/hooks";
 import { KeyEvent } from "../keys/keys";
@@ -179,6 +179,27 @@ test "a window over a real socket shows the server's panes, sends typing as inpu
 		assert await shows(v, 2, "two-marker");
 	}
 	await v.detachPanes();
+	fake.close();
+	cleanUp(path);
+}
+
+test "a window shows the server's pane exit and start failure the way an in-process shell does, and the server closes the pane" {
+	const path = freshPath();
+	const fake = fakeWithTwoPanes(path);
+	const notes = new Notes();
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	assert got.ok;
+	if (!got.ok) { return; }
+	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	await v.attachTo(link, got.value);
+	fake.endPane(1 as PaneId, { kind: MessageKind.Exited, pane: 1 as PaneId, code: 3 });
+	assert await until((): boolean => runningIds(v) == "2" && treeIds(v) == "2"), runningIds(v);
+	assert notes.lines.includes("pane 1: the shell exited with code 3"), notes.lines.join("\n");
+	fake.endPane(2 as PaneId, { kind: MessageKind.Failed, pane: 2 as PaneId, reason: "no such shell" });
+	assert await until((): boolean => notes.lines.includes("the last pane closed")), notes.lines.join("\n");
+	assert notes.lines.includes("pane 2: no such shell"), notes.lines.join("\n");
+	assert notes.fatal == "";
 	fake.close();
 	cleanUp(path);
 }

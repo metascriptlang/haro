@@ -49,6 +49,7 @@ export class FakeServer {
 	listener: Listener | null = null;
 	commands: int32 = 0;
 	byes: int32 = 0;
+	latest: Connection | null = null;
 
 	constructor(format: ScreenFormat, w: Workspace) {
 		this.format = format;
@@ -63,6 +64,7 @@ export class FakeServer {
 	}
 
 	accepted(c: Connection): void {
+		this.latest = c;
 		const decoder = Decoder.create();
 		c.start((chunk: uint8[]): void => {
 			const got = decoder.push(chunk);
@@ -144,6 +146,13 @@ export class FakeServer {
 		if (events.length == 0) { return; }
 		this.layoutTo(c, []);
 		for (const e of events) { this.send(c, { kind: MessageKind.Event, event: e }); }
+	}
+
+	endPane(id: PaneId, why: Message): void {
+		const c = this.latest;
+		if (c === null) { return; }
+		this.send(c, why);
+		this.run(c, { kind: CommandKind.ClosePane, pane: id });
 	}
 
 	echo(c: Connection, id: PaneId, bytes: uint8[]): void {

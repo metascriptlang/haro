@@ -75,6 +75,8 @@ import { ScreenFormat } from "../server/protocol";
 import { Attached, ServerLink, attach } from "../client/link";
 import { connectLocal, connectTcp, targetOf } from "../client/connect";
 import { startFake } from "../client/fakeServer";
+import { serve } from "../server/serve";
+import { dividerCellsOf } from "./workspaceView";
 import { vtBuild } from "../vt/snapshot";
 import { portOf } from "../controller/shell";
 import { ptySetWake } from "../pty/nativePty.h";
@@ -503,9 +505,16 @@ function inProcess(): boolean {
 
 async function main(): Promise<int32> {
 	stats.mark("main", Date.now());
-	if (hasFlag("--server")) { fail("haro --server: this build has no server yet"); }
 	config.readConfig();
 	stats.mark("config", Date.now());
+	if (hasFlag("--server")) {
+		return await serve({
+			config: config.loaded.config,
+			shellScripts: config.shellScripts(),
+			startIn: config.startIn(probableCli(), homeDir()),
+			dividerCells: dividerCellsOf(config.loaded.config),
+		});
+	}
 	const replayPath = flagValue("--replay");
 	if (replayPath !== null) { return await runReplay(replayPath); }
 	if (inProcess()) {

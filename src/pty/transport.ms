@@ -23,4 +23,5 @@ export interface Pty {
 	close: () => void;
 	busy: () => boolean;
 	ownsScreen: boolean;
+	takesReplies: boolean;
 }

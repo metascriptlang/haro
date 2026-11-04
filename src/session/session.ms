@@ -1,4 +1,5 @@
 import { Pty, PtyError } from "../pty/transport";
+import { Seed, seededVt } from "../pty/remote";
 import { Vt } from "../vt/vt";
 
 export enum SessionError {
@@ -22,8 +23,9 @@ export function start(
 	rows: int32,
 	cellWidth: int32 = 0,
 	cellHeight: int32 = 0,
+	seed: Seed | null = null,
 ): Result<Session, SessionError> {
-	const vt = Vt.create(cols, rows);
+	const vt = seed === null ? Vt.create(cols, rows) : seed.seededVt();
 	if (!vt.ok) {
 		pty.close();
 		return Result.err(SessionError.VtCreateFailed);
@@ -45,9 +47,15 @@ export function pump(this s: Session, buf: Span<uint8>): Result<boolean, Session
 	}
 	if (r.value > 0) {
 		s.vt.write(buf[0..r.value]);
-		try s.sendReplies();
+		try s.answer();
 	}
 	return Result.ok(true);
+}
+
+export function answer(this s: Session): Result<void, SessionError> {
+	if (s.pty.takesReplies) { return s.sendReplies(); }
+	s.vt.dropReplies();
+	return Result.ok(null);
 }
 
 export function sendReplies(this s: Session): Result<void, SessionError> {
@@ -85,7 +93,7 @@ export function resizeScreen(
 ): Result<void, SessionError> {
 	const resizedVt = s.vt.resize(cols, rows, cellWidth, cellHeight);
 	if (!resizedVt.ok) { return Result.err(SessionError.ResizeFailed); }
-	return s.sendReplies();
+	return s.answer();
 }
 
 export function resizePty(

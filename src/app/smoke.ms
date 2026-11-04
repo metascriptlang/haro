@@ -8,7 +8,16 @@ import { CellRect, PaneId } from "../workspace/tree";
 import { focusedPane } from "../workspace/workspace";
 import { PaneModel } from "./components/features/terminal/paneModel";
 import { paneOf } from "./panes";
-import { WorkspaceView, closeShells, confirmed, windowAction } from "./workspaceView";
+import { Attached, ServerLink } from "../client/link";
+import {
+	WorkspaceView,
+	attachTo,
+	closeShells,
+	confirmed,
+	detachPanes,
+	quit,
+	windowAction,
+} from "./workspaceView";
 
 
 function dump(this view: View, label: string): void {
@@ -265,6 +274,62 @@ export async function smokePanes(v: WorkspaceView): Promise<void> {
 		"the closed pane's sibling takes its place");
 
 	console.log(`smoke-panes: ${t.failed == 0 ? "PASS" : `FAIL ${t.failed}`}`);
+	await v.closeShells();
+	exit(t.failed == 0 ? 0 : 1);
+}
+
+function paneHas(v: WorkspaceView, id: int32, wanted: string): boolean {
+	const view = modelOf(v, id)?.view ?? null;
+	if (view === null) { return false; }
+	const n = view.grid.length() as int32;
+	for (let i = 0; i < n; i++) {
+		if (view.text(i).includes(wanted)) { return true; }
+	}
+	return false;
+}
+
+export interface Reattach {
+	link: ServerLink;
+	attached: Attached;
+}
+
+async function typedMarker(t: Tally, v: WorkspaceView, id: int32, marker: string): Promise<void> {
+	const m = modelOf(v, id);
+	if (m === null) {
+		t.checked(false, `pane ${id} is open to type into`);
+		return;
+	}
+	m.io.text(`echo ${marker}\r`, performance.now());
+	t.checked(await until((): boolean => paneHas(v, id, marker)), `pane ${id} shows ${marker}`);
+}
+
+export async function smokeAttach(
+	v: WorkspaceView,
+	reconnect: () => Promise<Result<Reattach, string>>,
+): Promise<void> {
+	const t: Tally = { failed: 0 };
+	t.checked(await until((): boolean => v.cols > 0 && v.panes.cellWidth > 0 && modelOf(v, 1) !== null),
+		"the window attached and shows the server's first pane");
+	await typedMarker(t, v, 1, "attach-1");
+	act(v, Action.SplitRight);
+	t.checked(await until((): boolean => focusedId(v) == 2 && modelOf(v, 2) !== null),
+		"split right asks the server, which opens pane 2");
+	await typedMarker(t, v, 2, "attach-2");
+	await v.detachPanes();
+	t.checked(v.panes.running.length == 0, "the window dropped its panes and its connection");
+	const again = await reconnect();
+	if (!again.ok) {
+		t.checked(false, `the window reconnected: ${again.error}`);
+	} else {
+		await v.attachTo(again.value.link, again.value.attached);
+		t.checked(
+			await until((): boolean => paneHas(v, 1, "attach-1") && paneHas(v, 2, "attach-2")),
+			"after reconnecting, both panes show their text",
+		);
+	}
+	console.log(`smoke-attach: ${t.failed == 0 ? "PASS" : `FAIL ${t.failed}`}`);
+	v.link?.detach();
+	v.link = null;
 	await v.closeShells();
 	exit(t.failed == 0 ? 0 : 1);
 }

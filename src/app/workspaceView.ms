@@ -16,6 +16,9 @@ import { gridSize } from "../grid/size";
 import { TermError } from "../controller/term";
 import { closed } from "../controller/shell";
 import { Axis, Pane, PaneId, TabId, panes } from "../workspace/tree";
+import { Message, MessageKind } from "../server/protocol";
+import { Attached, ServerLink } from "../client/link";
+import { Layout, screenParts } from "../client/wire";
 import {
 	CommandKind,
 	Direction,
@@ -23,6 +26,7 @@ import {
 	Workspace,
 	WorkspaceCommand,
 	WorkspaceError,
+	WorkspaceEvent,
 	activeTab,
 	apply,
 	create,
@@ -158,6 +162,10 @@ export interface WorkspaceView {
 	keepsEnded: boolean;
 	quitting: boolean;
 	started: (first: RunningPane) => void;
+	link: ServerLink | null;
+	attached: Attached | null;
+	inbox: Message[];
+	receiving: boolean;
 }
 
 function paletteHex(c: Config, index: int32, fallback: string): string {
@@ -242,6 +250,8 @@ export function open(
 	shellScripts: string | null,
 	startIn: string | null,
 	recording: string | null,
+	link: ServerLink | null = null,
+	attached: Attached | null = null,
 ): WorkspaceView {
 	const divider = dividerCellsOf(started);
 	const created = Workspace.create(divider);
@@ -305,6 +315,10 @@ export function open(
 		keepsEnded: recording !== null,
 		quitting: false,
 		started: (first: RunningPane): void => {},
+		link: link,
+		attached: attached,
+		inbox: [],
+		receiving: false,
 	};
 	paneHost.desktopFor = (id: PaneId): Desktop => v.desktopFor(id);
 	paneHost.eventsFor = (id: PaneId): HostEvents => v.eventsFor(id);
@@ -460,6 +474,11 @@ export function relayout(this v: WorkspaceView): void {
 }
 
 export function send(this v: WorkspaceView, c: WorkspaceCommand): void {
+	const link = v.link;
+	if (link !== null) {
+		v.sendTo(link, c);
+		return;
+	}
 	v.queue.push(c);
 	if (v.draining) { return; }
 	const _drained = v.drain();
@@ -472,6 +491,18 @@ async function drain(this v: WorkspaceView): Promise<void> {
 		if (next !== undefined) { await v.run(next); }
 	}
 	v.draining = false;
+}
+
+function sendTo(this v: WorkspaceView, link: ServerLink, c: WorkspaceCommand): void {
+	if (c.kind != CommandKind.Fit) {
+		link.command(c);
+		return;
+	}
+	link.fit(v.cols, v.rows);
+	if (v.refitAll) {
+		v.refitPanes();
+		v.redraw();
+	}
 }
 
 function refused(
@@ -492,6 +523,11 @@ function refused(
 }
 
 function notStarted(this v: WorkspaceView, id: PaneId, error: TermError): void {
+	if (v.link !== null) {
+		v.host.report.note(`pane ${id as int32}: the window could not show it: ${error.toString()}`);
+		v.focusedModel()?.notify(`Pane ${id as int32} could not be shown (${error.toString()})`);
+		return;
+	}
 	if (v.panes.running.length == 0) {
 		v.host.report.fail(`open: ${error.toString()}`);
 		return;
@@ -509,8 +545,21 @@ async function run(this v: WorkspaceView, c: WorkspaceCommand): Promise<void> {
 		v.refused(c, applied.error);
 		return;
 	}
+	await v.applyEvents(applied.value);
+}
+
+function refitPanes(this v: WorkspaceView): void {
+	v.refitAll = false;
+	for (const tab of v.w.tabs) {
+		for (const p of tab.layout(v.cols, v.rows, v.w.dividerCells)) {
+			v.panes.refit(p.pane.id, p.rect);
+		}
+	}
+}
+
+async function applyEvents(this v: WorkspaceView, events: WorkspaceEvent[]): Promise<void> {
 	const firstStart = v.panes.running.length == 0 && v.hooks.length == 0;
-	for (const e of applied.value) {
+	for (const e of events) {
 		if (e.kind == EventKind.WorkspaceEmpty) {
 			v.host.report.note("the last pane closed");
 			await v.quit();
@@ -522,17 +571,14 @@ async function run(this v: WorkspaceView, c: WorkspaceCommand): Promise<void> {
 			v.notStarted(e.pane, failed);
 		}
 	}
-	if (v.refitAll) {
-		v.refitAll = false;
-		for (const tab of v.w.tabs) {
-			for (const p of tab.layout(v.cols, v.rows, v.w.dividerCells)) {
-				v.panes.refit(p.pane.id, p.rect);
-			}
-		}
-	}
+	if (v.refitAll) { v.refitPanes(); }
 	v.redraw();
 	const first = v.panes.running.length > 0 ? v.panes.running[0] : null;
-	if (firstStart && first !== null) { v.started(first); }
+	if (firstStart && first !== null) {
+		const started = v.started;
+		v.started = (later: RunningPane): void => {};
+		started(first);
+	}
 }
 
 function forget(this v: WorkspaceView, id: PaneId): void {
@@ -663,6 +709,7 @@ export async function closeShells(this v: WorkspaceView): Promise<void> {
 export async function quit(this v: WorkspaceView): Promise<void> {
 	if (v.quitting) { return; }
 	v.quitting = true;
+	v.link?.detach();
 	await v.closeShells();
 	v.host.quit();
 }
@@ -735,6 +782,10 @@ function askCloseTab(this v: WorkspaceView): void {
 
 export function closeWindow(this v: WorkspaceView): void {
 	v.host.report.note("Close Window, Quit or a keybind asked to close");
+	if (v.link !== null) {
+		const _detached = v.quit();
+		return;
+	}
 	const ids = v.panes.running.map((r: RunningPane): PaneId => r.id);
 	const _asked = v.askClose(Closing.Window, ids, null);
 }
@@ -824,5 +875,130 @@ export function windowAction(this v: WorkspaceView, action: Action): void {
 		_ => {
 			v.host.report.note(`the window does not run ${action.toString()}`);
 		},
+	}
+}
+
+export function begin(this v: WorkspaceView): void {
+	const link = v.link;
+	const attached = v.attached;
+	v.attached = null;
+	if (link === null || attached === null) {
+		v.send({ kind: CommandKind.NewTab });
+		return;
+	}
+	const _attached = v.attachTo(link, attached);
+}
+
+function adopt(this v: WorkspaceView, layout: Layout): void {
+	v.w.tabs = layout.tabs;
+	v.w.active = layout.active;
+}
+
+function opening(this v: WorkspaceView): WorkspaceEvent[] {
+	const events: WorkspaceEvent[] = [];
+	for (const tab of v.w.tabs) {
+		for (const p of tab.layout(v.cols, v.rows, v.w.dividerCells)) {
+			events.push({
+				kind: EventKind.PaneOpened,
+				pane: p.pane.id,
+				tab: tab.id,
+				origin: p.pane.origin,
+				rect: p.rect,
+			});
+		}
+	}
+	const focused = v.w.focusedPane();
+	if (focused !== null) { events.push({ kind: EventKind.FocusChanged, pane: focused }); }
+	return events;
+}
+
+export async function attachTo(
+	this v: WorkspaceView,
+	link: ServerLink,
+	attached: Attached,
+): Promise<void> {
+	v.link = link;
+	v.panes.remote = {
+		screens: attached.screens,
+		input: (pane: PaneId, bytes: Vec<uint8>): void => { link.input(pane, bytes); },
+	};
+	v.adopt(attached.layout);
+	await v.applyEvents(v.opening());
+	if (v.w.tabs.length == 0) { link.command({ kind: CommandKind.NewTab }); }
+	link.fit(v.cols, v.rows);
+	link.listen(
+		(m: Message): void => { v.received(m); },
+		(why: string): void => { v.lost(why); },
+	);
+}
+
+export async function detachPanes(this v: WorkspaceView): Promise<void> {
+	v.link?.detach();
+	v.link = null;
+	v.inbox = [];
+	await v.closeShells();
+	v.panes.running = [];
+	v.hooks = [];
+	v.cwds = [];
+	v.w.tabs = [];
+	v.w.active = null;
+	v.setLayout(emptyFrame(v.w.dividerCells));
+	v.setTabs([]);
+	flush();
+}
+
+function lost(this v: WorkspaceView, why: string): void {
+	v.host.report.note(`server: ${why}`);
+	v.focusedModel()?.notify(`Haro lost its server: ${why}. Close this window and open Haro again.`);
+}
+
+function received(this v: WorkspaceView, m: Message): void {
+	v.inbox.push(m);
+	if (v.receiving) { return; }
+	const _drained = v.drainInbox();
+}
+
+async function drainInbox(this v: WorkspaceView): Promise<void> {
+	v.receiving = true;
+	while (v.inbox.length > 0 && !v.quitting) {
+		const next = v.inbox.shift();
+		if (next !== undefined) { await v.receive(next); }
+	}
+	v.receiving = false;
+}
+
+function output(this v: WorkspaceView, id: PaneId, seq: uint64, bytes: uint8[]): void {
+	const pane = v.panes.paneOf(id);
+	if (pane === null) {
+		v.host.report.note(`server: output for pane ${id as int32}, which this window does not show`);
+		return;
+	}
+	pane.shell.feed(seq, [...bytes]);
+	const wake = v.hooksOf(id).wake;
+	if (wake !== null) { wake(); }
+}
+
+async function receive(this v: WorkspaceView, m: Message): Promise<void> {
+	const parts = screenParts(m);
+	if (parts !== null) {
+		const layout = parts.layout;
+		if (layout !== null) { v.adopt(layout); }
+		const remote = v.panes.remote;
+		if (remote !== null) {
+			for (const s of parts.screens) { remote.screens.push(s); }
+		}
+		v.redraw();
+		return;
+	}
+	if (m.kind == MessageKind.Event) {
+		await v.applyEvents([m.event]);
+	} else if (m.kind == MessageKind.Output) {
+		v.output(m.pane, m.seq, m.bytes);
+	} else if (m.kind == MessageKind.Refused) {
+		v.lost(`the server refused: ${m.reason}`);
+	} else if (m.kind == MessageKind.Bye) {
+		v.lost("the server said goodbye");
+	} else {
+		v.host.report.note(`server: a window does not take ${m.kind.toString()}`);
 	}
 }

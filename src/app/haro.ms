@@ -59,7 +59,23 @@ import {
 	startIn,
 	watchConfig,
 } from "./configWatch";
-import { smoke, smokeFlood, smokePanes, smokeReplay, smokeTyping } from "./smoke";
+import {
+	Reattach,
+	smoke,
+	smokeAttach,
+	smokeFlood,
+	smokePanes,
+	smokeReplay,
+	smokeTyping,
+} from "./smoke";
+import { join } from "std/fs/path";
+import { tmpDir } from "std/os";
+import { Connection, connectToUnix, socketPath } from "../server/transport";
+import { ScreenFormat } from "../server/protocol";
+import { Attached, ServerLink, attach } from "../client/link";
+import { connectLocal, connectTcp, targetOf } from "../client/connect";
+import { startFake } from "../client/fakeServer";
+import { vtBuild } from "../vt/snapshot";
 import { portOf } from "../controller/shell";
 import { ptySetWake } from "../pty/nativePty.h";
 import { ConfigChange, ConfigOutcome } from "./components/features/terminal/paneModel";
@@ -135,6 +151,11 @@ let waiting: Vec<() => void> = [];
 const stats = Stats.empty();
 const config = ConfigWatch.forFile(flagValue("--config") ?? configPath());
 
+const ATTACH_TIMEOUT_MS: int32 = 5000;
+const HELLO_COLS: int32 = 80;
+const HELLO_ROWS: int32 = 24;
+const IN_PROCESS_FLAGS: string[] = ["--smoke", "--smoke-panes", "--typing", "--flood", "--shell"];
+
 const CONFIG_STUB = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = {};\n`;
 const LOG_LIMIT_BYTES = 1048576;
 let logFailed = false;
@@ -185,6 +206,11 @@ function reloadConfig(): void {
 function fail(message: string): never {
 	note(message);
 	exit(1);
+}
+
+function failVisibly(message: string): never {
+	notify(APP_TITLE, message, NOTIFICATION_ID);
+	fail(message);
 }
 
 function titleOr(title: string): string {
@@ -258,6 +284,8 @@ interface Launch {
 async function openWindow(
 	launch: Launch,
 	started: (v: WorkspaceView, first: RunningPane) => void,
+	link: ServerLink | null = null,
+	attached: Attached | null = null,
 ): Promise<int32> {
 	registerFallbacks();
 	const families = familyList(config.loaded.faces);
@@ -360,6 +388,8 @@ async function openWindow(
 		launch.shellScripts,
 		launch.startIn,
 		launch.recording,
+		link,
+		attached,
 	);
 	view.started = (first: RunningPane): void => { started(view, first); };
 	if (hasFlag("--stats")) { logStatsEverySecond(pace, stats); }
@@ -417,13 +447,78 @@ async function runReplay(path: string): Promise<int32> {
 	});
 }
 
+async function attachedTo(connection: Connection): Promise<Reattach> {
+	const link = new ServerLink(connection);
+	link.begin();
+	const got = await attach(link, vtBuild(), HELLO_COLS, HELLO_ROWS, ATTACH_TIMEOUT_MS);
+	if (!got.ok) {
+		link.connection.close();
+		failVisibly(`Haro could not attach to its server: ${got.error}`);
+	}
+	return { link: link, attached: got.value };
+}
+
+const CLIENT_LAUNCH: Launch = { command: "", startIn: null, shellScripts: null, recording: null };
+
+function ignoreStart(v: WorkspaceView, first: RunningPane): void {}
+
+async function runClient(connected: Result<Connection, string>): Promise<int32> {
+	if (!connected.ok) { failVisibly(connected.error); }
+	const server = await attachedTo(connected.value);
+	return await openWindow(CLIENT_LAUNCH, ignoreStart, server.link, server.attached);
+}
+
+async function reattachAt(path: string): Promise<Result<Reattach, string>> {
+	const c = await connectToUnix(path, ATTACH_TIMEOUT_MS);
+	if (!c.ok) { return Result.err(`no server answered at ${path}: ${c.error.toString()}`); }
+	const link = new ServerLink(c.value);
+	link.begin();
+	const got = await attach(link, vtBuild(), HELLO_COLS, HELLO_ROWS, ATTACH_TIMEOUT_MS);
+	if (!got.ok) { return Result.err(got.error); }
+	return Result.ok({ link: link, attached: got.value });
+}
+
+async function runSmokeAttach(): Promise<int32> {
+	const path = join(join(tmpDir(), `haro-smoke-attach-${Date.now()}`), "haro.sock");
+	const fake = startFake(path, ScreenFormat.Native);
+	if (!fake.ok) { fail(`smoke-attach: the test server did not listen: ${fake.error.toString()}`); }
+	const first = await reattachAt(path);
+	if (!first.ok) { fail(`smoke-attach: ${first.error}`); }
+	const reconnect = (): Promise<Result<Reattach, string>> => reattachAt(path);
+	return await openWindow(
+		CLIENT_LAUNCH,
+		(v: WorkspaceView, first: RunningPane): void => { const _s = smokeAttach(v, reconnect); },
+		first.value.link,
+		first.value.attached,
+	);
+}
+
+function inProcess(): boolean {
+	when (windows) {
+		return true;
+	} else {
+		return IN_PROCESS_FLAGS.some((flag: string): boolean => hasFlag(flag));
+	}
+}
+
 async function main(): Promise<int32> {
 	stats.mark("main", Date.now());
+	if (hasFlag("--server")) { fail("haro --server: this build has no server yet"); }
 	config.readConfig();
 	stats.mark("config", Date.now());
 	const replayPath = flagValue("--replay");
 	if (replayPath !== null) { return await runReplay(replayPath); }
-	return await runShell(flagValue("--shell") ?? config.loaded.config.command);
+	if (inProcess()) {
+		return await runShell(flagValue("--shell") ?? config.loaded.config.command);
+	}
+	if (hasFlag("--smoke-attach")) { return await runSmokeAttach(); }
+	const remote = flagValue("--connect");
+	if (remote !== null) {
+		const target = targetOf(remote);
+		if (!target.ok) { failVisibly(target.error); }
+		return await runClient(await connectTcp(target.value));
+	}
+	return await runClient(await connectLocal(socketPath()));
 }
 
 when (!testBuild) {

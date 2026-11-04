@@ -1,11 +1,13 @@
 import { JSON, JsonKind, JsonValue } from "std/core/json";
-import { readFile } from "std/fs";
+import { chmod, ensureDir, readFile, writeFile } from "std/fs";
 import {
 	ChildProcess,
 	ChildStream,
+	ExitStatus,
+	cwd,
 	ProcessError,
 	ProcessErrorKind,
-	spawn,
+	spawn as spawnProcess,
 } from "std/process";
 
 export enum TailnetFault {
@@ -17,6 +19,12 @@ export enum TailnetFault {
 	NotTailnetAddress,
 	UnknownPeer,
 	OtherUser,
+	NoOwner,
+}
+
+export enum TailnetAllow {
+	Owner,
+	Identified,
 }
 
 export struct TailnetError {
@@ -30,6 +38,7 @@ export struct TailnetSelf {
 	userId: int64;
 	loginName: string;
 	hostName: string;
+	tagged: boolean;
 }
 
 export struct PeerInfo {
@@ -37,6 +46,7 @@ export struct PeerInfo {
 	loginName: string;
 	hostName: string;
 	os: string;
+	tags: Vec<string>;
 }
 
 export struct TailnetPeer {
@@ -46,6 +56,7 @@ export struct TailnetPeer {
 }
 
 const CLI_TIMEOUT_MS: int32 = 5000;
+const POLL_MS: int32 = 5;
 
 function failure(fault: TailnetFault, detail: string): TailnetError {
 	return { fault: fault, detail: detail };
@@ -97,14 +108,12 @@ function drain(
 	}
 }
 
-function collect(
+function outcome(
 	child: ChildProcess,
-	timeoutMs: int32,
+	out: Result<string, TailnetError>,
+	errors: Result<string, TailnetError>,
+	status: Result<ExitStatus, ProcessError> | null,
 ): Result<string, TailnetError> {
-	const deadline = performance.now() + timeoutMs;
-	const out = drain(child, ChildStream.Stdout, deadline);
-	const errors = drain(child, ChildStream.Stderr, deadline);
-	const status = out.ok && errors.ok ? child.wait(msLeft(deadline)) : null;
 	child.close();
 	if (!out.ok) {
 		return Result.err(out.error);
@@ -131,18 +140,77 @@ function collect(
 	return Result.ok(out.value);
 }
 
-function runCli(
-	programs: string[],
-	args: string[],
+function collect(
+	child: ChildProcess,
 	timeoutMs: int32,
 ): Result<string, TailnetError> {
-	for (const program of programs) {
-		const started = spawn(program, args);
-		if (started.ok) {
-			return collect(started.value, timeoutMs);
+	const deadline = performance.now() + timeoutMs;
+	const out = drain(child, ChildStream.Stdout, deadline);
+	const errors = drain(child, ChildStream.Stderr, deadline);
+	const status = out.ok && errors.ok ? child.wait(msLeft(deadline)) : null;
+	return outcome(child, out, errors, status);
+}
+
+function waiting(e: ProcessError, deadline: float64): boolean {
+	return e.kind == ProcessErrorKind.Timeout && msLeft(deadline) > 0;
+}
+
+async function drainPolled(
+	child: ChildProcess,
+	stream: ChildStream,
+	deadline: float64,
+): Promise<Result<string, TailnetError>> {
+	let text = "";
+	while (true) {
+		const got = child.read(stream, 0);
+		if (!got.ok) {
+			if (!waiting(got.error, deadline)) {
+				return Result.err(processFailure(got.error));
+			}
+			await sleepAsync(POLL_MS);
+		} else if (got.value.ended) {
+			return Result.ok(text);
+		} else {
+			text += got.value.data;
 		}
-		if (started.error.kind != ProcessErrorKind.NotFound) {
-			return Result.err(failure(TailnetFault.CliFailed, started.error.message));
+	}
+}
+
+async function waitPolled(
+	child: ChildProcess,
+	deadline: float64,
+): Promise<Result<ExitStatus, ProcessError>> {
+	while (true) {
+		const status = child.wait(0);
+		if (status.ok || !waiting(status.error, deadline)) {
+			return status;
+		}
+		await sleepAsync(POLL_MS);
+	}
+}
+
+async function collectPolled(
+	child: ChildProcess,
+	timeoutMs: int32,
+): Promise<Result<string, TailnetError>> {
+	const deadline = performance.now() + timeoutMs;
+	const out = await drainPolled(child, ChildStream.Stdout, deadline);
+	const errors = await drainPolled(child, ChildStream.Stderr, deadline);
+	const status = out.ok && errors.ok ? await waitPolled(child, deadline) : null;
+	return outcome(child, out, errors, status);
+}
+
+function started(
+	programs: Readonly<string[]>,
+	args: string[],
+): Result<ChildProcess, TailnetError> {
+	for (const program of programs) {
+		const child = spawnProcess(program, args);
+		if (child.ok) {
+			return Result.ok(child.value);
+		}
+		if (child.error.kind != ProcessErrorKind.NotFound) {
+			return Result.err(failure(TailnetFault.CliFailed, child.error.message));
 		}
 	}
 	return Result.err(
@@ -151,6 +219,23 @@ function runCli(
 			`no Tailscale CLI found: tried ${programs.join(", ")}`,
 		),
 	);
+}
+
+function runCli(
+	programs: Readonly<string[]>,
+	args: string[],
+	timeoutMs: int32,
+): Result<string, TailnetError> {
+	return collect(try started(programs, args), timeoutMs);
+}
+
+async function runCliPolled(
+	programs: Readonly<string[]>,
+	args: string[],
+	timeoutMs: int32,
+): Promise<Result<string, TailnetError>> {
+	const child = try started(programs, args);
+	return await collectPolled(child, timeoutMs);
 }
 
 function badOutput(detail: string): TailnetError {
@@ -263,6 +348,14 @@ function textList(
 	return Result.ok(out);
 }
 
+function tagsOf(v: JsonValue, path: string): Result<Vec<string>, TailnetError> {
+	const found = try fieldOrNull(v, path, "Tags");
+	if (found === null || found.kind == JsonKind.Null) {
+		return Result.ok([]);
+	}
+	return textList(v, path, "Tags");
+}
+
 function firstAddress(ips: Vec<string>, ipv6: boolean): string | null {
 	for (const ip of ips) {
 		if (ip.includes(":") == ipv6) {
@@ -297,6 +390,7 @@ function selfFromStatus(status: JsonValue): Result<TailnetSelf, TailnetError> {
 		userId: userId,
 		loginName: try text(user, `User.${userId}`, "LoginName"),
 		hostName: try text(me, "Self", "HostName"),
+		tagged: (try tagsOf(me, "Self")).length > 0,
 	});
 }
 
@@ -350,13 +444,39 @@ function peerFromWhois(whois: JsonValue): Result<PeerInfo, TailnetError> {
 		hostName: try text(node, "Node", "ComputedName"),
 		os:
 			hostinfo === null ? "" : try textOrEmpty(hostinfo, "Node.Hostinfo", "OS"),
+		tags: try tagsOf(node, "Node"),
 	});
+}
+
+export function identityOf(peer: PeerInfo): string {
+	const who = peer.tags.length > 0 ? peer.tags.join(",") : peer.loginName;
+	return `${who} on ${peer.hostName}`;
 }
 
 function admit(
 	peer: PeerInfo,
 	self: TailnetSelf,
+	allow: TailnetAllow,
 ): Result<PeerInfo, TailnetError> {
+	if (allow == TailnetAllow.Identified) {
+		return Result.ok(peer);
+	}
+	if (self.tagged) {
+		return Result.err(
+			failure(
+				TailnetFault.NoOwner,
+				`${self.hostName} is a tagged machine with no owner, so only --tailnet-allow-identified lets anyone in`,
+			),
+		);
+	}
+	if (peer.tags.length > 0) {
+		return Result.err(
+			failure(
+				TailnetFault.NoOwner,
+				`${peer.hostName} is a tagged device (${peer.tags.join(",")}) with no owner, not ${self.loginName}`,
+			),
+		);
+	}
 	if (peer.userId != self.userId) {
 		return Result.err(
 			failure(
@@ -464,16 +584,14 @@ export function peers(): Result<Vec<TailnetPeer>, TailnetError> {
 	return peersFromStatus(status, try selfFromStatus(status));
 }
 
-export function peerAllowed(
+async function admittedVia(
+	programs: Readonly<string[]>,
 	remote: string,
 	self: TailnetSelf,
-): Result<PeerInfo, TailnetError> {
+	allow: TailnetAllow,
+): Promise<Result<PeerInfo, TailnetError>> {
 	try tailnetHost(remote);
-	const answer = runCli(
-		installedClis(),
-		["whois", "--json", remote],
-		CLI_TIMEOUT_MS,
-	);
+	const answer = await runCliPolled(programs, ["whois", "--json", remote], CLI_TIMEOUT_MS);
 	if (!answer.ok) {
 		const e = answer.error;
 		return Result.err(
@@ -485,7 +603,16 @@ export function peerAllowed(
 	return admit(
 		try peerFromWhois(try parsed(answer.value, "tailscale whois --json")),
 		self,
+		allow,
 	);
+}
+
+export async function peerAllowed(
+	remote: string,
+	self: TailnetSelf,
+	allow: TailnetAllow,
+): Promise<Result<PeerInfo, TailnetError>> {
+	return await admittedVia(installedClis(), remote, self, allow);
 }
 
 const TESTDATA = "src/server/testdata/";
@@ -496,6 +623,7 @@ const ME: TailnetSelf = {
 	userId: 7000000000000001,
 	loginName: "person@example.com",
 	hostName: "studio",
+	tagged: false,
 };
 
 function fixture(name: string): string {
@@ -511,8 +639,16 @@ function peersOf(status: string): Result<Vec<TailnetPeer>, TailnetError> {
 	return peersFromStatus(try parsed(status, "status"), ME);
 }
 
+function admittedAs(
+	whois: string,
+	self: TailnetSelf,
+	allow: TailnetAllow,
+): Result<PeerInfo, TailnetError> {
+	return admit(try peerFromWhois(try parsed(whois, "whois")), self, allow);
+}
+
 function admitted(whois: string): Result<PeerInfo, TailnetError> {
-	return admit(try peerFromWhois(try parsed(whois, "whois")), ME);
+	return admittedAs(whois, ME, TailnetAllow.Owner);
 }
 
 function faultOf<T>(r: Result<T, TailnetError>): TailnetFault | null {
@@ -601,6 +737,57 @@ test "a device of another user is refused naming both users" {
 			"friend-box belongs to friend@example.com, not person@example.com";
 }
 
+test "a tagged device has no owner, so only allow-identified lets it in" {
+	const refused = admitted(fixture("whoisTagged.json"));
+	assert faultOf(refused) == TailnetFault.NoOwner;
+	assert !refused.ok && refused.error.detail ==
+		"ci-runner is a tagged device (tag:ci) with no owner, not person@example.com";
+	const letIn = admittedAs(fixture("whoisTagged.json"), ME, TailnetAllow.Identified);
+	assert letIn.ok;
+	if (letIn.ok) { assert identityOf(letIn.value) == "tag:ci on ci-runner"; }
+}
+
+test "allow-identified lets in another user, named by its login" {
+	const other = admittedAs(fixture("whoisOther.json"), ME, TailnetAllow.Identified);
+	assert other.ok;
+	if (other.ok) { assert identityOf(other.value) == "friend@example.com on friend-box"; }
+}
+
+test "a tagged machine admits nobody as its owner, not even a device of the same user id" {
+	const status = fixture("status.json").replace(`"UserID": 7000000000000001,`, `"UserID": 7000000000000001, "Tags": ["tag:server"],`);
+	const self = selfOf(status);
+	assert self.ok;
+	if (!self.ok) { return; }
+	assert self.value.tagged;
+	const refused = admittedAs(fixture("whoisOwn.json"), self.value, TailnetAllow.Owner);
+	assert faultOf(refused) == TailnetFault.NoOwner;
+	assert !refused.ok && refused.error.detail.includes("--tailnet-allow-identified");
+	assert admittedAs(fixture("whoisOwn.json"), self.value, TailnetAllow.Identified).ok;
+	const untagged = selfOf(fixture("status.json"));
+	assert untagged.ok && !untagged.value.tagged;
+}
+
+test "a slow whois runs off the loop, so the loop keeps turning while it answers" {
+	when (windows) { return; }
+	const dir = `${cwd()}/out/slowWhois`;
+	assert ensureDir(dir).ok;
+	const script = `${dir}/tailscale`;
+	assert writeFile(script, `#!/bin/sh\nsleep 1\ncat '${cwd()}/${TESTDATA}whoisOwn.json'\n`).ok;
+	assert chmod(script, 0o755).ok;
+	let ticks = 0;
+	const timer = setInterval((): void => { ticks += 1; }, 10);
+	const started = performance.now();
+	const r = await admittedVia([script], "100.100.1.2:5000", ME, TailnetAllow.Owner);
+	clearInterval(timer);
+	assert r.ok, r.ok ? "" : r.error.detail;
+	assert performance.now() - started >= 900;
+	assert ticks >= 20, `${ticks}`;
+	const began = performance.now();
+	const hung = await runCliPolled(["/bin/sh"], ["-c", "sleep 10"], 200);
+	assert faultOf(hung) == TailnetFault.Timeout;
+	assert performance.now() - began < 5000;
+}
+
 test "a whois whose node and profile disagree on the user is BadOutput" {
 	const r = admitted(
 		`{"Node":{"User":1,"ComputedName":"x"},"UserProfile":{"ID":2,"LoginName":"a"}}`,
@@ -641,7 +828,7 @@ test "tailnet addresses with a port pass and every other remote is refused" {
 }
 
 test "a non-tailnet remote is refused before asking Tailscale" {
-	const r = peerAllowed("203.0.113.9:22", ME);
+	const r = await peerAllowed("203.0.113.9:22", ME, TailnetAllow.Identified);
 	assert faultOf(r) == TailnetFault.NotTailnetAddress;
 }
 
@@ -685,7 +872,7 @@ test "live: this host's Tailscale answers or says it is not running" {
 	}
 	const me = self.value;
 	assert tailnetHost(`${listenAddress(me)}:1`).ok;
-	const own = peerAllowed(`${me.ipv4}:1`, me);
-	assert own.ok && own.value.userId == me.userId;
+	const own = await peerAllowed(`${me.ipv4}:1`, me, TailnetAllow.Identified);
+	assert own.ok;
 	assert peers().ok;
 }

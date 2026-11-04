@@ -1,0 +1,29 @@
+{
+  "Node": {
+    "ID": 6000000000000006,
+    "StableID": "nFakePeer6CNTRL",
+    "Name": "ci-runner.tail0000.ts.net.",
+    "User": 7000000000000009,
+    "Tags": [
+      "tag:ci"
+    ],
+    "Addresses": [
+      "100.100.1.6/32",
+      "fd7a:115c:a1e0::1:6/128"
+    ],
+    "Hostinfo": {
+      "OS": "linux",
+      "Hostname": "ci-runner"
+    },
+    "Online": true,
+    "ComputedName": "ci-runner",
+    "ComputedNameWithHost": "ci-runner"
+  },
+  "UserProfile": {
+    "ID": 7000000000000009,
+    "LoginName": "tagged-devices",
+    "DisplayName": "Tagged Devices",
+    "ProfilePicURL": ""
+  },
+  "CapMap": {}
+}

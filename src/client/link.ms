@@ -14,7 +14,6 @@ import { WorkspaceCommand } from "../workspace/workspace";
 import { Layout, Screen, screenParts } from "./wire";
 
 const POLL_MS = 5;
-const BYE_GRACE_MS = 200;
 
 function ignoreMessage(m: Message): void {}
 function ignoreEnd(why: string): void {}
@@ -114,8 +113,7 @@ export class ServerLink {
 		this.handler = ignoreMessage;
 		this.onEnd = ignoreEnd;
 		this.send({ kind: MessageKind.Bye });
-		const connection = this.connection;
-		setTimeout((): void => { connection.close(); }, BYE_GRACE_MS);
+		this.connection.finish();
 	}
 }
 

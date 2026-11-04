@@ -7,8 +7,12 @@ import { Pty, PtyError } from "../pty/transport";
 import { Annotation, Decoration, FrameRows, none } from "./rows";
 import { Action } from "../input/bindings";
 import { Hit, vtOf } from "./controls";
-import { pwd } from "../vt/vt";
+import { pwd, title } from "../vt/vt";
+import { fileUri, isLocalHost } from "../term/pwd";
+import { isDir } from "std/fs";
+import { hostname } from "std/os";
 import {
+	Drained,
 	Io,
 	IoFrame,
 	IoPort,
@@ -24,6 +28,7 @@ import {
 	confirmDialog,
 	decorate,
 	drain,
+	drainOutput,
 	fit,
 	settleSize,
 	focus,
@@ -41,8 +46,9 @@ import {
 	unannotate,
 	undecorate,
 	wheel,
+	write,
 } from "./io";
-import { OpenPty, TermError, busy, openTerm } from "./term";
+import { OpenPty, Tee, TermError, busy, fresh, openTerm } from "./term";
 
 export struct PtySpec {
 	command: string;
@@ -76,9 +82,10 @@ export actor Shell {
 	private io: Io | null = null;
 	private refused: TermError | null = null;
 
-	constructor(spec: PtySpec) {
+	constructor(spec: PtySpec, teed: boolean = false) {
 		const opened = openTerm(spec.openerOf());
 		if (opened.ok) {
+			if (teed) { opened.value.tee = Tee.fresh(); }
 			this.io = Io.open(opened.value);
 		} else {
 			this.refused = opened.error;
@@ -111,6 +118,27 @@ export actor Shell {
 	undecorate(id: int32): void { this.io?.undecorate(id); }
 	annotate(a: Annotation): void { this.io?.annotate(a); }
 	unannotate(id: int32): void { this.io?.unannotate(id); }
+	write(bytes: Vec<uint8>): void { this.io?.write(bytes); }
+
+	output(): Drained | null {
+		const io = this.io;
+		if (io === null) { return null; }
+		let got = io.drainOutput();
+		return move got;
+	}
+
+	title(): string | null {
+		const io = this.io;
+		if (io === null) { return null; }
+		const vt = io.term.vtOf();
+		if (vt === null) { return null; }
+		const got = vt.title();
+		return got.ok ? got.value : null;
+	}
+
+	snapshot(): Vec<uint8> | null {
+		return null;
+	}
 
 	frame(): IoFrame | null {
 		const io = this.io;
@@ -189,6 +217,14 @@ export async function closed(shell: Shell): Promise<void> {
 export async function closeThen(shell: Shell, then: () => void): Promise<void> {
 	await closed(shell);
 	then();
+}
+
+export async function localCwd(shell: Shell): Promise<string | null> {
+	const uri = await shell.pwd();
+	if (uri === null) { return null; }
+	const parsed = fileUri(uri);
+	if (!parsed.ok || !isLocalHost(parsed.value.host, hostname())) { return null; }
+	return isDir(parsed.value.path) ? parsed.value.path : null;
 }
 
 export async function opened(shell: Shell): Promise<TermError | null> {

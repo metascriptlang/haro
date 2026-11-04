@@ -1,0 +1,39 @@
+{
+  "Node": {
+    "ID": 6000000000000001,
+    "StableID": "nFakePeer1CNTRL",
+    "Name": "build-1.tail0000.ts.net.",
+    "User": 7000000000000001,
+    "Key": "nodekey:0101010101010101010101010101010101010101010101010101010101010101",
+    "KeyExpiry": "2027-01-01T00:00:00Z",
+    "DiscoKey": "discokey:0101010101010101010101010101010101010101010101010101010101010101",
+    "Addresses": [
+      "100.100.1.2/32",
+      "fd7a:115c:a1e0::1:2/128"
+    ],
+    "AllowedIPs": [
+      "100.100.1.2/32",
+      "fd7a:115c:a1e0::1:2/128"
+    ],
+    "Endpoints": [
+      "192.0.2.20:41641"
+    ],
+    "HomeDERP": 1,
+    "Hostinfo": {
+      "OS": "linux",
+      "Hostname": "build-1"
+    },
+    "Created": "2026-01-01T00:00:00Z",
+    "Cap": 148,
+    "Online": true,
+    "ComputedName": "build-1",
+    "ComputedNameWithHost": "build-1"
+  },
+  "UserProfile": {
+    "ID": 7000000000000001,
+    "LoginName": "person@example.com",
+    "DisplayName": "person",
+    "ProfilePicURL": ""
+  },
+  "CapMap": {}
+}

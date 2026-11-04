@@ -1,0 +1,39 @@
+{
+  "Node": {
+    "ID": 6000000000000004,
+    "StableID": "nFakePeer4CNTRL",
+    "Name": "friend-box.tail0000.ts.net.",
+    "User": 7000000000000002,
+    "Key": "nodekey:0404040404040404040404040404040404040404040404040404040404040404",
+    "KeyExpiry": "2027-01-01T00:00:00Z",
+    "DiscoKey": "discokey:0404040404040404040404040404040404040404040404040404040404040404",
+    "Addresses": [
+      "100.100.1.5/32",
+      "fd7a:115c:a1e0::1:5/128"
+    ],
+    "AllowedIPs": [
+      "100.100.1.5/32",
+      "fd7a:115c:a1e0::1:5/128"
+    ],
+    "Endpoints": [
+      "192.0.2.20:41641"
+    ],
+    "HomeDERP": 1,
+    "Hostinfo": {
+      "OS": "linux",
+      "Hostname": "friend-box"
+    },
+    "Created": "2026-01-01T00:00:00Z",
+    "Cap": 148,
+    "Online": true,
+    "ComputedName": "friend-box",
+    "ComputedNameWithHost": "friend-box"
+  },
+  "UserProfile": {
+    "ID": 7000000000000002,
+    "LoginName": "friend@example.com",
+    "DisplayName": "friend",
+    "ProfilePicURL": ""
+  },
+  "CapMap": {}
+}

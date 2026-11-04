@@ -18,22 +18,40 @@ import { chmod, exists, isLinkLike, mkdir, remove } from "std/fs";
 import { dirname, join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { env } from "std/process";
+import { MAX_PAYLOAD_BYTES } from "./protocol";
 
 extern function msIoEngineCancelFd_ms(fd: int32): void;
 
 when (!windows) {
 	@include("unistd.h");
+	@include("sys/socket.h");
+	@include("netinet/in.h");
+	@include("arpa/inet.h");
 
 	extern function getuid(): uint32;
+	extern struct PeerStorage from "struct sockaddr_storage" { ss_family: uint16; }
+	extern struct PeerSockaddr from "struct sockaddr" { sa_family: uint16; }
+	extern struct PeerIn4Addr from "struct in_addr" { s_addr: uint32; }
+	extern struct PeerIn4 from "struct sockaddr_in" { sin_port: uint16; sin_addr: PeerIn4Addr; }
+	extern const AF_INET: int32 from "AF_INET";
+	extern function peerName(fd: int32, addr: Ptr<PeerSockaddr>, ref len: uint32): int32 from "getpeername";
+	extern function ntohs(v: uint16): uint16;
+	extern function ntop(
+		family: int32,
+		src: Ptr<void>,
+		dst: Ptr<uint8>,
+		size: uint32,
+	): Ptr<void> | null from "inet_ntop";
 }
 
-export const MAX_QUEUED_BYTES: int64 = 32 * 1024 * 1024;
+export const MAX_QUEUED_BYTES: int64 = (MAX_PAYLOAD_BYTES as int64) + 8 * 1024 * 1024;
 const READ_CHUNK: int32 = 64 * 1024;
 const BACKLOG: int32 = 64;
 const SOCKET_NAME = "haro.sock";
 const OWNER_ONLY_DIR: int32 = 0o700;
 const OWNER_ONLY_SOCKET: int32 = 0o600;
 const TIMED_OUT: int32 = -2;
+const ADDRESS_TEXT_BYTES: int32 = 64;
 
 export enum CloseReason {
 	Closed,
@@ -64,6 +82,27 @@ export function socketPath(): string {
 	}
 }
 
+when (windows) {
+	export function peerAddress(fd: int32): string | null {
+		return null;
+	}
+} else {
+	export function peerAddress(fd: int32): string | null {
+		let peer: PeerStorage = {};
+		let len: uint32 = sizeof PeerStorage as uint32;
+		if (peerName(fd, peer as Ptr<PeerSockaddr>, len) != 0) { return null; }
+		if ((peer.ss_family as int32) != AF_INET) { return null; }
+		const v4 = peer as Ptr<PeerIn4>;
+		let text: Vec<uint8> = new Array(ADDRESS_TEXT_BYTES);
+		const at = text as Span<uint8> as Ptr<uint8>;
+		if (ntop(AF_INET, v4[0].sin_addr as Ptr<void>, at, ADDRESS_TEXT_BYTES as uint32) === null) {
+			return null;
+		}
+		const end = text.indexOf(0);
+		return `${text.slice(0, end < 0 ? text.length : end).asString()}:${ntohs(v4[0].sin_port)}`;
+	}
+}
+
 function ignoreData(chunk: uint8[]): void {}
 function ignoreClose(reason: CloseReason): void {}
 
@@ -76,6 +115,7 @@ export class Connection {
 	private sending: boolean = false;
 	private reading: boolean = false;
 	private open: boolean = true;
+	private finishing: boolean = false;
 
 	constructor(fd: int32) { this.fd = fd; }
 
@@ -93,7 +133,7 @@ export class Connection {
 	}
 
 	send(bytes: uint8[]): boolean {
-		if (!this.open) { return false; }
+		if (!this.open || this.finishing) { return false; }
 		if (bytes.length == 0) { return true; }
 		this.queuedBytes += bytes.length as int64;
 		if (this.queuedBytes > MAX_QUEUED_BYTES) {
@@ -109,6 +149,12 @@ export class Connection {
 	}
 
 	close(): void { this.end(CloseReason.Closed); }
+
+	finish(): void {
+		if (!this.open) { return; }
+		this.finishing = true;
+		if (!this.sending) { this.end(CloseReason.Closed); }
+	}
 
 	end(reason: CloseReason): void {
 		if (!this.open) { return; }
@@ -128,7 +174,10 @@ export class Connection {
 	takeQueue(): uint8[][] {
 		const batch = this.queue;
 		this.queue = [];
-		if (batch.length == 0) { this.sending = false; }
+		if (batch.length == 0) {
+			this.sending = false;
+			if (this.finishing) { this.end(CloseReason.Closed); }
+		}
 		return batch;
 	}
 

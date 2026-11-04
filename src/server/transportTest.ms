@@ -19,6 +19,7 @@ import {
 	connectToUnix,
 	listenTcp,
 	listenUnix,
+	peerAddress,
 	socketPath,
 } from "./transport";
 
@@ -206,6 +207,36 @@ test "a reader that never reads is cut once its queue passes the limit" {
 	cleanUp(path);
 }
 
+test "a finished connection delivers what it queued, then closes" {
+	const path = freshPath();
+	const writer = new Accepted();
+	const handlers: ListenHandlers = {
+		accepted: (c: Connection): void => {
+			writer.c = c;
+			c.start((chunk: uint8[]): void => {}, (why: CloseReason): void => {});
+		},
+		failed: (): void => {},
+	};
+	const listener = listenUnix(path, handlers);
+	assert listener.ok;
+	const client = await dialed(path);
+	const sink = new Sink();
+	collect(client, sink, false);
+	assert await until((): boolean => writer.c !== null);
+	const w = writer.c!;
+	const total: int64 = (3 * MIB) as int64;
+	assert w.send(patterned(0, MIB));
+	assert w.send(patterned(MIB as int64, 2 * MIB));
+	w.finish();
+	assert !w.send(patterned(0, 1));
+	assert await until((): boolean => sink.closed == CloseReason.PeerClosed);
+	assert sink.count == total;
+	assert sink.patterned;
+	assert !w.isOpen();
+	listener.value.close();
+	cleanUp(path);
+}
+
 test "a socket file left by a dead server is replaced" {
 	const path = freshPath();
 	const first = listenUnix(path, echoing());
@@ -250,7 +281,7 @@ test "a client of a path nobody serves fails instead of waiting" {
 	assert got.error == ConnectError.Failed;
 }
 
-test "a tcp client on loopback echoes through the listener" {
+test "a tcp client on loopback echoes through the listener and names its peer" {
 	let port: int32 = 41000 + ((Date.now() % 20000) as int32);
 	let listener: Listener | null = null;
 	for (let tries: int32 = 0; tries < 50 && listener === null; tries++) {
@@ -261,6 +292,10 @@ test "a tcp client on loopback echoes through the listener" {
 	const got = await connectToTcp("127.0.0.1", port, 2000);
 	assert got.ok;
 	const client = got.value;
+	when (!windows) {
+		const remote = peerAddress(client.fd);
+		assert remote == `127.0.0.1:${port}`, remote ?? "<none>";
+	}
 	const sink = new Sink();
 	collect(client, sink, true);
 	assert client.send("over tcp".asBytes().slice(0));

@@ -20,7 +20,9 @@ import {
 	DIRECTIONS,
 	Decoder,
 	EVENT_KINDS,
+	HEADER_BYTES,
 	MAX_PAYLOAD_BYTES,
+	MAX_SCREEN_BYTES,
 	MAX_TREE_DEPTH,
 	MESSAGE_KINDS,
 	Message,
@@ -161,9 +163,9 @@ function tree(): Node {
 	};
 }
 
-function snapshot(): Message {
+function layout(): Message {
 	return {
-		kind: MessageKind.Snapshot,
+		kind: MessageKind.Layout,
 		tabs: [
 			{
 				id: tab(1),
@@ -189,23 +191,28 @@ function snapshot(): Message {
 			},
 		],
 		active: FOURTH_TAB,
-		panes: [
-			{
-				pane: pane(1),
-				cols: 25,
-				rows: 24,
-				format: ScreenFormat.VtBytes,
-				screen: [27, 91, 72, 0, 255],
-			},
-			{
-				pane: pane(9),
-				cols: 80,
-				rows: 24,
-				format: ScreenFormat.Native,
-				screen: [],
-			},
-		],
 	};
+}
+
+function screens(): Message[] {
+	return [
+		{
+			kind: MessageKind.Screen,
+			pane: pane(1),
+			cols: 25,
+			rows: 24,
+			format: ScreenFormat.VtBytes,
+			bytes: [27, 91, 72, 0, 255],
+		},
+		{
+			kind: MessageKind.Screen,
+			pane: pane(9),
+			cols: 80,
+			rows: 24,
+			format: ScreenFormat.Native,
+			bytes: [],
+		},
+	];
 }
 
 function commands(): WorkspaceCommand[] {
@@ -282,7 +289,8 @@ function messages(): Message[] {
 			vtBuild: "",
 		},
 		{ kind: MessageKind.Attach },
-		snapshot(),
+		layout(),
+		screens()[0],
 		{ kind: MessageKind.Command, command: commands()[5] },
 		{ kind: MessageKind.Event, event: events()[3] },
 		{ kind: MessageKind.Input, pane: pane(2), bytes: [3, 0, 255, 10] },
@@ -293,6 +301,8 @@ function messages(): Message[] {
 			bytes: [27, 93, 48, 59, 7],
 		},
 		{ kind: MessageKind.Fit, cols: 132, rows: 43 },
+		{ kind: MessageKind.Exited, pane: pane(2), code: -9 },
+		{ kind: MessageKind.Failed, pane: pane(2), reason: "pty \u{e9} gone" },
 		{ kind: MessageKind.Refused, reason: "nope \u{1f680}" },
 		{ kind: MessageKind.Bye },
 	];
@@ -370,10 +380,10 @@ test "every workspace event round trips" {
 	}
 }
 
-test "a snapshot keeps its tree, titles, extremes and screen bytes" {
-	const back = roundTrips(snapshot());
-	assert back.kind == MessageKind.Snapshot;
-	if (back.kind != MessageKind.Snapshot) { return; }
+test "a layout keeps its tree, titles and extremes" {
+	const back = roundTrips(layout());
+	assert back.kind == MessageKind.Layout;
+	if (back.kind != MessageKind.Layout) { return; }
 	assert back.tabs.length == 2;
 	assert back.tabs[0].title == TITLE;
 	assert back.tabs[1].title === null;
@@ -396,11 +406,44 @@ test "a snapshot keeps its tree, titles, extremes and screen bytes" {
 			}
 		}
 	}
-	assert back.panes[0].format == ScreenFormat.VtBytes;
-	assert back.panes[0].screen.length == 5;
-	assert back.panes[0].screen[4] == 255;
-	assert back.panes[1].format == ScreenFormat.Native;
-	assert back.panes[1].screen.length == 0;
+	assert back.active == FOURTH_TAB;
+}
+
+test "a screen keeps its pane, size, format and bytes, empty bytes included" {
+	const shots = screens();
+	const vt = roundTrips(shots[0]);
+	assert vt.kind == MessageKind.Screen;
+	if (vt.kind == MessageKind.Screen) {
+		assert vt.pane == pane(1) && vt.cols == 25 && vt.rows == 24;
+		assert vt.format == ScreenFormat.VtBytes;
+		assert vt.bytes.length == 5 && vt.bytes[4] == 255;
+	}
+	const native = roundTrips(shots[1]);
+	assert native.kind == MessageKind.Screen;
+	if (native.kind == MessageKind.Screen) {
+		assert native.format == ScreenFormat.Native;
+		assert native.bytes.length == 0;
+	}
+}
+
+function screenOf(size: int32): Message {
+	const bytes: uint8[] = new Array(size);
+	return {
+		kind: MessageKind.Screen,
+		pane: pane(1),
+		cols: 1,
+		rows: 1,
+		format: ScreenFormat.Native,
+		bytes: bytes,
+	};
+}
+
+test "a screen of MAX_SCREEN_BYTES fills the largest frame and one byte more is refused" {
+	const fits = encode(screenOf(MAX_SCREEN_BYTES));
+	assert fits.ok;
+	if (fits.ok) { assert fits.value.length == HEADER_BYTES + MAX_PAYLOAD_BYTES; }
+	const over = encode(screenOf(MAX_SCREEN_BYTES + 1));
+	assert !over.ok && over.error == ProtocolError.PayloadTooLarge;
 }
 
 test "a stream cut anywhere decodes to the same messages" {
@@ -455,10 +498,9 @@ test "a malformed payload is refused with the case it breaks" {
 	const hello = MessageKind.Hello as uint8;
 	assert refusal(frame(hello, [0, 0, 0, 1, 2, 0, 0, 0, 1, 0, 0, 0, 1])) ==
 		ProtocolError.UnknownRole;
-	const kind = MessageKind.Snapshot as uint8;
-	const screenOf: uint8[] = [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1];
-	const badFormat: uint8[] = [...screenOf, 0, 0, 0, 1, 0, 0, 0, 1, 2];
-	assert refusal(frame(kind, badFormat)) ==
+	const screen = MessageKind.Screen as uint8;
+	const badFormat: uint8[] = [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 2];
+	assert refusal(frame(screen, badFormat)) ==
 		ProtocolError.UnknownScreenFormat;
 	const command = MessageKind.Command as uint8;
 	const unknownCommand = COMMAND_KINDS.length as uint8;
@@ -483,7 +525,7 @@ test "a malformed payload is refused with the case it breaks" {
 }
 
 test "a tree with a bad node, ratio or depth is refused" {
-	const kind = MessageKind.Snapshot as uint8;
+	const kind = MessageKind.Layout as uint8;
 	const head: uint8[] = [0, 0, 0, 1, 0, 0, 0, 1, 0];
 	const badKind: uint8[] = [...head, 2];
 	assert refusal(frame(kind, badKind)) == ProtocolError.UnknownNodeKind;
@@ -517,9 +559,9 @@ function deepTree(depth: int32): Node {
 	return n;
 }
 
-function snapshotOf(root: Node): Message {
+function layoutOf(root: Node): Message {
 	return {
-		kind: MessageKind.Snapshot,
+		kind: MessageKind.Layout,
 		tabs: [
 			{
 				id: tab(1),
@@ -530,13 +572,12 @@ function snapshotOf(root: Node): Message {
 			},
 		],
 		active: null,
-		panes: [],
 	};
 }
 
 test "a tree at the depth limit encodes and one level deeper is refused" {
-	roundTrips(snapshotOf(deepTree(MAX_TREE_DEPTH)));
-	const deeper = encode(snapshotOf(deepTree(MAX_TREE_DEPTH + 1)));
+	roundTrips(layoutOf(deepTree(MAX_TREE_DEPTH)));
+	const deeper = encode(layoutOf(deepTree(MAX_TREE_DEPTH + 1)));
 	assert !deeper.ok && deeper.error == ProtocolError.TreeTooDeep;
 }
 

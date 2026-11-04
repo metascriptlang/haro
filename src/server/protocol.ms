@@ -36,23 +36,21 @@ export enum MessageKind {
 	Hello,
 	Welcome,
 	Attach,
-	Snapshot,
+	Layout,
+	Screen,
 	Command,
 	Event,
 	Input,
 	Output,
 	Fit,
+	Exited,
+	Failed,
 	Refused,
 	Bye,
 }
 
-export struct PaneScreen {
-	pane: PaneId;
-	cols: int32;
-	rows: int32;
-	format: ScreenFormat;
-	screen: uint8[];
-}
+const SCREEN_FIELDS_BYTES: int32 = 17;
+export const MAX_SCREEN_BYTES: int32 = MAX_PAYLOAD_BYTES - SCREEN_FIELDS_BYTES;
 
 export struct Message = match (kind: MessageKind) {
 	MessageKind.Hello => {
@@ -68,16 +66,21 @@ export struct Message = match (kind: MessageKind) {
 		vtBuild: string,
 	},
 	MessageKind.Attach => {},
-	MessageKind.Snapshot => {
-		tabs: Tab[],
-		active: TabId | null,
-		panes: PaneScreen[],
+	MessageKind.Layout => { tabs: Tab[], active: TabId | null },
+	MessageKind.Screen => {
+		pane: PaneId,
+		cols: int32,
+		rows: int32,
+		format: ScreenFormat,
+		bytes: uint8[],
 	},
 	MessageKind.Command => { command: WorkspaceCommand },
 	MessageKind.Event => { event: WorkspaceEvent },
 	MessageKind.Input => { pane: PaneId, bytes: uint8[] },
 	MessageKind.Output => { pane: PaneId, seq: uint64, bytes: uint8[] },
 	MessageKind.Fit => { cols: int32, rows: int32 },
+	MessageKind.Exited => { pane: PaneId, code: int32 },
+	MessageKind.Failed => { pane: PaneId, reason: string },
 	MessageKind.Refused => { reason: string },
 	MessageKind.Bye => {},
 };
@@ -104,12 +107,15 @@ export const MESSAGE_KINDS: MessageKind[] = [
 	MessageKind.Hello,
 	MessageKind.Welcome,
 	MessageKind.Attach,
-	MessageKind.Snapshot,
+	MessageKind.Layout,
+	MessageKind.Screen,
 	MessageKind.Command,
 	MessageKind.Event,
 	MessageKind.Input,
 	MessageKind.Output,
 	MessageKind.Fit,
+	MessageKind.Exited,
+	MessageKind.Failed,
 	MessageKind.Refused,
 	MessageKind.Bye,
 ];
@@ -350,7 +356,7 @@ function payload(this w: Writer, m: Message): void {
 		w.u32(m.version);
 		w.i32(m.serverPid);
 		w.text(m.vtBuild);
-	} else if (m.kind == MessageKind.Snapshot) {
+	} else if (m.kind == MessageKind.Layout) {
 		w.u32(m.tabs.length as uint32);
 		for (const t of m.tabs) {
 			w.tab(t.id);
@@ -360,14 +366,12 @@ function payload(this w: Writer, m: Message): void {
 			w.optionalPane(t.zoomed);
 		}
 		w.optionalTab(m.active);
-		w.u32(m.panes.length as uint32);
-		for (const p of m.panes) {
-			w.pane(p.pane);
-			w.i32(p.cols);
-			w.i32(p.rows);
-			w.u8(p.format as uint8);
-			w.blob(p.screen);
-		}
+	} else if (m.kind == MessageKind.Screen) {
+		w.pane(m.pane);
+		w.i32(m.cols);
+		w.i32(m.rows);
+		w.u8(m.format as uint8);
+		w.blob(m.bytes);
 	} else if (m.kind == MessageKind.Command) {
 		w.command(m.command);
 	} else if (m.kind == MessageKind.Event) {
@@ -382,6 +386,12 @@ function payload(this w: Writer, m: Message): void {
 	} else if (m.kind == MessageKind.Fit) {
 		w.i32(m.cols);
 		w.i32(m.rows);
+	} else if (m.kind == MessageKind.Exited) {
+		w.pane(m.pane);
+		w.i32(m.code);
+	} else if (m.kind == MessageKind.Failed) {
+		w.pane(m.pane);
+		w.text(m.reason);
 	} else if (m.kind == MessageKind.Refused) {
 		w.text(m.reason);
 	}
@@ -688,7 +698,7 @@ function event(this r: Reader): Result<WorkspaceEvent, ProtocolError> {
 	};
 }
 
-function snapshot(this r: Reader): Result<Message, ProtocolError> {
+function layout(this r: Reader): Result<Message, ProtocolError> {
 	const tabCount = try r.count();
 	const tabs: Tab[] = [];
 	for (let i: int32 = 0; i < tabCount; i++) {
@@ -706,31 +716,26 @@ function snapshot(this r: Reader): Result<Message, ProtocolError> {
 		});
 	}
 	const active = try r.optionalTab();
-	const paneCount = try r.count();
-	const panes: PaneScreen[] = [];
-	for (let i: int32 = 0; i < paneCount; i++) {
-		const id = try r.pane();
-		const cols = try r.i32();
-		const rows = try r.i32();
-		const format = try code(
-			SCREEN_FORMATS,
-			try r.u8(),
-			ProtocolError.UnknownScreenFormat,
-		);
-		const screen = try r.blob();
-		panes.push({
-			pane: id,
-			cols: cols,
-			rows: rows,
-			format: format,
-			screen: screen,
-		});
-	}
+	return Result.ok({ kind: MessageKind.Layout, tabs: tabs, active: active });
+}
+
+function screen(this r: Reader): Result<Message, ProtocolError> {
+	const id = try r.pane();
+	const cols = try r.i32();
+	const rows = try r.i32();
+	const format = try code(
+		SCREEN_FORMATS,
+		try r.u8(),
+		ProtocolError.UnknownScreenFormat,
+	);
+	const bytes = try r.blob();
 	return Result.ok({
-		kind: MessageKind.Snapshot,
-		tabs: tabs,
-		active: active,
-		panes: panes,
+		kind: MessageKind.Screen,
+		pane: id,
+		cols: cols,
+		rows: rows,
+		format: format,
+		bytes: bytes,
 	});
 }
 
@@ -766,7 +771,8 @@ function message(
 			})
 		},
 		MessageKind.Attach => Result.ok({ kind: MessageKind.Attach }),
-		MessageKind.Snapshot => r.snapshot(),
+		MessageKind.Layout => r.layout(),
+		MessageKind.Screen => r.screen(),
 		MessageKind.Command => {
 			const c = try r.command();
 			Result.ok({ kind: MessageKind.Command, command: c })
@@ -790,6 +796,16 @@ function message(
 			const cols = try r.i32();
 			const rows = try r.i32();
 			Result.ok({ kind: MessageKind.Fit, cols: cols, rows: rows })
+		},
+		MessageKind.Exited => {
+			const id = try r.pane();
+			const exitCode = try r.i32();
+			Result.ok({ kind: MessageKind.Exited, pane: id, code: exitCode })
+		},
+		MessageKind.Failed => {
+			const id = try r.pane();
+			const reason = try r.text();
+			Result.ok({ kind: MessageKind.Failed, pane: id, reason: reason })
 		},
 		MessageKind.Refused => {
 			const reason = try r.text();

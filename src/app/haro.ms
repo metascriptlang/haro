@@ -313,6 +313,7 @@ async function openWindow(
 		openConfig: openConfig,
 		reloadConfig: reloadConfig,
 		quit: (): void => { exit(0); },
+		wake: (): void => { ionWakeLoop(); },
 		report: { note: note, fail: fail },
 		timing: { clock: (): float64 => performance.now(), schedule: inFrame },
 		keyHook: {

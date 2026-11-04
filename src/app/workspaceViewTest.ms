@@ -2,7 +2,8 @@ import { removeAll } from "std/fs";
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { connectToUnix } from "../server/transport";
-import { MessageKind, ScreenFormat } from "../server/protocol";
+import { MAX_SCREEN_BYTES, MessageKind, ScreenFormat } from "../server/protocol";
+import { Server, start, stop } from "../server/serve";
 import { defaults } from "../config/config";
 import { HookPane, KeyAnswer, UNHANDLED } from "../config/hooks";
 import { KeyEvent } from "../keys/keys";
@@ -19,6 +20,7 @@ import {
 	WindowHost,
 	WorkspaceView,
 	attachTo,
+	connect,
 	detachPanes,
 	open,
 	send,
@@ -68,6 +70,7 @@ function fakeWithTwoPanes(path: string): FakeServer {
 class Notes {
 	lines: string[] = [];
 	fatal: string = "";
+	woke: () => void = (): void => {};
 }
 
 function hostOf(notes: Notes): WindowHost {
@@ -80,6 +83,7 @@ function hostOf(notes: Notes): WindowHost {
 		openConfig: (): void => {},
 		reloadConfig: (): void => {},
 		quit: (): void => {},
+		wake: (): void => { notes.woke(); },
 		report: {
 			note: (message: string): void => { notes.lines.push(message); },
 			fail: (message: string): void => { notes.fatal = message; },
@@ -96,7 +100,7 @@ function hostOf(notes: Notes): WindowHost {
 			commandDone: (pane: HookPane, done: CommandDone): Result<void, string> => Result.ok(null),
 		},
 		events: {
-			onWake: (handler: () => void): void => {},
+			onWake: (handler: () => void): void => { notes.woke = handler; },
 			onMenu: (handler: (id: string) => void): void => {},
 			onCloseRequest: (handler: () => void): void => {},
 			onConfig: (handler: (change: ConfigChange) => void): void => {},
@@ -149,6 +153,7 @@ test "a window over a real socket shows the server's panes, sends typing as inpu
 	assert got.ok;
 	if (!got.ok) { return; }
 	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
 	await v.attachTo(link, got.value);
 	assert runningIds(v) == "1,2";
 	assert treeIds(v) == "1,2";
@@ -192,6 +197,7 @@ test "a window shows the server's pane exit and start failure the way an in-proc
 	assert got.ok;
 	if (!got.ok) { return; }
 	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
 	await v.attachTo(link, got.value);
 	fake.endPane(1 as PaneId, { kind: MessageKind.Exited, pane: 1 as PaneId, code: 3 });
 	assert await until((): boolean => runningIds(v) == "2" && treeIds(v) == "2"), runningIds(v);
@@ -214,6 +220,7 @@ test "closing a server pane asks first only when the server says its shell runs 
 	assert got.ok;
 	if (!got.ok) { return; }
 	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
 	await v.attachTo(link, got.value);
 	v.askClosePane(1 as PaneId);
 	assert await until((): boolean => runningIds(v) == "2"), runningIds(v);
@@ -224,4 +231,38 @@ test "closing a server pane asks first only when the server says its shell runs 
 	await v.detachPanes();
 	fake.close();
 	cleanUp(path);
+}
+
+test "the first window of a fresh real server shows its first shell's opening output" {
+	when (!windows) {
+		const path = freshPath();
+		const started = await Server.start({
+			launch: {
+				command: "printf 'opening%swords\\n' -; exec sh",
+				shellScripts: null,
+				startIn: null,
+				originCwd: false,
+			},
+			socket: path,
+			dividerCells: 1,
+			tailnet: null,
+			screenLimit: MAX_SCREEN_BYTES,
+			log: (line: string): void => {},
+		});
+		assert started.ok;
+		if (!started.ok) { return; }
+		const notes = new Notes();
+		const link = await linked(path);
+		const got = await attach(link, vtBuild(), 80, 24, 5000);
+		assert got.ok;
+		if (!got.ok) { return; }
+		const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
+		await v.attachTo(link, got.value);
+		assert await shows(v, 1, "opening-words"), await screenOf(v, 1);
+		await v.detachPanes();
+		started.value.stop(0);
+		const _done = await started.value.finished;
+		cleanUp(path);
+	}
 }

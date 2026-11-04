@@ -99,6 +99,7 @@ export interface WindowHost {
 	openConfig: () => void;
 	reloadConfig: () => void;
 	quit: () => void;
+	wake: () => void;
 	report: Report;
 	timing: Timing;
 	keyHook: KeyHook;
@@ -980,8 +981,7 @@ function output(this v: WorkspaceView, id: PaneId, seq: uint64, bytes: uint8[]):
 		return;
 	}
 	pane.shell.feed(seq, [...bytes]);
-	const wake = v.hooksOf(id).wake;
-	if (wake !== null) { wake(); }
+	v.host.wake();
 }
 
 async function receive(this v: WorkspaceView, m: Message): Promise<void> {

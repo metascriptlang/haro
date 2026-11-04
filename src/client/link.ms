@@ -150,6 +150,33 @@ export class ServerLink {
 	}
 }
 
+export enum Failure {
+	Offline,
+	Refused,
+	Unkept,
+}
+
+export struct DialError {
+	failure: Failure;
+	why: string;
+	command: string;
+}
+
+export type Dial = (uploading: () => void) => Promise<Result<Connection, DialError>>;
+
+export function offline(why: string): DialError {
+	return { failure: Failure.Offline, why: why, command: "" };
+}
+
+export function refused(why: string): DialError {
+	return { failure: Failure.Refused, why: why, command: "" };
+}
+
+export interface Linked {
+	link: ServerLink;
+	attached: Attached;
+}
+
 export struct Attached {
 	serverPid: int32;
 	vtBuild: string;
@@ -166,8 +193,8 @@ async function next(link: ServerLink, deadline: float64): Promise<Message | null
 	}
 }
 
-function stopped(link: ServerLink, waiting: string): string {
-	return link.ended ?? `the server sent no ${waiting} in time`;
+function stopped(link: ServerLink, waiting: string): DialError {
+	return offline(link.ended ?? `the server sent no ${waiting} in time`);
 }
 
 function paneIds(layout: Layout): PaneId[] {
@@ -191,7 +218,7 @@ export async function attach(
 	cols: int32,
 	rows: int32,
 	timeoutMs: int32,
-): Promise<Result<Attached, string>> {
+): Promise<Result<Attached, DialError>> {
 	const deadline = performance.now() + (timeoutMs as float64);
 	link.send({
 		kind: MessageKind.Hello,
@@ -204,15 +231,15 @@ export async function attach(
 	const greeted = await next(link, deadline);
 	if (greeted === null) { return Result.err(stopped(link, "welcome")); }
 	if (greeted.kind == MessageKind.Refused) {
-		return Result.err(`the server refused this window: ${greeted.reason}`);
+		return Result.err(refused(greeted.reason));
 	}
 	if (greeted.kind != MessageKind.Welcome) {
-		return Result.err(`the server answered hello with ${greeted.kind.toString()}`);
+		return Result.err(offline(`the server answered hello with ${greeted.kind.toString()}`));
 	}
 	if (greeted.version != PROTOCOL_VERSION) {
-		return Result.err(
+		return Result.err(refused(
 			`the server speaks protocol ${greeted.version}, this window ${PROTOCOL_VERSION}`,
-		);
+		));
 	}
 	link.send({ kind: MessageKind.Attach });
 	let layout: Layout | null = null;
@@ -236,4 +263,24 @@ export async function attach(
 		layout: layout,
 		screens: screens,
 	});
+}
+
+export async function linkTo(
+	dial: Dial,
+	uploading: () => void,
+	vtBuild: string,
+	cols: int32,
+	rows: int32,
+	timeoutMs: int32,
+): Promise<Result<Linked, DialError>> {
+	const connected = await dial(uploading);
+	if (!connected.ok) { return Result.err(connected.error); }
+	const link = new ServerLink(connected.value);
+	link.begin();
+	const got = await attach(link, vtBuild, cols, rows, timeoutMs);
+	if (!got.ok) {
+		link.connection.close();
+		return Result.err(got.error);
+	}
+	return Result.ok({ link: link, attached: got.value });
 }

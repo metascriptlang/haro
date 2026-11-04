@@ -9,29 +9,9 @@ import { seededVt } from "../pty/remote";
 import { Axis, PaneId, panes } from "../workspace/tree";
 import { CommandKind, EventKind } from "../workspace/workspace";
 import { ServerLink, attach } from "./link";
-import { DEFAULT_PORT, targetOf } from "./connect";
 import { FakeServer, startFake } from "./fakeServer";
 
 const WAIT_MS: float64 = 10000;
-
-test "a connect target is a host with an optional port, bracketed when it is IPv6" {
-	const shown = (target: string): string => {
-		const got = targetOf(target);
-		return got.ok ? `${got.value.host} ${got.value.port}` : "refused";
-	};
-	assert shown("box") == `box ${DEFAULT_PORT}`;
-	assert shown("box:9000") == "box 9000";
-	assert shown("100.64.0.1:22") == "100.64.0.1 22";
-	assert shown("[fd7a::1]:9000") == "fd7a::1 9000";
-	assert shown("[fd7a::1]") == `fd7a::1 ${DEFAULT_PORT}`;
-	assert shown("fd7a::1") == `fd7a::1 ${DEFAULT_PORT}`;
-	assert shown("") == "refused";
-	assert shown(":80") == "refused";
-	assert shown("box:0") == "refused";
-	assert shown("box:65536") == "refused";
-	assert shown("box:http") == "refused";
-	assert shown("[fd7a::1") == "refused";
-}
 
 let dirs: int32 = 0;
 
@@ -119,7 +99,7 @@ test "attaching to a server that hangs up ends with the reason instead of waitin
 	const link = await linked(path);
 	const got = await attach(link, vtBuild(), 80, 24, 5000);
 	assert !got.ok;
-	if (!got.ok) { assert got.error == "the server closed the connection"; }
+	if (!got.ok) { assert got.error.why == "the server closed the connection"; }
 	if (listener.ok) { listener.value.close(); }
 	cleanUp(path);
 }

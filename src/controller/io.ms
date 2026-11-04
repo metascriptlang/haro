@@ -25,7 +25,7 @@ import {
 	undecorate as undecorateRows,
 } from "./rows";
 import { Mark } from "./mark";
-import { sendReplies } from "../session/session";
+import { answer } from "../session/session";
 import { Asks, Controls, Hit, holding, refit, takeAsks, typed, vtOf } from "./controls";
 import { cancel, clipboardAsked, clipboardText, confirm } from "./clipboard";
 import { act, closeKey, closeWindow, keyDown, keyUp } from "./keyboard";
@@ -218,6 +218,10 @@ function fail(this io: Io, where: Where, error: TermError): void {
 	io.failures.push({ where: where, error: error, started: io.started() });
 }
 
+export function outOfOrder(this io: Io): void {
+	io.fail(Where.Output, TermError.OutputOutOfOrder);
+}
+
 function check(this io: Io, where: Where, r: Result<boolean, TermError>): void {
 	if (!r.ok) { io.fail(where, r.error); }
 }
@@ -232,7 +236,7 @@ function apply(this io: Io): void {
 		!vt.setScrollback(settings.scrollback).ok) {
 		io.fail(Where.Settings, TermError.SettingsRefused);
 	}
-	if (!s.sendReplies().ok) { io.fail(Where.Settings, TermError.SettingsRefused); }
+	if (!s.answer().ok) { io.fail(Where.Settings, TermError.SettingsRefused); }
 }
 
 export function configure(this io: Io, settings: Settings): void {

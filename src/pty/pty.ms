@@ -291,6 +291,7 @@ export function toPty(this p: NativePty): Pty {
 		close: (): void => { p.close(); },
 		busy: (): boolean => { return p.busy(); },
 		ownsScreen: true,
+		takesReplies: true,
 	};
 }
 

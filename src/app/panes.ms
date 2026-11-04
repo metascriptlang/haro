@@ -1,7 +1,11 @@
 import { isDir } from "std/fs";
 import { hostname } from "std/os";
 import { Config } from "../config/config";
-import { Shell, closed, opened, portOf } from "../controller/shell";
+import { IoPort } from "../controller/io";
+import { PtySpec, Shell, closed, opened, portOf } from "../controller/shell";
+import { remotePortOf } from "../client/remotePort";
+import { Screen } from "../client/wire";
+import { Seed } from "../pty/remote";
 import { TermError } from "../controller/term";
 import { fileUri, isLocalHost } from "../term/pwd";
 import { CellRect, PaneId } from "../workspace/tree";
@@ -55,9 +59,15 @@ export interface RunningPane {
 	model: PaneModel;
 }
 
+export interface RemotePanes {
+	screens: Screen[];
+	input: (pane: PaneId, bytes: Vec<uint8>) => void;
+}
+
 export interface Panes {
 	launch: PaneLaunch;
 	host: PaneHost;
+	remote: RemotePanes | null;
 	cellWidth: int32;
 	cellHeight: int32;
 	focused: PaneId | null;
@@ -74,6 +84,7 @@ export function open(
 	return {
 		launch: launch,
 		host: host,
+		remote: null,
 		cellWidth: cellWidth,
 		cellHeight: cellHeight,
 		focused: null,
@@ -133,23 +144,54 @@ export function paneTiming(shared: Timing): Timing {
 	};
 }
 
+function specOf(this p: Panes, cwd: string | null): PtySpec {
+	return {
+		command: p.launch.command,
+		cwd: cwd,
+		recording: p.launch.recording,
+		shellScripts: p.launch.shellScripts,
+	};
+}
+
+export function seedFor(this remote: RemotePanes, id: PaneId, rect: CellRect): Seed {
+	for (const s of remote.screens) {
+		if (s.pane == id) {
+			remote.screens = remote.screens.filter((k: Screen): boolean => !(k.pane == id));
+			return s.seed;
+		}
+	}
+	return { native: false, cols: rect.cols, rows: rect.rows, bytes: [] };
+}
+
+async function shellFor(
+	this p: Panes,
+	id: PaneId,
+	origin: PaneId | null,
+	rect: CellRect,
+): Promise<Shell> {
+	const remote = p.remote;
+	if (remote !== null) { return new Shell(p.specOf(null), false, remote.seedFor(id, rect)); }
+	return new Shell(p.specOf(await p.cwdFor(origin ?? p.focused)));
+}
+
+function portFor(this p: Panes, id: PaneId, shell: Shell): IoPort {
+	const remote = p.remote;
+	if (remote === null) { return portOf(shell); }
+	return remotePortOf(shell, (bytes: Vec<uint8>): void => { remote.input(id, bytes); });
+}
+
 async function start(
 	this p: Panes,
 	id: PaneId,
 	origin: PaneId | null,
 	rect: CellRect,
 ): Promise<TermError | null> {
-	const shell = new Shell({
-		command: p.launch.command,
-		cwd: await p.cwdFor(origin ?? p.focused),
-		recording: p.launch.recording,
-		shellScripts: p.launch.shellScripts,
-	});
+	const shell = await p.shellFor(id, origin, rect);
 	const refused = await opened(shell);
 	if (refused !== null) { return refused; }
 	const h = p.host;
 	const model = PaneModel.open(
-		portOf(shell),
+		p.portFor(id, shell),
 		View.open(),
 		h.desktopFor(id),
 		h.report,

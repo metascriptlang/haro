@@ -19,6 +19,7 @@ import { paneOf } from "./panes";
 import {
 	WorkspaceView,
 	askClosePane,
+	begin,
 	cancelled,
 	confirmed,
 	connect,
@@ -74,7 +75,7 @@ export function App(v: WorkspaceView): NeonNode {
 			return null;
 		},
 	);
-	v.send({ kind: CommandKind.NewTab });
+	v.begin();
 	return <Void style={{ backgroundColor: v.chrome().background }}>
 		<View style={{ flexGrow: 1, flexDirection: "row" }}>
 			<Show when={v.sidebarShown() && v.chrome().sidebarLeft}>

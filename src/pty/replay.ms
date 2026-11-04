@@ -41,5 +41,6 @@ export function toPty(this r: Replay): Pty {
 		close: (): void => { closed = true; },
 		busy: (): boolean => { return false; },
 		ownsScreen: false,
+		takesReplies: true,
 	};
 }

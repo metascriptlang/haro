@@ -4,6 +4,8 @@ import { CellInk } from "../grid/lines";
 import { NativePty, spawn } from "../pty/pty";
 import { Replay, ofText, toPty } from "../pty/replay";
 import { Pty, PtyError } from "../pty/transport";
+import { RemotePty, Seed, asPty, empty, feed, takeTyped } from "../pty/remote";
+import { nativeSnapshot, snapshot } from "../vt/snapshot";
 import { Annotation, Decoration, FrameRows, none } from "./rows";
 import { Action } from "../input/bindings";
 import { Hit, vtOf } from "./controls";
@@ -34,6 +36,7 @@ import {
 	focus,
 	frame,
 	key,
+	outOfOrder,
 	keyReleased,
 	move,
 	open,
@@ -78,15 +81,25 @@ function openerOf(this spec: PtySpec): OpenPty {
 	};
 }
 
+function openerOf(this remote: RemotePty): OpenPty {
+	return (cols: int32, rows: int32): Result<Pty, PtyError> => {
+		return Result.ok(remote.asPty());
+	};
+}
+
 export actor Shell {
 	private io: Io | null = null;
 	private refused: TermError | null = null;
+	private remote: RemotePty | null = null;
 
-	constructor(spec: PtySpec, teed: boolean = false) {
-		const opened = openTerm(spec.openerOf());
+	constructor(spec: PtySpec, teed: boolean = false, seed: Seed | null = null) {
+		const remote = seed === null ? null : RemotePty.empty();
+		const opened = openTerm(remote === null ? spec.openerOf() : remote.openerOf());
 		if (opened.ok) {
 			if (teed) { opened.value.tee = Tee.fresh(); }
+			opened.value.seed = seed;
 			this.io = Io.open(opened.value);
+			this.remote = remote;
 		} else {
 			this.refused = opened.error;
 		}
@@ -120,6 +133,20 @@ export actor Shell {
 	unannotate(id: int32): void { this.io?.unannotate(id); }
 	write(bytes: Vec<uint8>): void { this.io?.write(bytes); }
 
+	feed(seq: uint64, bytes: Vec<uint8>): void {
+		const remote = this.remote;
+		const io = this.io;
+		if (remote === null || io === null) { return; }
+		if (!remote.feed(seq, bytes)) { io.outOfOrder(); }
+	}
+
+	typed(): Vec<uint8> {
+		const remote = this.remote;
+		if (remote === null) { return []; }
+		let got = remote.takeTyped();
+		return move got;
+	}
+
 	output(): Drained | null {
 		const io = this.io;
 		if (io === null) { return null; }
@@ -136,7 +163,7 @@ export actor Shell {
 		return got.ok ? got.value : null;
 	}
 
-	snapshot(native: boolean): Vec<uint8> | null {
+	snapshot(native: boolean = false): Vec<uint8> | null {
 		const io = this.io;
 		if (io === null) { return null; }
 		const vt = io.term.vtOf();

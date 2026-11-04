@@ -41,17 +41,21 @@ import {
 } from "./mouse";
 import {
 	Frame,
+	Output,
 	Term,
 	TermError,
+	dropEffects,
 	exitedAbnormally,
 	drain,
 	inkCursor,
 	pumpFrame,
 	releaseHeldKey,
 	sendFocus,
+	sendInput,
 	sendKey,
 	sendText,
 	shellExitCode,
+	takeOutput,
 	shellExitSignal,
 	shutdown,
 } from "./term";
@@ -150,6 +154,13 @@ export struct IoFrame {
 	hover: Link | null;
 	hoverChanged: boolean;
 	compressAfterMs: number | null;
+}
+
+export struct Drained {
+	output: Vec<Output>;
+	more: boolean;
+	exit: Exit | null;
+	failures: Vec<Failure>;
 }
 
 export interface Io {
@@ -366,6 +377,28 @@ export function unannotate(this io: Io, id: int32): void {
 export function drain(this io: Io): void {
 	const drained = io.term.drain();
 	if (!drained.ok) { io.fail(Where.Output, drained.error); }
+}
+
+export function write(this io: Io, bytes: Readonly<Span<uint8>>): void {
+	const sent = io.term.sendInput(bytes);
+	if (!sent.ok) { io.fail(Where.Text, sent.error); }
+}
+
+export function drainOutput(this io: Io): Drained {
+	const t = io.term;
+	const drained = t.drain();
+	if (!drained.ok) { io.fail(Where.Output, drained.error); }
+	t.dropEffects();
+	const ended = t.ended;
+	t.ended = false;
+	const failures = io.failures;
+	io.failures = [];
+	return {
+		output: t.takeOutput(),
+		more: drained.ok && drained.value,
+		exit: ended ? io.exitOf() : null,
+		failures: failures,
+	};
 }
 
 export function shutdown(this io: Io): void {

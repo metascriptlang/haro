@@ -129,6 +129,43 @@ export interface Term {
 	spawnedAt: float64;
 	marks: Vec<Mark>;
 	unsettled: PtySize | null;
+	tee: Tee | null;
+}
+
+export struct Output {
+	seq: int64;
+	bytes: Vec<uint8>;
+}
+
+export interface Tee {
+	next: int64;
+	taken: Vec<Output>;
+}
+
+export function fresh(this typeof Tee): Tee {
+	return { next: 1, taken: [] };
+}
+
+function teed(pty: Pty, tee: Tee): Pty {
+	return {
+		...pty,
+		read: (buf: Span<uint8>): Result<int32, PtyError> => {
+			const got = pty.read(buf);
+			if (got.ok && got.value > 0) {
+				tee.taken.push({ seq: tee.next, bytes: [...buf[0..got.value]] });
+				tee.next += 1;
+			}
+			return got;
+		},
+	};
+}
+
+export function takeOutput(this t: Term): Vec<Output> {
+	const tee = t.tee;
+	if (tee === null) { return []; }
+	const taken = tee.taken;
+	tee.taken = [];
+	return taken;
 }
 
 export struct PtySize {
@@ -201,6 +238,7 @@ export function openTerm(
 		spawnedAt: -1,
 		marks: [],
 		unsettled: null,
+		tee: null,
 	});
 }
 
@@ -218,7 +256,9 @@ export function fit(
 		if (!pty.ok) { return Result.err(ptyOpenFailure(pty.error)); }
 		t.marks.push({ name: "spawned", at: Date.now() });
 		t.spawnedAt = t.now();
-		const started = Session.start(pty.value, cols, rows, cellWidth, cellHeight);
+		const tee = t.tee;
+		const opened = tee === null ? pty.value : teed(pty.value, tee);
+		const started = Session.start(opened, cols, rows, cellWidth, cellHeight);
 		if (!started.ok) { return Result.err(TermError.SessionStartFailed); }
 		t.session = started.value;
 	} else {
@@ -401,6 +441,20 @@ export function releaseHeldKey(this t: Term): Result<void, TermError> {
 	if (s === null || held === null) { return Result.ok(null); }
 	for (const key of releasesOf(held)) { try t.sendKeyEvent(s, key); }
 	return Result.ok(null);
+}
+
+export function sendInput(this t: Term, bytes: Readonly<Span<uint8>>): Result<boolean, TermError> {
+	const s = t.session;
+	if (s === null) { return Result.ok(false); }
+	return s.sendBytes(bytes);
+}
+
+export function dropEffects(this t: Term): void {
+	const s = t.session;
+	if (s === null) { return; }
+	const _events = s.vt.takeEvents();
+	const _copied = s.vt.takeClipboard();
+	const _asked = s.vt.clipboardAsked();
 }
 
 export function sendText(this t: Term, text: string): Result<boolean, TermError> {
@@ -617,5 +671,40 @@ test "a burst of resizes reflows the screen at once and reaches the pty once, at
 		assert again.ok && !again.value;
 		assert seen.count == 1;
 		t.shutdown();
+	}
+}
+
+test "a teed term hands out each pty read whole, in seq order, while its screen still parses the same bytes" {
+	const text = "x".repeat(BUFFER_BYTES * 2) + "\x1b]2;t\x07";
+	for (const tee of [Tee.fresh(), null]) {
+		const replay = Replay.ofText(text);
+		const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
+			return Result.ok(replay.toPty());
+		});
+		assert opened.ok;
+		if (opened.ok) {
+			const t = opened.value;
+			t.tee = tee;
+			assert t.fit(20, 3).ok;
+			while (t.alive) { assert t.drainFor(1000).ok; }
+			const taken = t.takeOutput();
+			if (tee === null) {
+				assert taken.length == 0;
+			} else {
+				assert taken.map((o: Output): string => `${o.seq}:${o.bytes.length}`).join(" ") ==
+					`1:${BUFFER_BYTES} 2:${BUFFER_BYTES} 3:6`;
+				let joined = "";
+				for (const o of taken) { joined += o.bytes.asString(); }
+				assert joined == text;
+				assert t.takeOutput().length == 0;
+			}
+			const vt = t.session?.vt ?? null;
+			assert vt !== null;
+			if (vt !== null) {
+				const named = vt.title();
+				assert named.ok && named.value == "t";
+			}
+			t.shutdown();
+		}
 	}
 }

@@ -502,7 +502,7 @@ async function runSmokeAttach(): Promise<int32> {
 			if (kill(daemon, SIGTERM) != 0) { console.log(`smoke-attach: the server ${daemon} was already gone`); }
 			const _removed = removeAll(dir);
 		};
-		return await openWindow(
+		const code = await openWindow(
 			CLIENT_LAUNCH,
 			(v: WorkspaceView, shown: RunningPane): void => {
 				const _s = smokeAttach(v, reconnect, stopServer);
@@ -510,6 +510,8 @@ async function runSmokeAttach(): Promise<int32> {
 			link,
 			first.value,
 		);
+		stopServer();
+		return code;
 	}
 }
 

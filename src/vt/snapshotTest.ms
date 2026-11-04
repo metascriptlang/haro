@@ -2,7 +2,7 @@ import {
 	GhosttyTerminalData,
 	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
-import { snapshot } from "./snapshot";
+import { nativeSnapshot, snapshot, vtBuild } from "./snapshot";
 import {
 	Vt,
 	alternateScreen,
@@ -12,6 +12,7 @@ import {
 	modes,
 	pwd,
 	resize,
+	restore,
 	rows,
 	setPalette,
 	scrollTop,
@@ -266,4 +267,97 @@ test "colours a program set travel and the client's own palette stays" {
 			if (colors.ok) { assert colors.value.bg == bg; }
 		});
 	});
+}
+
+function nativeInto(a: Vt, body: (b: Vt) => void): boolean {
+	const shot = a.nativeSnapshot();
+	if (!shot.ok || !a.update().ok) { return false; }
+	const restored = Vt.restore(shot.value);
+	if (!restored.ok) { return false; }
+	const b = restored.value;
+	defer b.free();
+	if (!b.update().ok) { return false; }
+	body(b);
+	return true;
+}
+
+test "a native snapshot keeps the normal screen under the alternate screen" {
+	assert withVt(20, 6, (a: Vt): void => {
+		a.writeText(`${linefeedLines(120)}\r\n\x1b[1;31mprompt$\x1b[0m`);
+		a.writeText("\x1b[?1049h\x1b[2J\x1b[H\x1b[7m vim \x1b[0m\x1b[3;3Hbody");
+		a.writeText("\x1b[?1000h\x1b[?2004h\x1b[4;7H");
+		assert nativeInto(a, (b: Vt): void => {
+			const alt = b.alternateScreen();
+			assert alt.ok;
+			if (alt.ok) { assert alt.value; }
+			assert sameLines(a, b);
+			assert sameCells(a, b);
+			assert sameCursor(a, b);
+			assert sameModes(a, b);
+			a.writeText("\x1b[?1049l");
+			b.writeText("\x1b[?1049l");
+			assert a.update().ok;
+			assert b.update().ok;
+			assert sameLines(a, b);
+			assert sameCells(a, b);
+			assert sameCursor(a, b);
+			const shown = b.lines();
+			assert shown.ok;
+			if (shown.ok) { assert shown.value[5] == "prompt$"; }
+			const kept = scrollbackRows(a);
+			const restored = scrollbackRows(b);
+			assert kept.ok && restored.ok;
+			if (kept.ok && restored.ok) {
+				assert kept.value > 100;
+				assert restored.value == kept.value;
+			}
+			assert topScrollbackLine(b) == topScrollbackLine(a);
+		});
+	});
+}
+
+test "a native snapshot taken inside an escape sequence finishes it on restore" {
+	assert withVt(20, 4, (a: Vt): void => {
+		a.writeText("ab\x1b[3");
+		assert nativeInto(a, (b: Vt): void => {
+			a.writeText("1mX");
+			b.writeText("1mX");
+			assert a.update().ok;
+			assert b.update().ok;
+			assert sameLines(a, b);
+			assert sameCells(a, b);
+			const shown = b.lines();
+			assert shown.ok;
+			if (shown.ok) { assert shown.value[0] == "abX"; }
+		});
+	});
+}
+
+test "a garbled, truncated or other-version native snapshot is refused" {
+	assert withVt(20, 4, (a: Vt): void => {
+		a.writeText("hello");
+		const shot = a.nativeSnapshot();
+		assert shot.ok;
+		if (!shot.ok) { return; }
+		let flipped = shot.value.slice();
+		flipped[flipped.length - 3] = flipped[flipped.length - 3] ^ 0xff;
+		const garbled = Vt.restore(flipped);
+		assert !garbled.ok;
+		if (!garbled.ok) { assert garbled.error == VtError.RestoreFailed; }
+		let newer = shot.value.slice();
+		newer[8] = newer[8] + 1;
+		assert !Vt.restore(newer).ok;
+		const cut = Vt.restore(shot.value[0..(shot.value.length / 2)]);
+		assert !cut.ok;
+		const foreign = Vt.restore("\x1b[31mnot a snapshot".asBytes());
+		assert !foreign.ok;
+		const empty: Vec<uint8> = [];
+		assert !Vt.restore(empty).ok;
+	});
+}
+
+test "the build names the libghostty-vt version it was built from" {
+	const build = vtBuild();
+	assert build.length > 0;
+	assert build == vtBuild();
 }

@@ -7,7 +7,7 @@ import { Pty, PtyError } from "../pty/transport";
 import { Annotation, Decoration, FrameRows, none } from "./rows";
 import { Action } from "../input/bindings";
 import { Hit, vtOf } from "./controls";
-import { pwd, title } from "../vt/vt";
+import { nativeSnapshot, pwd, snapshot, title } from "../vt/vt";
 import { fileUri, isLocalHost } from "../term/pwd";
 import { isDir } from "std/fs";
 import { hostname } from "std/os";
@@ -136,8 +136,14 @@ export actor Shell {
 		return got.ok ? got.value : null;
 	}
 
-	snapshot(): Vec<uint8> | null {
-		return null;
+	snapshot(native: boolean): Vec<uint8> | null {
+		const io = this.io;
+		if (io === null) { return null; }
+		const vt = io.term.vtOf();
+		if (vt === null) { return null; }
+		let got = native ? vt.nativeSnapshot() : vt.snapshot();
+		if (!got.ok) { return null; }
+		return move got.value;
 	}
 
 	frame(): IoFrame | null {

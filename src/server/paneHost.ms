@@ -3,6 +3,7 @@ import { Drained, label } from "../controller/io";
 import { TermError } from "../controller/term";
 import { CellRect, PaneId } from "../workspace/tree";
 import { EventKind, WorkspaceEvent } from "../workspace/workspace";
+import { ScreenFormat } from "./protocol";
 
 export interface HostLaunch {
 	command: string;
@@ -20,6 +21,12 @@ export interface PaneSink {
 export enum PaneHostError {
 	UnknownPane,
 	SnapshotUnavailable,
+	SnapshotTooLarge,
+}
+
+export struct Shot {
+	format: ScreenFormat;
+	bytes: Vec<uint8>;
 }
 
 export interface HostedPane {
@@ -157,12 +164,21 @@ export async function title(this h: PaneHost, id: PaneId): Promise<string | null
 export async function snapshot(
 	this h: PaneHost,
 	id: PaneId,
-): Promise<Result<Vec<uint8>, PaneHostError>> {
+	wanted: ScreenFormat,
+	limit: int32,
+): Promise<Result<Shot, PaneHostError>> {
 	const pane = h.paneOf(id);
 	if (pane === null) { return Result.err(PaneHostError.UnknownPane); }
-	const got = await pane.shell.snapshot();
-	if (got === null) { return Result.err(PaneHostError.SnapshotUnavailable); }
-	return Result.ok(got);
+	if (wanted == ScreenFormat.Native) {
+		const native = await pane.shell.snapshot(true);
+		if (native !== null && native.length <= limit) {
+			return Result.ok({ format: ScreenFormat.Native, bytes: native });
+		}
+	}
+	const replayed = await pane.shell.snapshot(false);
+	if (replayed === null) { return Result.err(PaneHostError.SnapshotUnavailable); }
+	if (replayed.length > limit) { return Result.err(PaneHostError.SnapshotTooLarge); }
+	return Result.ok({ format: ScreenFormat.VtBytes, bytes: replayed });
 }
 
 export async function closeAll(this h: PaneHost): Promise<void> {

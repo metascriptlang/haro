@@ -26,6 +26,8 @@ import {
 	title,
 	write,
 } from "./paneHost";
+import { MAX_SCREEN_BYTES, ScreenFormat } from "./protocol";
+import { screenText } from "./screenRig";
 
 when (!windows) {
 	const COLS: int32 = 81;
@@ -160,7 +162,7 @@ when (!windows) {
 		assert seen.fatal == "", seen.fatal;
 	}
 
-	test "a pane is busy while a job runs, reports its shell's exit code, and has no snapshot yet" {
+	test "a pane is busy while a job runs and reports its shell's exit code" {
 		const seen = fresh();
 		const dir = dirNamed("hostBusy", seen);
 		const w = Workspace.create(1);
@@ -182,10 +184,6 @@ when (!windows) {
 		assert held;
 		assert typed(h, 1, "\x03");
 
-		const shot = await h.snapshot(id);
-		assert !shot.ok && shot.error == PaneHostError.SnapshotUnavailable;
-		const unknown = await h.snapshot(9 as PaneId);
-		assert !unknown.ok && unknown.error == PaneHostError.UnknownPane;
 
 		assert typed(h, 1, "exit 3\r");
 		const waited: float64 = performance.now();
@@ -193,6 +191,43 @@ when (!windows) {
 		assert seen.exits == "1:3 ", seen.exits;
 		await h.closeAll();
 		assert seen.gaps == "", seen.gaps;
+		assert seen.fatal == "", seen.fatal;
+	}
+
+	test "a pane's snapshot is native when it fits, VT bytes when native does not, and refused when neither does" {
+		const seen = fresh();
+		const dir = dirNamed("hostSnapshot", seen);
+		const w = Workspace.create(1);
+		assert w.ok;
+		if (!w.ok) { return; }
+		const h = hostIn(dir, seen);
+		const _tab = await ran(w.value, h, { kind: CommandKind.NewTab }, seen);
+		const id = 1 as PaneId;
+		assert typed(h, 1, "printf 'snap%sshot\\n' -\r");
+		assert await prints(h, seen, 1, "snap-shot");
+
+		const native = await h.snapshot(id, ScreenFormat.Native, MAX_SCREEN_BYTES);
+		assert native.ok;
+		if (!native.ok) { return; }
+		assert native.value.format == ScreenFormat.Native;
+		assert screenText(native.value.format, native.value.bytes, COLS, ROWS).includes("snap-shot");
+
+		const replayed = await h.snapshot(id, ScreenFormat.VtBytes, MAX_SCREEN_BYTES);
+		assert replayed.ok;
+		if (!replayed.ok) { return; }
+		assert replayed.value.format == ScreenFormat.VtBytes;
+		assert screenText(replayed.value.format, replayed.value.bytes, COLS, ROWS).includes("snap-shot");
+
+		const vtSize = replayed.value.bytes.length;
+		assert vtSize < native.value.bytes.length, `${vtSize} vs ${native.value.bytes.length}`;
+		const fallen = await h.snapshot(id, ScreenFormat.Native, vtSize);
+		assert fallen.ok && fallen.value.format == ScreenFormat.VtBytes;
+
+		const tooLarge = await h.snapshot(id, ScreenFormat.Native, vtSize - 1);
+		assert !tooLarge.ok && tooLarge.error == PaneHostError.SnapshotTooLarge;
+		const unknown = await h.snapshot(9 as PaneId, ScreenFormat.Native, MAX_SCREEN_BYTES);
+		assert !unknown.ok && unknown.error == PaneHostError.UnknownPane;
+		await h.closeAll();
 		assert seen.fatal == "", seen.fatal;
 	}
 }

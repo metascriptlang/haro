@@ -15,6 +15,11 @@ import { Layout, Screen, screenParts } from "./wire";
 
 const POLL_MS = 5;
 
+interface BusyWait {
+	pane: PaneId;
+	answer: (busy: boolean) => void;
+}
+
 function ignoreMessage(m: Message): void {}
 function ignoreEnd(why: string): void {}
 
@@ -34,6 +39,7 @@ export class ServerLink {
 	private listening: boolean = false;
 	private handler: (m: Message) => void = ignoreMessage;
 	private onEnd: (why: string) => void = ignoreEnd;
+	private busyWaits: BusyWait[] = [];
 	ended: string | null = null;
 
 	constructor(connection: Connection) { this.connection = connection; }
@@ -53,6 +59,7 @@ export class ServerLink {
 			return;
 		}
 		for (const m of got.value) {
+			if (this.answeredBusy(m)) { continue; }
 			if (this.listening) {
 				this.handler(m);
 			} else {
@@ -61,9 +68,34 @@ export class ServerLink {
 		}
 	}
 
+	answeredBusy(m: Message): boolean {
+		if (m.kind != MessageKind.Busy) { return false; }
+		const at = this.busyWaits.findIndex((w: BusyWait): boolean => w.pane == m.pane);
+		if (at < 0) { return true; }
+		const wait = this.busyWaits[at];
+		this.busyWaits.splice(at, 1);
+		wait.answer(m.busy);
+		return true;
+	}
+
+	unanswered(): void {
+		const waits = this.busyWaits;
+		this.busyWaits = [];
+		for (const w of waits) { w.answer(true); }
+	}
+
+	busy(pane: PaneId): Promise<boolean> {
+		if (this.ended !== null) { return Promise.resolve(true); }
+		this.send({ kind: MessageKind.AskBusy, pane: pane });
+		return new Promise<boolean>((answer: (busy: boolean) => void): void => {
+			this.busyWaits.push({ pane: pane, answer: answer });
+		});
+	}
+
 	end(why: string): void {
 		if (this.ended !== null) { return; }
 		this.ended = why;
+		this.unanswered();
 		if (this.listening) { this.onEnd(why); }
 	}
 
@@ -112,6 +144,7 @@ export class ServerLink {
 		this.listening = false;
 		this.handler = ignoreMessage;
 		this.onEnd = ignoreEnd;
+		this.unanswered();
 		this.send({ kind: MessageKind.Bye });
 		this.connection.finish();
 	}

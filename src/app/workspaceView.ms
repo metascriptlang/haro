@@ -719,9 +719,12 @@ export async function quit(this v: WorkspaceView): Promise<void> {
 
 async function busyCount(this v: WorkspaceView, ids: PaneId[]): Promise<int32> {
 	let busy: int32 = 0;
+	const link = v.link;
 	for (const id of ids) {
 		const pane = v.panes.paneOf(id);
-		if (pane !== null && !(await pane.foregroundIsShell())) { busy += 1; }
+		if (pane === null) { continue; }
+		const running = link === null ? !(await pane.foregroundIsShell()) : await link.busy(id);
+		if (running) { busy += 1; }
 	}
 	return busy;
 }

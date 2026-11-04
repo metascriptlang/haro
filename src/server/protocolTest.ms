@@ -303,6 +303,8 @@ function messages(): Message[] {
 		{ kind: MessageKind.Fit, cols: 132, rows: 43 },
 		{ kind: MessageKind.Exited, pane: pane(2), code: -9 },
 		{ kind: MessageKind.Failed, pane: pane(2), reason: "pty \u{e9} gone" },
+		{ kind: MessageKind.AskBusy, pane: pane(3) },
+		{ kind: MessageKind.Busy, pane: pane(3), busy: true },
 		{ kind: MessageKind.Refused, reason: "nope \u{1f680}" },
 		{ kind: MessageKind.Bye },
 	];
@@ -519,6 +521,8 @@ test "a malformed payload is refused with the case it breaks" {
 	const refused = MessageKind.Refused as uint8;
 	assert refusal(frame(refused, [0, 0, 0, 2, 0xc3, 0x28])) ==
 		ProtocolError.MalformedText;
+	const busy = MessageKind.Busy as uint8;
+	assert refusal(frame(busy, [0, 0, 0, 1, 2])) == ProtocolError.BadPresenceTag;
 	const input = MessageKind.Input as uint8;
 	assert refusal(frame(input, [0, 0, 0, 1, 0xff, 0xff, 0xff, 0xff])) ==
 		ProtocolError.PayloadTruncated;

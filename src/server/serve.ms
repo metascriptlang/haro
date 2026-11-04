@@ -16,6 +16,7 @@ import {
 	HostLaunch,
 	PaneHost,
 	apply as applyEvent,
+	busy,
 	closeAll,
 	open,
 	pump,
@@ -331,6 +332,12 @@ function received(this s: Server, c: Client, m: Message): void {
 		});
 	} else if (m.kind == MessageKind.Fit) {
 		s.fit(m.cols, m.rows);
+	} else if (m.kind == MessageKind.AskBusy) {
+		const pane = m.pane;
+		s.enqueue(async (): Promise<void> => {
+			const busy = await s.hostOf().busy(pane);
+			s.sendTo(c, { kind: MessageKind.Busy, pane: pane, busy: busy });
+		});
 	} else if (m.kind == MessageKind.Bye) {
 		c.conn.finish();
 	} else {

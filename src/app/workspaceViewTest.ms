@@ -203,3 +203,25 @@ test "a window shows the server's pane exit and start failure the way an in-proc
 	fake.close();
 	cleanUp(path);
 }
+
+test "closing a server pane asks first only when the server says its shell runs a program" {
+	const path = freshPath();
+	const fake = fakeWithTwoPanes(path);
+	fake.busyPanes = [2 as PaneId];
+	const notes = new Notes();
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	assert got.ok;
+	if (!got.ok) { return; }
+	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	await v.attachTo(link, got.value);
+	v.askClosePane(1 as PaneId);
+	assert await until((): boolean => runningIds(v) == "2"), runningIds(v);
+	assert !v.confirm.visible();
+	v.askClosePane(2 as PaneId);
+	assert await until((): boolean => v.confirm.visible());
+	assert runningIds(v) == "2";
+	await v.detachPanes();
+	fake.close();
+	cleanUp(path);
+}

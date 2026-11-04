@@ -166,6 +166,14 @@ when (!windows) {
 		return false;
 	}
 
+	function answers(p: Peer): string[] {
+		const out: string[] = [];
+		for (const m of p.got) {
+			if (m.kind == MessageKind.Busy) { out.push(`${m.pane as int32} ${m.busy}`); }
+		}
+		return out;
+	}
+
 	function layoutBeforeOpened(p: Peer, pane: PaneId): boolean {
 		let at = p.got.findIndex((m: Message): boolean =>
 			m.kind == MessageKind.Event && m.event.kind == EventKind.PaneOpened && m.event.pane == pane
@@ -269,6 +277,22 @@ when (!windows) {
 		typed(a, "printf 'second%sline\\n' -\r");
 		assert await until((): boolean => printed(a, FIRST).includes("second-line"));
 		assert seqsRise(a, FIRST);
+		await stopped(s, ended);
+		cleanUp(socket);
+	}
+
+	test "a client asking whether a pane is busy gets the pane's answer, and an unknown pane is not busy" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const s = await serving(setupAt(socket, logged));
+		const ended = ending(s);
+		const a = await attached(socket, vtBuild());
+		typed(a, "printf 'idle%sshell\\n' -\r");
+		assert await until((): boolean => printed(a, FIRST).includes("idle-shell"));
+		say(a, { kind: MessageKind.AskBusy, pane: FIRST });
+		say(a, { kind: MessageKind.AskBusy, pane: 9 as PaneId });
+		assert await until((): boolean => answers(a).length == 2), kinds(a);
+		assert answers(a).join(",") == "1 false,9 false", answers(a).join(",");
 		await stopped(s, ended);
 		cleanUp(socket);
 	}

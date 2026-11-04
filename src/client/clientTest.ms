@@ -146,3 +146,19 @@ test "the fake server sends a layout before the events of a command, as the real
 	fake.close();
 	cleanUp(path);
 }
+
+test "a pane's busy question is answered by the server, and a link that ends answers busy" {
+	const path = freshPath();
+	const fake = fakeWithTwoPanes(path, ScreenFormat.Native);
+	fake.busyPanes = [2 as PaneId];
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	assert got.ok;
+	assert !(await link.busy(1 as PaneId));
+	assert await link.busy(2 as PaneId);
+	link.connection.close();
+	assert await until((): boolean => link.ended !== null);
+	assert await link.busy(1 as PaneId);
+	fake.close();
+	cleanUp(path);
+}

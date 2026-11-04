@@ -45,6 +45,8 @@ export enum MessageKind {
 	Fit,
 	Exited,
 	Failed,
+	AskBusy,
+	Busy,
 	Refused,
 	Bye,
 }
@@ -81,6 +83,8 @@ export struct Message = match (kind: MessageKind) {
 	MessageKind.Fit => { cols: int32, rows: int32 },
 	MessageKind.Exited => { pane: PaneId, code: int32 },
 	MessageKind.Failed => { pane: PaneId, reason: string },
+	MessageKind.AskBusy => { pane: PaneId },
+	MessageKind.Busy => { pane: PaneId, busy: boolean },
 	MessageKind.Refused => { reason: string },
 	MessageKind.Bye => {},
 };
@@ -116,6 +120,8 @@ export const MESSAGE_KINDS: MessageKind[] = [
 	MessageKind.Fit,
 	MessageKind.Exited,
 	MessageKind.Failed,
+	MessageKind.AskBusy,
+	MessageKind.Busy,
 	MessageKind.Refused,
 	MessageKind.Bye,
 ];
@@ -392,6 +398,11 @@ function payload(this w: Writer, m: Message): void {
 	} else if (m.kind == MessageKind.Failed) {
 		w.pane(m.pane);
 		w.text(m.reason);
+	} else if (m.kind == MessageKind.AskBusy) {
+		w.pane(m.pane);
+	} else if (m.kind == MessageKind.Busy) {
+		w.pane(m.pane);
+		w.flag(m.busy);
 	} else if (m.kind == MessageKind.Refused) {
 		w.text(m.reason);
 	}
@@ -806,6 +817,15 @@ function message(
 			const id = try r.pane();
 			const reason = try r.text();
 			Result.ok({ kind: MessageKind.Failed, pane: id, reason: reason })
+		},
+		MessageKind.AskBusy => {
+			const id = try r.pane();
+			Result.ok({ kind: MessageKind.AskBusy, pane: id })
+		},
+		MessageKind.Busy => {
+			const id = try r.pane();
+			const busy = try r.flag();
+			Result.ok({ kind: MessageKind.Busy, pane: id, busy: busy })
 		},
 		MessageKind.Refused => {
 			const reason = try r.text();

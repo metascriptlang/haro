@@ -50,6 +50,7 @@ export class FakeServer {
 	commands: int32 = 0;
 	byes: int32 = 0;
 	latest: Connection | null = null;
+	busyPanes: PaneId[] = [];
 
 	constructor(format: ScreenFormat, w: Workspace) {
 		this.format = format;
@@ -182,6 +183,9 @@ export class FakeServer {
 			this.run(c, { kind: CommandKind.Fit });
 		} else if (m.kind == MessageKind.Input) {
 			this.echo(c, m.pane, m.bytes);
+		} else if (m.kind == MessageKind.AskBusy) {
+			const busy = this.busyPanes.includes(m.pane);
+			this.send(c, { kind: MessageKind.Busy, pane: m.pane, busy: busy });
 		} else if (m.kind == MessageKind.Bye) {
 			this.byes += 1;
 			c.close();

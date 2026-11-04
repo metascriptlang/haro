@@ -5,6 +5,7 @@ import { View, text } from "./frame";
 import { exit } from "std/process";
 import { Action } from "../input/bindings";
 import { CellRect, PaneId } from "../workspace/tree";
+import { HostId } from "../workspace/hosted";
 import { focusedPane } from "../workspace/workspace";
 import { PaneModel } from "./components/features/terminal/paneModel";
 import { paneOf } from "./panes";
@@ -15,8 +16,17 @@ import {
 	closeShells,
 	confirmed,
 	detachPanes,
+	LinkState,
+	addRemote,
+	paneAt,
+	primary,
+	selectTab,
+	shownHost,
+	sidebarHosts,
 	windowAction,
 } from "./workspaceView";
+import { FakeServer } from "../client/fakeServer";
+import { Dial } from "../client/link";
 
 
 function dump(this view: View, label: string): void {
@@ -157,7 +167,7 @@ function checked(this t: Tally, ok: boolean, what: string): void {
 }
 
 function modelOf(v: WorkspaceView, id: int32): PaneModel | null {
-	return v.panes.paneOf(id as PaneId)?.model ?? null;
+	return v.primary().panes.paneOf(id as PaneId)?.model ?? null;
 }
 
 function rectOf(v: WorkspaceView, id: int32): CellRect | null {
@@ -168,7 +178,7 @@ function rectOf(v: WorkspaceView, id: int32): CellRect | null {
 }
 
 function focusedId(v: WorkspaceView): int32 {
-	const id = v.w.focusedPane();
+	const id = v.primary().w.focusedPane();
 	return id === null ? -1 : id as int32;
 }
 
@@ -202,7 +212,7 @@ function act(v: WorkspaceView, action: Action): void {
 
 export async function smokePanes(v: WorkspaceView): Promise<void> {
 	const t: Tally = { failed: 0 };
-	t.checked(await until((): boolean => v.cols > 0 && v.panes.cellWidth > 0),
+	t.checked(await until((): boolean => v.cols > 0 && v.primary().panes.cellWidth > 0),
 		"the window laid out a grid of cells");
 	const _prompt = await pause(1500);
 	await typedInto(t, v, 1, "echo hi-1", "hi-1");
@@ -244,9 +254,9 @@ export async function smokePanes(v: WorkspaceView): Promise<void> {
 		"zoom off shows all three panes again");
 
 	act(v, Action.NewTab);
-	t.checked(await until((): boolean => v.w.tabs.length == 2 && modelOf(v, 4) !== null),
+	t.checked(await until((): boolean => v.primary().w.tabs.length == 2 && modelOf(v, 4) !== null),
 		"a new tab opens pane 4");
-	t.checked(v.tabs().length == 2 && v.tabs()[1].active,
+	t.checked(v.tabs()[0].tabs.length == 2 && v.tabs()[0].tabs[1].active,
 		"the sidebar lists two tabs, the new one active");
 	await typedInto(t, v, 4, "echo hi-4", "hi-4");
 	act(v, Action.PreviousTab);
@@ -255,7 +265,7 @@ export async function smokePanes(v: WorkspaceView): Promise<void> {
 	act(v, Action.GotoTab2);
 	t.checked(await until((): boolean => focusedId(v) == 4), "goto tab 2 focuses pane 4");
 	act(v, Action.ClosePane);
-	t.checked(await until((): boolean => v.w.tabs.length == 1 && modelOf(v, 4) === null),
+	t.checked(await until((): boolean => v.primary().w.tabs.length == 1 && modelOf(v, 4) === null),
 		"closing an idle shell's pane closes it at once, and its tab with it");
 	t.checked(!v.confirm.visible(), "no dialog asked for an idle shell");
 
@@ -308,7 +318,7 @@ async function reattached(
 	reconnect: () => Promise<Result<Reattach, string>>,
 ): Promise<boolean> {
 	await v.detachPanes();
-	t.checked(v.panes.running.length == 0, "the window dropped its panes and its connection");
+	t.checked(v.primary().panes.running.length == 0, "the window dropped its panes and its connection");
 	const again = await reconnect();
 	if (!again.ok) {
 		t.checked(false, `the window reconnected: ${again.error}`);
@@ -324,7 +334,7 @@ export async function smokeAttach(
 	stopServer: () => void,
 ): Promise<void> {
 	const t: Tally = { failed: 0 };
-	t.checked(await until((): boolean => v.cols > 0 && v.panes.cellWidth > 0 && modelOf(v, 1) !== null),
+	t.checked(await until((): boolean => v.cols > 0 && v.primary().panes.cellWidth > 0 && modelOf(v, 1) !== null),
 		"the window attached and shows the server's first pane");
 	await typedMarker(t, v, 1, "attach-1");
 	act(v, Action.SplitRight);
@@ -351,9 +361,60 @@ export async function smokeAttach(
 		);
 	}
 	console.log(`smoke-attach: ${t.failed == 0 ? "PASS" : `FAIL ${t.failed}`}`);
-	v.link?.detach();
-	v.link = null;
-	await v.closeShells();
+	await v.detachPanes();
 	stopServer();
+	exit(t.failed == 0 ? 0 : 1);
+}
+
+function hostPaneHas(v: WorkspaceView, host: HostId, id: int32, wanted: string): boolean {
+	const view = v.paneAt({ host: host, pane: id as PaneId })?.model.view ?? null;
+	if (view === null) { return false; }
+	const n = view.grid.length() as int32;
+	for (let i = 0; i < n; i++) {
+		if (view.text(i).includes(wanted)) { return true; }
+	}
+	return false;
+}
+
+export async function smokeHosts(
+	v: WorkspaceView,
+	fake: FakeServer,
+	dial: Dial,
+	stop: () => void,
+): Promise<void> {
+	const t: Tally = { failed: 0 };
+	t.checked(await until((): boolean => v.cols > 0 && modelOf(v, 1) !== null),
+		"the window attached to the local server and shows its pane 1");
+	await typedMarker(t, v, 1, "local-1");
+	const remote = v.addRemote("fake", dial);
+	t.checked(await until((): boolean => remote.state == LinkState.Connected && remote.panes.running.length == 1),
+		"the fake remote host attached and opened its pane 1");
+	const hosts = v.sidebarHosts();
+	t.checked(hosts.length == 2 && hosts[0].label == "local" && hosts[1].label == "fake" &&
+		hosts[1].tabs.length == 1, "the sidebar groups one tab under local and one under fake");
+	t.checked(await until((): boolean => hostPaneHas(v, remote.id, 1, "remote-marker")),
+		"the remote pane 1 shows the fake server's screen");
+	t.checked(!paneHas(v, 1, "remote-marker"), "the local pane 1 does not show the remote's screen");
+	v.selectTab({ host: remote.id, tab: remote.w.tabs[0].id });
+	t.checked(await until((): boolean => v.layout().panes.length == 1 && v.shownHost().id == remote.id),
+		"selecting the remote tab shows its pane");
+	v.paneAt({ host: remote.id, pane: 1 as PaneId })?.model.io.text("echo to-fake\r", performance.now());
+	t.checked(await until((): boolean => (fake.paneOf(1 as PaneId)?.seq ?? 0) > 0),
+		"typing in the remote pane reaches the fake server");
+	t.checked(await until((): boolean => hostPaneHas(v, remote.id, 1, "to-fake")),
+		"the remote pane shows what the fake server echoed");
+	fake.latest?.close();
+	t.checked(await until((): boolean => remote.state == LinkState.Offline),
+		"dropping the fake server's connection marks its host offline");
+	t.checked(v.sidebarHosts()[1].tabs.length == 1, "the offline host's tab stays listed");
+	t.checked(await until((): boolean => remote.state == LinkState.Connected),
+		"the host reconnects after its first backoff");
+	v.windowAction(Action.GotoTab1);
+	t.checked(await until((): boolean => v.shownHost().id == v.primary().id),
+		"goto tab 1 shows the local tab again");
+	await typedMarker(t, v, 1, "local-2");
+	console.log(`smoke-hosts: ${t.failed == 0 ? "PASS" : `FAIL ${t.failed}`}`);
+	await v.detachPanes();
+	stop();
 	exit(t.failed == 0 ? 0 : 1);
 }

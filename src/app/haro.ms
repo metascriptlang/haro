@@ -64,6 +64,7 @@ import {
 	smoke,
 	smokeAttach,
 	smokeFlood,
+	smokeHosts,
 	smokePanes,
 	smokeReplay,
 	smokeTyping,
@@ -71,8 +72,15 @@ import {
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { Connection, connectToUnix, socketPath } from "../server/transport";
-import { Attached, ServerLink, attach } from "../client/link";
-import { connectLocal, connectTcp, targetOf } from "../client/connect";
+import { Attached, Dial, ServerLink, attach } from "../client/link";
+import { connectLocal, dialLocal, dialUnix } from "../client/connect";
+import { startFake } from "../client/fakeServer";
+import { ScreenFormat } from "../server/protocol";
+import { CommandKind } from "../workspace/workspace";
+import { PaneId } from "../workspace/tree";
+import { writeText } from "../vt/vt";
+import { sshDial } from "../client/ssh";
+import { destinationOf } from "../client/destination";
 import { serve } from "../server/serve";
 import { dividerCellsOf } from "./workspaceView";
 import { vtBuild } from "../vt/snapshot";
@@ -80,7 +88,7 @@ import { portOf } from "../controller/shell";
 import { ptySetWake } from "../pty/nativePty.h";
 import { ConfigChange, ConfigOutcome } from "./components/features/terminal/paneModel";
 import { RunningPane } from "./panes";
-import { WindowHost, WorkspaceView, closeShells, open, quit } from "./workspaceView";
+import { WindowHost, WorkspaceView, addRemote, closeShells, open, quit } from "./workspaceView";
 
 const APP_TITLE = "Haro";
 const NOTIFICATION_ID = "haro";
@@ -95,7 +103,7 @@ when (!windows) {
 }
 
 when (macos) {
-	import { MenuItem, MenuRole, ModCmd, ModShift, Submenu, setAppMenu } from "../../../ion/src/index";
+	import { MenuItem, MenuRole, ModAlt, ModCmd, ModShift, Submenu, setAppMenu } from "../../../ion/src/index";
 
 	@include("unistd.h");
 
@@ -121,6 +129,9 @@ when (macos) {
 			{
 				title: "File",
 				items: [
+					MenuItem.action("new_tab_on_host", "New Tab on Host…", "t", ModCmd | ModAlt),
+					MenuItem.action("add_remote_host", "Add Remote Host…", "", 0),
+					MenuItem.separator(),
 					MenuItem.action("close_pane", "Close Pane", "w", ModCmd),
 					MenuItem.action("close_window", "Close Window", "w", ModCmd | ModShift),
 				],
@@ -286,11 +297,20 @@ interface Launch {
 	recording: string | null;
 }
 
+interface Served {
+	link: ServerLink | null;
+	attached: Attached | null;
+	dial: Dial | null;
+	label: string;
+	remotes: boolean;
+}
+
+const IN_PROCESS: Served = { link: null, attached: null, dial: null, label: "", remotes: false };
+
 async function openWindow(
 	launch: Launch,
 	started: (v: WorkspaceView, first: RunningPane) => void,
-	link: ServerLink | null = null,
-	attached: Attached | null = null,
+	served: Served = IN_PROCESS,
 ): Promise<int32> {
 	registerFallbacks();
 	const families = familyList(config.loaded.faces);
@@ -394,9 +414,16 @@ async function openWindow(
 		launch.shellScripts,
 		launch.startIn,
 		launch.recording,
-		link,
-		attached,
+		served.link,
+		served.attached,
+		served.dial,
+		served.label,
 	);
+	if (served.remotes) {
+		for (const remote of config.loaded.config.remoteHosts) {
+			const _added = view.addRemote(remote.label, sshDial(remote.address));
+		}
+	}
 	view.started = (first: RunningPane): void => { started(view, first); };
 	if (hasFlag("--stats")) { logStatsEverySecond(pace, stats); }
 	when (macos) {
@@ -459,7 +486,7 @@ async function attachedTo(connection: Connection): Promise<Reattach> {
 	const got = await attach(link, vtBuild(), HELLO_COLS, HELLO_ROWS, ATTACH_TIMEOUT_MS);
 	if (!got.ok) {
 		link.connection.close();
-		failVisibly(`Haro could not attach to its server: ${got.error}`);
+		failVisibly(`Haro could not attach to its server: ${got.error.why}`);
 	}
 	return { link: link, attached: got.value };
 }
@@ -468,10 +495,28 @@ const CLIENT_LAUNCH: Launch = { command: "", startIn: null, shellScripts: null, 
 
 function ignoreStart(v: WorkspaceView, first: RunningPane): void {}
 
-async function runClient(connected: Result<Connection, string>): Promise<int32> {
+async function runClient(): Promise<int32> {
+	const path = socketPath();
+	const connected = await connectLocal(path);
 	if (!connected.ok) { failVisibly(connected.error); }
 	const server = await attachedTo(connected.value);
-	return await openWindow(CLIENT_LAUNCH, ignoreStart, server.link, server.attached);
+	return await openWindow(CLIENT_LAUNCH, ignoreStart, {
+		link: server.link,
+		attached: server.attached,
+		dial: dialLocal(path),
+		label: "",
+		remotes: true,
+	});
+}
+
+async function runRemote(destination: string): Promise<int32> {
+	return await openWindow(CLIENT_LAUNCH, ignoreStart, {
+		link: null,
+		attached: null,
+		dial: sshDial(destination),
+		label: destination,
+		remotes: false,
+	});
 }
 
 async function reattachAt(path: string): Promise<Result<Reattach, string>> {
@@ -480,7 +525,7 @@ async function reattachAt(path: string): Promise<Result<Reattach, string>> {
 	const link = new ServerLink(c.value);
 	link.begin();
 	const got = await attach(link, vtBuild(), HELLO_COLS, HELLO_ROWS, ATTACH_TIMEOUT_MS);
-	if (!got.ok) { return Result.err(got.error); }
+	if (!got.ok) { return Result.err(got.error.why); }
 	return Result.ok({ link: link, attached: got.value });
 }
 
@@ -496,7 +541,7 @@ async function runSmokeAttach(): Promise<int32> {
 		const link = new ServerLink(started.value);
 		link.begin();
 		const first = await attach(link, vtBuild(), HELLO_COLS, HELLO_ROWS, ATTACH_TIMEOUT_MS);
-		if (!first.ok) { fail(`smoke-attach: ${first.error}`); }
+		if (!first.ok) { fail(`smoke-attach: ${first.error.why}`); }
 		const daemon = first.value.serverPid;
 		const reconnect = (): Promise<Result<Reattach, string>> => reattachAt(path);
 		const stopServer = (): void => {
@@ -508,10 +553,45 @@ async function runSmokeAttach(): Promise<int32> {
 			(v: WorkspaceView, shown: RunningPane): void => {
 				const _s = smokeAttach(v, reconnect, stopServer);
 			},
-			link,
-			first.value,
+			{ link: link, attached: first.value, dial: null, label: "", remotes: false },
 		);
 		stopServer();
+		return code;
+	}
+}
+
+async function runSmokeHosts(): Promise<int32> {
+	when (windows) {
+		fail("smoke-hosts: a Haro server does not run on Windows yet");
+	} else {
+		const dir = join(tmpDir(), `haro-smoke-hosts-${Date.now()}`);
+		const path = join(dir, "haro.sock");
+		const remotePath = join(dir, "remote.sock");
+		const _chosen = env.set("HARO_SOCKET", path);
+		const started = await connectLocal(socketPath());
+		if (!started.ok) { fail(`smoke-hosts: ${started.error}`); }
+		const link = new ServerLink(started.value);
+		link.begin();
+		const first = await attach(link, vtBuild(), HELLO_COLS, HELLO_ROWS, ATTACH_TIMEOUT_MS);
+		if (!first.ok) { fail(`smoke-hosts: ${first.error.why}`); }
+		const fake = startFake(remotePath, ScreenFormat.Native);
+		if (!fake.ok) { fail(`smoke-hosts: the fake remote did not listen: ${fake.error.toString()}`); }
+		const _tab = fake.value.apply({ kind: CommandKind.NewTab });
+		fake.value.paneOf(1 as PaneId)?.vt.writeText("remote-marker\r\n");
+		const daemon = first.value.serverPid;
+		const stop = (): void => {
+			fake.value.close();
+			if (kill(daemon, SIGTERM) != 0) { console.log(`smoke-hosts: the server ${daemon} was already gone`); }
+			const _removed = removeAll(dir);
+		};
+		const code = await openWindow(
+			CLIENT_LAUNCH,
+			(v: WorkspaceView, shown: RunningPane): void => {
+				const _s = smokeHosts(v, fake.value, dialUnix(remotePath), stop);
+			},
+			{ link: link, attached: first.value, dial: null, label: "", remotes: false },
+		);
+		stop();
 		return code;
 	}
 }
@@ -542,13 +622,14 @@ async function main(): Promise<int32> {
 		return await runShell(flagValue("--shell") ?? config.loaded.config.command);
 	}
 	if (hasFlag("--smoke-attach")) { return await runSmokeAttach(); }
+	if (hasFlag("--smoke-hosts")) { return await runSmokeHosts(); }
 	const remote = flagValue("--connect");
 	if (remote !== null) {
-		const target = targetOf(remote);
-		if (!target.ok) { failVisibly(target.error); }
-		return await runClient(await connectTcp(target.value));
+		const destination = destinationOf(remote);
+		if (!destination.ok) { failVisibly(`--connect: ${destination.error}`); }
+		return await runRemote(destination.value);
 	}
-	return await runClient(await connectLocal(socketPath()));
+	return await runClient();
 }
 
 when (!testBuild) {

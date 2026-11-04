@@ -1,12 +1,14 @@
 import { NeonNode } from "../../../neon/src/render/node";
 import { NeonEvent } from "../../../neon/src/render/event";
-import { Show } from "../../../neon/src/macros/ui/flow";
+import { For, Show } from "../../../neon/src/macros/ui/flow";
+import { Accessor, untrack } from "../../../neon/src/core/signal";
 import { createEffect } from "../../../neon/src/core/effect";
 import { Cleanup } from "../../../neon/src/core/types";
 import { PixelRatio } from "../../../neon/src/api/pixelRatio";
 import { View, Void } from "../../../neon/src/components/primitives";
 import { Axis, PaneId, TabId } from "../workspace/tree";
-import { CommandKind } from "../workspace/workspace";
+import { HostId, HostPane } from "../workspace/hosted";
+import { CommandKind, WorkspaceCommand } from "../workspace/workspace";
 import { Notice } from "./components/features/notice/notice";
 import { PasteDialog } from "./components/features/paste/pasteDialog";
 import { cancelDialog, confirmDialog } from "./components/features/terminal/paneEvents";
@@ -14,25 +16,31 @@ import { TerminalPane } from "./components/features/terminal/terminalPane";
 import { PaneFrame } from "./components/features/workspace/paneFrame";
 import { Sidebar } from "./components/features/sidebar/sidebar";
 import { ConfirmClose } from "./components/features/confirm/confirmClose";
+import { HostDialog } from "./components/features/hosts/hostDialog";
 import { CursorTrail } from "./components/content/cursor";
-import { paneOf } from "./panes";
 import {
 	WorkspaceView,
+	addHost,
 	askClosePane,
 	begin,
 	cancelled,
 	confirmed,
 	connect,
+	focusPane,
+	hostDialogShut,
+	hostOf,
 	laidOut,
+	newTabOn,
+	paneAt,
 	relayout,
 	selectTab,
-	send,
+	sendTo,
 } from "./workspaceView";
 
-function PaneView(props: { view: WorkspaceView; id: PaneId }): NeonNode {
+function PaneView(props: { view: WorkspaceView; at: HostPane }): NeonNode {
 	const v = props.view;
-	const id = props.id;
-	const running = v.panes.paneOf(id);
+	const id = props.at.pane;
+	const running = v.paneAt(props.at);
 	if (running === null) { return <View style={{ flexGrow: 1 }} />; }
 	const m = running.model;
 	return <View style={{ flexGrow: 1 }}>
@@ -51,18 +59,43 @@ function PaneView(props: { view: WorkspaceView; id: PaneId }): NeonNode {
 function SidebarOf(props: { view: WorkspaceView }): NeonNode {
 	const v = props.view;
 	return <Sidebar
-		tabs={v.tabs()}
+		hosts={v.tabs()}
 		cols={v.chrome().sidebarCols}
 		metrics={v.font.metrics}
 		foreground={v.chrome().foreground}
 		background={v.chrome().background}
 		accent={v.chrome().accent}
 		dim={v.chrome().dim}
-		onSelectTab={(id: int32): void => { v.selectTab(id as TabId); }}
-		onFocusPane={(id: int32): void => {
-			v.send({ kind: CommandKind.FocusPane, pane: id as PaneId });
+		onHost={(host: int32): void => { v.newTabOn(host as HostId); }}
+		onSelectTab={(host: int32, id: int32): void => {
+			v.selectTab({ host: host as HostId, tab: id as TabId });
 		}}
-		onClosePane={(id: int32): void => { v.askClosePane(id as PaneId); }}
+		onFocusPane={(host: int32, id: int32): void => {
+			v.focusPane({ host: host as HostId, pane: id as PaneId });
+		}}
+		onClosePane={(host: int32, id: int32): void => {
+			v.askClosePane({ host: host as HostId, pane: id as PaneId });
+		}}
+	/>;
+}
+
+function HostFrame(props: { view: WorkspaceView; host: HostId }): NeonNode {
+	const v = props.view;
+	const host = props.host;
+	const send = (c: WorkspaceCommand): void => {
+		const h = v.hostOf(host);
+		if (h !== null) { v.sendTo(h, c); }
+	};
+	return <PaneFrame
+		layout={v.layout()}
+		metrics={v.font.metrics}
+		inset={v.inset()}
+		look={v.look()}
+		pane={(id: PaneId): NeonNode => <PaneView view={v} at={{ host: host, pane: id }} />}
+		onFocusPane={(id: PaneId): void => { v.focusPane({ host: host, pane: id }); }}
+		onMoveDivider={(before: PaneId, axis: Axis, by: int32): void => {
+			send({ kind: CommandKind.MoveDivider, pane: before, axis: axis, by: by });
+		}}
 	/>;
 }
 
@@ -84,29 +117,28 @@ export function App(v: WorkspaceView): NeonNode {
 			<View
 				style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}
 				onLayout={(e: NeonEvent): void => { v.laidOut(e); }}>
-				<PaneFrame
-					layout={v.layout()}
-					metrics={v.font.metrics}
-					inset={v.inset()}
-					look={v.look()}
-					pane={(id: PaneId): NeonNode => <PaneView view={v} id={id} />}
-					onFocusPane={(id: PaneId): void => {
-						v.send({ kind: CommandKind.FocusPane, pane: id });
-					}}
-					onMoveDivider={(before: PaneId, axis: Axis, by: int32): void => {
-						v.send({
-							kind: CommandKind.MoveDivider,
-							pane: before,
-							axis: axis,
-							by: by,
-						});
-					}}
-				/>
+				<For each={[v.shown()]} keyed={(h: HostId): number => h as int32}>
+					{(shown: Accessor<HostId>): NeonNode => <HostFrame view={v} host={untrack((): HostId => shown())} />}
+				</For>
 			</View>
 			<Show when={v.sidebarShown() && !v.chrome().sidebarLeft}>
 				<SidebarOf view={v} />
 			</Show>
 		</View>
+		<HostDialog
+			model={v.hostDialog}
+			metrics={v.font.metrics}
+			onPick={(id: int32): void => {
+				v.hostDialogShut();
+				v.newTabOn(id as HostId);
+			}}
+			onAdd={(label: string, address: string): string => {
+				const refusal = v.addHost(label, address);
+				if (refusal == "") { v.hostDialogShut(); }
+				return refusal;
+			}}
+			onClose={(): void => { v.hostDialogShut(); }}
+		/>
 		<ConfirmClose
 			model={v.confirm}
 			metrics={v.font.metrics}

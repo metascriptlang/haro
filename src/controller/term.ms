@@ -9,6 +9,7 @@ import {
 } from "../keys/keys";
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
+import { Seed } from "../pty/remote";
 import { Session, SessionError } from "../session/session";
 import { CellInk } from "../grid/lines";
 import {
@@ -83,6 +84,7 @@ export enum TermError {
 	ClipboardUnasked,
 	SettingsRefused,
 	FrameRowOutOfRange,
+	OutputOutOfOrder,
 }
 
 export converter vtFailed(e: VtError): TermError {
@@ -130,6 +132,7 @@ export interface Term {
 	marks: Vec<Mark>;
 	unsettled: PtySize | null;
 	tee: Tee | null;
+	seed: Seed | null;
 }
 
 export struct Output {
@@ -239,6 +242,7 @@ export function openTerm(
 		marks: [],
 		unsettled: null,
 		tee: null,
+		seed: null,
 	});
 }
 
@@ -258,7 +262,8 @@ export function fit(
 		t.spawnedAt = t.now();
 		const tee = t.tee;
 		const opened = tee === null ? pty.value : teed(pty.value, tee);
-		const started = Session.start(opened, cols, rows, cellWidth, cellHeight);
+		const started = Session.start(opened, cols, rows, cellWidth, cellHeight, t.seed);
+		t.seed = null;
 		if (!started.ok) { return Result.err(TermError.SessionStartFailed); }
 		t.session = started.value;
 	} else {

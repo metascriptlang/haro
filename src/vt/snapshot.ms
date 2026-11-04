@@ -4,16 +4,21 @@ import {
 	GhosttyFormatterScreenExtra,
 	GhosttyFormatterTerminalExtra,
 	GhosttyFormatterTerminalOptions,
+	GhosttyAllocator,
+	GhosttyBuildInfo,
 	GhosttyColorRgb,
 	GhosttyResult,
+	GhosttyString,
 	GhosttyTerminal,
 	GhosttyTerminalData,
 	ghostty_formatter_free,
+	ghostty_free,
 	ghostty_formatter_terminal_new,
 	size_t,
 } from "../../vendor/ghostty/include/ghostty/vt.h";
 import { Vt } from "./terminal";
 import { title } from "./terminal";
+import { wellFormed } from "./wellFormed";
 import {
 	Colors256,
 	checked,
@@ -28,6 +33,18 @@ extern function formatInto(
 	buf: Span<uint8>,
 	out written: size_t,
 ): GhosttyResult from "ghostty_formatter_format_buf";
+
+extern function encodeNative(
+	terminal: GhosttyTerminal,
+	allocator: Ptr<GhosttyAllocator> | null,
+	out bytes: Ptr<uint8> | null,
+	out len: size_t,
+): GhosttyResult from "ghostty_snapshot_encode_alloc";
+
+extern function buildText(
+	key: GhosttyBuildInfo,
+	out value: GhosttyString,
+): GhosttyResult from "ghostty_build_info";
 
 function restoreOptions(): GhosttyFormatterTerminalOptions {
 	return {
@@ -134,4 +151,25 @@ export function snapshot(this vt: Vt): Result<Vec<uint8>, VtError> {
 	const named = try vt.title();
 	if (named.length > 0) { pushAll(bytes, `\x1b]2;${named}\x1b\\`.asBytes()); }
 	return Result.ok(bytes);
+}
+
+export function nativeSnapshot(this vt: Vt): Result<Vec<uint8>, VtError> {
+	let bytes: Ptr<uint8> | null = null;
+	let len: size_t = 0;
+	try checked(encodeNative(vt.terminal, vtAllocator(), bytes, len), VtError.ReadFailed);
+	let out: Vec<uint8> = [];
+	if (bytes !== null) {
+		pushAll(out, bytes[0..len]);
+		ghostty_free(vtAllocator(), bytes, len);
+	}
+	return Result.ok(out);
+}
+
+export function vtBuild(): string {
+	let version: GhosttyString;
+	const key = GhosttyBuildInfo.GHOSTTY_BUILD_INFO_VERSION_STRING;
+	if (!checked(buildText(key, version), VtError.ReadFailed).ok) {
+		throw new Error("vtBuild: libghostty-vt reports no version string");
+	}
+	return wellFormed(version.ptr[0..version.len]);
 }

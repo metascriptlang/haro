@@ -40,6 +40,7 @@ export {
 	pendingReplies,
 	pwd,
 	resize,
+	restore,
 	setDefaultColors,
 	setPalette,
 	setPullScrollback,
@@ -99,7 +100,7 @@ export {
 	selectionSet,
 	unitAt,
 } from "./selection";
-export { snapshot } from "./snapshot";
+export { nativeSnapshot, snapshot, vtBuild } from "./snapshot";
 export {
 	Keys,
 	KeysError,

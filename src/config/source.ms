@@ -367,14 +367,14 @@ test "a config typed with HaroConfig evaluates, and a misspelt field is the chec
 	if (!wrongMode.ok) { assert wrongMode.error.includes("/config.ms:3:"), wrongMode.error; }
 }
 
-test "a config typed with HaroConfig sets the pane and sidebar fields and binds a workspace action" {
+test "a config typed with HaroConfig sets the pane, sidebar and server fields and binds a workspace action" {
 	const dir = `${cwd()}/out/workspaceConfig`;
 	assert ensureDir(dir).ok;
 	const path = `${dir}/config.ms`;
 	const config = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = {\n` +
 		`\tdividerStyle: "line", focusedDividerColor: "#7aa2f7", paneGap: 2, paneTitle: "none",\n` +
 		`\tpaneResizeStep: 4, sidebarPosition: "right", sidebarVisible: false, sidebarWidth: 30,\n` +
-		`\tconfirmClose: false, newPaneCwd: "start",\n` +
+		`\tconfirmClose: false, newPaneCwd: "start", serverTailnet: true, serverTailnetPort: 9001,\n` +
 		`\tkeybinds: [{ keys: "ctrl+shift+backslash", action: "split_right" }],\n};\n`;
 	assert writeFile(path, config).ok;
 	const typed = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
@@ -387,6 +387,7 @@ test "a config typed with HaroConfig sets the pane and sidebar fields and binds 
 	assert c.value.paneGap == 2 && c.value.paneResizeStep == 4 && c.value.sidebarWidth == 30;
 	assert c.value.sidebarPosition == SidebarSide.Right && !c.value.sidebarVisible;
 	assert !c.value.confirmClose && c.value.newPaneCwd == PaneCwd.Start;
+	assert c.value.serverTailnet && c.value.serverTailnetPort == 9001;
 	assert c.value.keybinds[0].action == Action.SplitRight;
 }
 

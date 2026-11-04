@@ -74,6 +74,8 @@ export struct Config {
 	sidebarWidth: int64;
 	confirmClose: boolean;
 	newPaneCwd: PaneCwd;
+	serverTailnet: boolean;
+	serverTailnetPort: int32;
 }
 
 const POINTS_PER_INCH: float64 = 72;
@@ -89,6 +91,8 @@ const MAX_PANE_RESIZE_STEP: int64 = 1000;
 const SIDEBAR_WIDTH: int64 = 24;
 const MIN_SIDEBAR_WIDTH: int64 = 8;
 const MAX_SIDEBAR_WIDTH: int64 = 200;
+const SERVER_TAILNET_PORT: int32 = 7681;
+const MAX_PORT: int64 = 65535;
 
 when (windows) {
 	import { defaultCommand } from "../pty/pty";
@@ -141,6 +145,8 @@ export function defaults(): Config {
 		sidebarWidth: SIDEBAR_WIDTH,
 		confirmClose: true,
 		newPaneCwd: PaneCwd.Focused,
+		serverTailnet: false,
+		serverTailnetPort: SERVER_TAILNET_PORT,
 	};
 }
 
@@ -479,6 +485,14 @@ export function parse(json: string): Result<Config, string> {
 			},
 			"confirmClose" => { if (given) { c.confirmClose = try readBool(v, key); } },
 			"newPaneCwd" => { if (given) { c.newPaneCwd = try paneCwdOf(try readString(v, key)); } },
+			"serverTailnet" => { if (given) { c.serverTailnet = try readBool(v, key); } },
+			"serverTailnetPort" => {
+				if (!given) { continue; }
+				if (v.kind != JsonKind.Int || v.intVal < 1 || v.intVal > MAX_PORT) {
+					return Result.err(`serverTailnetPort must be a port from 1 to ${MAX_PORT}`);
+				}
+				c.serverTailnetPort = v.intVal as int32;
+			},
 			_ => { return Result.err(`unknown config field "${key}"`); },
 		}
 	}
@@ -538,6 +552,18 @@ test "the pane, sidebar and close fields a config gives replace the defaults" {
 	assert c.value.sidebarWidth == 30;
 	assert !c.value.confirmClose;
 	assert c.value.newPaneCwd == PaneCwd.Start;
+}
+
+test "the server listens on the tailnet only when the config turns it on, at its port" {
+	const off = parse("{}");
+	assert off.ok && !off.value.serverTailnet && off.value.serverTailnetPort == SERVER_TAILNET_PORT;
+	const on = parse(`{"serverTailnet":true,"serverTailnetPort":9001}`);
+	assert on.ok && on.value.serverTailnet && on.value.serverTailnetPort == 9001;
+	assert refusal(`{"serverTailnetPort":0}`) ==
+		"serverTailnetPort must be a port from 1 to 65535";
+	assert refusal(`{"serverTailnetPort":65536}`) ==
+		"serverTailnetPort must be a port from 1 to 65535";
+	assert refusal(`{"serverTailnet":"yes"}`) != "";
 }
 
 test "a pane, sidebar or close field the config cannot use is refused by name" {

@@ -153,6 +153,8 @@ export interface HaroConfig {
 	sidebarWidth?: int32;
 	confirmClose?: boolean;
 	newPaneCwd?: "focused" | "start";
+	serverTailnet?: boolean;
+	serverTailnetPort?: int32;
 	onKey?: (e: KeyPress) => KeyAnswer;
 	onPrompt?: (e: Prompt) => void;
 	onCommandDone?: (e: CommandDone) => void;

@@ -33,6 +33,7 @@ export {
 	compressionActivity,
 	create,
 	dropReplies,
+	dropClipboardRead,
 	free,
 	holdLimit,
 	holding,

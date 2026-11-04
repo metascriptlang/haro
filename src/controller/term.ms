@@ -459,7 +459,7 @@ export function dropEffects(this t: Term): void {
 	if (s === null) { return; }
 	const _events = s.vt.takeEvents();
 	const _copied = s.vt.takeClipboard();
-	const _asked = s.vt.clipboardAsked();
+	s.vt.dropClipboardRead();
 }
 
 export function sendText(this t: Term, text: string): Result<boolean, TermError> {

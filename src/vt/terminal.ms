@@ -381,6 +381,11 @@ export function clipboardAsked(this vt: Vt): boolean {
 	return asked;
 }
 
+export function dropClipboardRead(this vt: Vt): void {
+	vt.effects.readFrame = null;
+	vt.effects.readAsked = false;
+}
+
 export function answerClipboard(this vt: Vt, text: string, allow: boolean): Result<void, VtError> {
 	if (!vt.effects.answerRead(text, allow)) { return Result.err(VtError.ReadFailed); }
 	return Result.ok(null);

@@ -136,6 +136,21 @@ test "a clipboard read that was asked in a failed frame is still asked in the ne
 	}).ok;
 }
 
+test "a term whose effects are dropped holds no clipboard read, so the next read is held again instead of denied" {
+	assert onFresh("\x1b]52;c;?\x07", (t: Term, sink: Sink): void => {
+		assert t.drain().ok;
+		t.dropEffects();
+		const s = t.session;
+		assert s !== null;
+		if (s !== null) {
+			s.vt.writeText("\x1b]52;c;?\x07");
+			assert s.vt.clipboardAsked();
+		}
+		assert t.sendReplies().ok;
+		assert sink.sent == "", JSON.stringify(sink.sent);
+	}).ok;
+}
+
 test "planning rows for a grid shorter than the screen names the row that does not fit" {
 	assert onFresh("abc", (t: Term, sink: Sink): void => {
 		const s = t.session;

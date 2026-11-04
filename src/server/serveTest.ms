@@ -247,6 +247,23 @@ when (!windows) {
 		cleanUp(socket);
 	}
 
+	test "the first client of a fresh server sees its first shell's opening output, in its screen or as output" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const setup = setupAt(socket, logged);
+		const s = await serving({
+			...setup,
+			launch: { ...setup.launch, command: "printf 'opening%swords\\n' -; exec sh" },
+		});
+		const ended = ending(s);
+		const a = await attached(socket, vtBuild());
+		assert await until((): boolean =>
+			textOf(screenFor(a, FIRST), printed(a, FIRST)).includes("opening-words")
+		), `${textOf(screenFor(a, FIRST), "")} | ${printed(a, FIRST)} | ${kinds(a)}`;
+		await stopped(s, ended);
+		cleanUp(socket);
+	}
+
 	test "a split from one client reaches every attached client as an event" {
 		const socket = socketIn();
 		const logged = new Logged();

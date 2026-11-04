@@ -8,14 +8,84 @@ import { PROTOCOL_VERSION } from "../server/protocol";
 import { Dial, DialError, Failure, offline, refused } from "./link";
 
 when (!windows) {
-	@include("./spawn.h");
+	@include("spawn.h");
+	@include("sys/socket.h");
+	@include("sys/wait.h");
+	@include("fcntl.h");
+	@include("unistd.h");
 	@include("./version.h");
-	@compile("./spawn.c");
 
-	extern function haroSpawnSocket(joined: cstring, errPath: cstring, ref fd: int32): int32;
-	extern function haroReap(pid: int32, ref code: int32): int32;
-	extern function haroShutdownWrite(fd: int32): int32;
+	extern struct SpawnFiles from "posix_spawn_file_actions_t" {}
+	extern struct SpawnAttr from "posix_spawnattr_t" {}
+	extern const AF_UNIX: int32 from "AF_UNIX";
+	extern const SOCK_STREAM: int32 from "SOCK_STREAM";
+	extern const SHUT_WR: int32 from "SHUT_WR";
+	extern const F_SETFD: int32 from "F_SETFD";
+	extern const FD_CLOEXEC: int32 from "FD_CLOEXEC";
+	extern const O_WRONLY: int32 from "O_WRONLY";
+	extern const O_CREAT: int32 from "O_CREAT";
+	extern const O_TRUNC: int32 from "O_TRUNC";
+	extern const WNOHANG: int32 from "WNOHANG";
 	extern const HARO_SERVER_VERSION: cstring from "HARO_SERVER_VERSION";
+	extern function socketpair(domain: int32, kind: int32, protocol: int32, pair: Ptr<int32>): int32;
+	extern function shutdown(fd: int32, how: int32): int32;
+	extern function fcntl(fd: int32, command: int32, arg: int32): int32;
+	extern function closeRaw(fd: int32): int32 from "close";
+	extern function waitpid(pid: int32, status: Ptr<int32>, options: int32): int32;
+	extern function exitedNormally(status: int32): int32 from "WIFEXITED";
+	extern function exitStatus(status: int32): int32 from "WEXITSTATUS";
+	extern function signalled(status: int32): int32 from "WIFSIGNALED";
+	extern function termSignal(status: int32): int32 from "WTERMSIG";
+	extern function posix_spawn_file_actions_init(files: Ptr<SpawnFiles>): int32;
+	extern function posix_spawn_file_actions_destroy(files: Ptr<SpawnFiles>): int32;
+	extern function posix_spawn_file_actions_adddup2(
+		files: Ptr<SpawnFiles>,
+		fd: int32,
+		to: int32,
+	): int32;
+	extern function posix_spawn_file_actions_addopen(
+		files: Ptr<SpawnFiles>,
+		fd: int32,
+		path: cstring,
+		flags: int32,
+		mode: int32,
+	): int32;
+	extern function posix_spawnattr_init(attr: Ptr<SpawnAttr>): int32;
+	extern function posix_spawnattr_destroy(attr: Ptr<SpawnAttr>): int32;
+	extern function posix_spawnattr_setflags(attr: Ptr<SpawnAttr>, flags: int16): int32;
+	extern function posix_spawnp(
+		pid: Ptr<int32>,
+		file: cstring,
+		files: Ptr<SpawnFiles>,
+		attr: Ptr<SpawnAttr>,
+		argv: Ptr<Ptr<char>>,
+		envp: Ptr<Ptr<char>>,
+	): int32;
+}
+
+when (macos) {
+	@include("crt_externs.h");
+
+	extern const POSIX_SPAWN_CLOEXEC_DEFAULT: int16 from "POSIX_SPAWN_CLOEXEC_DEFAULT";
+	extern function nsEnviron(): Ptr<Ptr<Ptr<char>>> from "_NSGetEnviron";
+
+	function environment(): Ptr<Ptr<char>> {
+		return nsEnviron()[0];
+	}
+
+	function spawnFlags(attr: Ptr<SpawnAttr>): int32 {
+		return posix_spawnattr_setflags(attr, POSIX_SPAWN_CLOEXEC_DEFAULT);
+	}
+} else when (!windows) {
+	extern const environ: Ptr<Ptr<char>> from "environ";
+
+	function environment(): Ptr<Ptr<char>> {
+		return environ;
+	}
+
+	function spawnFlags(attr: Ptr<SpawnAttr>): int32 {
+		return 0;
+	}
 }
 
 const SSH = "ssh";
@@ -110,19 +180,79 @@ export function platformOf(uname: string): string | null {
 	};
 }
 
+when (!windows) {
+	function socketPair(): [int32, int32] | null {
+		let pair: Vec<int32> = [-1, -1];
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair as Span<int32> as Ptr<int32>) != 0) {
+			return null;
+		}
+		const _parent = fcntl(pair[0], F_SETFD, FD_CLOEXEC);
+		const _child = fcntl(pair[1], F_SETFD, FD_CLOEXEC);
+		return [pair[0], pair[1]];
+	}
+
+	function spawnedOn(args: string[], child: int32, errPath: string): int32 {
+		let files: SpawnFiles = {};
+		let attr: SpawnAttr = {};
+		const fileActions = files as Ptr<SpawnFiles>;
+		const attributes = attr as Ptr<SpawnAttr>;
+		let rc = posix_spawn_file_actions_init(fileActions);
+		if (rc != 0) { return -rc; }
+		rc = posix_spawnattr_init(attributes);
+		if (rc != 0) {
+			const _files = posix_spawn_file_actions_destroy(fileActions);
+			return -rc;
+		}
+		rc = posix_spawn_file_actions_adddup2(fileActions, child, 0);
+		if (rc == 0) { rc = posix_spawn_file_actions_adddup2(fileActions, child, 1); }
+		if (rc == 0) {
+			rc = posix_spawn_file_actions_addopen(
+				fileActions,
+				2,
+				errPath,
+				O_WRONLY | O_CREAT | O_TRUNC,
+				0o600,
+			);
+		}
+		if (rc == 0) { rc = spawnFlags(attributes); }
+		let argv: Vec<Ptr<char> | null> = [];
+		for (const a of args) { argv.push((a as cstring) as Ptr<char>); }
+		argv.push(null);
+		let pid: Vec<int32> = [0];
+		if (rc == 0) {
+			rc = posix_spawnp(
+				pid as Span<int32> as Ptr<int32>,
+				args[0],
+				fileActions,
+				attributes,
+				argv as Span<Ptr<char> | null> as Ptr<Ptr<char>>,
+				environment(),
+			);
+		}
+		const _files = posix_spawn_file_actions_destroy(fileActions);
+		const _attr = posix_spawnattr_destroy(attributes);
+		return rc == 0 ? pid[0] : -rc;
+	}
+}
+
 function spawned(args: string[]): Result<Spawned, string> {
 	when (windows) {
 		return Result.err("ssh hosts are not available on Windows yet");
 	} else {
-		if (args.some((a: string): boolean => a.includes("\n"))) {
-			return Result.err("an ssh argument holds a line break");
+		if (args.some((a: string): boolean => a.includes("\n") || a.includes("\0"))) {
+			return Result.err("an ssh argument holds a line break or a NUL");
 		}
 		spawns += 1;
 		const errPath = join(tmpDir(), `haro-ssh-${Date.now()}-${spawns}.err`);
-		let fd: int32 = -1;
-		const pid = haroSpawnSocket(args.join("\n"), errPath, fd);
-		if (pid <= 0) { return Result.err(`${args[0]} did not start (errno ${-pid})`); }
-		return Result.ok({ pid: pid, fd: fd, errPath: errPath });
+		const pair = socketPair();
+		if (pair === null) { return Result.err("no socket pair for ssh"); }
+		const pid = spawnedOn(args, pair[1], errPath);
+		const _child = closeRaw(pair[1]);
+		if (pid <= 0) {
+			const _parent = closeRaw(pair[0]);
+			return Result.err(`${args[0]} did not start (errno ${-pid})`);
+		}
+		return Result.ok({ pid: pid, fd: pair[0], errPath: errPath });
 	}
 }
 
@@ -130,9 +260,16 @@ async function reaped(pid: int32, pollMs: int32): Promise<int32> {
 	when (windows) {
 		return -1;
 	} else {
-		let code: int32 = -1;
-		while (haroReap(pid, code) == 0) { await sleepAsync(pollMs); }
-		return code;
+		let status: Vec<int32> = [0];
+		while (true) {
+			const got = waitpid(pid, status as Span<int32> as Ptr<int32>, WNOHANG);
+			if (got < 0) { return -1; }
+			if (got > 0) { break; }
+			await sleepAsync(pollMs);
+		}
+		if (exitedNormally(status[0]) != 0) { return exitStatus(status[0]); }
+		if (signalled(status[0]) != 0) { return 128 + termSignal(status[0]); }
+		return -1;
 	}
 }
 
@@ -152,7 +289,7 @@ export async function run(args: string[], input: Buffer): Promise<Result<Ran, st
 			const end = Math.min(at + UPLOAD_CHUNK, size);
 			if (await sendAsync(s.fd, input.slice(at, end)) < 0) { break; }
 		}
-		const _shut = haroShutdownWrite(s.fd);
+		const _shut = shutdown(s.fd, SHUT_WR);
 	}
 	let out = "";
 	while (true) {

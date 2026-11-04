@@ -99,6 +99,7 @@ export {
 	selectionSet,
 	unitAt,
 } from "./selection";
+export { snapshot } from "./snapshot";
 export {
 	Keys,
 	KeysError,

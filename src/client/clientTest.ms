@@ -2,12 +2,12 @@ import { removeAll } from "std/fs";
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { Connection, connectToUnix, listenUnix } from "../server/transport";
-import { ScreenFormat } from "../server/protocol";
+import { Message, MessageKind, ScreenFormat } from "../server/protocol";
 import { Vt, lines, update, writeText } from "../vt/vt";
 import { vtBuild } from "../vt/snapshot";
 import { seededVt } from "../pty/remote";
 import { Axis, PaneId, panes } from "../workspace/tree";
-import { CommandKind } from "../workspace/workspace";
+import { CommandKind, EventKind } from "../workspace/workspace";
 import { ServerLink, attach } from "./link";
 import { DEFAULT_PORT, targetOf } from "./connect";
 import { FakeServer, startFake } from "./fakeServer";
@@ -124,3 +124,25 @@ test "attaching to a server that hangs up ends with the reason instead of waitin
 	cleanUp(path);
 }
 
+
+test "the fake server sends a layout before the events of a command, as the real server does" {
+	const path = freshPath();
+	const fake = fakeWithTwoPanes(path, ScreenFormat.Native);
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	assert got.ok;
+	const kinds: string[] = [];
+	link.listen((m: Message): void => {
+		if (m.kind == MessageKind.Layout) {
+			kinds.push(`layout ${m.tabs[0].root.panes().length}`);
+		} else if (m.kind == MessageKind.Event && m.event.kind == EventKind.PaneOpened) {
+			kinds.push("opened");
+		}
+	}, (why: string): void => {});
+	link.command({ kind: CommandKind.Split, pane: 2 as PaneId, axis: Axis.Stacked });
+	assert await until((): boolean => kinds.includes("opened")), kinds.join(",");
+	assert kinds.join(",") == "layout 3,opened", kinds.join(",");
+	link.detach();
+	fake.close();
+	cleanUp(path);
+}

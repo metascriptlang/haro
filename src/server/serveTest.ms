@@ -2,8 +2,8 @@ import { removeAll } from "std/fs";
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { vtBuild } from "../vt/vt";
-import { Axis, PaneId } from "../workspace/tree";
-import { CommandKind, EventKind } from "../workspace/workspace";
+import { Axis, Pane, PaneId, panes } from "../workspace/tree";
+import { CommandKind, EventKind, Tab } from "../workspace/workspace";
 import {
 	Decoder,
 	MAX_SCREEN_BYTES,
@@ -166,6 +166,21 @@ when (!windows) {
 		return false;
 	}
 
+	function layoutBeforeOpened(p: Peer, pane: PaneId): boolean {
+		let at = p.got.findIndex((m: Message): boolean =>
+			m.kind == MessageKind.Event && m.event.kind == EventKind.PaneOpened && m.event.pane == pane
+		);
+		while (at > 0) {
+			at -= 1;
+			const m = p.got[at];
+			if (m.kind == MessageKind.Layout) {
+				return m.tabs.some((t: Tab): boolean => t.root.panes().some((leaf: Pane): boolean => leaf.id == pane));
+			}
+			if (m.kind != MessageKind.Event && m.kind != MessageKind.Output) { return false; }
+		}
+		return false;
+	}
+
 	function textOf(m: Message | null, after: string): string {
 		if (m === null || m.kind != MessageKind.Screen) { return "<no screen>"; }
 		return screenText(m.format, m.bytes, m.cols, m.rows, after);
@@ -237,6 +252,8 @@ when (!windows) {
 		});
 		const second = 2 as PaneId;
 		assert await until((): boolean => opened(a, second) && opened(b, second)), logged.text;
+		assert layoutBeforeOpened(a, second), kinds(a);
+		assert layoutBeforeOpened(b, second), kinds(b);
 		await stopped(s, ended);
 		cleanUp(socket);
 	}

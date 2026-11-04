@@ -211,6 +211,9 @@ async function run(this s: Server, c: WorkspaceCommand): Promise<void> {
 		s.log(`${c.kind.toString()} refused: ${events.error.toString()}`);
 		return;
 	}
+	if (events.value.length > 0) {
+		s.broadcast({ kind: MessageKind.Layout, tabs: s.workspace.tabs, active: s.workspace.active });
+	}
 	const failed: PaneId[] = [];
 	for (const e of events.value) {
 		s.broadcast({ kind: MessageKind.Event, event: e });

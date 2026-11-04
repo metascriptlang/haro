@@ -19,6 +19,7 @@ export enum VtError {
 	EffectsWireFailed,
 	AnchorFailed,
 	MouseOpenFailed,
+	RestoreFailed,
 }
 
 export enum PasteError {

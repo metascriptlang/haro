@@ -41,6 +41,7 @@ import {
 	GhosttyRowSemanticPrompt,
 	GhosttySelection,
 	GhosttySelectionOrder,
+	GhosttySnapshotDecoder,
 	GhosttyTerminal,
 	GhosttyTerminalCompressionMode,
 	GhosttyTerminalCompressionResult,
@@ -111,6 +112,11 @@ when (emcc) {
 } else {
 	export function vtAllocator(): Ptr<GhosttyAllocator> | null { return null; }
 }
+export extern function snapshotDecoder(
+	allocator: Ptr<GhosttyAllocator> | null,
+	out decoder: GhosttySnapshotDecoder,
+	bytes: Readonly<Span<uint8>>,
+): GhosttyResult from "ghostty_snapshot_decoder_new_buf";
 export extern function vtEffectsWire(terminal: GhosttyTerminal, effects: Ptr<void> | null): int32;
 export extern function vtCompressionActivity(terminal: GhosttyTerminal, out activity: uint64): GhosttyResult
 	from "ghostty_terminal_compression_activity";

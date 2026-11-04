@@ -29,7 +29,7 @@ import {
 } from "../../../ion/src/index";
 import { ionWakeLoop } from "../../../ion/src/platform/bridge.h";
 import { argv, exit } from "std/process";
-import { appendFile, ensureDir, exists, fileSize, readFile, rename, writeFile } from "std/fs";
+import { appendFile, ensureDir, exists, fileSize, readFile, removeAll, rename, writeFile } from "std/fs";
 import { dirname } from "std/fs/path";
 import { homeDir } from "std/os";
 import { App } from "./app";
@@ -71,10 +71,8 @@ import {
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { Connection, connectToUnix, socketPath } from "../server/transport";
-import { ScreenFormat } from "../server/protocol";
 import { Attached, ServerLink, attach } from "../client/link";
 import { connectLocal, connectTcp, targetOf } from "../client/connect";
-import { startFake } from "../client/fakeServer";
 import { serve } from "../server/serve";
 import { dividerCellsOf } from "./workspaceView";
 import { vtBuild } from "../vt/snapshot";
@@ -89,6 +87,11 @@ const NOTIFICATION_ID = "haro";
 
 when (!windows) {
 	import { env } from "std/process";
+
+	@include("signal.h");
+
+	extern function kill(pid: int32, signal: int32): int32;
+	extern const SIGTERM: int32 from "SIGTERM";
 }
 
 when (macos) {
@@ -481,18 +484,33 @@ async function reattachAt(path: string): Promise<Result<Reattach, string>> {
 }
 
 async function runSmokeAttach(): Promise<int32> {
-	const path = join(join(tmpDir(), `haro-smoke-attach-${Date.now()}`), "haro.sock");
-	const fake = startFake(path, ScreenFormat.Native);
-	if (!fake.ok) { fail(`smoke-attach: the test server did not listen: ${fake.error.toString()}`); }
-	const first = await reattachAt(path);
-	if (!first.ok) { fail(`smoke-attach: ${first.error}`); }
-	const reconnect = (): Promise<Result<Reattach, string>> => reattachAt(path);
-	return await openWindow(
-		CLIENT_LAUNCH,
-		(v: WorkspaceView, first: RunningPane): void => { const _s = smokeAttach(v, reconnect); },
-		first.value.link,
-		first.value.attached,
-	);
+	when (windows) {
+		fail("smoke-attach: a Haro server does not run on Windows yet");
+	} else {
+		const dir = join(tmpDir(), `haro-smoke-attach-${Date.now()}`);
+		const path = join(dir, "haro.sock");
+		const _chosen = env.set("HARO_SOCKET", path);
+		const started = await connectLocal(socketPath());
+		if (!started.ok) { fail(`smoke-attach: ${started.error}`); }
+		const link = new ServerLink(started.value);
+		link.begin();
+		const first = await attach(link, vtBuild(), HELLO_COLS, HELLO_ROWS, ATTACH_TIMEOUT_MS);
+		if (!first.ok) { fail(`smoke-attach: ${first.error}`); }
+		const daemon = first.value.serverPid;
+		const reconnect = (): Promise<Result<Reattach, string>> => reattachAt(path);
+		const stopServer = (): void => {
+			if (kill(daemon, SIGTERM) != 0) { console.log(`smoke-attach: the server ${daemon} was already gone`); }
+			const _removed = removeAll(dir);
+		};
+		return await openWindow(
+			CLIENT_LAUNCH,
+			(v: WorkspaceView, shown: RunningPane): void => {
+				const _s = smokeAttach(v, reconnect, stopServer);
+			},
+			link,
+			first.value,
+		);
+	}
 }
 
 function inProcess(): boolean {

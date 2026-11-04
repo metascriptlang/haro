@@ -73,6 +73,8 @@ export enum ConnectError {
 }
 
 export function socketPath(): string {
+	const chosen = env.get("HARO_SOCKET");
+	if (chosen != "") { return chosen; }
 	const runtime = env.get("XDG_RUNTIME_DIR");
 	if (runtime != "") { return join(join(runtime, "haro"), SOCKET_NAME); }
 	when (windows) {

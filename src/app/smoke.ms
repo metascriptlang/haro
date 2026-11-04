@@ -15,7 +15,6 @@ import {
 	closeShells,
 	confirmed,
 	detachPanes,
-	quit,
 	windowAction,
 } from "./workspaceView";
 
@@ -303,9 +302,26 @@ async function typedMarker(t: Tally, v: WorkspaceView, id: int32, marker: string
 	t.checked(await until((): boolean => paneHas(v, id, marker)), `pane ${id} shows ${marker}`);
 }
 
+async function reattached(
+	t: Tally,
+	v: WorkspaceView,
+	reconnect: () => Promise<Result<Reattach, string>>,
+): Promise<boolean> {
+	await v.detachPanes();
+	t.checked(v.panes.running.length == 0, "the window dropped its panes and its connection");
+	const again = await reconnect();
+	if (!again.ok) {
+		t.checked(false, `the window reconnected: ${again.error}`);
+		return false;
+	}
+	await v.attachTo(again.value.link, again.value.attached);
+	return true;
+}
+
 export async function smokeAttach(
 	v: WorkspaceView,
 	reconnect: () => Promise<Result<Reattach, string>>,
+	stopServer: () => void,
 ): Promise<void> {
 	const t: Tally = { failed: 0 };
 	t.checked(await until((): boolean => v.cols > 0 && v.panes.cellWidth > 0 && modelOf(v, 1) !== null),
@@ -315,21 +331,29 @@ export async function smokeAttach(
 	t.checked(await until((): boolean => focusedId(v) == 2 && modelOf(v, 2) !== null),
 		"split right asks the server, which opens pane 2");
 	await typedMarker(t, v, 2, "attach-2");
-	await v.detachPanes();
-	t.checked(v.panes.running.length == 0, "the window dropped its panes and its connection");
-	const again = await reconnect();
-	if (!again.ok) {
-		t.checked(false, `the window reconnected: ${again.error}`);
-	} else {
-		await v.attachTo(again.value.link, again.value.attached);
+	if (await reattached(t, v, reconnect)) {
 		t.checked(
 			await until((): boolean => paneHas(v, 1, "attach-1") && paneHas(v, 2, "attach-2")),
 			"after reconnecting, both panes show their text",
+		);
+	}
+	modelOf(v, 1)?.io.text("printf 'under%salt\\n' -; printf '\\033[?1049h\\033[2J\\033[Hon%salt' -\r", performance.now());
+	t.checked(await until((): boolean => paneHas(v, 1, "on-alt")), "pane 1 entered the alternate screen");
+	if (await reattached(t, v, reconnect)) {
+		t.checked(
+			await until((): boolean => paneHas(v, 1, "on-alt") && !paneHas(v, 1, "under-alt")),
+			"after reconnecting, pane 1 still shows the alternate screen",
+		);
+		modelOf(v, 1)?.io.text("printf '\\033[?1049l'\r", performance.now());
+		t.checked(
+			await until((): boolean => paneHas(v, 1, "under-alt") && paneHas(v, 1, "attach-1")),
+			"leaving the alternate screen shows the normal screen kept across the reconnect",
 		);
 	}
 	console.log(`smoke-attach: ${t.failed == 0 ? "PASS" : `FAIL ${t.failed}`}`);
 	v.link?.detach();
 	v.link = null;
 	await v.closeShells();
+	stopServer();
 	exit(t.failed == 0 ? 0 : 1);
 }

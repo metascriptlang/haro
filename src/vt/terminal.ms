@@ -6,6 +6,7 @@ import {
 	GhosttyRenderStateRowCells,
 	GhosttyRenderStateRowIterator,
 	GhosttyResult,
+	GhosttySnapshotDecoder,
 	GhosttyString,
 	GhosttyTerminal,
 	GhosttyTerminalCompressionMode,
@@ -24,6 +25,8 @@ import {
 	ghostty_render_state_row_iterator_free,
 	ghostty_render_state_row_iterator_new,
 	ghostty_render_state_update,
+	ghostty_snapshot_decoder_decode,
+	ghostty_snapshot_decoder_free,
 	ghostty_terminal_free,
 	ghostty_terminal_new,
 	ghostty_terminal_resize,
@@ -51,6 +54,7 @@ import {
 	modeOn,
 	ok,
 	pushAll,
+	snapshotDecoder,
 	stateGet,
 	terminalGet,
 	terminalSet,
@@ -124,6 +128,22 @@ function applyGraphemeWidth(terminal: GhosttyTerminal): Result<void, VtError> {
 	return Result.ok(null);
 }
 
+function keepMode(terminal: GhosttyTerminal, mode: uint16, on: boolean): Result<void, VtError> {
+	let kept: GhosttyTerminalModeConfig = { mode: mode, value: on };
+	const modeOption = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_MODE;
+	try checked(terminalSet(terminal, modeOption, kept), VtError.WriteFailed);
+	return Result.ok(null);
+}
+
+const CONTINUATION_MAX_BYTES: size_t = 1048576;
+
+function trackContinuation(terminal: GhosttyTerminal): Result<void, VtError> {
+	let limit = CONTINUATION_MAX_BYTES;
+	const option = GhosttyTerminalOption.GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES;
+	try checked(terminalSet(terminal, option, limit), VtError.WriteFailed);
+	return Result.ok(null);
+}
+
 function applyScrollback(terminal: GhosttyTerminal, lines: int64): Result<void, VtError> {
 	if (lines < 0) { return Result.err(VtError.ScrollbackInvalid); }
 	let bytes = SCROLLBACK_MAX_BYTES;
@@ -144,21 +164,25 @@ function gridSide(cells: int32, fail: VtError): Result<uint16, VtError> {
 
 function configure(
 	terminal: GhosttyTerminal,
+	restored: boolean,
 	out anchor: GhosttyTrackedGridRef,
 ): Result<void, VtError> {
 	try checked(vtTopTrack(terminal, anchor), VtError.AnchorFailed);
 	try applyColors(terminal, { r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 });
+	const blinking = try modeOn(terminal, MODE_CURSOR_BLINKING);
+	const graphemes = try modeOn(terminal, MODE_GRAPHEME_CLUSTER);
 	try applyBlinkDefault(terminal, true);
 	try applyGraphemeWidth(terminal);
+	if (restored) {
+		try keepMode(terminal, MODE_CURSOR_BLINKING, blinking);
+		try keepMode(terminal, MODE_GRAPHEME_CLUSTER, graphemes);
+	}
 	try applyScrollback(terminal, SCROLLBACK_LINES);
+	try trackContinuation(terminal);
 	return Result.ok(null);
 }
 
-export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtError> {
-	const wide = try gridSide(cols, VtError.CreateFailed);
-	const tall = try gridSide(rows, VtError.CreateFailed);
-	let terminal: GhosttyTerminal;
-	try checked(ghostty_terminal_new(vtAllocator(), terminal, wide, tall), VtError.CreateFailed);
+function wrap(terminal: GhosttyTerminal, restored: boolean): Result<Vt, VtError> {
 	let state: GhosttyRenderState;
 	let iterator: GhosttyRenderStateRowIterator;
 	let cells: GhosttyRenderStateRowCells;
@@ -176,7 +200,7 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		return Result.err(effects.error);
 	}
 	let anchor: GhosttyTrackedGridRef;
-	const configured = configure(terminal, anchor);
+	const configured = configure(terminal, restored, anchor);
 	if (!configured.ok) {
 		closeEffects(terminal);
 		ghostty_tracked_grid_ref_free(anchor);
@@ -193,6 +217,25 @@ export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtE
 		anchor: anchor,
 		painted: { alternate: false, rows: [], palette: null },
 	});
+}
+
+export function create(this typeof Vt, cols: int32, rows: int32): Result<Vt, VtError> {
+	const wide = try gridSide(cols, VtError.CreateFailed);
+	const tall = try gridSide(rows, VtError.CreateFailed);
+	let terminal: GhosttyTerminal;
+	try checked(ghostty_terminal_new(vtAllocator(), terminal, wide, tall), VtError.CreateFailed);
+	return wrap(terminal, false);
+}
+
+export function restore(this typeof Vt, snapshot: Readonly<Span<uint8>>): Result<Vt, VtError> {
+	let decoder: GhosttySnapshotDecoder;
+	const opened = snapshotDecoder(vtAllocator(), decoder, snapshot);
+	try checked(opened, VtError.RestoreFailed);
+	defer ghostty_snapshot_decoder_free(decoder);
+	let terminal: GhosttyTerminal;
+	const decoded = ghostty_snapshot_decoder_decode(decoder, terminal);
+	try checked(decoded, VtError.RestoreFailed);
+	return wrap(terminal, true);
 }
 
 export function write(this vt: Vt, bytes: Readonly<Span<uint8>>): void {

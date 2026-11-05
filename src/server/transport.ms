@@ -57,7 +57,7 @@ const OWNER_ONLY_DIR: int32 = 0o700;
 const OWNER_ONLY_SOCKET: int32 = 0o600;
 const TIMED_OUT: int32 = -2;
 const ADDRESS_TEXT_BYTES: int32 = 64;
-const LOCAL_SOCKET_BUFFER_BYTES: int32 = 1024 * 1024;
+const MACOS_LOCAL_SOCKET_BUFFER_BYTES: int32 = 1024 * 1024;
 
 export enum CloseReason {
 	Closed,
@@ -112,8 +112,8 @@ when (windows) {
 }
 
 function widened(fd: int32): int32 {
-	when (!windows) {
-		let size = LOCAL_SOCKET_BUFFER_BYTES;
+	when (macos) {
+		let size = MACOS_LOCAL_SOCKET_BUFFER_BYTES;
 		const _sending = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, size, sizeof int32 as uint32);
 		const _receiving = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, size, sizeof int32 as uint32);
 	}

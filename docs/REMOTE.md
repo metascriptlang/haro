@@ -60,3 +60,11 @@ let in every identified user and tagged device.
 `scripts/buildServer.sh` builds the bundle `out/haro-server/<platform>/` (`linux-x64`,
 `linux-arm64`, `macos-arm64`, `macos-x64`) for the machine it runs on;
 `scripts/serverCheck.sh <binary>` drives a build end to end on a private socket.
+`scripts/buildApp.sh` ships every bundle of its version found under `out/haro-server/` in
+`Haro.app/Contents/Resources/servers/<platform>/`, where the window looks for them; `HARO_SERVERS`
+names another directory. A bundle is about 36 MB, 11 MB as the gzipped tar a window uploads.
+
+`HARO_REMOTE_HOST=<host> msc test src/client/remoteTest.ms --tests-in-dir` drives the window's ssh
+dial against a real host on a private socket: upload, a pane's output, a killed ssh, a redial that
+shows the pane again, then `stop` and the removal of the uploaded version. Build it with the
+`--passC=-DHARO_SERVER_BUILD=<version>` of the bundles in `HARO_SERVERS`.

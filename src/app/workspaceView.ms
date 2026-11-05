@@ -169,6 +169,7 @@ export interface LinkedHost {
 	draining: boolean;
 	inbox: Message[];
 	receiving: boolean;
+	lostWhy: string | null;
 	rttMs: float64 | null;
 	predicting: boolean;
 }
@@ -426,6 +427,7 @@ function made(
 		draining: false,
 		inbox: [],
 		receiving: false,
+		lostWhy: null,
 		rttMs: null,
 		predicting: false,
 	};
@@ -1492,6 +1494,10 @@ export function retryNow(this v: WorkspaceView, h: LinkedHost): void {
 
 function lost(this v: WorkspaceView, h: LinkedHost, link: ServerLink | null, why: string): void {
 	if (link === null || h.link !== link) { return; }
+	if (h.receiving) {
+		h.lostWhy = why;
+		return;
+	}
 	h.link = null;
 	h.inbox = [];
 	v.host.report.note(`server ${v.labelOf(h)}: ${why}`);
@@ -1510,6 +1516,7 @@ function received(this v: WorkspaceView, h: LinkedHost, link: ServerLink, ms: Me
 
 async function drainInbox(this v: WorkspaceView, h: LinkedHost): Promise<void> {
 	h.receiving = true;
+	const drained = h.link;
 	while (h.inbox.length > 0 && !v.quitting) {
 		const link = h.link;
 		const batch = h.inbox;
@@ -1527,6 +1534,9 @@ async function drainInbox(this v: WorkspaceView, h: LinkedHost): Promise<void> {
 		v.feed(h, feeds);
 	}
 	h.receiving = false;
+	const why = h.lostWhy;
+	h.lostWhy = null;
+	if (why !== null) { v.lost(h, drained, why); }
 }
 
 function feed(this v: WorkspaceView, h: LinkedHost, feeds: Feed[]): void {

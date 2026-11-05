@@ -556,6 +556,22 @@ test "a host whose last pane closes while another host has tabs is not dialed ag
 	await closeAll(t);
 }
 
+test "a server that closes right after its last pane's events is let go, not dialed again" {
+	const t = await twoHosts();
+	const v = t.v;
+	const b = t.build;
+	assert await until((): boolean => b.state == LinkState.Connected && b.panes.running.length == 2);
+	for (const p of [1, 2]) {
+		t.remote.endPane(p as PaneId, { kind: MessageKind.Exited, pane: p as PaneId, code: 0 });
+	}
+	t.remote.latest?.finish();
+	assert await until((): boolean => b.state == LinkState.Offline && b.w.tabs.length == 0);
+	await sleepAsync(1500);
+	assert b.reason == "no shells", b.reason;
+	assert b.link === null && b.retry === null && b.state == LinkState.Offline;
+	await closeAll(t);
+}
+
 test "a host that refuses the window shows refused, is not dialed again, and leaves local panes working" {
 	const t = await twoHosts();
 	const v = t.v;

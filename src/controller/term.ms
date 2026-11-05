@@ -10,7 +10,7 @@ import {
 import { Pty, PtyError } from "../pty/transport";
 import { Replay } from "../pty/replay";
 import { Seed } from "../pty/remote";
-import { Session, SessionError } from "../session/session";
+import { Session, SessionError, pumped } from "../session/session";
 import { CellInk } from "../grid/lines";
 import {
 	Cursor,
@@ -49,6 +49,10 @@ import { MAX_SCREEN_BYTES } from "../server/protocol";
 const BUFFER_BYTES = 65536;
 const DRAIN_LIMIT = 16;
 const DRAIN_BUDGET_MS: float64 = 8;
+const SLICE_MS: float64 = 1;
+const SLICE_BYTES: int64 = 64 * 1024;
+const SLICE_READ_BYTES: int32 = 16 * 1024;
+const UNCAPPED_BYTES: int64 = 0x7fffffffffffffff;
 const BYTE_MAX: int32 = 255;
 
 export enum PasteCheck {
@@ -331,22 +335,34 @@ export function drain(this t: Term): Result<boolean, TermError> {
 	return t.drainFor(DRAIN_BUDGET_MS);
 }
 
-function drainFor(this t: Term, budgetMs: float64): Result<boolean, TermError> {
+export function drainSlice(this t: Term): Result<boolean, TermError> {
+	return t.drainFor(SLICE_MS, SLICE_BYTES, SLICE_READ_BYTES);
+}
+
+function drainFor(
+	this t: Term,
+	budgetMs: float64,
+	budgetBytes: int64 = UNCAPPED_BYTES,
+	readBytes: int32 = BUFFER_BYTES,
+): Result<boolean, TermError> {
 	const s = t.session;
 	if (s === null) { return Result.ok(false); }
 	const began = t.now();
+	let bytes: int64 = 0;
 	let more = false;
 	for (let i = 0; i < DRAIN_LIMIT && t.alive; i++) {
 		const ready = s.pty.wait(0);
 		if (!ready.ok) { return Result.err(TermError.PumpFailed); }
 		if (!ready.value) { break; }
-		const alive = s.pump(t.buf);
-		if (!alive.ok) { return Result.err(TermError.PumpFailed); }
-		if (!alive.value) {
+		const read = s.pumped(t.buf[0..readBytes]);
+		if (!read.ok) { return Result.err(TermError.PumpFailed); }
+		const alive = read.value >= 0;
+		if (!alive) {
 			t.alive = false;
 			t.ended = true;
 		}
-		more = alive.value && (i == DRAIN_LIMIT - 1 || t.now() - began >= budgetMs);
+		bytes += Math.max(0, read.value) as int64;
+		more = alive && (i == DRAIN_LIMIT - 1 || bytes >= budgetBytes || t.now() - began >= budgetMs);
 		if (more) { break; }
 	}
 	return Result.ok(more);

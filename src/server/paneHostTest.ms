@@ -1,4 +1,5 @@
-import { ensureDir } from "std/fs";
+import { ensureDir, exists, fileSize, readFile, remove } from "std/fs";
+import { IoFrame } from "../controller/io";
 import { cwd } from "std/process";
 import { Axis, PaneId } from "../workspace/tree";
 import {
@@ -196,6 +197,40 @@ when (!windows) {
 		assert await prints(h, seen, 1, "held-back");
 		assert !h.holding();
 		assert seen.gaps == "", seen.gaps;
+		await h.closeAll();
+		assert seen.fatal == "", seen.fatal;
+	}
+
+	class Done { at: float64 = -1; }
+
+	test "input reaches the shell while its pane's actor is still busy with earlier work" {
+		const seen = fresh();
+		const dir = dirNamed("hostBypass", seen);
+		const marker = `${dir}/typed`;
+		if (exists(marker)) { const _removed = remove(marker); }
+		const w = Workspace.create(1);
+		assert w.ok;
+		if (!w.ok) { return; }
+		const h = hostIn(dir, seen);
+		const _tab = await ran(w.value, h, { kind: CommandKind.NewTab }, seen);
+		const pane = h.paneOf(1 as PaneId);
+		assert pane !== null;
+		if (pane === null) { return; }
+		const stamp = "perl -MTime::HiRes=time -e 'printf \"%.0f\", time * 1000'";
+		assert typed(h, 1, `yes & read line; ${stamp} > ${marker}\r`);
+		assert await prints(h, seen, 1, "y\r\ny\r\ny\r\n");
+		const frames: Promise<IoFrame | null>[] = [];
+		for (let i = 0; i < 60; i++) { frames.push(pane.shell.frame()); }
+		const busy = new Done();
+		Promise.all(frames).then((all: (IoFrame | null)[]): void => { busy.at = Date.now(); });
+		assert typed(h, 1, "go\r");
+		const _frames = await Promise.all(frames);
+		const waited: float64 = performance.now();
+		while (fileSize(marker) <= 0 && performance.now() - waited < WAIT_MS) { await sleepAsync(5); }
+		const read = readFile(marker);
+		assert read.ok;
+		const typedAt = read.ok ? parseFloat(read.value) : -1;
+		assert typedAt > 0 && typedAt < busy.at, `the input reached the shell at ${typedAt}, the frames queued before it ended at ${busy.at}`;
 		await h.closeAll();
 		assert seen.fatal == "", seen.fatal;
 	}

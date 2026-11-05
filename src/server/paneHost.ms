@@ -1,6 +1,8 @@
 import { Shell, closed, localCwd, opened } from "../controller/shell";
-import { Drained, label } from "../controller/io";
+import { Drained, Where, label } from "../controller/io";
 import { TermError } from "../controller/term";
+import { NativePty, exitCode, wait, write as writeNative } from "../pty/pty";
+import { PtyError } from "../pty/transport";
 import { CellRect, PaneId } from "../workspace/tree";
 import { EventKind, WorkspaceEvent } from "../workspace/workspace";
 import { ScreenFormat } from "./protocol";
@@ -34,6 +36,7 @@ export struct Shot {
 export interface HostedPane {
 	id: PaneId;
 	shell: Shell;
+	native: NativePty | null;
 	draining: boolean;
 	again: boolean;
 	held: boolean;
@@ -100,7 +103,15 @@ async function start(
 		await closed(shell);
 		return failed;
 	}
-	h.panes.push({ id: id, shell: shell, draining: false, again: false, held: false });
+	const native = await shell.nativeId();
+	h.panes.push({
+		id: id,
+		shell: shell,
+		native: native < 0 ? null : { id: native },
+		draining: false,
+		again: false,
+		held: false,
+	});
 	return null;
 }
 
@@ -156,7 +167,16 @@ function drain(this h: PaneHost, pane: HostedPane): void {
 }
 
 export function wake(this h: PaneHost): void {
-	for (const pane of h.panes) { h.drain(pane); }
+	for (const pane of h.panes) {
+		if (pane.ready()) { h.drain(pane); }
+	}
+}
+
+function ready(this pane: HostedPane): boolean {
+	const native = pane.native;
+	if (native === null) { return true; }
+	const ready = native.wait(0);
+	return !ready.ok || ready.value;
 }
 
 export function holding(this h: PaneHost): boolean {
@@ -172,14 +192,17 @@ export function release(this h: PaneHost): void {
 export function write(this h: PaneHost, id: PaneId, bytes: Vec<uint8>): boolean {
 	const pane = h.paneOf(id);
 	if (pane === null) { return false; }
-	pane.shell.write(bytes);
+	const native = pane.native;
+	if (native === null) {
+		pane.shell.write(bytes);
+		return true;
+	}
+	const wrote = native.writeNative(bytes);
+	if (!wrote.ok && native.exitCode() === null) {
+		const error = wrote.error == PtyError.Backlogged ? TermError.InputBacklogged : TermError.WriteFailed;
+		h.sink.failed(id, `${Where.Text.label()}: ${error}`);
+	}
 	return true;
-}
-
-export async function writeAt(this h: PaneHost, id: PaneId, bytes: Vec<uint8>): Promise<float64 | null> {
-	const pane = h.paneOf(id);
-	if (pane === null) { return null; }
-	return await pane.shell.writeAt(bytes);
 }
 
 export async function busy(this h: PaneHost, id: PaneId): Promise<boolean> {

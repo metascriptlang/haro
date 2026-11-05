@@ -1,7 +1,7 @@
 import { MouseButton } from "./mouseButton";
 import { KeyEvent } from "../keys/keys";
 import { CellInk } from "../grid/lines";
-import { NativePty, spawn } from "../pty/pty";
+import { NativePty, open as openNative, toPty as asNativePty } from "../pty/pty";
 import { Replay, ofText, toPty } from "../pty/replay";
 import { Pty, PtyError } from "../pty/transport";
 import { RemotePty, Seed, asPty, dropInbound, empty, feed, takeTyped } from "../pty/remote";
@@ -67,7 +67,9 @@ export struct PtySpec {
 	shellScripts: string | null;
 }
 
-function openerOf(this spec: PtySpec): OpenPty {
+class Spawned { id: int32 = -1; }
+
+function openerOf(this spec: PtySpec, spawned: Spawned): OpenPty {
 	const recording = spec.recording;
 	if (recording !== null) {
 		const replay = Replay.ofText(recording);
@@ -84,7 +86,9 @@ function openerOf(this spec: PtySpec): OpenPty {
 		cellWidth: int32,
 		cellHeight: int32,
 	): Result<Pty, PtyError> => {
-		return NativePty.spawn(command, cols, rows, cwd, cellWidth, cellHeight, scripts);
+		const opened = try NativePty.open(command, cols, rows, cwd, cellWidth, cellHeight, scripts);
+		spawned.id = opened.id;
+		return Result.ok(opened.asNativePty());
 	};
 }
 
@@ -98,10 +102,11 @@ export actor Shell {
 	private io: Io | null = null;
 	private refused: TermError | null = null;
 	private remote: RemotePty | null = null;
+	private spawned: Spawned = new Spawned();
 
 	constructor(spec: PtySpec, teed: boolean = false, seed: Seed | null = null) {
 		const remote = seed === null ? null : RemotePty.empty();
-		const opened = openTerm(remote === null ? spec.openerOf() : remote.openerOf());
+		const opened = openTerm(remote === null ? spec.openerOf(this.spawned) : remote.openerOf());
 		if (opened.ok) {
 			if (teed) { opened.value.tee = Tee.fresh(); }
 			opened.value.seed = seed;
@@ -139,11 +144,7 @@ export actor Shell {
 	annotate(a: Annotation): void { this.io?.annotate(a); }
 	unannotate(id: int32): void { this.io?.unannotate(id); }
 	write(bytes: Vec<uint8>): void { this.io?.write(bytes); }
-
-	writeAt(bytes: Vec<uint8>): float64 {
-		this.io?.write(bytes);
-		return performance.now();
-	}
+	nativeId(): int32 { return this.spawned.id; }
 
 	feed(first: uint64, last: uint64, bytes: Vec<uint8>): void {
 		const remote = this.remote;

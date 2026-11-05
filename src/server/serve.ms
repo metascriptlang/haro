@@ -24,7 +24,6 @@ import {
 	snapshot,
 	wake as wakePanes,
 	write,
-	writeAt,
 } from "./paneHost";
 import {
 	Decoder,
@@ -576,14 +575,9 @@ function input(this s: Server, pane: PaneId, bytes: uint8[]): void {
 }
 
 function typeInto(this s: Server, pane: PaneId, bytes: Vec<uint8>, row: int32): boolean {
-	const host = s.hostOf();
-	const trace = s.trace;
-	if (trace === null) { return host.write(pane, bytes); }
-	if (host.paneOf(pane) === null) { return false; }
-	host.writeAt(pane, bytes).then((at: float64 | null): void => {
-		if (at !== null) { trace.wrote(row, at); }
-	});
-	return true;
+	const written = s.hostOf().write(pane, bytes);
+	s.trace?.wrote(row, performance.now());
+	return written;
 }
 
 function data(this s: Server, c: Client, chunk: uint8[]): void {

@@ -47,6 +47,7 @@ import {
 	dropEffects,
 	exitedAbnormally,
 	drain,
+	drainSlice,
 	inkCursor,
 	pumpFrame,
 	releaseHeldKey,
@@ -390,7 +391,7 @@ export function write(this io: Io, bytes: Readonly<Span<uint8>>): void {
 
 export function drainOutput(this io: Io): Drained {
 	const t = io.term;
-	const drained = t.drain();
+	const drained = t.drainSlice();
 	if (!drained.ok) { io.fail(Where.Output, drained.error); }
 	t.dropEffects();
 	const ended = t.ended;

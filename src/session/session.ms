@@ -66,16 +66,21 @@ export function reseeded(
 }
 
 export function pump(this s: Session, buf: Span<uint8>): Result<boolean, SessionError> {
+	const read = try s.pumped(buf);
+	return Result.ok(read >= 0);
+}
+
+export function pumped(this s: Session, buf: Span<uint8>): Result<int32, SessionError> {
 	const r = s.pty.read(buf);
 	if (!r.ok) {
-		if (r.error == PtyError.Closed) { return Result.ok(false); }
+		if (r.error == PtyError.Closed) { return Result.ok(-1); }
 		return Result.err(SessionError.PtyReadFailed);
 	}
 	if (r.value > 0) {
 		s.vt.write(buf[0..r.value]);
 		try s.answer();
 	}
-	return Result.ok(true);
+	return Result.ok(r.value);
 }
 
 export function answer(this s: Session): Result<void, SessionError> {

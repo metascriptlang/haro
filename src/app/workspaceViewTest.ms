@@ -572,6 +572,27 @@ test "a server that closes right after its last pane's events is let go, not dia
 	await closeAll(t);
 }
 
+test "a resize refits every served pane at once, before any server answers" {
+	const t = await twoHosts();
+	const v = t.v;
+	const b = t.build;
+	assert await until((): boolean => b.state == LinkState.Connected && b.panes.running.length == 2);
+	v.cols = 160;
+	v.rows = 48;
+	v.fitAll();
+	const wide = v.cols;
+	for (const h of [v.primary(), b]) {
+		for (const tab of h.w.tabs) {
+			for (const p of tab.layout(v.cols, v.rows, h.w.dividerCells)) {
+				const shown = h.panes.paneOf(p.pane.id);
+				assert shown !== null && shown.model.cols == p.rect.cols && shown.model.rows == p.rect.rows,
+					`${h.label} pane ${p.pane.id as int32}: ${shown?.model.cols ?? -1}x${shown?.model.rows ?? -1} != ${p.rect.cols}x${p.rect.rows} of ${wide}`;
+			}
+		}
+	}
+	await closeAll(t);
+}
+
 test "a host that refuses the window shows refused, is not dialed again, and leaves local panes working" {
 	const t = await twoHosts();
 	const v = t.v;

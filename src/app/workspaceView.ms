@@ -607,7 +607,7 @@ export function relayout(this v: WorkspaceView): void {
 	v.fitAll();
 }
 
-function fitAll(this v: WorkspaceView): void {
+export function fitAll(this v: WorkspaceView): void {
 	let served = false;
 	for (const h of v.hosts) {
 		if (h.inProcess) {
@@ -617,7 +617,7 @@ function fitAll(this v: WorkspaceView): void {
 			h.link?.fit(v.cols, v.rows);
 		}
 	}
-	if (served && v.refitAll) {
+	if (served) {
 		v.refitPanes();
 		v.redraw();
 	}

@@ -18,6 +18,7 @@ import { chmod, exists, isLinkLike, mkdir, remove } from "std/fs";
 import { dirname, join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { env } from "std/process";
+import { copyInto } from "./bytes";
 import { MAX_PAYLOAD_BYTES } from "./protocol";
 
 extern function msIoEngineCancelFd_ms(fd: int32): void;
@@ -105,21 +106,35 @@ when (windows) {
 	}
 }
 
+export const UNTAGGED: int32 = -1;
+
+struct Queued {
+	bytes: uint8[];
+	tag: int32;
+}
+
 function ignoreData(chunk: uint8[]): void {}
 function ignoreClose(reason: CloseReason): void {}
+function ignoreIdle(): void {}
 
 export class Connection {
 	readonly fd: int32;
+	readonly readBytes: int32;
 	private onData: (chunk: uint8[]) => void = ignoreData;
 	private onClose: (reason: CloseReason) => void = ignoreClose;
-	private queue: uint8[][] = [];
+	private onIdle: () => void = ignoreIdle;
+	private queue: Queued[] = [];
 	private queuedBytes: int64 = 0;
 	private sending: boolean = false;
 	private reading: boolean = false;
 	private open: boolean = true;
 	private finishing: boolean = false;
+	writes: int32 = 0;
 
-	constructor(fd: int32) { this.fd = fd; }
+	constructor(fd: int32, readBytes: int32 = READ_CHUNK) {
+		this.fd = fd;
+		this.readBytes = readBytes;
+	}
 
 	isOpen(): boolean { return this.open; }
 
@@ -134,7 +149,18 @@ export class Connection {
 		const _reading = readLoop(this);
 	}
 
-	send(bytes: uint8[]): boolean {
+	queued(): int64 { return this.queuedBytes; }
+
+	whenIdle(idle: () => void): void {
+		if (!this.open) { return; }
+		if (!this.sending) {
+			idle();
+			return;
+		}
+		this.onIdle = idle;
+	}
+
+	send(bytes: uint8[], tag: int32 = UNTAGGED): boolean {
 		if (!this.open || this.finishing) { return false; }
 		if (bytes.length == 0) { return true; }
 		this.queuedBytes += bytes.length as int64;
@@ -142,7 +168,7 @@ export class Connection {
 			this.end(CloseReason.Backlogged);
 			return false;
 		}
-		this.queue.push(bytes);
+		this.queue.push({ bytes: bytes, tag: tag });
 		if (!this.sending) {
 			this.sending = true;
 			const _flushing = flushLoop(this);
@@ -168,19 +194,48 @@ export class Connection {
 		const onClose = this.onClose;
 		this.onData = ignoreData;
 		this.onClose = ignoreClose;
+		this.onIdle = ignoreIdle;
 		onClose(reason);
 	}
 
 	deliver(chunk: uint8[]): void { this.onData(chunk); }
 
-	takeQueue(): uint8[][] {
+	drop(tag: int32): int64 {
+		let dropped: int64 = 0;
+		const kept: Queued[] = [];
+		for (const q of this.queue) {
+			if (q.tag == tag) {
+				dropped += q.bytes.length as int64;
+			} else {
+				kept.push(q);
+			}
+		}
+		this.queue = kept;
+		this.queuedBytes -= dropped;
+		return dropped;
+	}
+
+	takeQueue(): uint8[] {
 		const batch = this.queue;
 		this.queue = [];
 		if (batch.length == 0) {
 			this.sending = false;
 			if (this.finishing) { this.end(CloseReason.Closed); }
+			const idle = this.onIdle;
+			this.onIdle = ignoreIdle;
+			idle();
+			return [];
 		}
-		return batch;
+		if (batch.length == 1) { return batch[0].bytes; }
+		let total: int32 = 0;
+		for (const q of batch) { total += q.bytes.length; }
+		const joined = Buffer.allocUnsafe(total) as uint8[];
+		let at: int32 = 0;
+		for (const q of batch) {
+			copyInto(joined, at, q.bytes);
+			at += q.bytes.length;
+		}
+		return joined;
 	}
 
 	sent(count: int64): void { this.queuedBytes -= count; }
@@ -188,7 +243,7 @@ export class Connection {
 
 async function readLoop(c: Connection): Promise<void> {
 	while (c.isOpen()) {
-		const chunk = await recvAsync(c.fd, READ_CHUNK);
+		const chunk = await recvAsync(c.fd, c.readBytes);
 		if (!c.isOpen()) { return; }
 		if (chunk.length == 0) {
 			c.end(CloseReason.PeerClosed);
@@ -201,15 +256,14 @@ async function readLoop(c: Connection): Promise<void> {
 async function flushLoop(c: Connection): Promise<void> {
 	let batch = c.takeQueue();
 	while (batch.length > 0) {
-		for (const bytes of batch) {
-			const sent = await sendAsync(c.fd, bytes);
-			if (!c.isOpen()) { return; }
-			if (sent < 0) {
-				c.end(CloseReason.SendFailed);
-				return;
-			}
-			c.sent(bytes.length as int64);
+		c.writes += 1;
+		const sent = await sendAsync(c.fd, batch);
+		if (!c.isOpen()) { return; }
+		if (sent < 0) {
+			c.end(CloseReason.SendFailed);
+			return;
 		}
+		c.sent(batch.length as int64);
 		batch = c.takeQueue();
 	}
 }

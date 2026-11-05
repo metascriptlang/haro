@@ -43,6 +43,8 @@ import {
 } from "./rows";
 import { Mark } from "./mark";
 import { holdsButton } from "./mouseButton";
+import { copyInto } from "../server/bytes";
+import { MAX_SCREEN_BYTES } from "../server/protocol";
 
 const BUFFER_BYTES = 65536;
 const DRAIN_LIMIT = 16;
@@ -143,10 +145,25 @@ export struct Output {
 export interface Tee {
 	next: int64;
 	taken: Vec<Output>;
+	pending: Vec<uint8>;
 }
 
 export function fresh(this typeof Tee): Tee {
-	return { next: 1, taken: [] };
+	return { next: 1, taken: [], pending: [] };
+}
+
+function seal(this tee: Tee): void {
+	if (tee.pending.length == 0) { return; }
+	tee.taken.push({ seq: tee.next, bytes: move tee.pending });
+	tee.pending = [];
+	tee.next += 1;
+}
+
+function keep(this tee: Tee, bytes: Readonly<Span<uint8>>): void {
+	if (tee.pending.length + bytes.length > MAX_SCREEN_BYTES) { tee.seal(); }
+	const at = tee.pending.length;
+	tee.pending.length = at + bytes.length;
+	copyInto(tee.pending, at, bytes);
 }
 
 function teed(pty: Pty, tee: Tee): Pty {
@@ -154,10 +171,7 @@ function teed(pty: Pty, tee: Tee): Pty {
 		...pty,
 		read: (buf: Span<uint8>): Result<int32, PtyError> => {
 			const got = pty.read(buf);
-			if (got.ok && got.value > 0) {
-				tee.taken.push({ seq: tee.next, bytes: [...buf[0..got.value]] });
-				tee.next += 1;
-			}
+			if (got.ok && got.value > 0) { tee.keep(buf[0..got.value]); }
 			return got;
 		},
 	};
@@ -166,7 +180,8 @@ function teed(pty: Pty, tee: Tee): Pty {
 export function takeOutput(this t: Term): Vec<Output> {
 	const tee = t.tee;
 	if (tee === null) { return []; }
-	const taken = tee.taken;
+	tee.seal();
+	const taken = move tee.taken;
 	tee.taken = [];
 	return taken;
 }
@@ -679,8 +694,8 @@ test "a burst of resizes reflows the screen at once and reaches the pty once, at
 	}
 }
 
-test "a teed term hands out each pty read whole, in seq order, while its screen still parses the same bytes" {
-	const text = "x".repeat(BUFFER_BYTES * 2) + "\x1b]2;t\x07";
+test "a teed term hands out one Output per drain, the drain's reads joined in seq order, while its screen still parses the same bytes" {
+	const text = "x".repeat(BUFFER_BYTES * (DRAIN_LIMIT + 1)) + "\x1b]2;t\x07";
 	for (const tee of [Tee.fresh(), null]) {
 		const replay = Replay.ofText(text);
 		const opened = openTerm((cols: int32, rows: int32): Result<Pty, PtyError> => {
@@ -691,13 +706,16 @@ test "a teed term hands out each pty read whole, in seq order, while its screen 
 			const t = opened.value;
 			t.tee = tee;
 			assert t.fit(20, 3).ok;
-			while (t.alive) { assert t.drainFor(1000).ok; }
-			const taken = t.takeOutput();
+			const taken: Output[] = [];
+			while (t.alive) {
+				assert t.drainFor(1000).ok;
+				for (const o of t.takeOutput()) { taken.push(o); }
+			}
 			if (tee === null) {
 				assert taken.length == 0;
 			} else {
 				assert taken.map((o: Output): string => `${o.seq}:${o.bytes.length}`).join(" ") ==
-					`1:${BUFFER_BYTES} 2:${BUFFER_BYTES} 3:6`;
+					`1:${BUFFER_BYTES * DRAIN_LIMIT} 2:${BUFFER_BYTES + 6}`;
 				let joined = "";
 				for (const o of taken) { joined += o.bytes.asString(); }
 				assert joined == text;

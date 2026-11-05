@@ -13,7 +13,7 @@ export interface HostLaunch {
 }
 
 export interface PaneSink {
-	output: (pane: PaneId, seq: int64, bytes: Vec<uint8>) => void;
+	output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>) => void;
 	exit: (pane: PaneId, code: int32) => void;
 	failed: (pane: PaneId, failure: string) => void;
 }
@@ -32,7 +32,10 @@ export struct Shot {
 export interface HostedPane {
 	id: PaneId;
 	shell: Shell;
+	typedAt: float64;
 }
+
+const TYPED_RECENTLY_MS: float64 = 50;
 
 export interface PaneHost {
 	launch: HostLaunch;
@@ -66,7 +69,9 @@ function deliver(this h: PaneHost, id: PaneId, drained: Drained): TermError | nu
 		if (!f.started && refused === null) { refused = f.error; }
 		h.sink.failed(id, `${f.where.label()}: ${f.error}`);
 	}
-	for (const chunk of drained.output) { h.sink.output(id, chunk.seq, chunk.bytes); }
+	for (let i = 0; i < drained.output.length; i++) {
+		h.sink.output(id, drained.output[i].seq, drained.output[i].bytes);
+	}
 	const exit = drained.exit;
 	if (exit !== null) { h.sink.exit(id, exit.code); }
 	return refused;
@@ -93,7 +98,7 @@ async function start(
 		await closed(shell);
 		return failed;
 	}
-	h.panes.push({ id: id, shell: shell });
+	h.panes.push({ id: id, shell: shell, typedAt: -TYPED_RECENTLY_MS });
 	return null;
 }
 
@@ -125,12 +130,21 @@ export async function apply(this h: PaneHost, e: WorkspaceEvent): Promise<TermEr
 	return null;
 }
 
+function typedFirst(panes: HostedPane[]): HostedPane[] {
+	const now = performance.now();
+	const typed = panes.filter((p: HostedPane): boolean => now - p.typedAt < TYPED_RECENTLY_MS);
+	const rest = panes.filter((p: HostedPane): boolean => !(now - p.typedAt < TYPED_RECENTLY_MS));
+	return [...typed, ...rest];
+}
+
 export async function pump(this h: PaneHost): Promise<boolean> {
+	const order = typedFirst(h.panes);
+	const drains = order.map((pane: HostedPane): Promise<Drained | null> => pane.shell.output());
 	let more = false;
-	for (const pane of [...h.panes]) {
-		const drained = await pane.shell.output();
+	for (let i = 0; i < order.length; i++) {
+		const drained = await drains[i];
 		if (drained !== null) {
-			const _refused = h.deliver(pane.id, drained);
+			const _refused = h.deliver(order[i].id, drained);
 			more = more || drained.more;
 		}
 	}
@@ -141,6 +155,7 @@ export function write(this h: PaneHost, id: PaneId, bytes: Vec<uint8>): boolean 
 	const pane = h.paneOf(id);
 	if (pane === null) { return false; }
 	pane.shell.write(bytes);
+	pane.typedAt = performance.now();
 	return true;
 }
 

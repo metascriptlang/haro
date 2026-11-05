@@ -16,6 +16,7 @@ import {
 	WorkspaceCommand,
 	WorkspaceEvent,
 } from "../workspace/workspace";
+import { appendBytes } from "./bytes";
 
 export const PROTOCOL_VERSION: uint32 = 1;
 export const HEADER_BYTES: int32 = 5;
@@ -245,7 +246,7 @@ function flag(this w: Writer, present: boolean): void {
 
 function blob(this w: Writer, bytes: Readonly<Span<uint8>>): void {
 	w.u32(bytes.length as uint32);
-	for (const b of bytes) { w.bytes.push(b); }
+	w.bytes.appendBytes(bytes);
 }
 
 function text(this w: Writer, s: string): void {
@@ -365,6 +366,12 @@ function event(this w: Writer, e: WorkspaceEvent): void {
 	}
 }
 
+function output(this w: Writer, id: PaneId, seq: uint64, bytes: Readonly<Span<uint8>>): void {
+	w.pane(id);
+	w.u64(seq);
+	w.blob(bytes);
+}
+
 function payload(this w: Writer, m: Message): void {
 	if (m.kind == MessageKind.Hello) {
 		w.u32(m.version);
@@ -400,9 +407,7 @@ function payload(this w: Writer, m: Message): void {
 		w.pane(m.pane);
 		w.blob(m.bytes);
 	} else if (m.kind == MessageKind.Output) {
-		w.pane(m.pane);
-		w.u64(m.seq);
-		w.blob(m.bytes);
+		w.output(m.pane, m.seq, m.bytes);
 	} else if (m.kind == MessageKind.Fit) {
 		w.i32(m.cols);
 		w.i32(m.rows);
@@ -425,11 +430,30 @@ function payload(this w: Writer, m: Message): void {
 	}
 }
 
-export function encode(m: Message): Result<uint8[], ProtocolError> {
+function started(kind: MessageKind): Writer {
 	const w: Writer = { bytes: [], tooDeep: false };
 	w.u32(0);
-	w.u8(m.kind as uint8);
+	w.u8(kind as uint8);
+	return w;
+}
+
+export function encode(m: Message): Result<uint8[], ProtocolError> {
+	const w = started(m.kind);
 	w.payload(m);
+	return w.sealed();
+}
+
+export function encodeOutput(
+	id: PaneId,
+	seq: uint64,
+	bytes: Readonly<Span<uint8>>,
+): Result<uint8[], ProtocolError> {
+	const w = started(MessageKind.Output);
+	w.output(id, seq, bytes);
+	return w.sealed();
+}
+
+function sealed(this w: Writer): Result<uint8[], ProtocolError> {
 	if (w.tooDeep) { return Result.err(ProtocolError.TreeTooDeep); }
 	const length = w.bytes.length - HEADER_BYTES;
 	if (length > MAX_PAYLOAD_BYTES) {
@@ -525,7 +549,7 @@ function count(this r: Reader): Result<int32, ProtocolError> {
 function blob(this r: Reader): Result<uint8[], ProtocolError> {
 	const n = try r.count();
 	const at = try r.take(n);
-	return Result.ok(r.bytes.slice(at, at + n));
+	return Result.ok(r.bytes[at..at + n].slice());
 }
 
 function text(this r: Reader): Result<string, ProtocolError> {
@@ -876,36 +900,36 @@ export function create(this typeof Decoder): Decoder {
 }
 
 function frame(
-	this d: Decoder,
+	bytes: uint8[],
 	at: int32,
 	out: Message[],
 ): Result<int32, ProtocolError> {
-	if (d.pending.length - at < HEADER_BYTES) { return Result.ok(at); }
-	const size = bigEndian(d.pending, at);
+	if (bytes.length - at < HEADER_BYTES) { return Result.ok(at); }
+	const size = bigEndian(bytes, at);
 	if ((size as int64) > (MAX_PAYLOAD_BYTES as int64)) {
 		return Result.err(ProtocolError.PayloadTooLarge);
 	}
 	const kind = try code(
 		MESSAGE_KINDS,
-		d.pending[at + 4],
+		bytes[at + 4],
 		ProtocolError.UnknownMessageType,
 	);
 	const start = at + HEADER_BYTES;
 	const end = start + (size as int32);
-	if (d.pending.length < end) { return Result.ok(at); }
-	const r: Reader = { bytes: d.pending, at: start, end: end };
+	if (bytes.length < end) { return Result.ok(at); }
+	const r: Reader = { bytes: bytes, at: start, end: end };
 	out.push(try r.message(kind));
 	if (r.at != end) { return Result.err(ProtocolError.TrailingBytes); }
 	return Result.ok(end);
 }
 
 function drain(
-	this d: Decoder,
+	bytes: uint8[],
 	out: Message[],
 ): Result<int32, ProtocolError> {
 	let at: int32 = 0;
 	while (true) {
-		const next = try d.frame(at, out);
+		const next = try frame(bytes, at, out);
 		if (next == at) { return Result.ok(at); }
 		at = next;
 	}
@@ -913,19 +937,23 @@ function drain(
 
 export function push(
 	this d: Decoder,
-	chunk: Readonly<Span<uint8>>,
+	chunk: uint8[],
 ): Result<Message[], ProtocolError> {
 	const failed = d.failed;
 	if (failed !== null) { return Result.err(failed); }
-	for (const b of chunk) { d.pending.push(b); }
+	const held = d.pending.length > 0;
+	if (held) { d.pending.appendBytes(chunk); }
+	const bytes = held ? d.pending : chunk;
 	const out: Message[] = [];
-	const drained = d.drain(out);
+	const drained = drain(bytes, out);
 	if (!drained.ok) {
 		d.failed = drained.error;
 		return Result.err(drained.error);
 	}
-	if (drained.value > 0) {
-		d.pending = d.pending.slice(drained.value, d.pending.length);
+	if (drained.value == bytes.length) {
+		d.pending = [];
+	} else if (!held || drained.value > 0) {
+		d.pending = bytes[drained.value..bytes.length].slice();
 	}
 	return Result.ok(out);
 }

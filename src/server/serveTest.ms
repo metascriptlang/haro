@@ -1,4 +1,5 @@
-import { removeAll } from "std/fs";
+import { exists, removeAll } from "std/fs";
+import { connectUnix, createUnixSocket, send as sendRaw } from "std/net";
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { vtBuild } from "../vt/vt";
@@ -17,7 +18,7 @@ import {
 	push,
 } from "./protocol";
 import { screenText } from "./screenRig";
-import { Server, ServerSetup, TailnetListen, start, stop, tailnetListen } from "./serve";
+import { Server, ServerSetup, TailnetListen, enqueue, start, stop, tailnetListen } from "./serve";
 import { PeerInfo, TailnetAllow, TailnetError, TailnetFault, TailnetSelf } from "./tailnet";
 import { CloseReason, Connection, connectToTcp, connectToUnix } from "./transport";
 
@@ -306,6 +307,92 @@ when (!windows) {
 		typed(a, "printf 'second%sline\\n' -\r");
 		assert await until((): boolean => printed(a, FIRST).includes("second-line"));
 		assert seqsRise(a, FIRST);
+		await stopped(s, ended);
+		cleanUp(socket);
+	}
+
+	class Gate { open: boolean = false; }
+
+	test "input reaches the shell while the server's job queue is held" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const s = await serving(setupAt(socket, logged));
+		const ended = ending(s);
+		const a = await attached(socket, vtBuild());
+		const marker = `${socket.slice(0, socket.lastIndexOf("/"))}/typed`;
+		const gate = new Gate();
+		s.enqueue(async (): Promise<void> => {
+			while (!gate.open) { await sleepAsync(2); }
+		});
+		typed(a, `printf x > ${marker}\r`);
+		const reached = await until((): boolean => exists(marker));
+		gate.open = true;
+		assert reached, logged.text;
+		await stopped(s, ended);
+		cleanUp(socket);
+	}
+
+	function lastScreenAt(p: Peer, pane: PaneId): int32 {
+		let at: int32 = -1;
+		for (let i: int32 = 0; i < p.got.length; i++) {
+			const m = p.got[i];
+			if (m.kind == MessageKind.Screen && m.pane == pane) { at = i; }
+		}
+		return at;
+	}
+
+	function screensFor(p: Peer, pane: PaneId): int32 {
+		let n: int32 = 0;
+		for (const m of p.got) {
+			if (m.kind == MessageKind.Screen && m.pane == pane) { n += 1; }
+		}
+		return n;
+	}
+
+	function rawSay(fd: int32, m: Message): void {
+		const bytes = encode(m);
+		if (!bytes.ok || sendRaw(fd, bytes.value) != bytes.value.length) { throw new Error(`${m.kind} not sent`); }
+	}
+
+	test "a client that falls behind skips to a fresh screen of the pane, then output after it, and stays connected" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const s = await serving(setupAt(socket, logged));
+		s.jumpBytes = 256 * 1024;
+		const ended = ending(s);
+		const slow = createUnixSocket();
+		assert connectUnix(slow, socket) == 0;
+		rawSay(slow, hello(vtBuild()));
+		rawSay(slow, { kind: MessageKind.Attach });
+		assert await until((): boolean => s.clients.length == 1 && s.clients[0].attached), logged.text;
+		const flooded = `${socket.slice(0, socket.lastIndexOf("/"))}/flooded`;
+		const flood = 20 * 1024 * 1024;
+		rawSay(slow, {
+			kind: MessageKind.Input,
+			pane: FIRST,
+			bytes: [...`head -c ${flood} /dev/zero | tr '\\0' x; touch ${flooded}\r`.asBytes()],
+		});
+		assert await until((): boolean => exists(flooded)), logged.text;
+		const p = watched(new Peer(new Connection(slow)));
+		assert await until((): boolean => screensFor(p, FIRST) >= 2), `${kinds(p)} ${logged.text}`;
+		say(p, { kind: MessageKind.Input, pane: FIRST, bytes: [...`printf 'after%sjump\\n' -\r`.asBytes()] });
+		assert await until((): boolean => printed(p, FIRST).includes("after-jump")), `${kinds(p)} ${logged.text}`;
+		assert !p.closed && p.broken == "", p.broken;
+		assert !logged.text.includes("fell too far behind"), logged.text;
+		const last = lastScreenAt(p, FIRST);
+		let before: uint64 = 0;
+		let after: uint64 = 0;
+		let received: int64 = 0;
+		for (let i: int32 = 0; i < p.got.length; i++) {
+			const m = p.got[i];
+			if (m.kind == MessageKind.Output && m.pane == FIRST) {
+				received += m.bytes.length as int64;
+				if (i < last) { before = m.seq; } else if (after == 0) { after = m.seq; }
+			}
+		}
+		assert after > before, `${before} then ${after}`;
+		assert seqsRise(p, FIRST);
+		assert received * 2 < (flood as int64), `${received} bytes of a ${flood} byte flood`;
 		await stopped(s, ended);
 		cleanUp(socket);
 	}

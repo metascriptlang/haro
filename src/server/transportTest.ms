@@ -207,6 +207,72 @@ test "a reader that never reads is cut once its queue passes the limit" {
 	cleanUp(path);
 }
 
+test "messages queued while a write is in flight leave together in one write" {
+	const path = freshPath();
+	const writer = new Accepted();
+	const handlers: ListenHandlers = {
+		accepted: (c: Connection): void => {
+			writer.c = c;
+			c.start((chunk: uint8[]): void => {}, (why: CloseReason): void => {});
+		},
+		failed: (): void => {},
+	};
+	const listener = listenUnix(path, handlers);
+	assert listener.ok;
+	const client = await dialed(path);
+	const sink = new Sink();
+	collect(client, sink, false);
+	assert await until((): boolean => writer.c !== null);
+	const w = writer.c!;
+	const parts: int32 = 10;
+	for (let i: int32 = 0; i < parts; i++) { assert w.send(patterned((i * 100) as int64, 100)); }
+	assert await until((): boolean => sink.count == (parts * 100) as int64);
+	assert sink.patterned;
+	assert w.writes <= 2, `${w.writes} writes for ${parts} messages`;
+	client.close();
+	listener.value.close();
+	cleanUp(path);
+}
+
+test "queued messages of one tag are dropped unsent and the rest still arrive in order" {
+	const path = freshPath();
+	const writer = new Accepted();
+	const handlers: ListenHandlers = {
+		accepted: (c: Connection): void => {
+			writer.c = c;
+			c.start((chunk: uint8[]): void => {}, (why: CloseReason): void => {});
+		},
+		failed: (): void => {},
+	};
+	const listener = listenUnix(path, handlers);
+	assert listener.ok;
+	const stalled = createUnixSocket();
+	assert connectUnix(stalled, path) == 0;
+	assert await until((): boolean => writer.c !== null);
+	const w = writer.c!;
+	const first = 4 * MIB;
+	const dropped: uint8[] = [];
+	for (let i: int32 = 0; i < 500; i++) { dropped.push(0xee); }
+	assert w.send(patterned(0, first));
+	assert w.send(dropped, 5);
+	assert w.send(patterned(first as int64, 1000));
+	assert w.send(dropped, 5);
+	const before = w.queued();
+	assert w.drop(5) == 1000;
+	assert w.queued() == before - 1000;
+	assert w.drop(5) == 0;
+	const reader = new Connection(stalled);
+	const sink = new Sink();
+	collect(reader, sink, false);
+	assert await until((): boolean => sink.count == (first + 1000) as int64);
+	await sleepAsync(50);
+	assert sink.count == (first + 1000) as int64;
+	assert sink.patterned;
+	reader.close();
+	listener.value.close();
+	cleanUp(path);
+}
+
 test "a finished connection delivers what it queued, then closes" {
 	const path = freshPath();
 	const writer = new Accepted();

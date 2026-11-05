@@ -3,7 +3,7 @@
 import { Config, PaneCwd } from "../config/config";
 import { ptySetWake } from "../pty/nativePty.h";
 import { vtBuild } from "../vt/vt";
-import { PaneId, panes } from "../workspace/tree";
+import { Pane, PaneId, panes } from "../workspace/tree";
 import {
 	CommandKind,
 	EventKind,
@@ -31,6 +31,7 @@ import {
 	ScreenFormat,
 	create as decoder,
 	encode,
+	encodeOutput,
 	greet,
 	push,
 	screenFormat,
@@ -50,13 +51,12 @@ import {
 	Connection,
 	ListenError,
 	Listener,
-	connectToUnix,
 	listenTcp,
 	listenUnix,
 	peerAddress,
 	socketPath,
 } from "./transport";
-import { serverWake, serverWakeTo } from "./wake.h";
+import { serverWake, serverWakeClose, serverWakeOpen } from "./wake.h";
 
 when (windows) {
 	@include("windows.h");
@@ -74,7 +74,8 @@ when (windows) {
 
 const DEFAULT_COLS: int32 = 80;
 const DEFAULT_ROWS: int32 = 24;
-const WAKE_CONNECT_MS: int32 = 2000;
+const WAKE_READ_BYTES: int32 = 64;
+const JUMP_BYTES: int64 = 8 * 1024 * 1024;
 const FLUSH_ON_EXIT_MS: int32 = 2000;
 const MAX_ADMITTING: int32 = 8;
 const LOCAL: string = "local";
@@ -125,6 +126,7 @@ class Client {
 	vtBuild: string = "";
 	cols: int32 = 0;
 	rows: int32 = 0;
+	resyncing: PaneId[] = [];
 
 	constructor(conn: Connection, identity: string) {
 		this.conn = conn;
@@ -148,8 +150,9 @@ export class Server {
 	admitting: Connection[] = [];
 	listeners: Listener[] = [];
 	serving: string[] = [];
-	wakeIn: Connection | null = null;
-	wakeOut: Connection | null = null;
+	wake: Connection | null = null;
+	jumpBytes: int64 = JUMP_BYTES;
+	inputsHeld: int32 = 0;
 	cols: int32 = DEFAULT_COLS;
 	rows: int32 = DEFAULT_ROWS;
 	jobs: (() => Promise<void>)[] = [];
@@ -180,7 +183,7 @@ function hostOf(this s: Server): PaneHost {
 	return host;
 }
 
-function enqueue(this s: Server, job: () => Promise<void>): void {
+export function enqueue(this s: Server, job: () => Promise<void>): void {
 	if (s.stopping) { return; }
 	s.jobs.push(job);
 	if (!s.working) {
@@ -216,6 +219,48 @@ function broadcast(this s: Server, m: Message): void {
 	for (const c of s.clients) {
 		if (c.attached) { const _sent = c.conn.send(bytes.value); }
 	}
+}
+
+function output(this s: Server, pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>): void {
+	const frame = encodeOutput(pane, seq as uint64, bytes);
+	if (!frame.ok) {
+		s.log(`Output not sent: ${frame.error.toString()}`);
+		return;
+	}
+	for (const c of s.clients) {
+		if (!c.attached || c.resyncing.includes(pane)) { continue; }
+		if (c.conn.queued() + (frame.value.length as int64) > s.jumpBytes) {
+			s.jump(c, pane);
+		} else {
+			const _sent = c.conn.send(frame.value, pane as int32);
+		}
+	}
+}
+
+function jump(this s: Server, c: Client, pane: PaneId): void {
+	const waiting = c.resyncing.length > 0;
+	const _dropped = c.conn.drop(pane as int32);
+	c.resyncing.push(pane);
+	for (const tab of s.workspace.tabs) {
+		for (const other of tab.root.panes()) {
+			if (other.id != pane && c.conn.drop(other.id as int32) > 0) { c.resyncing.push(other.id); }
+		}
+	}
+	if (waiting) { return; }
+	c.conn.whenIdle((): void => {
+		s.enqueue(async (): Promise<void> => { await s.resync(c); });
+	});
+}
+
+async function resync(this s: Server, c: Client): Promise<void> {
+	const wanted = screenFormat(c.vtBuild, s.vtBuild);
+	for (const tab of s.workspace.tabs) {
+		for (const pane of tab.root.panes()) {
+			if (!c.conn.isOpen()) { return; }
+			if (c.resyncing.includes(pane.id)) { await s.screenTo(c, pane, wanted); }
+		}
+	}
+	c.resyncing = [];
 }
 
 function kick(this s: Server): void {
@@ -279,33 +324,35 @@ async function attach(this s: Server, c: Client): Promise<void> {
 	s.sendTo(c, { kind: MessageKind.Layout, tabs: s.workspace.tabs, active: s.workspace.active });
 	const wanted = screenFormat(c.vtBuild, s.vtBuild);
 	for (const tab of s.workspace.tabs) {
-		for (const pane of tab.root.panes()) {
-			const cols = pane.rect.cols;
-			const rows = pane.rect.rows;
-			const shot = await s.hostOf().snapshot(pane.id, wanted, s.setup.screenLimit);
-			if (shot.ok) {
-				s.sendTo(c, {
-					kind: MessageKind.Screen,
-					pane: pane.id,
-					cols: cols,
-					rows: rows,
-					format: shot.value.format,
-					bytes: [...shot.value.bytes],
-				});
-			} else {
-				s.log(`pane ${pane.id as int32} screen sent empty: ${shot.error.toString()}`);
-				s.sendTo(c, {
-					kind: MessageKind.Screen,
-					pane: pane.id,
-					cols: cols,
-					rows: rows,
-					format: ScreenFormat.VtBytes,
-					bytes: [],
-				});
-			}
-		}
+		for (const pane of tab.root.panes()) { await s.screenTo(c, pane, wanted); }
 	}
 	c.attached = true;
+}
+
+async function screenTo(this s: Server, c: Client, pane: Pane, wanted: ScreenFormat): Promise<void> {
+	const cols = pane.rect.cols;
+	const rows = pane.rect.rows;
+	const shot = await s.hostOf().snapshot(pane.id, wanted, s.setup.screenLimit);
+	if (shot.ok) {
+		s.sendTo(c, {
+			kind: MessageKind.Screen,
+			pane: pane.id,
+			cols: cols,
+			rows: rows,
+			format: shot.value.format,
+			bytes: shot.value.bytes[0..shot.value.bytes.length].slice(),
+		});
+	} else {
+		s.log(`pane ${pane.id as int32} screen sent empty: ${shot.error.toString()}`);
+		s.sendTo(c, {
+			kind: MessageKind.Screen,
+			pane: pane.id,
+			cols: cols,
+			rows: rows,
+			format: ScreenFormat.VtBytes,
+			bytes: [],
+		});
+	}
 }
 
 function refuse(this s: Server, c: Client, reason: string): void {
@@ -356,13 +403,7 @@ function received(this s: Server, c: Client, m: Message): void {
 		const command = m.command;
 		s.enqueue(async (): Promise<void> => { await s.run(command); });
 	} else if (m.kind == MessageKind.Input) {
-		const pane = m.pane;
-		const bytes: Vec<uint8> = [...m.bytes];
-		s.enqueue(async (): Promise<void> => {
-			if (!s.hostOf().write(pane, bytes)) {
-				s.log(`input for unknown pane ${pane as int32} dropped`);
-			}
-		});
+		s.input(m.pane, m.bytes);
 	} else if (m.kind == MessageKind.Fit) {
 		s.fit(m.cols, m.rows);
 	} else if (m.kind == MessageKind.AskBusy) {
@@ -381,6 +422,22 @@ function received(this s: Server, c: Client, m: Message): void {
 	} else {
 		s.refuse(c, `${m.kind.toString()} is a message only the server sends`);
 	}
+}
+
+function input(this s: Server, pane: PaneId, bytes: uint8[]): void {
+	const host = s.hostOf();
+	const owned: Vec<uint8> = [...bytes];
+	if (s.inputsHeld == 0 && host.paneOf(pane) !== null) {
+		const _written = host.write(pane, owned);
+		return;
+	}
+	s.inputsHeld += 1;
+	s.enqueue(async (): Promise<void> => {
+		s.inputsHeld -= 1;
+		if (!s.hostOf().write(pane, owned)) {
+			s.log(`input for unknown pane ${pane as int32} dropped`);
+		}
+	});
 }
 
 function data(this s: Server, c: Client, chunk: uint8[]): void {
@@ -460,9 +517,8 @@ async function shutdown(this s: Server, code: int32): Promise<void> {
 	s.listeners = [];
 	for (const c of s.admitting) { c.close(); }
 	s.admitting = [];
-	serverWakeTo(-1);
-	s.wakeIn?.close();
-	s.wakeOut?.close();
+	serverWakeClose();
+	s.wake?.close();
 	const host = s.host;
 	if (host !== null) { await host.closeAll(); }
 	for (const c of s.clients) { c.conn.finish(); }
@@ -472,37 +528,17 @@ async function shutdown(this s: Server, code: int32): Promise<void> {
 	s.resolve(code);
 }
 
-async function openWake(this s: Server): Promise<boolean> {
-	const path = `${s.setup.socket}.wake`;
-	const listening = listenUnix(path, {
-		accepted: (c: Connection): void => {
-			s.wakeIn = c;
-			c.start((chunk: uint8[]): void => { s.kick(); }, (why: CloseReason): void => {
-				if (!s.stopping) { s.log(`the pty wake closed: ${why.toString()}`); }
-			});
-		},
-		failed: (): void => { s.log("the pty wake stopped accepting"); },
+function openWake(this s: Server): boolean {
+	const fd = serverWakeOpen();
+	if (fd < 0) {
+		s.log("the pty wake did not open");
+		return false;
+	}
+	const wake = new Connection(fd, WAKE_READ_BYTES);
+	s.wake = wake;
+	wake.start((chunk: uint8[]): void => { s.kick(); }, (why: CloseReason): void => {
+		if (!s.stopping) { s.log(`the pty wake closed: ${why.toString()}`); }
 	});
-	if (!listening.ok) {
-		s.log(`the pty wake did not open: ${listening.error.toString()}`);
-		return false;
-	}
-	const dialed = await connectToUnix(path, WAKE_CONNECT_MS);
-	if (!dialed.ok) {
-		listening.value.close();
-		s.log(`the pty wake did not connect: ${dialed.error.toString()}`);
-		return false;
-	}
-	const deadline = Date.now() + WAKE_CONNECT_MS;
-	while (s.wakeIn === null && Date.now() < deadline) { await sleepAsync(1); }
-	listening.value.close();
-	if (s.wakeIn === null) {
-		dialed.value.close();
-		s.log("the pty wake was never accepted");
-		return false;
-	}
-	s.wakeOut = dialed.value;
-	serverWakeTo(dialed.value.fd);
 	ptySetWake(serverWake);
 	return true;
 }
@@ -544,16 +580,14 @@ export async function start(this typeof Server, setup: ServerSetup): Promise<Res
 	s.listeners.push(listening.value);
 	s.serving.push(`unix ${setup.socket}`);
 	s.host = PaneHost.open(setup.launch, {
-		output: (pane: PaneId, seq: int64, bytes: Vec<uint8>): void => {
-			s.broadcast({ kind: MessageKind.Output, pane: pane, seq: seq as uint64, bytes: [...bytes] });
-		},
+		output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>): void => { s.output(pane, seq, bytes); },
 		exit: (pane: PaneId, code: int32): void => { s.exits.push({ pane: pane, code: code }); },
 		failed: (pane: PaneId, failure: string): void => {
 			s.log(`pane ${pane as int32}: ${failure}`);
 			s.broadcast({ kind: MessageKind.Failed, pane: pane, reason: failure });
 		},
 	});
-	if (!(await s.openWake())) {
+	if (!s.openWake()) {
 		s.stop(1);
 		await s.finished;
 		return Result.err("the pty wake did not open");

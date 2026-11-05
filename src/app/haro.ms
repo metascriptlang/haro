@@ -87,7 +87,8 @@ import { portOf } from "../controller/shell";
 import { ptySetWake } from "../pty/nativePty.h";
 import { ConfigChange, ConfigOutcome } from "./components/features/terminal/paneModel";
 import { RunningPane } from "./panes";
-import { WindowHost, WorkspaceView, addRemote, closeShells, open, quit } from "./workspaceView";
+import { WindowHost, WorkspaceView, addHosts, closeShells, open, quit } from "./workspaceView";
+import { keptHostsPath } from "../client/hostBook";
 
 const APP_TITLE = "Haro";
 const NOTIFICATION_ID = "haro";
@@ -130,6 +131,7 @@ when (macos) {
 				items: [
 					MenuItem.action("new_tab_on_host", "New Tab on Host…", "t", ModCmd | ModAlt),
 					MenuItem.action("add_remote_host", "Add Remote Host…", "", 0),
+					MenuItem.action("remove_remote_host", "Remove Remote Host…", "", 0),
 					MenuItem.separator(),
 					MenuItem.action("close_pane", "Close Pane", "w", ModCmd),
 					MenuItem.action("close_window", "Close Window", "w", ModCmd | ModShift),
@@ -406,6 +408,7 @@ async function openWindow(
 		},
 		stats: stats,
 		fontFamily: families.join(", "),
+		hostBook: { path: keptHostsPath(), dial: (address: string): Dial => sshDial(address) },
 	};
 	const view = WorkspaceView.open(
 		host,
@@ -419,11 +422,7 @@ async function openWindow(
 		served.dial,
 		served.label,
 	);
-	if (served.remotes) {
-		for (const remote of config.loaded.config.remoteHosts) {
-			const _added = view.addRemote(remote.label, sshDial(remote.address));
-		}
-	}
+	if (served.remotes) { view.addHosts(config.loaded.config.remoteHosts); }
 	view.started = (first: RunningPane): void => { started(view, first); };
 	if (hasFlag("--stats")) { logStatsEverySecond(pace, stats); }
 	when (macos) {

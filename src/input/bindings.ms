@@ -53,6 +53,7 @@ export enum Action {
 	ToggleSidebar,
 	NewTabOnHost,
 	AddRemoteHost,
+	RemoveRemoteHost,
 }
 
 const SHIFT = modSet(KeyMod.Shift);
@@ -244,6 +245,7 @@ const NAMED: Vec<Named> = [
 	{ name: "toggle_sidebar", action: Action.ToggleSidebar },
 	{ name: "new_tab_on_host", action: Action.NewTabOnHost },
 	{ name: "add_remote_host", action: Action.AddRemoteHost },
+	{ name: "remove_remote_host", action: Action.RemoveRemoteHost },
 ];
 
 export function actionNamed(name: string): Action | null {
@@ -608,16 +610,16 @@ test "every workspace action has a name a keybind can give, and no default moves
 		"resize_pane_left", "resize_pane_right", "resize_pane_up", "resize_pane_down",
 		"toggle_pane_zoom", "new_tab", "close_tab", "previous_tab", "next_tab", "goto_tab_1",
 		"goto_tab_9", "move_tab_left", "move_tab_right", "rename_tab", "toggle_sidebar",
-		"new_tab_on_host", "add_remote_host"];
+		"new_tab_on_host", "add_remote_host", "remove_remote_host"];
 	for (const name of names) { assert actionNamed(name) !== null; }
 	assert actionNamed("goto_tab_9") == Action.GotoTab9;
 	assert actionNamed("goto_tab_0") === null;
 	for (const b of BINDINGS) {
 		assert b.action != Action.MoveTabLeft && b.action != Action.RenameTab;
-		assert b.action != Action.AddRemoteHost;
+		assert b.action != Action.AddRemoteHost && b.action != Action.RemoveRemoteHost;
 	}
 	for (const b of WORKSPACE) {
 		assert b.action != Action.MoveTabRight && b.action != Action.RenameTab;
-		assert b.action != Action.AddRemoteHost;
+		assert b.action != Action.AddRemoteHost && b.action != Action.RemoveRemoteHost;
 	}
 }

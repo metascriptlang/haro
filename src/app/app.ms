@@ -28,6 +28,7 @@ import {
 	connect,
 	focusPane,
 	hostDialogShut,
+	hostPicked,
 	hostOf,
 	laidOut,
 	newTabOn,
@@ -128,10 +129,7 @@ export function App(v: WorkspaceView): NeonNode {
 		<HostDialog
 			model={v.hostDialog}
 			metrics={v.font.metrics}
-			onPick={(id: int32): void => {
-				v.hostDialogShut();
-				v.newTabOn(id as HostId);
-			}}
+			onPick={(id: int32): void => { v.hostPicked(id as HostId); }}
 			onAdd={(label: string, address: string): string => {
 				const refusal = v.addHost(label, address);
 				if (refusal == "") { v.hostDialogShut(); }

@@ -29,6 +29,7 @@ import { ModalLayer } from "../../layout/modalLayer";
 const DIALOG_COLS: int32 = 48;
 const PICK_TITLE = "New tab on host";
 const ADD_TITLE = "Add remote host";
+const FORGET_TITLE = "Remove remote host";
 const ADDRESS_HINT = "an ssh alias, user@host or tailnet name";
 const SQUARE_PRIMARY: ButtonLook = { ...PRIMARY_BUTTON, radius: 0 };
 const SQUARE_SECONDARY: ButtonLook = { ...SECONDARY_BUTTON, radius: 0 };
@@ -37,6 +38,7 @@ export enum HostAsk {
 	Closed,
 	Pick,
 	Add,
+	Forget,
 }
 
 export struct HostChoice {
@@ -78,6 +80,11 @@ export function askPick(this d: HostDialogModel, choices: HostChoice[]): void {
 	d.setChoices(choices);
 	d.setPicked(0);
 	d.setAsk(HostAsk.Pick);
+}
+
+export function askForget(this d: HostDialogModel, choices: HostChoice[]): void {
+	d.askPick(choices);
+	d.setAsk(HostAsk.Forget);
 }
 
 export function askAdd(this d: HostDialogModel): void {
@@ -160,13 +167,17 @@ export function HostDialog(props: {
 	}));
 	return <Show when={d.visible()}>
 		<ModalLayer>
-			<Show when={d.ask() == HostAsk.Pick}>
+			<Show when={d.ask() == HostAsk.Pick || d.ask() == HostAsk.Forget}>
 				<View
 					style={{ ...card, width: width() }}
 					focusable
 					ref={(h: ViewHandle): void => { h.focus(); }}
 					onKeyDown={pickKey}>
-					<CellText metrics={m} spans={[{ text: PICK_TITLE, style: TITLE_STYLE }]} widths={[]} />
+					<CellText
+						metrics={m}
+						spans={[{ text: d.ask() == HostAsk.Forget ? FORGET_TITLE : PICK_TITLE, style: TITLE_STYLE }]}
+						widths={[]}
+					/>
 					<For each={d.choices()} keyed={(c: HostChoice): number => c.id}>
 						{(c: Accessor<HostChoice>): NeonNode => <View
 							onPointerDown={(e: NeonEvent): void => { props.onPick(c().id); }}>

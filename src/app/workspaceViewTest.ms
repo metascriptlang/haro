@@ -14,7 +14,8 @@ import { vtBuild } from "../vt/snapshot";
 import { Axis, PaneId, panes } from "../workspace/tree";
 import { HostId, HostPane } from "../workspace/hosted";
 import { CommandKind, focusedPane } from "../workspace/workspace";
-import { DialError, Failure, ServerLink, attach } from "../client/link";
+import { Dial, DialError, Failure, ServerLink, attach } from "../client/link";
+import { readKept } from "../client/hostBook";
 import { FakeServer, startFake } from "../client/fakeServer";
 import { dialUnix } from "../client/connect";
 import { Stats, empty } from "./stats";
@@ -28,12 +29,15 @@ import {
 	detachPanes,
 	LinkState,
 	LinkedHost,
+	addHost,
+	addHosts,
 	addRemote,
 	newTabOn,
 	open,
 	paneAt,
 	primary,
 	quit,
+	removeHost,
 	retryNow,
 	selectTab,
 	send,
@@ -89,6 +93,7 @@ class Notes {
 	woke: () => void = (): void => {};
 	wakes: int32 = 0;
 	due: (() => void)[] = [];
+	book: string = "";
 }
 
 function hostOf(notes: Notes): WindowHost {
@@ -128,6 +133,7 @@ function hostOf(notes: Notes): WindowHost {
 		},
 		stats: Stats.empty(),
 		fontFamily: "",
+		hostBook: { path: notes.book, dial: (address: string): Dial => dialUnix(address) },
 	};
 }
 
@@ -583,4 +589,71 @@ test "a host that keeps no session opens its new tab as a local pane, scoped apa
 	assert await showsAt(v, at(plain, 1), "plain-shell");
 	assert !(await screenAt(v, at(v.primary(), 1))).includes("plain-shell");
 	await closeAll(t);
+}
+
+function hostLabelled(v: WorkspaceView, label: string): LinkedHost | null {
+	return v.hosts.find((h: LinkedHost): boolean => h.label == label) ?? null;
+}
+
+async function opened(notes: Notes, path: string): Promise<WorkspaceView> {
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	if (!got.ok) { throw new Error(`attach: ${got.error.why}`); }
+	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
+	await v.attachTo(link, got.value);
+	return v;
+}
+
+test "a host added from the window is kept, comes back with its panes in the next window, loses to config on a label, and can be removed" {
+	const localPath = freshPath();
+	const remotePath = freshPath();
+	const local = fakeWithTwoPanes(localPath);
+	const remote = fakeWithTwoPanes(remotePath);
+	remote.paneOf(1 as PaneId)?.vt.writeText("kept-marker\r\n");
+	const notes = new Notes();
+	notes.book = join(join(tmpDir(), `haro-book-${Date.now()}`), "hosts.json");
+
+	const first = await opened(notes, localPath);
+	assert first.addHost("build", remotePath) == "";
+	const kept = readKept(notes.book);
+	assert kept.ok && kept.value.length == 1 && kept.value[0].address == remotePath;
+	await first.quit();
+
+	const again = await opened(notes, localPath);
+	again.addHosts([]);
+	const back = hostLabelled(again, "build");
+	assert back !== null;
+	if (back === null) { return; }
+	again.retryNow(back);
+	assert await until((): boolean => back.state == LinkState.Connected && back.panes.running.length == 2);
+	assert await showsAt(again, at(back, 1), "kept-marker");
+	await again.quit();
+
+	const configured = await opened(notes, localPath);
+	configured.addHosts([{ label: "build", address: "other" }]);
+	assert configured.hosts.filter((h: LinkedHost): boolean => h.label == "build").length == 1;
+	assert configured.kept.length == 0;
+	await configured.quit();
+
+	const last = await opened(notes, localPath);
+	last.addHosts([]);
+	const gone = hostLabelled(last, "build");
+	assert gone !== null;
+	if (gone !== null) { await last.removeHost(gone.id); }
+	assert hostLabelled(last, "build") === null;
+	const left = readKept(notes.book);
+	assert left.ok && left.value.length == 0;
+	await last.quit();
+	const after = await opened(notes, localPath);
+	after.addHosts([]);
+	assert after.hosts.length == 1;
+	await after.quit();
+
+	assert notes.fatal == "";
+	local.close();
+	remote.close();
+	cleanUp(localPath);
+	cleanUp(remotePath);
+	cleanUp(notes.book);
 }

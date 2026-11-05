@@ -2,7 +2,9 @@ import { chmod, ensureDir, readDir, readFile, removeAll, writeFile } from "std/f
 import { dirname, join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { env } from "std/process";
-import { ScreenFormat } from "../server/protocol";
+import { MAX_SCREEN_BYTES, ScreenFormat } from "../server/protocol";
+import { DelayRelay, close as closeRelay, delayed, relay } from "../server/delayRelay";
+import { Server, start, stop } from "../server/serve";
 import { vtBuild } from "../vt/snapshot";
 import { writeText } from "../vt/vt";
 import { PaneId } from "../workspace/tree";
@@ -208,6 +210,43 @@ test "a host that wants a password is refused, an unreachable one is offline" {
 	if (!gone.ok) {
 		assert gone.error.failure == Failure.Offline;
 		assert gone.error.why.includes("Connection refused"), gone.error.why;
+	}
+	done(r);
+}
+
+class Rtts { got: float64[] = []; }
+
+test "a link dialed over ssh through a 100 ms relay measures a round trip of about 100 ms" {
+	const r = rig(true);
+	preinstall(r, "far", answering(r, versionLine("test")));
+	const served = await Server.start({
+		launch: { command: "sh", shellScripts: null, startIn: null, originCwd: false },
+		socket: join(r.dir, "real.sock"),
+		dividerCells: 1,
+		tailnet: null,
+		screenLimit: MAX_SCREEN_BYTES,
+		log: (line: string): void => {},
+	});
+	assert served.ok;
+	const relayed = DelayRelay.relay(join(r.dir, "slow.sock"), join(r.dir, "real.sock"), delayed(100));
+	assert relayed.ok;
+	if (served.ok && relayed.ok) {
+		const _s = env.set("FAKE_SOCKET", join(r.dir, "slow.sock"));
+		const got = await linkTo(sshDial("far"), (): void => {}, vtBuild(), 80, 24, 10000);
+		assert got.ok, got.ok ? "" : got.error.why;
+		if (got.ok) {
+			const rtts = new Rtts();
+			got.value.link.measure((ms: float64): void => { rtts.got.push(ms); });
+			const deadline = performance.now() + 5000;
+			while (rtts.got.length < 2 && performance.now() < deadline) { await sleepAsync(20); }
+			assert rtts.got.length >= 2;
+			const rtt = got.value.link.rttMs ?? 0;
+			assert rtt >= 100 && rtt < 250, `${rtt}`;
+			got.value.link.detach();
+		}
+		relayed.value.closeRelay();
+		served.value.stop(0);
+		const _ended = await served.value.finished;
 	}
 	done(r);
 }

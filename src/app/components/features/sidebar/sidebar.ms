@@ -131,7 +131,11 @@ function paneRow(host: SidebarHost, pane: SidebarPane, cols: int32): SidebarRow 
 }
 
 export function lonePane(hosts: SidebarHost[]): boolean {
-	return hosts.length == 1 && hosts[0].tabs.length == 1 && hosts[0].tabs[0].panes.length == 1;
+	let panes = 0;
+	for (const h of hosts) {
+		for (const t of h.tabs) { panes += t.panes.length; }
+	}
+	return panes == 1;
 }
 
 export function sidebarRows(hosts: SidebarHost[], cols: int32): SidebarRow[] {
@@ -237,11 +241,12 @@ function rowsOf(tabs: SidebarTab[], cols: int32): SidebarRow[] {
 	return sidebarRows([only], cols);
 }
 
-test "a lone pane is one host with one tab holding one pane" {
+test "a lone pane is the only pane across every host and tab" {
 	assert lonePane([host(0, "", [tab(1, true, [pane(2, "zsh", true)])])]);
 	assert !lonePane([host(0, "", [tab(1, true, [pane(2, "zsh", true), pane(3, "vim", false)])])]);
 	assert !lonePane([host(0, "", [tab(1, true, [pane(2, "zsh", true)]), tab(4, false, [pane(5, "top", true)])])]);
-	assert !lonePane([host(0, "", [tab(1, true, [pane(2, "zsh", true)])]), host(1, "rtx", [])]);
+	assert lonePane([host(0, "", [tab(1, true, [pane(2, "zsh", true)])]), host(1, "rtx", [])]);
+	assert !lonePane([host(0, "", [tab(1, true, [pane(2, "zsh", true)])]), host(1, "rtx", [tab(3, true, [pane(4, "zsh", true)])])]);
 	assert !lonePane([]);
 }
 

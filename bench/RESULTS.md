@@ -9,6 +9,10 @@ What it drives: in-process is a `Term` over a `NativePty`. Client/server is a se
 `serverPath.exe --serve` process running `Server.start` on a temp `HARO_SOCKET`, and a
 `ServerLink` + `attach` client that feeds each `Output` into a `RemotePty`-backed `Term` and drains it.
 Both modes run on one thread with no Shell actor, no `WorkspaceView` inbox and no frames.
+The client joins outputs through `src/client/feeds.ms` and resets a pane on a mid-stream Screen
+the way `Shell.reseed` does. After a reseed, an echo counts once the VT shows the key at the cursor.
+`*_split` rows time each client echo up to the start of the read batch that carries it (`to_client`),
+beside the client thread's busy share and its longest batch.
 So the A/B difference is the server, the transport and the second parse.
 Echo is timed from the write until the client VT has parsed the echoed byte of `cat` under
 `stty raw -echo`, 500 keys, 5 ms apart. CPU is `getrusage(RUSAGE_SELF)`. Server CPU is the
@@ -41,3 +45,36 @@ Read with care:
 - Attach time includes `attach`'s 5 ms poll (`POLL_MS`, src/client/link.ms), so about 10 ms of it is the poll floor.
 - In-process echo under `yes` sits at the 8 ms drain budget on macOS (`DRAIN_BUDGET_MS`, src/controller/term.ms).
 - With 500 keys per rep, the p99.9 of one rep is its max. The pooled value uses 1500 keys.
+
+## After the server and client fixes: merge a097bec (tree 246dc08) on m1m, 81970db (tree afb9301) on rtx, 3 reps
+
+Targets: client/server adds < 1 ms echo at p50 and < 8 ms at p99.9, and flood within 10% of in-process.
+
+| measure | macOS in-process | macOS client/server | Linux in-process | Linux client/server |
+|---|---|---|---|---|
+| echo idle p50 / p99.9 ms (pooled) | 0.08 / 6.68 | 0.38 / 10.17 | 0.16 / 0.29 | 0.20 / 0.43 |
+| echo under `cat` loop p50 / p99.9 ms | 0.74 / 1.10 | 0.14 / 0.29, no reseed (see below) | 0.09 / 5.75 | 0.74 / 77.9, 77-137 reseeds per 500 keys |
+| echo under `yes` p50 / p99.9 ms | 8.59 / 9.57 | 1124 / 2648, 199-252 reseeds | 0.10 / 0.87 | 0.87 / 33.4, no reseed |
+| ^C during `yes` until prompt, ms | 18.1 [17.6..18.9] | 68 [37..170] | 5.7 [5.6..5.8] | 6.0 [5.8..16.8] |
+| flood MB/s | 127 [117..144] | 88.9 [76.9..95.7] | 196 [195..196] | 172.5 [168..182] |
+| CPU ms/MB | 9.2 | client 5.8, server 16.9 | 8.7 | client 2.2, server 8.9 |
+| pty-only ceiling MB/s | 101 [92..171] | | 197 [196..288] | |
+| attach after `seq 1 50000`: ms, Native / VtBytes | | 15.3 / 34.8 | | 12.2 / 13.7 |
+
+No link was cut on either host.
+
+Where loaded echo time goes. In every loaded run, `to_client` p99.9 equals the echo p99.9 (Linux `cat`
+77.91 / 77.91; macOS `yes` 2647.5 / 2647.7), so the time is spent before the client handles the read.
+Meanwhile the client is busy only 36-41% on Linux and 2% on macOS under `yes`, and its longest batch
+is 6-15 ms on Linux, so client queueing explains at most one batch of it. The rest is in the server or the
+socket before the client reads it.
+
+Drain-budget probe: `DRAIN_BUDGET_MS` 8 → 1 in src/controller/term.ms, uncommitted, rtx, 2 reps, 8 MB.
+- Client echo p99.9 fell from 77.9 to 27.2 ms under `cat` and from 33.4 to 17.5 ms under `yes`.
+- Reseeds fell to 0, while `cat` p50 rose to 1.9 ms.
+- So a flood pane's drain holding the next pump explains part of the tail, not all of it.
+
+Not explained:
+- macOS client echo under `cat` beats in-process, with 1-batch-sized reads (longest 0.14 ms). That
+  suggests little of the `cat` flood reaches the client there; not traced.
+- On macOS under `yes`, nearly every key comes back inside a reseed after about 1 s.

@@ -1,6 +1,6 @@
 #!/bin/sh
-# Builds Haro.app with the server bundles a window uploads: this machine's, built here, and every
-# out/haro-server/<platform>/ another machine built from the same version.
+# Builds Haro.app with its server bundles: this machine's, which the window starts here, built here, and every
+# out/haro-server/<platform>/ another machine built from the same version, which a window uploads.
 set -e
 root="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-$root/out/app}"

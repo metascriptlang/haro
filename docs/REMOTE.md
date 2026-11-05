@@ -4,6 +4,30 @@
 so they survive a client that disconnects. It links no window, GPU or webview code and runs on a
 machine with no display.
 
+## On this machine
+
+The window is always a client of `haro-server`, on this machine as on another one; only the
+Windows build still runs its shells inside the window. When nothing answers on the socket, the
+window runs `<servers>/<platform>/haro-server start`, where `<servers>` is the app's
+`Contents/Resources/servers` (or `servers/` beside the binary, or `HARO_SERVERS`) and `<platform>`
+comes from `uname -sm`; with no server there it says which path it looked for. A run from source
+builds the bundle first and names it:
+
+```sh
+sh scripts/buildServer.sh
+HARO_SERVERS="$PWD/out/haro-server" msc run src/app/haro.ms
+```
+
+A server left running by an older Haro keeps its shells. A window of the same protocol attaches to
+it whatever its build; one of another protocol attaches to nothing and says which program holds
+the socket (its path and pid, read from the socket's peer) and how to stop it once its shells are
+done, `<that haro-server> stop`. Nothing stops it for the user. The proxy below does the same
+check before it bridges, so a remote window gets the same message.
+
+`--smoke`, `--smoke-panes`, `--typing`, `--flood`, `--smoke-attach` and `--smoke-hosts` start a
+server of their own on a private `HARO_SOCKET` and stop it when they end. `--shell` exists only
+on Windows; elsewhere the server's `command` in `config.ms` picks the shell.
+
 ## Over ssh
 
 The window reaches a remote machine with

@@ -18,6 +18,7 @@ import { vtBuild } from "../vt/snapshot";
 import { gridSize } from "../grid/size";
 import { TermError } from "../controller/term";
 import { closed } from "../controller/shell";
+import { predicts } from "../controller/predict";
 import { Axis, Pane, PaneId, panes } from "../workspace/tree";
 import { HostId, HostPane, HostTab } from "../workspace/hosted";
 import { Message, MessageKind } from "../server/protocol";
@@ -169,6 +170,7 @@ export interface LinkedHost {
 	inbox: Message[];
 	receiving: boolean;
 	rttMs: float64 | null;
+	predicting: boolean;
 }
 
 struct HostCommand {
@@ -422,6 +424,7 @@ function made(
 		inbox: [],
 		receiving: false,
 		rttMs: null,
+		predicting: false,
 	};
 }
 
@@ -1378,6 +1381,7 @@ export async function attachHost(
 	}
 	link.fit(v.cols, v.rows);
 	h.rttMs = null;
+	h.predicting = false;
 	if (h.dial !== null) { link.measure((ms: float64): void => { v.measured(h, link, ms); }); }
 	link.listen(
 		(ms: Message[]): void => { v.received(h, link, ms); },
@@ -1398,6 +1402,8 @@ function measured(this v: WorkspaceView, h: LinkedHost, link: ServerLink, ms: fl
 	if (h.link !== link) { return; }
 	const was = latencyText(h.rttMs);
 	h.rttMs = ms;
+	h.predicting = predicts(v.config.remotePrediction, ms, h.predicting);
+	for (const pane of h.panes.running) { pane.shell.predict(h.predicting, ms); }
 	if (latencyText(ms) != was) { v.showHosts(); }
 }
 
@@ -1565,6 +1571,8 @@ async function receive(this v: WorkspaceView, h: LinkedHost, m: Message): Promis
 		await v.applyEvents(h, [m.event]);
 	} else if (m.kind == MessageKind.Exited) {
 		v.exited({ host: h.id, pane: m.pane }, m.code);
+	} else if (m.kind == MessageKind.Unseen) {
+		h.panes.paneOf(m.pane)?.shell.hideTyping(m.unseen);
 	} else if (m.kind == MessageKind.Failed) {
 		v.host.report.note(`pane ${m.pane as int32}: ${m.reason}`);
 		v.shellFailed(m.reason);

@@ -6,9 +6,12 @@ import {
 	Rgb,
 	ShellMark,
 	ShellStep,
+	Underline,
 	geometryOf,
+	lines,
 	writeText,
 } from "../vt/vt";
+import { predict } from "./predict";
 import { View, fitRows, open, paint, text } from "../app/frame";
 import { RowNote } from "../grid/lines";
 import {
@@ -18,6 +21,7 @@ import {
 	sendReplies,
 	shutdown,
 	drain,
+	predictTyped,
 	pumpFrame,
 } from "./term";
 import {
@@ -520,5 +524,58 @@ test "a failed decoration pass keeps the tints on screen and is retried by the n
 		assert t.decor.tints[0] !== null;
 		assert t.pumpFrame().ok;
 		assert !t.decor.stale;
+	}).ok;
+}
+
+function lineAt(f: Frame, y: int32): string {
+	const rows = f.rows;
+	if (rows === null) { return "<none>"; }
+	for (const r of rows.rows) {
+		if (r.y == y) { return r.line.text; }
+	}
+	return "<unchanged>";
+}
+
+function underlined(f: Frame, y: int32): int32 {
+	const rows = f.rows;
+	if (rows === null) { return 0; }
+	let count: int32 = 0;
+	for (const r of rows.rows) {
+		if (r.y != y) { continue; }
+		for (const run of r.line.runs) {
+			if (run.underline == Underline.Single) { count += run.units; }
+		}
+	}
+	return count;
+}
+
+test "a predicted key is drawn underlined past the cursor without entering the VT, and a wrong echo leaves no trace" {
+	assert onFresh("$ ", (t: Term, sink: Sink): void => {
+		t.decor.ahead.predict(true, 100);
+		assert t.pumpFrame().ok;
+		t.predictTyped("a".asBytes());
+		t.decor.ahead.confirmed = t.decor.ahead.epoch;
+		const ahead = t.pumpFrame();
+		assert ahead.ok;
+		if (ahead.ok) {
+			assert lineAt(ahead.value, 0) == "$ a", lineAt(ahead.value, 0);
+			assert underlined(ahead.value, 0) == 1;
+			assert ahead.value.cursor?.x == 3;
+		}
+		const s = t.session;
+		assert s !== null;
+		if (s !== null) {
+			const vtLines = s.vt.lines();
+			assert vtLines.ok && vtLines.value[0].trimEnd() == "$", vtLines.ok ? vtLines.value[0] : "";
+			s.vt.writeText("b");
+		}
+		const wrong = t.pumpFrame();
+		assert wrong.ok;
+		if (wrong.ok) {
+			assert lineAt(wrong.value, 0) == "$ b", lineAt(wrong.value, 0);
+			assert underlined(wrong.value, 0) == 0;
+			assert wrong.value.cursor?.x == 3;
+		}
+		assert t.decor.ahead.misses == 1;
 	}).ok;
 }

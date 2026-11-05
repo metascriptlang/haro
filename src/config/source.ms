@@ -6,6 +6,7 @@ import { homeDir } from "std/os";
 import { changeStamp, ensureDir, exists, readDir, readFile, remove, rename, writeFile } from "std/fs";
 import { dirname, isAbsolute, relative } from "std/fs/path";
 import { Config, DividerStyle, PaneCwd, SidebarSide, defaults, parse } from "./config";
+import { Predicting } from "../controller/predict";
 import { Action } from "../input/bindings";
 import { CommandDone, Rgb } from "../vt/vt";
 import { RowNote, RowTint } from "../grid/lines";
@@ -375,7 +376,7 @@ test "a config typed with HaroConfig sets the pane, sidebar and server fields an
 		`\tdividerStyle: "line", focusedDividerColor: "#7aa2f7", paneGap: 2, paneTitle: "none",\n` +
 		`\tpaneResizeStep: 4, sidebarPosition: "right", sidebarVisible: false, sidebarWidth: 30,\n` +
 		`\tconfirmClose: false, newPaneCwd: "start", serverTailnet: true, serverTailnetPort: 9001,\n` +
-		`\tremoteHosts: [{ label: "build", address: "me@build" }],\n` +
+		`\tremoteHosts: [{ label: "build", address: "me@build" }], remotePrediction: "off",\n` +
 		`\tkeybinds: [{ keys: "ctrl+shift+backslash", action: "new_tab_on_host" }],\n};\n`;
 	assert writeFile(path, config).ok;
 	const typed = evaluate(path, dir, `${cwd()}/assets/haro`, INSTALLED);
@@ -391,6 +392,7 @@ test "a config typed with HaroConfig sets the pane, sidebar and server fields an
 	assert c.value.serverTailnet && c.value.serverTailnetPort == 9001;
 	assert c.value.remoteHosts.length == 1 && c.value.remoteHosts[0].label == "build";
 	assert c.value.remoteHosts[0].address == "me@build";
+	assert c.value.remotePrediction == Predicting.Off;
 	assert c.value.keybinds[0].action == Action.NewTabOnHost;
 }
 

@@ -53,7 +53,8 @@ import {
 	wheel,
 	write,
 } from "./io";
-import { OpenPty, Tee, TermError, busy, fresh, openTerm, shownSeq } from "./term";
+import { OpenPty, Tee, TermError, busy, fresh, openTerm, predictTyped, shownSeq } from "./term";
+import { heardOutput, hide, predict } from "./predict";
 
 export struct Snapshot {
 	bytes: Vec<uint8>;
@@ -96,6 +97,13 @@ function openerOf(this remote: RemotePty): OpenPty {
 	return (cols: int32, rows: int32): Result<Pty, PtyError> => {
 		return Result.ok(remote.asPty());
 	};
+}
+
+function takenFrom(remote: RemotePty | null, io: Io | null): Vec<uint8> {
+	if (remote === null) { return []; }
+	let got = remote.takeTyped();
+	io?.term.predictTyped(got);
+	return move got;
 }
 
 export actor Shell {
@@ -151,7 +159,11 @@ export actor Shell {
 		const io = this.io;
 		if (remote === null || io === null) { return; }
 		if (!remote.feed(first, last, bytes)) { io.outOfOrder(); }
+		io.term.decor.ahead.heardOutput();
 	}
+
+	predict(enabled: boolean, rttMs: float64): void { this.io?.term.decor.ahead.predict(enabled, rttMs); }
+	hideTyping(unseen: boolean): void { this.io?.term.decor.ahead.hide(unseen); }
 
 	reseed(seed: Seed): void {
 		const remote = this.remote;
@@ -175,25 +187,19 @@ export actor Shell {
 	}
 
 	typed(): Vec<uint8> {
-		const remote = this.remote;
-		if (remote === null) { return []; }
-		let got = remote.takeTyped();
+		let got = takenFrom(this.remote, this.io);
 		return move got;
 	}
 
 	keyTyped(k: KeyEvent, time: float64): Vec<uint8> {
 		this.io?.key(k, time);
-		const remote = this.remote;
-		if (remote === null) { return []; }
-		let got = remote.takeTyped();
+		let got = takenFrom(this.remote, this.io);
 		return move got;
 	}
 
 	textTyped(typed: string, time: float64): Vec<uint8> {
 		this.io?.text(typed, time);
-		const remote = this.remote;
-		if (remote === null) { return []; }
-		let got = remote.takeTyped();
+		let got = takenFrom(this.remote, this.io);
 		return move got;
 	}
 

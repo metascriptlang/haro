@@ -163,6 +163,7 @@ export interface HaroConfig {
 	serverTailnet?: boolean;
 	serverTailnetPort?: int32;
 	remoteHosts?: RemoteHost[];
+	remotePrediction?: "auto" | "on" | "off";
 	onKey?: (e: KeyPress) => KeyAnswer;
 	onPrompt?: (e: Prompt) => void;
 	onCommandDone?: (e: CommandDone) => void;

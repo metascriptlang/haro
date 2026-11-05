@@ -5,6 +5,7 @@ import { Action, Keybind, Screen, actionNames, actionNamed, keybind } from "../i
 import { PARTICLE_DENSITY } from "../term/trail";
 import { KeyMod, OptionAsAlt, modSet } from "../keys/keys";
 import { destinationOf } from "../client/destination";
+import { Predicting } from "../controller/predict";
 
 export enum StartKind {
 	Inherit,
@@ -83,6 +84,7 @@ export struct Config {
 	serverTailnet: boolean;
 	serverTailnetPort: int32;
 	remoteHosts: Vec<RemoteHost>;
+	remotePrediction: Predicting;
 }
 
 const POINTS_PER_INCH: float64 = 72;
@@ -155,6 +157,7 @@ export function defaults(): Config {
 		serverTailnet: false,
 		serverTailnetPort: SERVER_TAILNET_PORT,
 		remoteHosts: [],
+		remotePrediction: Predicting.Auto,
 	};
 }
 
@@ -301,6 +304,15 @@ function sidebarSideOf(name: string): Result<SidebarSide, string> {
 		"left" => Result.ok(SidebarSide.Left),
 		"right" => Result.ok(SidebarSide.Right),
 		_ => Result.err(`sidebarPosition: "${name}" must be left or right`),
+	};
+}
+
+function predictingOf(name: string): Result<Predicting, string> {
+	return match (name) {
+		"auto" => Result.ok(Predicting.Auto),
+		"on" => Result.ok(Predicting.On),
+		"off" => Result.ok(Predicting.Off),
+		_ => Result.err(`remotePrediction: "${name}" must be auto, on or off`),
 	};
 }
 
@@ -547,6 +559,9 @@ export function parse(json: string): Result<Config, string> {
 				c.serverTailnetPort = v.intVal as int32;
 			},
 			"remoteHosts" => { if (given) { c.remoteHosts = try readRemoteHosts(v, key); } },
+			"remotePrediction" => {
+				if (given) { c.remotePrediction = try predictingOf(try readString(v, key)); }
+			},
 			_ => { return Result.err(`unknown config field "${key}"`); },
 		}
 	}
@@ -606,6 +621,16 @@ test "the pane, sidebar and close fields a config gives replace the defaults" {
 	assert c.value.sidebarWidth == 30;
 	assert !c.value.confirmClose;
 	assert c.value.newPaneCwd == PaneCwd.Start;
+}
+
+test "remote prediction is auto unless the config turns it on or off" {
+	const unset = parse("{}");
+	assert unset.ok && unset.value.remotePrediction == Predicting.Auto;
+	const on = parse(`{"remotePrediction":"on"}`);
+	assert on.ok && on.value.remotePrediction == Predicting.On;
+	const off = parse(`{"remotePrediction":"off"}`);
+	assert off.ok && off.value.remotePrediction == Predicting.Off;
+	assert refusal(`{"remotePrediction":"always"}`) == `remotePrediction: "always" must be auto, on or off`;
 }
 
 test "the server listens on the tailnet only when the config turns it on, at its port" {

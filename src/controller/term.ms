@@ -42,6 +42,7 @@ import {
 	relitRows,
 } from "./rows";
 import { Mark } from "./mark";
+import { typed as aheadTyped } from "./predict";
 import { holdsButton } from "./mouseButton";
 import { copyInto } from "../pty/bytes";
 import { MAX_SCREEN_BYTES } from "../server/protocol";
@@ -422,6 +423,13 @@ export function pumpFrame(this t: Term): Result<Frame, TermError> {
 		notifications: events.notifications,
 		shell: events.shell,
 	});
+}
+
+export function predictTyped(this t: Term, bytes: Readonly<Span<uint8>>): void {
+	const s = t.session;
+	if (s === null || bytes.length == 0) { return; }
+	const at = s.vt.cursor();
+	t.decor.ahead.aheadTyped(bytes, at.ok ? at.value : null, t.cols, s.vt.painted.alternate, t.now());
 }
 
 export function inkCursor(this t: Term, ink: CellInk | null): Result<FrameRows, TermError> {

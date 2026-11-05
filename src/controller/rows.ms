@@ -1,5 +1,6 @@
 import { CellInk, GridLine, RowNote, RowTint, cellOnRow, line } from "../grid/lines";
 import { PlanKind, plan } from "../screen/plan";
+import { Ahead, Overlay, cursorAhead, idle, overlaid, overlayAt, settle } from "./predict";
 import {
 	Cursor,
 	Rgb,
@@ -30,6 +31,7 @@ export struct Shown {
 	ink: CellInk | null;
 	tint: RowTint | null;
 	note: RowNote | null;
+	ahead: Overlay | null;
 }
 
 export struct Decoration {
@@ -53,10 +55,11 @@ export interface Decor {
 	tints: Vec<RowTint | null>;
 	notes: Vec<RowNote | null>;
 	stale: boolean;
+	ahead: Ahead;
 }
 
 export function empty(this typeof Decor): Decor {
-	return { decorations: [], annotations: [], tints: [], notes: [], stale: false };
+	return { decorations: [], annotations: [], tints: [], notes: [], stale: false, ahead: Ahead.idle() };
 }
 
 export function decorate(this d: Decor, decoration: Decoration): void {
@@ -159,7 +162,7 @@ export function none(this typeof FrameRows): FrameRows {
 
 export function fitShown(this ref shown: Vec<Shown>, rows: int32): void {
 	while ((shown.length as int32) < rows) {
-		shown.push({ cell: null, ink: null, tint: null, note: null });
+		shown.push({ cell: null, ink: null, tint: null, note: null, ahead: null });
 	}
 	while ((shown.length as int32) > rows) { shown.pop(); }
 }
@@ -176,9 +179,10 @@ function rowOf(
 	const cell = cursor.cellOnRow(row.y);
 	const tint = decor.tintAt(row.y);
 	const note = decor.noteAt(row.y);
-	const built = row.line(cell, ink.inkOn(cell), SELECTION, background, tint, note);
+	const ahead = decor.ahead.overlayAt(row.y);
+	const built = row.overlaid(ahead).line(cell, ink.inkOn(cell), SELECTION, background, tint, note);
 	if (!built.ok) { return Result.err(FrameError.LineFailed); }
-	shown[row.y] = { cell: cell, ink: ink.inkOn(cell), tint: tint, note: note };
+	shown[row.y] = { cell: cell, ink: ink.inkOn(cell), tint: tint, note: note, ahead: ahead };
 	return Result.ok({ y: row.y, line: move built.value });
 }
 
@@ -196,7 +200,7 @@ function relight(
 		const cell = cursor.cellOnRow(y);
 		const was = shown[y];
 		const same = was.cell == cell && was.ink == ink.inkOn(cell) &&
-			was.tint == decor.tintAt(y) && was.note == decor.noteAt(y);
+			was.tint == decor.tintAt(y) && was.note == decor.noteAt(y) && was.ahead == decor.ahead.overlayAt(y);
 		if (!same) {
 			const built = try rowOf(shown, vt.painted.rows[i], cursor, ink, background, decor);
 			out.push(move built);
@@ -215,9 +219,14 @@ export function relitRows(
 	if (colors === null || shown.length != vt.painted.rows.length) { return Result.ok(FrameRows.none()); }
 	const at = vt.cursor();
 	if (!at.ok) { return Result.err(FrameError.CursorFailed); }
+	const cursor = decor.ahead.cursorAhead(at.value, vt.width());
 	let rows: Vec<RowUpdate> = [];
-	try relight(rows, shown, vt, at.value, ink, colors.bg, decor);
+	try relight(rows, shown, vt, cursor, ink, colors.bg, decor);
 	return Result.ok({ scrolled: 0, rows: rows, background: colors.bg });
+}
+
+function width(this vt: Vt): int32 {
+	return vt.painted.rows.length > 0 ? vt.painted.rows[0].cells.length as int32 : 0;
 }
 
 export struct Planned {
@@ -239,7 +248,8 @@ export function planRows(
 	}
 	const at = vt.cursor();
 	if (!at.ok) { return Result.err(FrameError.CursorFailed); }
-	const cursor = at.value;
+	decor.ahead.settle(vt.painted.rows, at.value, vt.painted.alternate, performance.now());
+	const cursor = decor.ahead.cursorAhead(at.value, vt.width());
 	const p = planned.value;
 	for (let i = 0; i < p.scrolled; i++) { shown.push(shown.shift()); }
 	let rows: Vec<RowUpdate> = [];

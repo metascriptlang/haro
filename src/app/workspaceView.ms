@@ -448,6 +448,11 @@ export function shownHost(this v: WorkspaceView): LinkedHost {
 	return v.hostOf(v.shown()) ?? v.primary();
 }
 
+function show(this v: WorkspaceView, id: HostId): void {
+	v.setShown(id);
+	flush();
+}
+
 function labelOf(this v: WorkspaceView, h: LinkedHost): string {
 	return h.label == "" ? LOCAL_LABEL : h.label;
 }
@@ -760,7 +765,7 @@ function follow(this v: WorkspaceView, h: LinkedHost): void {
 	const pending = v.pendingShow;
 	if (pending === null || !(pending == h.id) || h.w.tabs.length == 0) { return; }
 	v.pendingShow = null;
-	v.setShown(h.id);
+	v.show(h.id);
 }
 
 function forget(this v: WorkspaceView, id: HostPane): void {
@@ -902,7 +907,7 @@ function withTabs(this v: WorkspaceView): LinkedHost | null {
 
 export function redraw(this v: WorkspaceView): void {
 	const h = v.withTabs();
-	if (h !== null && !(h.id == v.shown())) { v.setShown(h.id); }
+	if (h !== null && !(h.id == v.shown())) { v.show(h.id); }
 	const tab = h?.w.activeTab() ?? null;
 	if (h === null || tab === null) {
 		v.showHosts();
@@ -1080,7 +1085,7 @@ export function selectTab(this v: WorkspaceView, id: HostTab): void {
 	for (let i: int32 = 0; i < h.w.tabs.length; i++) {
 		if (h.w.tabs[i].id == id.tab) {
 			if (!(h.id == v.shown())) {
-				v.setShown(h.id);
+				v.show(h.id);
 				v.redraw();
 			}
 			v.sendTo(h, { kind: CommandKind.GotoTab, index: i });
@@ -1135,7 +1140,7 @@ export function newTabOn(this v: WorkspaceView, id: HostId): void {
 	}
 	if (h.w.tabs.length > 0) {
 		if (!(h.id == v.shown())) {
-			v.setShown(h.id);
+			v.show(h.id);
 			v.redraw();
 		}
 	} else {

@@ -509,6 +509,7 @@ test "two servers' tabs list grouped by host, typing reaches its own server, and
 
 	v.selectTab({ host: b.id, tab: b.w.tabs[0].id });
 	assert v.shownHost().id == b.id;
+	assert v.tabs()[1].tabs[0].active && !v.tabs()[0].tabs[0].active;
 	v.windowAction(Action.SplitRight);
 	assert await until((): boolean => t.remote.panes.length == 3 && b.panes.running.length == 3);
 	assert t.local.panes.length == 2;

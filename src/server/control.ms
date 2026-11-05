@@ -8,7 +8,7 @@ import {
 	encode,
 	push,
 } from "./protocol";
-import { CloseReason, Connection, connectToUnix } from "./transport";
+import { CloseReason, Connection, PeerProgram, connectToUnix, peerProgram } from "./transport";
 
 const CONNECT_MS: int32 = 1000;
 const ANSWER_MS: int32 = 5000;
@@ -56,10 +56,10 @@ export function nobody(socket: string): string {
 	return `no Haro server answers at ${socket}`;
 }
 
-async function greeted(socket: string): Promise<Result<Asker, string>> {
-	const dialed = await connectToUnix(socket, CONNECT_MS);
-	if (!dialed.ok) { return Result.err(nobody(socket)); }
-	const a = new Asker(dialed.value);
+async function dialed(socket: string): Promise<Asker | null> {
+	const got = await connectToUnix(socket, CONNECT_MS);
+	if (!got.ok) { return null; }
+	const a = new Asker(got.value);
 	a.conn.start((chunk: uint8[]): void => {
 		const got = a.decoder.push(chunk);
 		if (!got.ok) {
@@ -69,9 +69,15 @@ async function greeted(socket: string): Promise<Result<Asker, string>> {
 		for (const m of got.value) { a.got.push(m); }
 	}, (why: CloseReason): void => { a.closed = true; });
 	a.say({ kind: MessageKind.Hello, version: PROTOCOL_VERSION, role: Role.Cli, cols: 0, rows: 0, vtBuild: "" });
-	const answered = await a.waitFor((): boolean => a.got.length > 0 || a.closed || a.broken != "", ANSWER_MS);
+	const _answered = await a.waitFor((): boolean => a.got.length > 0 || a.closed || a.broken != "", ANSWER_MS);
+	return a;
+}
+
+async function greeted(socket: string): Promise<Result<Asker, string>> {
+	const a = await dialed(socket);
+	if (a === null) { return Result.err(nobody(socket)); }
 	if (a.broken != "") { return Result.err(`the server at ${socket} sent a malformed stream: ${a.broken}`); }
-	if (!answered || a.got.length == 0) {
+	if (a.got.length == 0) {
 		a.conn.close();
 		return Result.err(`the server at ${socket} did not answer Hello`);
 	}
@@ -118,4 +124,29 @@ export async function askStop(socket: string): Promise<Result<int32, string>> {
 		return Result.err(`the server ${pid} at ${socket} was asked to stop and still runs after ${STOP_MS / 1000} s`);
 	}
 	return Result.ok(pid);
+}
+
+export function otherVersionAdvice(socket: string, reason: string, peer: PeerProgram | null): string {
+	const said = `A Haro server of another version answers at ${socket} and keeps its shells (${reason}).`;
+	if (peer === null || peer.path == "") {
+		return `${said} Close its shells and stop it with the Haro it came from, then connect again.`;
+	}
+	if (peer.path.endsWith("/haro-server")) {
+		return `${said} Close its shells and run ${peer.path} stop, then connect again.`;
+	}
+	return `${said} It is ${peer.path}, pid ${peer.pid}: close its shells and quit it, then connect again.`;
+}
+
+export async function otherVersion(socket: string): Promise<string | null> {
+	const a = await dialed(socket);
+	if (a === null) { return null; }
+	const first: Message | null = a.got.length > 0 ? a.got[0] : null;
+	if (first !== null && first.kind == MessageKind.Refused) {
+		const peer = peerProgram(a.conn.fd);
+		a.conn.close();
+		return otherVersionAdvice(socket, first.reason, peer);
+	}
+	a.say({ kind: MessageKind.Bye });
+	a.conn.finish();
+	return null;
 }

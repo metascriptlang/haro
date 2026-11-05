@@ -1,8 +1,9 @@
 import { removeAll } from "std/fs";
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
-import { askStatus, askStop, answeringPid, nobody } from "./control";
-import { MAX_SCREEN_BYTES } from "./protocol";
+import { askStatus, askStop, answeringPid, nobody, otherVersion, otherVersionAdvice } from "./control";
+import { MAX_SCREEN_BYTES, MessageKind, encode } from "./protocol";
+import { CloseReason, Connection, listenUnix } from "./transport";
 import { Server, start } from "./serve";
 
 when (!windows) {
@@ -56,4 +57,40 @@ when (!windows) {
 		const stopped = await askStop(socket);
 		assert !stopped.ok && stopped.error == nobody(socket);
 	}
+
+	test "a server of another protocol is named by its program and pid, a current one is not" {
+		const live = socketIn("current");
+		const _s = await serving(live);
+		assert await otherVersion(live) === null;
+		const stopped = await askStop(live);
+		assert stopped.ok, stopped.ok ? "" : stopped.error;
+		const _gone = removeAll(live.slice(0, live.lastIndexOf("/")));
+		const old = socketIn("old");
+		const refusal = encode({ kind: MessageKind.Refused, reason: "protocol version 2 refused: this server speaks 1" });
+		assert refusal.ok;
+		const listener = listenUnix(old, {
+			accepted: (c: Connection): void => {
+				c.start((chunk: uint8[]): void => {
+					if (refusal.ok) { const _sent = c.send(refusal.value); }
+					c.finish();
+				}, (why: CloseReason): void => {});
+			},
+			failed: (): void => {},
+		});
+		assert listener.ok;
+		const said = await otherVersion(old);
+		assert said !== null && said.includes("this server speaks 1") && said.includes(`pid ${getpid()}`), said ?? "null";
+		if (listener.ok) { listener.value.close(); }
+		const _removed = removeAll(old.slice(0, old.lastIndexOf("/")));
+	}
+}
+
+test "the advice names the stop command of a haro-server, and only asks to quit another program" {
+	const reason = "protocol version 2 refused: this server speaks 1";
+	const server = otherVersionAdvice("/s", reason, { pid: 7, path: "/h/.haro/server/abc/haro-server" });
+	assert server.endsWith("run /h/.haro/server/abc/haro-server stop, then connect again."), server;
+	const app = otherVersionAdvice("/s", reason, { pid: 7, path: "/A/Haro.app/Contents/MacOS/haro" });
+	assert app.includes("It is /A/Haro.app/Contents/MacOS/haro, pid 7: close its shells and quit it"), app;
+	const unknown = otherVersionAdvice("/s", reason, null);
+	assert unknown.startsWith(`A Haro server of another version answers at /s and keeps its shells (${reason}).`);
 }

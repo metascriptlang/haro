@@ -1,5 +1,6 @@
 import { CloseReason, Connection, connectToUnix } from "./transport";
 import { MessageKind, encode } from "./protocol";
+import { otherVersion } from "./control";
 
 when (!windows) {
 	@include("./pump.h");
@@ -72,6 +73,13 @@ export async function proxy(socket: string, startServer: () => Promise<boolean>)
 		if (!(await startServer())) { return Result.err(`no Haro server answered at ${socket} and none could be started`); }
 		dialed = await connectToUnix(socket, CONNECT_MS);
 		if (!dialed.ok) { return Result.err(`the Haro server started but does not answer at ${socket}`); }
+	}
+	const other = await otherVersion(socket);
+	if (other !== null) {
+		dialed.value.close();
+		const said = encode({ kind: MessageKind.Refused, reason: other });
+		if (said.ok) { const _told = writeAll(STDOUT, said.value); }
+		return Result.err(other);
 	}
 	return await bridge(dialed.value, STDIN, STDOUT);
 }

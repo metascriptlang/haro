@@ -90,11 +90,68 @@ export function socketPath(): string {
 	}
 }
 
+export struct PeerProgram {
+	pid: int32;
+	path: string;
+}
+
+when (macos) {
+	@include("sys/un.h");
+	@include("libproc.h");
+
+	extern const SOL_LOCAL: int32 from "SOL_LOCAL";
+	extern const LOCAL_PEERPID: int32 from "LOCAL_PEERPID";
+	extern const PROC_PIDPATHINFO_MAXSIZE: int32 from "PROC_PIDPATHINFO_MAXSIZE";
+	extern function getsockopt(fd: int32, level: int32, name: int32, value: Ptr<int32>, ref len: uint32): int32;
+	extern function proc_pidpath(pid: int32, buf: Ptr<uint8>, size: uint32): int32;
+
+	function peerPid(fd: int32): int32 {
+		let pid: Vec<int32> = [0];
+		let len: uint32 = sizeof int32 as uint32;
+		if (getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, pid as Span<int32> as Ptr<int32>, len) != 0) { return 0; }
+		return pid[0];
+	}
+
+	function programOf(pid: int32): string {
+		let path: Vec<uint8> = new Array(PROC_PIDPATHINFO_MAXSIZE);
+		const got = proc_pidpath(pid, path as Span<uint8> as Ptr<uint8>, PROC_PIDPATHINFO_MAXSIZE as uint32);
+		return got <= 0 ? "" : path.slice(0, got).asString();
+	}
+} else when (!windows) {
+	extern const SO_PEERCRED: int32 from "SO_PEERCRED";
+	extern function getsockopt(fd: int32, level: int32, name: int32, value: Ptr<int32>, ref len: uint32): int32;
+	extern function readlink(path: cstring, buf: Ptr<uint8>, size: uint64): int64;
+
+	const PROGRAM_PATH_BYTES: int32 = 4096;
+
+	function peerPid(fd: int32): int32 {
+		let cred: Vec<int32> = [0, 0, 0];
+		let len: uint32 = (3 * sizeof int32) as uint32;
+		if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, cred as Span<int32> as Ptr<int32>, len) != 0) { return 0; }
+		return cred[0];
+	}
+
+	function programOf(pid: int32): string {
+		let path: Vec<uint8> = new Array(PROGRAM_PATH_BYTES);
+		const got = readlink(`/proc/${pid}/exe`, path as Span<uint8> as Ptr<uint8>, PROGRAM_PATH_BYTES as uint64);
+		return got <= 0 ? "" : path.slice(0, got as int32).asString();
+	}
+}
+
 when (windows) {
 	export function peerAddress(fd: int32): string | null {
 		return null;
 	}
+
+	export function peerProgram(fd: int32): PeerProgram | null {
+		return null;
+	}
 } else {
+	export function peerProgram(fd: int32): PeerProgram | null {
+		const pid = peerPid(fd);
+		return pid <= 0 ? null : { pid: pid, path: programOf(pid) };
+	}
+
 	export function peerAddress(fd: int32): string | null {
 		let peer: PeerStorage = {};
 		let len: uint32 = sizeof PeerStorage as uint32;

@@ -91,7 +91,7 @@ test "the advice names the stop command of a haro-server, and only asks to quit 
 	const server = otherVersionAdvice("/s", reason, { pid: 7, path: "/h/.haro/server/abc/haro-server" });
 	assert server.endsWith("run /h/.haro/server/abc/haro-server stop, then connect again."), server;
 	const app = otherVersionAdvice("/s", reason, { pid: 7, path: "/A/Haro.app/Contents/MacOS/haro" });
-	assert app.includes("It is /A/Haro.app/Contents/MacOS/haro, pid 7: close its shells and quit it"), app;
+	assert app.includes("It is /A/Haro.app/Contents/MacOS/haro, pid 7: close its shells, end it with kill 7"), app;
 	const unknown = otherVersionAdvice("/s", reason, null);
 	assert unknown.startsWith(`A Haro server of another version answers at /s and keeps its shells (${reason}).`);
 }

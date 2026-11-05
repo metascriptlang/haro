@@ -138,7 +138,7 @@ export function otherVersionAdvice(socket: string, reason: string, peer: PeerPro
 	if (peer.path.endsWith("/haro-server")) {
 		return `${said} Close its shells and run ${peer.path} stop, then connect again.`;
 	}
-	return `${said} It is ${peer.path}, pid ${peer.pid}: close its shells and quit it, then connect again.`;
+	return `${said} It is ${peer.path}, pid ${peer.pid}: close its shells, end it with kill ${peer.pid}, then connect again.`;
 }
 
 export async function otherVersion(socket: string): Promise<string | null> {

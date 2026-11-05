@@ -142,7 +142,8 @@ function shownIn(this w: Watch, vt: Vt, arrivedAt: float64): Result<void, string
 		const under = row.slice(cursor.x, cursor.x + 1);
 		w.found = before == pattern || under == pattern;
 	} else {
-		w.found = row.includes(pattern) || above.includes(pattern);
+		const shown = pattern.trimEnd();
+		w.found = row.includes(shown) || above.includes(shown);
 	}
 	w.matched = 0;
 	if (w.found && w.arrivedAt < 0) { w.arrivedAt = arrivedAt; }

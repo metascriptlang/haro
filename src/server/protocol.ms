@@ -18,7 +18,7 @@ import {
 } from "../workspace/workspace";
 import { append } from "../pty/bytes";
 
-export const PROTOCOL_VERSION: uint32 = 1;
+export const PROTOCOL_VERSION: uint32 = 2;
 export const HEADER_BYTES: int32 = 5;
 export const MAX_PAYLOAD_BYTES: int32 = 64 * 1024 * 1024;
 export const MAX_TREE_DEPTH: int32 = 128;
@@ -53,6 +53,8 @@ export enum MessageKind {
 	Stop,
 	AskStatus,
 	Status,
+	Ping,
+	Pong,
 }
 
 const SCREEN_FIELDS_BYTES: int32 = 17;
@@ -94,6 +96,8 @@ export struct Message = match (kind: MessageKind) {
 	MessageKind.Stop => {},
 	MessageKind.AskStatus => {},
 	MessageKind.Status => { listeners: string[], clients: string[] },
+	MessageKind.Ping => { nonce: uint64, rttMicros: uint32 },
+	MessageKind.Pong => { nonce: uint64 },
 };
 
 export enum ProtocolError {
@@ -134,6 +138,8 @@ export const MESSAGE_KINDS: MessageKind[] = [
 	MessageKind.Stop,
 	MessageKind.AskStatus,
 	MessageKind.Status,
+	MessageKind.Ping,
+	MessageKind.Pong,
 ];
 export const ROLES: Role[] = [Role.Window, Role.Cli];
 export const SCREEN_FORMATS: ScreenFormat[] = [
@@ -427,6 +433,11 @@ function payload(this w: Writer, m: Message): void {
 	} else if (m.kind == MessageKind.Status) {
 		w.texts(m.listeners);
 		w.texts(m.clients);
+	} else if (m.kind == MessageKind.Ping) {
+		w.u64(m.nonce);
+		w.u32(m.rttMicros);
+	} else if (m.kind == MessageKind.Pong) {
+		w.u64(m.nonce);
 	}
 }
 
@@ -886,6 +897,15 @@ function message(
 			const listeners = try r.texts();
 			const clients = try r.texts();
 			Result.ok({ kind: MessageKind.Status, listeners: listeners, clients: clients })
+		},
+		MessageKind.Ping => {
+			const nonce = try r.u64();
+			const rttMicros = try r.u32();
+			Result.ok({ kind: MessageKind.Ping, nonce: nonce, rttMicros: rttMicros })
+		},
+		MessageKind.Pong => {
+			const nonce = try r.u64();
+			Result.ok({ kind: MessageKind.Pong, nonce: nonce })
 		},
 	};
 }

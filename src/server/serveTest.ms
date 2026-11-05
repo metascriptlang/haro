@@ -21,6 +21,7 @@ import { screenText } from "./screenRig";
 import { Server, ServerSetup, TailnetListen, enqueue, start, stop, tailnetListen } from "./serve";
 import { PeerInfo, TailnetAllow, TailnetError, TailnetFault, TailnetSelf } from "./tailnet";
 import { CloseReason, Connection, connectToTcp, connectToUnix } from "./transport";
+import { ServerLink } from "../client/link";
 
 when (!windows) {
 	const COLS: int32 = 80;
@@ -213,6 +214,8 @@ when (!windows) {
 	}
 
 	class Ended { code: int32 = -1; }
+
+	class Heard { rtts: float64[] = []; }
 
 	function ending(s: Server): Ended {
 		const ended = new Ended();
@@ -709,6 +712,32 @@ when (!windows) {
 		assert ended.code < 0;
 		const a = await attached(socket, vtBuild());
 		assert a.got[0].kind == MessageKind.Welcome;
+		await stopped(s, ended);
+		cleanUp(socket);
+	}
+
+	test "a client's ping is answered with a pong of its nonce, and a link turns pongs into a smoothed round trip" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const s = await serving(setupAt(socket, logged));
+		const ended = ending(s);
+		const p = await dial(socket);
+		say(p, cliHello());
+		say(p, { kind: MessageKind.Ping, nonce: 41, rttMicros: 42000 });
+		assert await until((): boolean => p.got.some((m: Message): boolean => m.kind == MessageKind.Pong && m.nonce == 41)),
+			kinds(p);
+		const conn = await connectToUnix(socket, 2000);
+		assert conn.ok;
+		if (conn.ok) {
+			const link = new ServerLink(conn.value);
+			link.begin();
+			link.send(cliHello());
+			const heard = new Heard();
+			link.measure((ms: float64): void => { heard.rtts.push(ms); });
+			assert await until((): boolean => heard.rtts.length > 0), logged.text;
+			assert link.rttMs !== null && heard.rtts[0] >= 0;
+			link.detach();
+		}
 		await stopped(s, ended);
 		cleanUp(socket);
 	}

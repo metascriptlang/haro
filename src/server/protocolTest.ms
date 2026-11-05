@@ -315,6 +315,8 @@ function messages(): Message[] {
 			listeners: ["unix /run/user/1000/haro/haro.sock", "tailnet 100.100.1.1:7681"],
 			clients: ["local", "person@example.com on build-1", "\u{e9}"],
 		},
+		{ kind: MessageKind.Ping, nonce: 18446744073709551615, rttMicros: 4294967295 },
+		{ kind: MessageKind.Pong, nonce: 7 },
 	];
 }
 
@@ -330,7 +332,7 @@ test "each decode table lists its enum in ordinal order" {
 	for (let i: int32 = 0; i < MESSAGE_KINDS.length; i++) {
 		assert MESSAGE_KINDS[i] as int32 == i;
 	}
-	assert MESSAGE_KINDS.length == (MessageKind.Status as int32) + 1;
+	assert MESSAGE_KINDS.length == (MessageKind.Pong as int32) + 1;
 	for (let i: int32 = 0; i < COMMAND_KINDS.length; i++) {
 		assert COMMAND_KINDS[i] as int32 == i;
 	}

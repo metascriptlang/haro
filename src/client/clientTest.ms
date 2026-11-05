@@ -8,7 +8,7 @@ import { vtBuild } from "../vt/snapshot";
 import { seededVt } from "../pty/remote";
 import { Axis, PaneId, panes } from "../workspace/tree";
 import { CommandKind, EventKind } from "../workspace/workspace";
-import { ServerLink, attach } from "./link";
+import { ServerLink, attach, smoothed } from "./link";
 import { FakeServer, startFake } from "./fakeServer";
 
 const WAIT_MS: float64 = 10000;
@@ -143,4 +143,10 @@ test "a pane's busy question is answered by the server, and a link that ends ans
 	assert await link.busy(1 as PaneId);
 	fake.close();
 	cleanUp(path);
+}
+
+test "the round trip starts at its first sample, then moves an eighth of the way to each new one" {
+	assert smoothed(null, 80) == 80;
+	assert smoothed(80, 160) == 90;
+	assert smoothed(90, 90) == 90;
 }

@@ -168,6 +168,7 @@ export interface LinkedHost {
 	draining: boolean;
 	inbox: Message[];
 	receiving: boolean;
+	rttMs: float64 | null;
 }
 
 struct HostCommand {
@@ -420,6 +421,7 @@ function made(
 		draining: false,
 		inbox: [],
 		receiving: false,
+		rttMs: null,
 	};
 }
 
@@ -809,6 +811,10 @@ function stateText(h: LinkedHost): string {
 	};
 }
 
+export function latencyText(rttMs: float64 | null): string {
+	return rttMs === null ? "" : `\u{b7} ${Math.round(rttMs)} ms`;
+}
+
 function reasonText(h: LinkedHost): string {
 	return h.reason == "" ? "" : ` (${h.reason})`;
 }
@@ -853,6 +859,7 @@ export function sidebarHosts(this v: WorkspaceView): SidebarHost[] {
 			id: h.id as int32,
 			label: v.labelOf(h),
 			state: stateText(h),
+			latency: h.state == LinkState.Connected ? latencyText(h.rttMs) : "",
 			reason: h.reason,
 			header: headed,
 			live: live(h),
@@ -1370,6 +1377,8 @@ export async function attachHost(
 		v.showHosts();
 	}
 	link.fit(v.cols, v.rows);
+	h.rttMs = null;
+	if (h.dial !== null) { link.measure((ms: float64): void => { v.measured(h, link, ms); }); }
 	link.listen(
 		(ms: Message[]): void => { v.received(h, link, ms); },
 		(why: string): void => { v.lost(h, link, why); },
@@ -1383,6 +1392,13 @@ export async function detachPanes(this v: WorkspaceView): Promise<void> {
 	h.state = LinkState.Offline;
 	h.reason = "detached";
 	await v.dropPanes(h);
+}
+
+function measured(this v: WorkspaceView, h: LinkedHost, link: ServerLink, ms: float64): void {
+	if (h.link !== link) { return; }
+	const was = latencyText(h.rttMs);
+	h.rttMs = ms;
+	if (latencyText(ms) != was) { v.showHosts(); }
 }
 
 async function dialHost(this v: WorkspaceView, h: LinkedHost): Promise<void> {

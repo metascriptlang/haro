@@ -15,6 +15,9 @@ import { WorkspaceCommand } from "../workspace/workspace";
 import { Layout, Screen, screenParts } from "./wire";
 
 const POLL_MS = 5;
+const PING_MS: int32 = 1000;
+const SMOOTHING: float64 = 0.125;
+const MAX_RTT_MICROS: float64 = 4294967295;
 
 interface BusyWait {
 	pane: PaneId;
@@ -23,6 +26,12 @@ interface BusyWait {
 
 function ignoreMessages(ms: Message[]): void {}
 function ignoreEnd(why: string): void {}
+function ignoreRtt(ms: float64): void {}
+
+export function smoothed(rttMs: float64 | null, sampleMs: float64): float64 {
+	if (rttMs === null) { return sampleMs; }
+	return rttMs + (sampleMs - rttMs) * SMOOTHING;
+}
 
 function closeText(reason: CloseReason): string {
 	return match (reason) {
@@ -41,6 +50,11 @@ export class ServerLink {
 	private handler: (ms: Message[]) => void = ignoreMessages;
 	private onEnd: (why: string) => void = ignoreEnd;
 	private busyWaits: BusyWait[] = [];
+	private onRtt: (ms: float64) => void = ignoreRtt;
+	private pinging: number | null = null;
+	private nonce: uint64 = 0;
+	private pingedAt: float64 = -1;
+	rttMs: float64 | null = null;
 	ended: string | null = null;
 
 	constructor(connection: Connection) { this.connection = connection; }
@@ -61,7 +75,7 @@ export class ServerLink {
 		}
 		const kept: Message[] = [];
 		for (const m of got.value) {
-			if (this.answeredBusy(m)) { continue; }
+			if (this.answeredBusy(m) || this.ponged(m)) { continue; }
 			if (this.listening) {
 				kept.push(m);
 			} else {
@@ -81,6 +95,41 @@ export class ServerLink {
 		return true;
 	}
 
+	ponged(m: Message): boolean {
+		if (m.kind != MessageKind.Pong) { return false; }
+		if (m.nonce != this.nonce || this.pingedAt < 0) { return true; }
+		const rtt = smoothed(this.rttMs, performance.now() - this.pingedAt);
+		this.pingedAt = -1;
+		this.rttMs = rtt;
+		this.onRtt(rtt);
+		return true;
+	}
+
+	measure(onRtt: (ms: float64) => void): void {
+		this.onRtt = onRtt;
+		if (this.pinging === null) { this.ping(); }
+	}
+
+	ping(): void {
+		this.pinging = null;
+		if (this.ended !== null) { return; }
+		if (this.pingedAt < 0) {
+			this.nonce += 1;
+			this.pingedAt = performance.now();
+			const rtt = this.rttMs ?? 0;
+			const micros = Math.round(Math.min(rtt * 1000, MAX_RTT_MICROS)) as uint32;
+			this.send({ kind: MessageKind.Ping, nonce: this.nonce, rttMicros: micros });
+		}
+		this.pinging = setTimeout((): void => { this.ping(); }, PING_MS);
+	}
+
+	quiet(): void {
+		const pinging = this.pinging;
+		if (pinging !== null) { clearTimeout(pinging); }
+		this.pinging = null;
+		this.onRtt = ignoreRtt;
+	}
+
 	unanswered(): void {
 		const waits = this.busyWaits;
 		this.busyWaits = [];
@@ -98,6 +147,7 @@ export class ServerLink {
 	end(why: string): void {
 		if (this.ended !== null) { return; }
 		this.ended = why;
+		this.quiet();
 		this.unanswered();
 		if (this.listening) { this.onEnd(why); }
 	}
@@ -149,6 +199,7 @@ export class ServerLink {
 		this.listening = false;
 		this.handler = ignoreMessages;
 		this.onEnd = ignoreEnd;
+		this.quiet();
 		this.unanswered();
 		this.send({ kind: MessageKind.Bye });
 		this.connection.finish();

@@ -31,6 +31,7 @@ export struct SidebarHost {
 	id: int32;
 	label: string;
 	state: string;
+	latency: string;
 	reason: string;
 	header: boolean;
 	live: boolean;
@@ -72,7 +73,8 @@ function keyOf(host: SidebarHost, kind: RowKind, id: int32): int64 {
 }
 
 function hostRow(host: SidebarHost, cols: int32): SidebarRow {
-	const text = fit(host.state == "" ? host.label : `${host.label} ${host.state}`, cols);
+	const status = host.state == "" ? host.latency : host.state;
+	const text = fit(status == "" ? host.label : `${host.label} ${status}`, cols);
 	const left = cols - text.length - 1;
 	const role = host.state == "refused"
 		? RowRole.Alert
@@ -222,7 +224,7 @@ function tab(id: int32, active: boolean, panes: SidebarPane[]): SidebarTab {
 }
 
 function host(id: int32, label: string, tabs: SidebarTab[]): SidebarHost {
-	return { id: id, label: label, state: "", reason: "", header: true, live: true, tabs: tabs };
+	return { id: id, label: label, state: "", latency: "", reason: "", header: true, live: true, tabs: tabs };
 }
 
 function rowsOf(tabs: SidebarTab[], cols: int32): SidebarRow[] {
@@ -360,4 +362,13 @@ test "an offline host shows its state and reason and dims its tabs, a refused on
 	no.state = "refused";
 	no.live = false;
 	assert sidebarRows([no], 30)[0].role == RowRole.Alert;
+}
+
+test "a connected host's row shows its round trip after its label, a state replaces it" {
+	let linked = host(1, "rtx", []);
+	linked.latency = "\u{b7} 42 ms";
+	assert sidebarRows([linked], 20)[0].text == "rtx \u{b7} 42 ms";
+	linked.state = "offline";
+	linked.live = false;
+	assert sidebarRows([linked], 20)[0].text == "rtx offline";
 }

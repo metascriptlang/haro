@@ -153,6 +153,7 @@ class Client {
 	rows: int32 = 0;
 	views: PaneView[] = [];
 	resyncQueued: boolean = false;
+	rttMs: float64 = 0;
 
 	constructor(conn: Connection, identity: string) {
 		this.conn = conn;
@@ -552,6 +553,9 @@ function received(this s: Server, c: Client, m: Message): void {
 	} else if (m.kind == MessageKind.Stop) {
 		s.log(`stop asked by ${c.identity}`);
 		s.stop(0);
+	} else if (m.kind == MessageKind.Ping) {
+		c.rttMs = (m.rttMicros as float64) / 1000;
+		s.sendTo(c, { kind: MessageKind.Pong, nonce: m.nonce });
 	} else {
 		s.refuse(c, `${m.kind.toString()} is a message only the server sends`);
 	}

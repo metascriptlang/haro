@@ -188,6 +188,13 @@ export function serversDir(): string {
 	return exists(beside) || !exists(bundled) ? beside : bundled;
 }
 
+export async function localServer(): Promise<Result<string, string>> {
+	const uname = try await run(["uname", "-sm"]);
+	const platform = uname.code == 0 ? platformOf(uname.out) : null;
+	if (platform === null) { return Result.err(`no Haro server is built for ${uname.out.trim()}`); }
+	return Result.ok(join(join(serversDir(), platform), "haro-server"));
+}
+
 export function platformOf(uname: string): string | null {
 	return match (uname.trim()) {
 		"Linux x86_64" => "linux-x64",

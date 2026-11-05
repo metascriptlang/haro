@@ -1,40 +1,29 @@
-import { execPath } from "std/process";
+import { exists } from "std/fs";
 import { Connection, connectToUnix } from "../server/transport";
 import { Dial, DialError, offline } from "./link";
-
-when (!windows) {
-	@include("./detached.h");
-	@compile("./detached.c");
-
-	extern function haroStartDetached(path: cstring, flag: cstring): int32;
-}
+import { localServer, run } from "./ssh";
 
 const CONNECT_TIMEOUT_MS: int32 = 2000;
-const RETRY_DELAYS_MS: int32[] = [25, 50, 100, 200, 400, 800, 1600];
 
-function startServer(): Result<void, string> {
-	when (windows) {
-		return Result.err("this window cannot start a Haro server on Windows yet");
-	} else {
-		if (execPath == "") {
-			return Result.err("the OS does not report this program's path to start its server");
-		}
-		const pid = haroStartDetached(execPath, "--server");
-		if (pid <= 0) { return Result.err(`starting ${execPath} --server failed (${-pid})`); }
-		return Result.ok(null);
+async function startServer(): Promise<Result<void, string>> {
+	const server = try await localServer();
+	if (!exists(server)) {
+		return Result.err(
+			`no Haro server at ${server}: build one with scripts/buildServer.sh and name out/haro-server with HARO_SERVERS`,
+		);
 	}
+	const started = try await run([server, "start"]);
+	if (started.code != 0) { return Result.err(`${server} start: ${started.out.trim()}`); }
+	return Result.ok(null);
 }
 
 export async function connectLocal(path: string): Promise<Result<Connection, string>> {
 	const first = await connectToUnix(path, CONNECT_TIMEOUT_MS);
 	if (first.ok) { return Result.ok(first.value); }
-	try startServer();
-	for (const delay of RETRY_DELAYS_MS) {
-		await sleepAsync(delay);
-		const again = await connectToUnix(path, CONNECT_TIMEOUT_MS);
-		if (again.ok) { return Result.ok(again.value); }
-	}
-	return Result.err(`the Haro server started but never answered at ${path}`);
+	const started = await startServer();
+	const again = await connectToUnix(path, CONNECT_TIMEOUT_MS);
+	if (again.ok) { return Result.ok(again.value); }
+	return Result.err(started.ok ? `the Haro server started but never answered at ${path}` : started.error);
 }
 
 export function dialLocal(path: string): Dial {

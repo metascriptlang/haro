@@ -1,6 +1,6 @@
 # Server path: in-process vs client/server
 
-`sh scripts/benchServerPath.sh [--reps N] [--flood-mb M] [--no-attach]` builds and runs
+`sh scripts/benchServerPath.sh [--reps N] [--flood-mb M] [--no-attach] [--flood-only]` builds and runs
 `bench/serverPath.ms`. Run it on a host, not on the Mac:
 `run-remote.sh --mac --host m1m --cores 4 -- sh scripts/benchServerPath.sh`, and `--host rtx` for Linux.
 Each measure prints one `RESULT` line, and a table follows at the end.
@@ -14,6 +14,12 @@ the way `Shell.reseed` does. After a reseed, an echo counts once the VT shows th
 `*_split` rows time each client echo up to the start of the read batch that carries it (`to_client`),
 beside the client thread's busy share and its longest batch.
 So the A/B difference is the server, the transport and the second parse.
+`--flood-only` runs just the flood rows, so a profiler can sample `serverPath.exe --serve` under a flood.
+The bench starts the server with `HARO_SERVER_TRACE=<file>`. The server then stamps each key's arrival
+and pty write, and each echo-sized output's pty read, hand-off to the connection and socket write.
+The `*_stages` rows split client echo into `to_server`, `to_pty`, `to_read`, `to_hand`,
+`to_socket`, `to_client` and `parse`, and count jumps. A negative `to_client` means the server loop
+saw the send complete late, and `to_socket` overstates by the same amount.
 Echo is timed from the write until the client VT has parsed the echoed byte of `cat` under
 `stty raw -echo`, 500 keys, 5 ms apart. CPU is `getrusage(RUSAGE_SELF)`. Server CPU is the
 server's lifetime CPU minus that of a server that only starts, attaches and stops.
@@ -78,3 +84,51 @@ Not explained:
 - macOS client echo under `cat` beats in-process, with 1-batch-sized reads (longest 0.14 ms). That
   suggests little of the `cat` flood reaches the client there; not traced.
 - On macOS under `yes`, nearly every key comes back inside a reseed after about 1 s.
+
+## Per-pane delivery, direct input and sliced drains: 7b62523, 3 reps, 200 MB flood
+
+Before (a097bec, 1 rep, 16 MB), stage p50 / p99.9 ms:
+- Linux `cat`: to_server 0.15/7.1, to_pty 0.20/8.4, to_read 0.07/10.4, to_hand 0.05/1.9, to_socket 0.37/97.3.
+  16 jumps; echo p99.9 120 ms.
+- macOS `yes`: to_server 2.0/9.6, to_pty 8.6/9.6, to_read 8.6/10.0, to_socket 1659/5385.
+  216 jumps; echo p50 1099 ms.
+- Socket write held the echo behind a whole flood queue, and on macOS the 8 KiB default socket
+  buffer turned that into jumps.
+
+What changed:
+- Each pane drains and delivers on its own. A pane is held while every keeping-up client already has
+  256 KiB of it queued (`FLOW_BYTES`), and a client 250 ms without send progress stops counting.
+- Input goes straight to the pty writer.
+- A drain is a slice of at most 1 ms or 64 KiB, read 16 KiB at a time.
+- macOS asks for 1 MiB socket buffers. A 256 KiB buffer gave `yes` p99.9 17.8 ms against 6.6 ms (1 rep).
+  Linux keeps its default, because there 1 MiB let 1.5 MiB of flood sit ahead of another pane's echo.
+
+| measure | macOS in-process | macOS client/server | Linux in-process | Linux client/server |
+|---|---|---|---|---|
+| echo idle p50 / p99.9 ms (pooled) | 0.08 / 8.79 | 0.25 / 14.79 | 0.16 / 0.39 | 0.21 / 0.43 |
+| echo under `cat` p50 / p99.9 ms | 0.72 / 1.09 | 0.15 / 0.30 | 0.09 / 2.69 | 0.79 / 2.56 |
+| echo under `yes` p50 / p99.9 ms | 8.62 / 9.59 | 5.23 / 7.00 | 0.09 / 1.36 | 0.42 / 2.18 |
+| ^C during `yes` until prompt, ms | 18.4 [18.3..19.4] | 23.8 [23.6..23.8] | 5.5 [4.9..5.6] | 5.8 [5.4..5.8] |
+| flood MB/s | 93.3 [93.1..146.7] | 78.2 [77.0..90.2] | 200.7 [194.3..202.0] | 197.2 [196.5..199.3] |
+| CPU ms/MB | 11.7 | client 6.2, server 18.8 | 8.2 | client 3.1, server 8.8 |
+| pty-only ceiling MB/s | 98 [97..98] | | 194 [193..198] | |
+| attach after `seq 1 50000`, Native / VtBytes ms | | 16.0 / 28.4 | | 13.0 / 18.2 |
+
+Hosts: m1m at e4f6043 (the macOS code is the same at 7b62523), rtx at 7b62523.
+Jumps and reseeds were 0 in every run.
+Stage p50 under `yes` was 0.82 to_server, 1.47 to_read, 1.29 to_hand and 1.46 to_socket on macOS,
+against 0.12 / 0.16 / 0.16 for to_read / to_hand / to_socket on Linux.
+
+What is still open:
+- macOS idle p99.9 is noisy. Per rep it was 14.2, 3.6 and 49.1 ms. The 49 ms echo spent 46 ms in
+  `to_server`, between the client's write and the server's read, on an idle machine. The other tail echoes
+  spent 12-13 ms in `to_read`, the pty's own echo; in-process shows the same 9 ms tail.
+- Flood on macOS is 16% below in-process. In-process varies 89-147 MB/s from run to run, while
+  client/server holds at 77-82 MB/s. The server main thread is the stage holding it: about 82% busy,
+  17% in the VT parse and the rest in per-hop runtime work. That work is kqueue register and unregister
+  on every socket recv and send (about 10%), completion-queue pipe writes for the Shell actor's replies
+  (about 8%), the wake socket and `ptyWait`.
+  Probes that did not move it (2-3 reps, 400 MB):
+  - `FLOW_BYTES` at 1 MiB: 78-82 MB/s.
+  - A wake only when the pty queue empties, plus `ptyWait(0)` without a timed wait: 77.7-79.6.
+  - A 4 ms / 256 KiB slice: 73-92.

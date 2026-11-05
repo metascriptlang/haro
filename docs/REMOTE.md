@@ -13,7 +13,8 @@ ssh <host> ~/.haro/server/<version>/haro-server proxy
 ```
 
 `proxy` bridges its stdin and stdout to the user's server on the machine's unix socket, byte for
-byte, and starts the server in the background (as `start` does) when none answers. The server
+byte after one message that marks the connection remote, and starts the server in the background
+(as `start` does) when none answers. The server
 outlives the proxy, the ssh session and its hangup; the end of the proxy's stdin closes only the
 proxy's own connection. Who gets in is decided by ssh (keys, or Tailscale SSH).
 
@@ -30,6 +31,24 @@ tar -xzf - -C "$t" && { [ -e "$d/<version>" ] || mv "$t" "$d/<version>"; }
 
 When two windows upload at once, the first rename wins and the other's copy is dropped. A server
 of the same build that answers with another protocol is replaced.
+
+## Slow links
+
+A remote host's sidebar row shows its smoothed round trip, `rtx · 42 ms`, measured by a ping each
+second. On a proxied or tailnet connection the server:
+
+- holds a pane's output for up to 8 ms (never more than half the round trip) once the round trip
+  reaches 20 ms, and sends it as one message; output within 50 ms of a keystroke the window sent
+  to that pane goes at once;
+- deflates a message over 4 KiB when that makes it smaller;
+- tells the window when a pane reads a line without echo (a password prompt).
+
+From 30 ms until the round trip falls back to 20 ms, the window draws a printable key typed into a
+remote pane at once, underlined after the cursor, and drops it when the pane's output arrives: kept
+as the server drew it, or gone when the output differs. After a control key, a wrong guess or a
+guess the server never answers, the next key waits for its echo before guesses show again. Nothing
+is guessed on the alternate screen or while the pane reads unseen. `remotePrediction` in the config
+is `"auto"` (the default), `"on"` at any round trip, or `"off"`.
 
 ## Commands
 

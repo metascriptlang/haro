@@ -2,7 +2,7 @@ import { ensureDir, exists, fileSize, isDir, readFile, rename } from "std/fs";
 import { dirname, join } from "std/fs/path";
 import { homeDir } from "std/os";
 import { ChildStream, argv, cwd, env, execPath, exit, spawn as spawnProcess } from "std/process";
-import { Config, DividerStyle, defaults } from "../config/config";
+import { defaults, dividerCellsOf } from "../config/config";
 import { configPath, load } from "../config/source";
 import { Invocation, USAGE, Verb, parseArgs, runArgs, tailnetChoice } from "./cli";
 import { answeringPid, askStatus, askStop, nobody } from "./control";
@@ -53,13 +53,6 @@ function resourceRoot(): string {
 	return execPath != "" && isDir(`${beside}/assets`) ? beside : cwd();
 }
 
-function dividerCells(c: Config): int32 {
-	return match (c.dividerStyle) {
-		DividerStyle.Cell => 1,
-		DividerStyle.Line => 0,
-	};
-}
-
 async function run(inv: Invocation): Promise<int32> {
 	if (inv.detach) {
 		when (!windows) { const _session = setsid(); }
@@ -85,7 +78,7 @@ async function run(inv: Invocation): Promise<int32> {
 		config: config,
 		shellScripts: config.shellIntegration ? `${assets}/shell` : null,
 		startIn: startIn,
-		dividerCells: dividerCells(config),
+		dividerCells: dividerCellsOf(config),
 	}, tailnetChoice(inv, config), logged);
 }
 

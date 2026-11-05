@@ -168,6 +168,13 @@ export function startDirectory(this c: Config, probableCli: boolean, home: strin
 	};
 }
 
+export function dividerCellsOf(c: Config): int32 {
+	return match (c.dividerStyle) {
+		DividerStyle.Cell => 1,
+		DividerStyle.Line => 0,
+	};
+}
+
 export function pxOf(points: float64): float64 {
 	return points * SCREEN_DPI / POINTS_PER_INCH;
 }

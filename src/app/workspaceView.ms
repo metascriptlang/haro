@@ -7,6 +7,7 @@ import {
 	Config,
 	DividerStyle as ConfigDivider,
 	PaneCwd,
+	dividerCellsOf,
 	PaneTitle,
 	SidebarSide,
 } from "../config/config";
@@ -253,13 +254,6 @@ export function lookOf(c: Config): FrameLook {
 			FOCUS_BLUE,
 			DEFAULT_FRAME_LOOK.focusedDivider,
 		),
-	};
-}
-
-export function dividerCellsOf(c: Config): int32 {
-	return match (c.dividerStyle) {
-		ConfigDivider.Cell => 1,
-		ConfigDivider.Line => 0,
 	};
 }
 

@@ -53,7 +53,12 @@ import {
 	wheel,
 	write,
 } from "./io";
-import { OpenPty, Tee, TermError, busy, fresh, openTerm } from "./term";
+import { OpenPty, Tee, TermError, busy, fresh, openTerm, shownSeq } from "./term";
+
+export struct Snapshot {
+	bytes: Vec<uint8>;
+	seq: int64;
+}
 
 export struct PtySpec {
 	command: string;
@@ -207,14 +212,14 @@ export actor Shell {
 		return got.ok ? got.value : null;
 	}
 
-	snapshot(native: boolean = false): Vec<uint8> | null {
+	snapshot(native: boolean = false): Snapshot | null {
 		const io = this.io;
 		if (io === null) { return null; }
 		const vt = io.term.vtOf();
 		if (vt === null) { return null; }
 		let got = native ? vt.nativeSnapshot() : vt.snapshot();
 		if (!got.ok) { return null; }
-		return move got.value;
+		return { bytes: move got.value, seq: io.term.shownSeq() };
 	}
 
 	frame(): IoFrame | null {

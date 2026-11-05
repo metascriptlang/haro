@@ -1,5 +1,5 @@
 import { exists, removeAll } from "std/fs";
-import { connectUnix, createUnixSocket, send as sendRaw } from "std/net";
+import { connectUnix, createUnixSocket, recvAsync, send as sendRaw } from "std/net";
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { vtBuild } from "../vt/vt";
@@ -393,6 +393,76 @@ when (!windows) {
 		assert after > before, `${before} then ${after}`;
 		assert seqsRise(p, FIRST);
 		assert received * 2 < (flood as int64), `${received} bytes of a ${flood} byte flood`;
+		await stopped(s, ended);
+		cleanUp(socket);
+	}
+
+	async function readSlowly(p: Peer, pauseMs: number): Promise<void> {
+		while (true) {
+			const chunk = await recvAsync(p.conn.fd, 64 * 1024);
+			if (chunk.length == 0) {
+				p.closed = true;
+				return;
+			}
+			const got = p.decoder.push(chunk);
+			if (!got.ok) {
+				p.broken = got.error.toString();
+				return;
+			}
+			for (const m of got.value) { p.got.push(m); }
+			await sleepAsync(pauseMs);
+		}
+	}
+
+	function outputBytes(p: Peer, pane: PaneId, from: int32, until: int32): int64 {
+		let total: int64 = 0;
+		for (let i = from; i < until; i++) {
+			const m = p.got[i];
+			if (m.kind == MessageKind.Output && m.pane == pane) { total += m.bytes.length as int64; }
+		}
+		return total;
+	}
+
+	function printedAt(p: Peer, pane: PaneId, from: int32, wanted: string): int32 {
+		let text = "";
+		for (let i = from; i < p.got.length; i++) {
+			const m = p.got[i];
+			if (m.kind == MessageKind.Output && m.pane == pane) {
+				text += m.bytes.asString();
+				if (text.includes(wanted)) { return i; }
+			}
+		}
+		return -1;
+	}
+
+	test "a flooding pane neither jumps a client that keeps reading nor queues far ahead of another pane's echo" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const s = await serving(setupAt(socket, logged));
+		const ended = ending(s);
+		const fd = createUnixSocket();
+		assert connectUnix(fd, socket) == 0;
+		const p = new Peer(new Connection(fd));
+		const _reading = readSlowly(p, 2);
+		say(p, hello(vtBuild()));
+		say(p, { kind: MessageKind.Attach });
+		assert await until((): boolean => screenFor(p, FIRST) !== null), kinds(p);
+		say(p, {
+			kind: MessageKind.Command,
+			command: { kind: CommandKind.Split, pane: FIRST, axis: Axis.SideBySide },
+		});
+		const second = 2 as PaneId;
+		assert await until((): boolean => opened(p, second)), logged.text;
+		say(p, { kind: MessageKind.Input, pane: FIRST, bytes: [...`yes flooding\r`.asBytes()] });
+		assert await until((): boolean => outputBytes(p, FIRST, 0, p.got.length) > 4 * 1024 * 1024), logged.text;
+		const from = p.got.length;
+		say(p, { kind: MessageKind.Input, pane: second, bytes: [...`printf 'quick%secho\\n' -\r`.asBytes()] });
+		assert await until((): boolean => printedAt(p, second, from, "quick-echo") >= 0), logged.text;
+		const ahead = outputBytes(p, FIRST, from, printedAt(p, second, from, "quick-echo"));
+		assert ahead < 1024 * 1024, `${ahead} flood bytes arrived between the echo's input and the echo`;
+		assert screensFor(p, FIRST) == 1, `${screensFor(p, FIRST)} screens: ${logged.text}`;
+		assert !p.closed && p.broken == "", p.broken;
+		say(p, { kind: MessageKind.Input, pane: FIRST, bytes: [0x03] });
 		await stopped(s, ended);
 		cleanUp(socket);
 	}

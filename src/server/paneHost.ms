@@ -16,6 +16,7 @@ export interface PaneSink {
 	output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>, readAt: float64) => void;
 	exit: (pane: PaneId, code: int32) => void;
 	failed: (pane: PaneId, failure: string) => void;
+	room: (pane: PaneId) => boolean;
 }
 
 export enum PaneHostError {
@@ -27,15 +28,16 @@ export enum PaneHostError {
 export struct Shot {
 	format: ScreenFormat;
 	bytes: Vec<uint8>;
+	seq: int64;
 }
 
 export interface HostedPane {
 	id: PaneId;
 	shell: Shell;
-	typedAt: float64;
+	draining: boolean;
+	again: boolean;
+	held: boolean;
 }
-
-const TYPED_RECENTLY_MS: float64 = 50;
 
 export interface PaneHost {
 	launch: HostLaunch;
@@ -98,7 +100,7 @@ async function start(
 		await closed(shell);
 		return failed;
 	}
-	h.panes.push({ id: id, shell: shell, typedAt: -TYPED_RECENTLY_MS });
+	h.panes.push({ id: id, shell: shell, draining: false, again: false, held: false });
 	return null;
 }
 
@@ -130,39 +132,53 @@ export async function apply(this h: PaneHost, e: WorkspaceEvent): Promise<TermEr
 	return null;
 }
 
-function typedFirst(panes: HostedPane[]): HostedPane[] {
-	const now = performance.now();
-	const typed = panes.filter((p: HostedPane): boolean => now - p.typedAt < TYPED_RECENTLY_MS);
-	const rest = panes.filter((p: HostedPane): boolean => !(now - p.typedAt < TYPED_RECENTLY_MS));
-	return [...typed, ...rest];
+function drain(this h: PaneHost, pane: HostedPane): void {
+	if (pane.draining) {
+		pane.again = true;
+		return;
+	}
+	pane.again = false;
+	pane.held = !h.sink.room(pane.id);
+	if (pane.held) { return; }
+	pane.draining = true;
+	pane.shell.output().then((drained: Drained | null): void => {
+		pane.draining = false;
+		if (h.paneOf(pane.id) !== pane) { return; }
+		if (drained !== null) {
+			const _refused = h.deliver(pane.id, drained);
+			if (drained.more) { pane.again = true; }
+		}
+		if (pane.again) { h.drain(pane); }
+	}).catch((e: Error): void => {
+		pane.draining = false;
+		h.sink.failed(pane.id, `output: ${e}`);
+	});
 }
 
-export async function pump(this h: PaneHost): Promise<boolean> {
-	const order = typedFirst(h.panes);
-	const drains = order.map((pane: HostedPane): Promise<Drained | null> => pane.shell.output());
-	let more = false;
-	for (let i = 0; i < order.length; i++) {
-		const drained = await drains[i];
-		if (drained !== null) {
-			const _refused = h.deliver(order[i].id, drained);
-			more = more || drained.more;
-		}
+export function wake(this h: PaneHost): void {
+	for (const pane of h.panes) { h.drain(pane); }
+}
+
+export function holding(this h: PaneHost): boolean {
+	return h.panes.some((pane: HostedPane): boolean => pane.held);
+}
+
+export function release(this h: PaneHost): void {
+	for (const pane of h.panes) {
+		if (pane.held) { h.drain(pane); }
 	}
-	return more;
 }
 
 export function write(this h: PaneHost, id: PaneId, bytes: Vec<uint8>): boolean {
 	const pane = h.paneOf(id);
 	if (pane === null) { return false; }
 	pane.shell.write(bytes);
-	pane.typedAt = performance.now();
 	return true;
 }
 
 export async function writeAt(this h: PaneHost, id: PaneId, bytes: Vec<uint8>): Promise<float64 | null> {
 	const pane = h.paneOf(id);
 	if (pane === null) { return null; }
-	pane.typedAt = performance.now();
 	return await pane.shell.writeAt(bytes);
 }
 
@@ -193,14 +209,14 @@ export async function snapshot(
 	if (pane === null) { return Result.err(PaneHostError.UnknownPane); }
 	if (wanted == ScreenFormat.Native) {
 		const native = await pane.shell.snapshot(true);
-		if (native !== null && native.length <= limit) {
-			return Result.ok({ format: ScreenFormat.Native, bytes: native });
+		if (native !== null && native.bytes.length <= limit) {
+			return Result.ok({ format: ScreenFormat.Native, bytes: native.bytes, seq: native.seq });
 		}
 	}
 	const replayed = await pane.shell.snapshot(false);
 	if (replayed === null) { return Result.err(PaneHostError.SnapshotUnavailable); }
-	if (replayed.length > limit) { return Result.err(PaneHostError.SnapshotTooLarge); }
-	return Result.ok({ format: ScreenFormat.VtBytes, bytes: replayed });
+	if (replayed.bytes.length > limit) { return Result.err(PaneHostError.SnapshotTooLarge); }
+	return Result.ok({ format: ScreenFormat.VtBytes, bytes: replayed.bytes, seq: replayed.seq });
 }
 
 export async function closeAll(this h: PaneHost): Promise<void> {

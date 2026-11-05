@@ -18,12 +18,14 @@ import {
 	apply as applyEvent,
 	busy,
 	closeAll,
+	holding,
 	open,
 	paneOf,
-	pump,
 	pwd,
+	release,
 	snapshot,
 	title,
+	wake,
 	write,
 } from "./paneHost";
 import { MAX_SCREEN_BYTES, ScreenFormat } from "./protocol";
@@ -47,7 +49,9 @@ when (!windows) {
 		return { printed: new Map(), seqs: new Map(), outputs: 0, gaps: "", exits: "", fatal: "" };
 	}
 
-	function sinkOf(seen: Seen): PaneSink {
+	class Room { open: boolean = true; }
+
+	function sinkOf(seen: Seen, room: Room = new Room()): PaneSink {
 		return {
 			output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>, readAt: float64): void => {
 				const id = pane as int32;
@@ -61,7 +65,13 @@ when (!windows) {
 			failed: (pane: PaneId, failure: string): void => {
 				seen.fatal += `${pane as int32}: ${failure}\n`;
 			},
+			room: (pane: PaneId): boolean => room.open,
 		};
+	}
+
+	async function woken(h: PaneHost): Promise<void> {
+		h.wake();
+		await sleepAsync(1);
 	}
 
 	function dirNamed(name: string, seen: Seen): string {
@@ -70,10 +80,10 @@ when (!windows) {
 		return dir;
 	}
 
-	function hostIn(start: string, seen: Seen): PaneHost {
+	function hostIn(start: string, seen: Seen, room: Room = new Room()): PaneHost {
 		return PaneHost.open(
 			{ command: "sh", shellScripts: null, startIn: start, originCwd: true },
-			sinkOf(seen),
+			sinkOf(seen, room),
 		);
 	}
 
@@ -102,7 +112,7 @@ when (!windows) {
 	async function prints(h: PaneHost, seen: Seen, id: int32, wanted: string): Promise<boolean> {
 		const start: float64 = performance.now();
 		while (performance.now() - start < WAIT_MS) {
-			const _more = await h.pump();
+			await woken(h);
 			if (printedBy(seen, id).includes(wanted)) { return true; }
 		}
 		return false;
@@ -128,7 +138,7 @@ when (!windows) {
 		assert typed(h, 1, `cd ${moved}; printf '\\033]7;file://localhost%s\\007' "$PWD"\r`);
 		const waited: float64 = performance.now();
 		while ((await h.pwd(1 as PaneId)) != `file://localhost${moved}` && performance.now() - waited < WAIT_MS) {
-			const _more = await h.pump();
+			await woken(h);
 		}
 		assert (await h.pwd(1 as PaneId)) == `file://localhost${moved}`;
 
@@ -151,7 +161,7 @@ when (!windows) {
 		assert typed(h, 2, "printf '\\033]2;named\\007'\r");
 		const titled: float64 = performance.now();
 		while ((await h.title(2 as PaneId)) != "named" && performance.now() - titled < WAIT_MS) {
-			const _more = await h.pump();
+			await woken(h);
 		}
 		assert (await h.title(2 as PaneId)) == "named";
 
@@ -164,25 +174,27 @@ when (!windows) {
 		assert seen.fatal == "", seen.fatal;
 	}
 
-	test "each pump hands out at most one Output per pane, however many pty reads its drain joined" {
+	test "a pane the sink has no room for keeps its output in the pty until released" {
 		const seen = fresh();
-		const dir = dirNamed("hostJoined", seen);
+		const dir = dirNamed("hostHeld", seen);
 		const w = Workspace.create(1);
 		assert w.ok;
 		if (!w.ok) { return; }
-		const h = hostIn(dir, seen);
+		const room = new Room();
+		const h = hostIn(dir, seen, room);
 		const _tab = await ran(w.value, h, { kind: CommandKind.NewTab }, seen);
-		assert typed(h, 1, "head -c 400000 /dev/zero | tr '\\0' x; printf 'joined%send\\n' -\r");
-		await sleepAsync(500);
-		let most: int32 = 0;
-		const start: float64 = performance.now();
-		while (!printedBy(seen, 1).includes("joined-end") && performance.now() - start < WAIT_MS) {
-			const before = seen.outputs;
-			const _more = await h.pump();
-			most = Math.max(most, seen.outputs - before);
-		}
-		assert printedBy(seen, 1).includes("joined-end");
-		assert most == 1, `${most} Outputs in one pump`;
+		assert typed(h, 1, "echo ready\r");
+		assert await prints(h, seen, 1, "ready");
+		room.open = false;
+		assert typed(h, 1, "printf 'held%sback\\n' -\r");
+		await sleepAsync(300);
+		await woken(h);
+		assert !printedBy(seen, 1).includes("held-back");
+		assert h.holding();
+		room.open = true;
+		h.release();
+		assert await prints(h, seen, 1, "held-back");
+		assert !h.holding();
 		assert seen.gaps == "", seen.gaps;
 		await h.closeAll();
 		assert seen.fatal == "", seen.fatal;
@@ -204,7 +216,7 @@ when (!windows) {
 		const start: float64 = performance.now();
 		let held = false;
 		while (!held && performance.now() - start < WAIT_MS) {
-			const _more = await h.pump();
+			await woken(h);
 			held = await h.busy(id);
 		}
 		assert held;
@@ -213,7 +225,7 @@ when (!windows) {
 
 		assert typed(h, 1, "exit 3\r");
 		const waited: float64 = performance.now();
-		while (seen.exits == "" && performance.now() - waited < WAIT_MS) { const _more = await h.pump(); }
+		while (seen.exits == "" && performance.now() - waited < WAIT_MS) { await woken(h); }
 		assert seen.exits == "1:3 ", seen.exits;
 		await h.closeAll();
 		assert seen.gaps == "", seen.gaps;

@@ -180,6 +180,12 @@ function teed(pty: Pty, tee: Tee): Pty {
 	};
 }
 
+export function shownSeq(this t: Term): int64 {
+	const tee = t.tee;
+	if (tee === null) { return 0; }
+	return tee.pending.length == 0 ? tee.next - 1 : tee.next;
+}
+
 export function takeOutput(this t: Term): Vec<Output> {
 	const tee = t.tee;
 	if (tee === null) { return []; }

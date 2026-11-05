@@ -113,6 +113,11 @@ struct Queued {
 	tag: int32;
 }
 
+struct TagBytes {
+	tag: int32;
+	bytes: int64;
+}
+
 function ignoreData(chunk: uint8[]): void {}
 function ignoreClose(reason: CloseReason): void {}
 function ignoreIdle(): void {}
@@ -127,6 +132,9 @@ export class Connection {
 	private onSent: (total: int64) => void = ignoreSent;
 	private queue: Queued[] = [];
 	private queuedBytes: int64 = 0;
+	private tagged: Vec<TagBytes> = [];
+	private flying: Vec<TagBytes> = [];
+	private progressAt: float64 = 0;
 	private sending: boolean = false;
 	private reading: boolean = false;
 	private open: boolean = true;
@@ -154,6 +162,28 @@ export class Connection {
 
 	queued(): int64 { return this.queuedBytes; }
 
+	queuedFor(tag: int32): int64 {
+		for (const t of this.tagged) {
+			if (t.tag == tag) { return t.bytes; }
+		}
+		return 0;
+	}
+
+	stalled(now: float64, quietMs: float64): boolean {
+		return this.queuedBytes > 0 && now - this.progressAt > quietMs;
+	}
+
+	private count(tag: int32, bytes: int64): void {
+		if (tag == UNTAGGED) { return; }
+		for (let i = 0; i < this.tagged.length; i++) {
+			if (this.tagged[i].tag == tag) {
+				this.tagged[i].bytes += bytes;
+				return;
+			}
+		}
+		this.tagged.push({ tag: tag, bytes: bytes });
+	}
+
 	whenIdle(idle: () => void): void {
 		if (!this.open) { return; }
 		if (!this.sending) {
@@ -168,12 +198,14 @@ export class Connection {
 	send(bytes: uint8[], tag: int32 = UNTAGGED): boolean {
 		if (!this.open || this.finishing) { return false; }
 		if (bytes.length == 0) { return true; }
+		if (this.queuedBytes == 0) { this.progressAt = performance.now(); }
 		this.queuedBytes += bytes.length as int64;
 		if (this.queuedBytes > MAX_QUEUED_BYTES) {
 			this.end(CloseReason.Backlogged);
 			return false;
 		}
 		this.queue.push({ bytes: bytes, tag: tag });
+		this.count(tag, bytes.length as int64);
 		if (!this.sending) {
 			this.sending = true;
 			const _flushing = flushLoop(this);
@@ -194,6 +226,8 @@ export class Connection {
 		this.open = false;
 		this.queue = [];
 		this.queuedBytes = 0;
+		this.tagged = [];
+		this.flying = [];
 		msIoEngineCancelFd_ms(this.fd);
 		closeFd(this.fd);
 		const onClose = this.onClose;
@@ -218,6 +252,7 @@ export class Connection {
 		}
 		this.queue = kept;
 		this.queuedBytes -= dropped;
+		this.count(tag, -dropped);
 		return dropped;
 	}
 
@@ -232,6 +267,7 @@ export class Connection {
 			idle();
 			return [];
 		}
+		for (const q of batch) { this.fly(q.tag, q.bytes.length as int64); }
 		if (batch.length == 1) { return batch[0].bytes; }
 		let total: int32 = 0;
 		for (const q of batch) { total += q.bytes.length; }
@@ -244,7 +280,21 @@ export class Connection {
 		return joined;
 	}
 
+	private fly(tag: int32, bytes: int64): void {
+		if (tag == UNTAGGED) { return; }
+		for (let i = 0; i < this.flying.length; i++) {
+			if (this.flying[i].tag == tag) {
+				this.flying[i].bytes += bytes;
+				return;
+			}
+		}
+		this.flying.push({ tag: tag, bytes: bytes });
+	}
+
 	sent(count: int64): void {
+		for (const f of this.flying) { this.count(f.tag, -f.bytes); }
+		this.flying = [];
+		this.progressAt = performance.now();
 		this.queuedBytes -= count;
 		this.sentBytes += count;
 		this.onSent(this.sentBytes);

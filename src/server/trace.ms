@@ -76,10 +76,9 @@ export function wrote(this t: Trace, row: int32, at: float64): void {
 export function follow(this t: Trace, conn: Connection): void {
 	if (t.followed !== null) { return; }
 	t.followed = conn;
-	conn.watchSent((total: int64): void => { t.sentUpTo(total); });
 }
 
-function sentUpTo(this t: Trace, total: int64): void {
+export function sentUpTo(this t: Trace, total: int64): void {
 	const at = performance.now();
 	while (t.unsent < t.outputs.length && t.outputs[t.unsent].end <= total) {
 		t.outputs[t.unsent].sentAt = at;

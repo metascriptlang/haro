@@ -142,7 +142,7 @@ async function screenOf(v: WorkspaceView, id: int32): Promise<string> {
 	if (pane === null) { return "<no pane>"; }
 	const shot = await pane.shell.snapshot();
 	if (shot === null) { return "<no screen>"; }
-	return shot.asString();
+	return shot.bytes.asString();
 }
 
 async function shows(v: WorkspaceView, id: int32, wanted: string): Promise<boolean> {
@@ -429,7 +429,7 @@ async function screenAt(v: WorkspaceView, at: HostPane): Promise<string> {
 	if (pane === null) { return "<no pane>"; }
 	const _frame = await pane.shell.frame();
 	const shot = await pane.shell.snapshot();
-	return shot === null ? "<no screen>" : shot.asString();
+	return shot === null ? "<no screen>" : shot.bytes.asString();
 }
 
 async function showsAt(v: WorkspaceView, at: HostPane, wanted: string): Promise<boolean> {

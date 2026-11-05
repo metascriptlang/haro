@@ -13,7 +13,7 @@ export interface HostLaunch {
 }
 
 export interface PaneSink {
-	output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>) => void;
+	output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>, readAt: float64) => void;
 	exit: (pane: PaneId, code: int32) => void;
 	failed: (pane: PaneId, failure: string) => void;
 }
@@ -70,7 +70,7 @@ function deliver(this h: PaneHost, id: PaneId, drained: Drained): TermError | nu
 		h.sink.failed(id, `${f.where.label()}: ${f.error}`);
 	}
 	for (let i = 0; i < drained.output.length; i++) {
-		h.sink.output(id, drained.output[i].seq, drained.output[i].bytes);
+		h.sink.output(id, drained.output[i].seq, drained.output[i].bytes, drained.output[i].readAt);
 	}
 	const exit = drained.exit;
 	if (exit !== null) { h.sink.exit(id, exit.code); }
@@ -157,6 +157,13 @@ export function write(this h: PaneHost, id: PaneId, bytes: Vec<uint8>): boolean 
 	pane.shell.write(bytes);
 	pane.typedAt = performance.now();
 	return true;
+}
+
+export async function writeAt(this h: PaneHost, id: PaneId, bytes: Vec<uint8>): Promise<float64 | null> {
+	const pane = h.paneOf(id);
+	if (pane === null) { return null; }
+	pane.typedAt = performance.now();
+	return await pane.shell.writeAt(bytes);
 }
 
 export async function busy(this h: PaneHost, id: PaneId): Promise<boolean> {

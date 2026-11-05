@@ -22,6 +22,7 @@ import {
 	pump,
 	snapshot,
 	write,
+	writeAt,
 } from "./paneHost";
 import {
 	Decoder,
@@ -56,6 +57,7 @@ import {
 	peerAddress,
 	socketPath,
 } from "./transport";
+import { Trace, follow, handed, jumped, received as traceReceived, save, tracing, wrote } from "./trace";
 import { serverWake, serverWakeClose, serverWakeOpen } from "./wake.h";
 
 when (windows) {
@@ -161,6 +163,7 @@ export class Server {
 	exits: PaneExit[] = [];
 	stopping: boolean = false;
 	resolve: (code: int32) => void = settle;
+	readonly trace: Trace | null = tracing();
 	readonly finished: Promise<int32>;
 
 	constructor(setup: ServerSetup, workspace: Workspace) {
@@ -221,7 +224,7 @@ function broadcast(this s: Server, m: Message): void {
 	}
 }
 
-function output(this s: Server, pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>): void {
+function output(this s: Server, pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>, readAt: float64): void {
 	const frame = encodeOutput(pane, seq as uint64, bytes);
 	if (!frame.ok) {
 		s.log(`Output not sent: ${frame.error.toString()}`);
@@ -233,12 +236,14 @@ function output(this s: Server, pane: PaneId, seq: int64, bytes: Readonly<Span<u
 			s.jump(c, pane);
 		} else {
 			const _sent = c.conn.send(frame.value, pane as int32);
+			s.trace?.handed(c.conn, pane, seq, readAt, bytes.length);
 		}
 	}
 }
 
 function jump(this s: Server, c: Client, pane: PaneId): void {
 	const waiting = c.resyncing.length > 0;
+	s.trace?.jumped(pane, c.conn.queued());
 	const _dropped = c.conn.drop(pane as int32);
 	c.resyncing.push(pane);
 	for (const tab of s.workspace.tabs) {
@@ -327,6 +332,7 @@ async function attach(this s: Server, c: Client): Promise<void> {
 		for (const pane of tab.root.panes()) { await s.screenTo(c, pane, wanted); }
 	}
 	c.attached = true;
+	s.trace?.follow(c.conn);
 }
 
 async function screenTo(this s: Server, c: Client, pane: Pane, wanted: ScreenFormat): Promise<void> {
@@ -427,17 +433,29 @@ function received(this s: Server, c: Client, m: Message): void {
 function input(this s: Server, pane: PaneId, bytes: uint8[]): void {
 	const host = s.hostOf();
 	const owned: Vec<uint8> = [...bytes];
+	const row = s.trace?.traceReceived(pane) ?? -1;
 	if (s.inputsHeld == 0 && host.paneOf(pane) !== null) {
-		const _written = host.write(pane, owned);
+		const _written = s.typeInto(pane, owned, row);
 		return;
 	}
 	s.inputsHeld += 1;
 	s.enqueue(async (): Promise<void> => {
 		s.inputsHeld -= 1;
-		if (!s.hostOf().write(pane, owned)) {
+		if (!s.typeInto(pane, owned, row)) {
 			s.log(`input for unknown pane ${pane as int32} dropped`);
 		}
 	});
+}
+
+function typeInto(this s: Server, pane: PaneId, bytes: Vec<uint8>, row: int32): boolean {
+	const host = s.hostOf();
+	const trace = s.trace;
+	if (trace === null) { return host.write(pane, bytes); }
+	if (host.paneOf(pane) === null) { return false; }
+	host.writeAt(pane, bytes).then((at: float64 | null): void => {
+		if (at !== null) { trace.wrote(row, at); }
+	});
+	return true;
 }
 
 function data(this s: Server, c: Client, chunk: uint8[]): void {
@@ -525,6 +543,7 @@ async function shutdown(this s: Server, code: int32): Promise<void> {
 	const deadline = Date.now() + FLUSH_ON_EXIT_MS;
 	while (s.clients.length > 0 && Date.now() < deadline) { await sleepAsync(5); }
 	for (const c of s.clients) { c.conn.close(); }
+	s.trace?.save();
 	s.resolve(code);
 }
 
@@ -580,7 +599,9 @@ export async function start(this typeof Server, setup: ServerSetup): Promise<Res
 	s.listeners.push(listening.value);
 	s.serving.push(`unix ${setup.socket}`);
 	s.host = PaneHost.open(setup.launch, {
-		output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>): void => { s.output(pane, seq, bytes); },
+		output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>, readAt: float64): void => {
+			s.output(pane, seq, bytes, readAt);
+		},
 		exit: (pane: PaneId, code: int32): void => { s.exits.push({ pane: pane, code: code }); },
 		failed: (pane: PaneId, failure: string): void => {
 			s.log(`pane ${pane as int32}: ${failure}`);

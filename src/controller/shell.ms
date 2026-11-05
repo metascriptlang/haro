@@ -135,6 +135,11 @@ export actor Shell {
 	unannotate(id: int32): void { this.io?.unannotate(id); }
 	write(bytes: Vec<uint8>): void { this.io?.write(bytes); }
 
+	writeAt(bytes: Vec<uint8>): float64 {
+		this.io?.write(bytes);
+		return performance.now();
+	}
+
 	feed(first: uint64, last: uint64, bytes: Vec<uint8>): void {
 		const remote = this.remote;
 		const io = this.io;

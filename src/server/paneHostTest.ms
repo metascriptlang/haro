@@ -49,7 +49,7 @@ when (!windows) {
 
 	function sinkOf(seen: Seen): PaneSink {
 		return {
-			output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>): void => {
+			output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>, readAt: float64): void => {
 				const id = pane as int32;
 				seen.outputs += 1;
 				const last = seen.seqs.get(id) ?? 0;

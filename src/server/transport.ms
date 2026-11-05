@@ -116,6 +116,7 @@ struct Queued {
 function ignoreData(chunk: uint8[]): void {}
 function ignoreClose(reason: CloseReason): void {}
 function ignoreIdle(): void {}
+function ignoreSent(total: int64): void {}
 
 export class Connection {
 	readonly fd: int32;
@@ -123,6 +124,7 @@ export class Connection {
 	private onData: (chunk: uint8[]) => void = ignoreData;
 	private onClose: (reason: CloseReason) => void = ignoreClose;
 	private onIdle: () => void = ignoreIdle;
+	private onSent: (total: int64) => void = ignoreSent;
 	private queue: Queued[] = [];
 	private queuedBytes: int64 = 0;
 	private sending: boolean = false;
@@ -130,6 +132,7 @@ export class Connection {
 	private open: boolean = true;
 	private finishing: boolean = false;
 	writes: int32 = 0;
+	sentBytes: int64 = 0;
 
 	constructor(fd: int32, readBytes: int32 = READ_CHUNK) {
 		this.fd = fd;
@@ -159,6 +162,8 @@ export class Connection {
 		}
 		this.onIdle = idle;
 	}
+
+	watchSent(sent: (total: int64) => void): void { this.onSent = sent; }
 
 	send(bytes: uint8[], tag: int32 = UNTAGGED): boolean {
 		if (!this.open || this.finishing) { return false; }
@@ -195,6 +200,7 @@ export class Connection {
 		this.onData = ignoreData;
 		this.onClose = ignoreClose;
 		this.onIdle = ignoreIdle;
+		this.onSent = ignoreSent;
 		onClose(reason);
 	}
 
@@ -238,7 +244,11 @@ export class Connection {
 		return joined;
 	}
 
-	sent(count: int64): void { this.queuedBytes -= count; }
+	sent(count: int64): void {
+		this.queuedBytes -= count;
+		this.sentBytes += count;
+		this.onSent(this.sentBytes);
+	}
 }
 
 async function readLoop(c: Connection): Promise<void> {

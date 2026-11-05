@@ -140,27 +140,30 @@ export interface Term {
 export struct Output {
 	seq: int64;
 	bytes: Vec<uint8>;
+	readAt: float64;
 }
 
 export interface Tee {
 	next: int64;
 	taken: Vec<Output>;
 	pending: Vec<uint8>;
+	pendingReadAt: float64;
 }
 
 export function fresh(this typeof Tee): Tee {
-	return { next: 1, taken: [], pending: [] };
+	return { next: 1, taken: [], pending: [], pendingReadAt: 0 };
 }
 
 function seal(this tee: Tee): void {
 	if (tee.pending.length == 0) { return; }
-	tee.taken.push({ seq: tee.next, bytes: move tee.pending });
+	tee.taken.push({ seq: tee.next, bytes: move tee.pending, readAt: tee.pendingReadAt });
 	tee.pending = [];
 	tee.next += 1;
 }
 
 function keep(this tee: Tee, bytes: Readonly<Span<uint8>>): void {
 	if (tee.pending.length + bytes.length > MAX_SCREEN_BYTES) { tee.seal(); }
+	if (tee.pending.length == 0) { tee.pendingReadAt = performance.now(); }
 	const at = tee.pending.length;
 	tee.pending.length = at + bytes.length;
 	copyInto(tee.pending, at, bytes);

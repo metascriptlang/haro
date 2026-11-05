@@ -1,4 +1,4 @@
-import { removeAll } from "std/fs";
+import { readFile, removeAll } from "std/fs";
 import { join } from "std/fs/path";
 import { hostname, tmpDir } from "std/os";
 import {
@@ -86,6 +86,8 @@ class Watch {
 	found: boolean = false;
 	heldAt: float64 = -1;
 	arrivedAt: float64 = -1;
+	first: int64 = -1;
+	last: int64 = -1;
 }
 
 function expect(this w: Watch, pattern: Vec<uint8>): void {
@@ -94,13 +96,17 @@ function expect(this w: Watch, pattern: Vec<uint8>): void {
 	w.found = false;
 	w.heldAt = -1;
 	w.arrivedAt = -1;
+	w.first = -1;
+	w.last = -1;
 }
 
-function arrived(this w: Watch, at: float64, bytes: Readonly<Span<uint8>>): void {
+function arrived(this w: Watch, at: float64, f: Feed): void {
 	if (w.found || w.arrivedAt >= 0 || w.pattern.length != 1) { return; }
-	for (const b of bytes) {
+	for (const b of f.bytes) {
 		if (b == w.pattern[0]) {
 			w.arrivedAt = at;
+			w.first = f.first as int64;
+			w.last = f.last as int64;
 			return;
 		}
 	}
@@ -171,6 +177,7 @@ class BenchPane {
 	term: Term;
 	watch: Watch;
 	remote: RemotePty | null;
+	sent: int32 = 0;
 
 	constructor(id: PaneId, term: Term, watch: Watch, remote: RemotePty | null) {
 		this.id = id;
@@ -294,6 +301,7 @@ class ServerProc {
 	readonly dir: string;
 	readonly path: string;
 	readonly child: ChildProcess;
+	trace: string = "";
 
 	constructor(dir: string, path: string, child: ChildProcess) {
 		this.dir = dir;
@@ -308,7 +316,12 @@ async function startServer(): Promise<Result<ServerProc, string>> {
 	servers += 1;
 	const dir = join(tmpDir(), `haro-bench-${Date.now()}-${servers}`);
 	const path = join(dir, "s.sock");
-	const launched = spawnProcess("/usr/bin/env", [`HARO_SOCKET=${path}`, execPath, "--serve"]);
+	const launched = spawnProcess("/usr/bin/env", [
+		`HARO_SOCKET=${path}`,
+		`HARO_SERVER_TRACE=${join(dir, "trace.tsv")}`,
+		execPath,
+		"--serve",
+	]);
 	if (!launched.ok) { return Result.err(`server spawn: ${launched.error.message}`); }
 	const deadline = performance.now() + SERVER_START_MS;
 	while (performance.now() < deadline) {
@@ -339,6 +352,8 @@ async function stopServer(s: ServerProc): Promise<Result<float64, string>> {
 		}
 	}
 	s.child.close();
+	const traced = readFile(join(s.dir, "trace.tsv"));
+	if (traced.ok) { lastTrace = traced.value; }
 	const _removed = removeAll(s.dir);
 	if (!stopped.ok) { return Result.err(stopped.error); }
 	for (const line of said.split("\n")) {
@@ -373,7 +388,7 @@ function fed(this c: Client, feeds: Feed[]): void {
 		const p = c.paneOf(f.pane);
 		const remote = p?.remote ?? null;
 		if (p === null || remote === null) { continue; }
-		p.watch.arrived(c.batchAt, f.bytes);
+		p.watch.arrived(c.batchAt, f);
 		if (!remote.feed(f.first, f.last, move f.bytes)) {
 			c.failure = `pane ${f.pane as int32} output out of order at ${f.first}`;
 			return;
@@ -511,7 +526,10 @@ async function clientDriver(): Promise<Result<Driver, string>> {
 	const c = attached.value;
 	return Result.ok({
 		panes: c.panes,
-		input: (p: BenchPane, bytes: Vec<uint8>): void => { c.link.input(p.id, bytes); },
+		input: (p: BenchPane, bytes: Vec<uint8>): void => {
+			p.sent += 1;
+			c.link.input(p.id, bytes);
+		},
 		poll: async (focus: BenchPane): Promise<Result<void, string>> => {
 			if (c.failure != "") { return Result.err(c.failure); }
 			await sleepAsync(1);
@@ -590,7 +608,7 @@ struct Echoes {
 	failure: string;
 }
 
-async function echoes(d: Driver, p: BenchPane): Promise<Echoes> {
+async function echoes(d: Driver, p: BenchPane, measure: string): Promise<Echoes> {
 	let got: Echoes = { latencies: [], arrivals: [], failure: "" };
 	for (let i: int32 = 0; i < ECHO_KEYS; i++) {
 		const key = (97 + i % 26) as uint8;
@@ -608,6 +626,16 @@ async function echoes(d: Driver, p: BenchPane): Promise<Echoes> {
 		}
 		got.latencies.push(p.watch.heldAt - at);
 		if (p.watch.arrivedAt >= 0) { got.arrivals.push(p.watch.arrivedAt - at); }
+		keyRows.push({
+			measure: measure,
+			pane: p.id as int32,
+			ordinal: p.sent - 1,
+			sentAt: at,
+			first: p.watch.first,
+			last: p.watch.last,
+			arrivedAt: p.watch.arrivedAt,
+			shownAt: p.watch.heldAt,
+		});
 		const paused = await pause(d, p, KEY_GAP_MS);
 		if (!paused.ok) {
 			got.failure = paused.error;
@@ -680,6 +708,139 @@ function pool(mode: string, measure: string, values: Vec<float64>): void {
 	pools.push({ mode: mode, measure: measure, values: [...values] });
 }
 
+struct KeyRow {
+	measure: string;
+	pane: int32;
+	ordinal: int32;
+	sentAt: float64;
+	first: int64;
+	last: int64;
+	arrivedAt: float64;
+	shownAt: float64;
+}
+
+struct ServerIn {
+	pane: int32;
+	ordinal: int32;
+	receivedAt: float64;
+	wroteAt: float64;
+}
+
+struct ServerOut {
+	pane: int32;
+	seq: int64;
+	readAt: float64;
+	handedAt: float64;
+	sentAt: float64;
+}
+
+let keyRows: Vec<KeyRow> = [];
+let lastTrace = "";
+
+const STAGES: string[] = ["to_server", "to_pty", "to_read", "to_hand", "to_socket", "to_client", "parse"];
+const WORST_SHOWN: int32 = 3;
+
+function matchedOut(outs: Vec<ServerOut>, k: KeyRow, wroteAt: float64): ServerOut | null {
+	let fallback: ServerOut | null = null;
+	for (const o of outs) {
+		if (o.pane != k.pane || o.seq < k.first || o.seq > k.last) { continue; }
+		if (o.readAt >= wroteAt) { return o; }
+		fallback = o;
+	}
+	return fallback;
+}
+
+function stagesOf(k: KeyRow, i: ServerIn, o: ServerOut): Vec<float64> {
+	return [
+		i.receivedAt - k.sentAt,
+		i.wroteAt - i.receivedAt,
+		o.readAt - i.wroteAt,
+		o.handedAt - o.readAt,
+		o.sentAt - o.handedAt,
+		k.arrivedAt - o.sentAt,
+		k.shownAt - k.arrivedAt,
+	];
+}
+
+function stageReport(rep: int32): void {
+	let ins: Vec<ServerIn> = [];
+	let outs: Vec<ServerOut> = [];
+	let jumps: Vec<float64> = [];
+	for (const line of lastTrace.split("\n")) {
+		const f = line.split("\t");
+		if (f[0] == "in" && f.length == 5) {
+			ins.push({
+				pane: parseInt(f[1]) as int32,
+				ordinal: parseInt(f[2]) as int32,
+				receivedAt: parseFloat(f[3]),
+				wroteAt: parseFloat(f[4]),
+			});
+		} else if (f[0] == "out" && f.length == 6) {
+			outs.push({
+				pane: parseInt(f[1]) as int32,
+				seq: parseInt(f[2]) as int64,
+				readAt: parseFloat(f[3]),
+				handedAt: parseFloat(f[4]),
+				sentAt: parseFloat(f[5]),
+			});
+		} else if (f[0] == "jump" && f.length == 4) {
+			jumps.push(parseFloat(f[2]));
+		}
+	}
+	let measures: string[] = [];
+	for (const k of keyRows) {
+		if (!measures.includes(k.measure)) { measures.push(k.measure); }
+	}
+	for (const measure of measures) {
+		let columns: Vec<Vec<float64>> = [];
+		for (const _name of STAGES) { columns.push([]); }
+		let unmatched = 0;
+		let from = -1.0;
+		let until = -1.0;
+		let worst: Vec<string> = [];
+		let totals: Vec<float64> = [];
+		for (const k of keyRows) {
+			if (k.measure != measure) { continue; }
+			if (from < 0) { from = k.sentAt; }
+			until = k.shownAt;
+			const i = ins.find((r: ServerIn): boolean => r.pane == k.pane && r.ordinal == k.ordinal);
+			if (i === undefined || k.first < 0 || i.wroteAt < 0) {
+				unmatched += 1;
+				continue;
+			}
+			const o = matchedOut(outs, k, i.wroteAt);
+			if (o === null || o.sentAt < 0) {
+				unmatched += 1;
+				continue;
+			}
+			const stages = stagesOf(k, i, o);
+			for (let s = 0; s < stages.length; s++) { columns[s].push(stages[s]); }
+			const total = k.shownAt - k.sentAt;
+			totals.push(total);
+			worst.push(`${total.toFixed(2)} ms: ${stages.map((v: float64, s: number): string => `${STAGES[s]}=${v.toFixed(2)}`).join(" ")}`);
+		}
+		let pairs: Vec<Pair> = [];
+		for (let s = 0; s < STAGES.length; s++) {
+			pairs.push({ key: `${STAGES[s]}_p50`, value: percentile(columns[s], 0.5) });
+			pairs.push({ key: `${STAGES[s]}_p999`, value: percentile(columns[s], 0.999) });
+		}
+		const inWindow = jumps.filter((at: float64): boolean => at >= from && at <= until).length;
+		const seconds = Math.max(0.001, (until - from) / 1000.0);
+		pairs.push({ key: "jumps", value: inWindow as float64 });
+		pairs.push({ key: "jumps_per_s", value: (inWindow as float64) / seconds });
+		pairs.push({ key: "unmatched", value: unmatched as float64 });
+		pairs.push({ key: "n", value: columns[0].length as float64 });
+		record("client", `${measure}_stages`, rep, pairs);
+		let order = totals.map((t: float64, at: number): int32 => at as int32);
+		order.sort((a: int32, b: int32): number => totals[b] - totals[a]);
+		for (let w = 0; w < Math.min(WORST_SHOWN, order.length); w++) {
+			console.log(`STAGES ${measure} rep=${rep} worst ${worst[order[w]]}`);
+		}
+	}
+	keyRows = [];
+	lastTrace = "";
+}
+
 function keysDone(e: Echoes): Pair {
 	return { key: "failed_after_keys", value: e.latencies.length as float64 };
 }
@@ -704,7 +865,7 @@ async function measuredEcho(
 	const busyBefore = d.busyMs();
 	const began = performance.now();
 	const _reset = d.takeLongestMs();
-	const got = await echoes(d, echo);
+	const got = await echoes(d, echo, measure);
 	if (got.arrivals.length > 0) {
 		const busy = (d.busyMs() - busyBefore) / (performance.now() - began);
 		record(mode, `${measure}_split`, rep, [
@@ -1032,6 +1193,11 @@ async function bench(): Promise<Result<void, string>> {
 			const d = mode == "client" ? try await clientDriver() : try localDriver();
 			const ran = await session(mode, rep, d, file);
 			const closed = await d.close();
+			if (mode == "client") {
+				stageReport(rep);
+			} else {
+				keyRows = [];
+			}
 			if (!ran.ok) { return Result.err(`${mode} rep ${rep}: ${ran.error}`); }
 			if (!closed.ok) { return Result.err(`${mode} rep ${rep} close: ${closed.error}`); }
 		}

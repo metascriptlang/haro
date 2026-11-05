@@ -741,6 +741,12 @@ async function applyEvents(
 async function emptied(this v: WorkspaceView, h: LinkedHost): Promise<boolean> {
 	if (v.hosts.some((other: LinkedHost): boolean => other.w.tabs.length > 0)) {
 		v.host.report.note(`the last pane on ${v.labelOf(h)} closed`);
+		h.link?.detach();
+		h.link = null;
+		h.inbox = [];
+		h.state = LinkState.Offline;
+		h.reason = "no shells";
+		v.showHosts();
 		return false;
 	}
 	v.host.report.note("the last pane closed");

@@ -542,6 +542,20 @@ test "a dropped server's tabs stay listed offline while the other works, and its
 	await closeAll(t);
 }
 
+test "a host whose last pane closes while another host has tabs is not dialed again until a new tab asks" {
+	const t = await twoHosts();
+	const v = t.v;
+	const b = t.build;
+	assert await until((): boolean => b.state == LinkState.Connected && b.panes.running.length == 2);
+	for (const p of [1, 2]) { v.sendTo(b, { kind: CommandKind.ClosePane, pane: p as PaneId }); }
+	assert await until((): boolean => b.state == LinkState.Offline && b.w.tabs.length == 0);
+	assert b.reason == "no shells", b.reason;
+	await sleepAsync(1500);
+	assert b.link === null && b.retry === null && b.state == LinkState.Offline;
+	assert v.primary().panes.running.length == 2;
+	await closeAll(t);
+}
+
 test "a host that refuses the window shows refused, is not dialed again, and leaves local panes working" {
 	const t = await twoHosts();
 	const v = t.v;

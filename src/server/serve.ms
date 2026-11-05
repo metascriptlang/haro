@@ -315,7 +315,7 @@ function output(this s: Server, pane: PaneId, seq: int64, bytes: Readonly<Span<u
 	}
 	let remote = false;
 	for (const c of s.clients) {
-		if (c.remote && s.paces(c, pane, performance.now())) {
+		if (c.remote && c.live(pane) && s.paces(c, pane, performance.now())) {
 			s.pace(c, pane, seq, bytes, readAt);
 		} else {
 			if (c.remote) { s.flushPaced(c, pane); }
@@ -588,6 +588,7 @@ async function screenTo(this s: Server, c: Client, pane: Pane, wanted: ScreenFor
 	const cols = pane.rect.cols;
 	const rows = pane.rect.rows;
 	const view = c.viewFor(pane.id);
+	s.flushPaced(c, pane.id);
 	view.sight = Sight.Shooting;
 	view.held = [];
 	const shot = await s.hostOf().snapshot(pane.id, wanted, s.setup.screenLimit);

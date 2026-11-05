@@ -155,6 +155,8 @@ function waiting(e: ProcessError, deadline: float64): boolean {
 	return e.kind == ProcessErrorKind.Timeout && msLeft(deadline) > 0;
 }
 
+// Polled, not run in spawn: an awaited spawn holds the event loop
+// (compiler card 2026-11-05-await-of-a-spawn-handle-blocks-the-event-loop).
 async function drainPolled(
 	child: ChildProcess,
 	stream: ChildStream,

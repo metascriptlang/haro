@@ -130,6 +130,10 @@ function paneRow(host: SidebarHost, pane: SidebarPane, cols: int32): SidebarRow 
 	};
 }
 
+export function lonePane(hosts: SidebarHost[]): boolean {
+	return hosts.length == 1 && hosts[0].tabs.length == 1 && hosts[0].tabs[0].panes.length == 1;
+}
+
 export function sidebarRows(hosts: SidebarHost[], cols: int32): SidebarRow[] {
 	let rows: SidebarRow[] = [];
 	let index: int32 = 0;
@@ -231,6 +235,14 @@ function rowsOf(tabs: SidebarTab[], cols: int32): SidebarRow[] {
 	let only = host(0, "", tabs);
 	only.header = false;
 	return sidebarRows([only], cols);
+}
+
+test "a lone pane is one host with one tab holding one pane" {
+	assert lonePane([host(0, "", [tab(1, true, [pane(2, "zsh", true)])])]);
+	assert !lonePane([host(0, "", [tab(1, true, [pane(2, "zsh", true), pane(3, "vim", false)])])]);
+	assert !lonePane([host(0, "", [tab(1, true, [pane(2, "zsh", true)]), tab(4, false, [pane(5, "top", true)])])]);
+	assert !lonePane([host(0, "", [tab(1, true, [pane(2, "zsh", true)])]), host(1, "rtx", [])]);
+	assert !lonePane([]);
 }
 
 test "tabs list in order, each followed by its panes one cell in" {

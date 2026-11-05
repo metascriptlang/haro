@@ -1,4 +1,4 @@
-import { Accessor, Setter, createSignal } from "../../../neon/src/core/signal";
+import { Accessor, Setter, accessor, createSignal } from "../../../neon/src/core/signal";
 import { flush } from "../../../neon/src/core/runtime";
 import { NeonEvent } from "../../../neon/src/render/event";
 import { PixelRatio } from "../../../neon/src/api/pixelRatio";
@@ -80,7 +80,7 @@ import {
 	DEFAULT_FRAME_LOOK,
 	FrameLook,
 } from "./components/features/workspace/paneFrame";
-import { SidebarHost, SidebarPane, SidebarTab } from "./components/features/sidebar/sidebar";
+import { SidebarHost, SidebarPane, SidebarTab, lonePane } from "./components/features/sidebar/sidebar";
 import {
 	CloseAsk,
 	Closing,
@@ -210,7 +210,8 @@ export interface WorkspaceView {
 	tabs: Accessor<SidebarHost[]>;
 	setTabs: Setter<SidebarHost[]>;
 	sidebarShown: Accessor<boolean>;
-	setSidebarShown: Setter<boolean>;
+	setSidebarWanted: Setter<boolean>;
+	setSidebarToggled: Setter<boolean | null>;
 	look: Accessor<FrameLook>;
 	setLook: Setter<FrameLook>;
 	chrome: Accessor<Chrome>;
@@ -323,6 +324,7 @@ export function open(
 	const [tabs, setTabs] = createSignal<SidebarHost[]>([]);
 	const [shown, setShown] = createSignal<HostId>(0 as HostId);
 	const [sidebar, setSidebar] = createSignal<boolean>(started.sidebarVisible);
+	const [toggled, setToggled] = createSignal<boolean | null>(null);
 	const [look, setLook] = createSignal<FrameLook>(lookOf(started));
 	const [chrome, setChrome] = createSignal<Chrome>(chromeOf(started));
 	const [inset, setInset] = createSignal<number>(started.padding);
@@ -350,8 +352,9 @@ export function open(
 		setLayout: setLayout,
 		tabs: tabs,
 		setTabs: setTabs,
-		sidebarShown: sidebar,
-		setSidebarShown: setSidebar,
+		sidebarShown: accessor((): boolean => toggled() ?? (sidebar() && !lonePane(tabs()))),
+		setSidebarWanted: setSidebar,
+		setSidebarToggled: setToggled,
 		look: look,
 		setLook: setLook,
 		chrome: chrome,
@@ -554,7 +557,8 @@ function reconfigure(this v: WorkspaceView, change: ConfigChange): void {
 	v.setLook(lookOf(c));
 	v.setChrome(chromeOf(c));
 	v.setInset(c.padding);
-	v.setSidebarShown(c.sidebarVisible);
+	v.setSidebarWanted(c.sidebarVisible);
+	v.setSidebarToggled(null);
 	for (const h of v.hosts) { h.w.dividerCells = dividerCellsOf(c); }
 	flush();
 	v.font.reconfigured(c, change.family);
@@ -1109,7 +1113,7 @@ function resized(this v: WorkspaceView, direction: Direction): void {
 }
 
 export function toggleSidebar(this v: WorkspaceView): void {
-	v.setSidebarShown(!v.sidebarShown());
+	v.setSidebarToggled(!v.sidebarShown());
 	flush();
 }
 

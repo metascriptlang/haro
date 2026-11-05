@@ -132,3 +132,41 @@ What is still open:
   - `FLOW_BYTES` at 1 MiB: 78-82 MB/s.
   - A wake only when the pty queue empties, plus `ptyWait(0)` without a timed wait: 77.7-79.6.
   - A 4 ms / 256 KiB slice: 73-92.
+
+## Remote: a delay relay in place of the network, 3 reps
+
+`sh scripts/benchServerPath.sh --remote --reps 3 --flood-mb 50` runs the client through a fake `ssh`
+whose transport is `serverPath.exe --relay`, a unix-socket relay. The relay delays each direction by
+half the RTT, and holds at most 2 MiB in flight per direction, the size of ssh's channel window.
+The real dial path runs (`ssh host … haro-server proxy`, `Proxied`, then pings), so the server paces and packs
+as it would for a remote client. The plain rows start the server with `--no-pack`.
+Echo is 100 keys typed into `cat` under `stty raw -echo`, with prediction off, then a `\r`, then 100 with it on.
+With prediction on, a key counts once it is drawn, from the overlay or from the VT.
+
+| measure | Linux (rtx) | macOS (m1m) |
+|---|---|---|
+| echo p50, prediction off, 50 / 100 / 300 ms RTT | 50.9 / 101.8 / 300.7 | 52.2 / 102.3 / 302.3 |
+| echo p50, prediction on, any RTT | 0.01 | 0.07-0.08 |
+| echo max, prediction on | one RTT, the first key of an epoch | same |
+| keys predicted / misses of 100 | 98 / 0 | 98 / 0 |
+| flood MB/s at 100 ms, repeated line, packed / plain | 109.8 / 37.2 | 84.4 / 36.6 |
+| wire MB for 50 MB, repeated line, packed / plain | 0.40 / 53.1 | 1.29 / 53.1 |
+| flood MB/s at 100 ms, `seq`, packed / plain | 23.8 / 24.2 | 39.1 / 34.0 |
+| wire MB for 50 MB, `seq`, packed / plain | 12.35 / 59.1 | 3.08 / 57.3 |
+| server CPU ms/MB, `seq`, packed / plain | 68 / 69 | 32 / 27 |
+| attach at 100 ms, empty / `seq 1 50000`, packed, ms | 221 / 226 | 276 / 281 |
+| attach wire bytes after `seq 1 50000`, packed / plain | 19.8 K / 80.1 K | 19.9 K / 82.1 K |
+
+Hosts: rtx and m1m at 1617807 plus the snapshot flush of 7e67379.
+Reading the rows:
+- The repeated line is the best case for deflate, and the relay window makes the plain run
+  wire bound. The `seq` file is the honest case: on Linux the client's parse (about 28 ms/MB) bounds it,
+  so packing saves 4.8x the bytes for the same rate; on macOS it saves 18x and runs 15% faster.
+- Deflate at level 1 costs the server about 1-5 ms/MB on top of the drain; on Linux the
+  difference is inside the noise.
+- Attach is two RTTs plus spawning the fake `ssh` and the proxy; packing shrinks the screen 4x.
+
+Local path: the client/server rows of the same runs match the table above.
+Linux flood 189 MB/s against 197, echo idle 0.20 / 0.43, under `cat` 0.81 / 2.45, under `yes` 0.41 / 2.94,
+attach Native / VtBytes 11.4 / 12.4 ms. macOS flood 78.0 against 78.2, echo idle 0.24 / 6.41,
+under `cat` 0.14 / 0.41, under `yes` 5.19 / 9.16, attach 14.0 / 18.0 ms.

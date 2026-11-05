@@ -1187,8 +1187,9 @@ async function bench(): Promise<Result<void, string>> {
 	const file = join(dir, "flood.txt");
 	const fileBytes = try makeFile(file, floodMb);
 	const modes = ["inproc", "client"];
+	const floodOnly = hasFlag("--flood-only");
 	for (let rep: int32 = 1; rep <= reps; rep++) {
-		for (let m = 0; m < modes.length; m++) {
+		for (let m = 0; m < modes.length && !floodOnly; m++) {
 			const mode = modes[m];
 			const d = mode == "client" ? try await clientDriver() : try localDriver();
 			const ran = await session(mode, rep, d, file);
@@ -1216,7 +1217,7 @@ async function bench(): Promise<Result<void, string>> {
 		try ceiling(rep, file, fileBytes);
 	}
 	for (const p of pools) { record(p.mode, p.measure, -1, spread(p.values)); }
-	if (!hasFlag("--no-attach")) { try await attachRun(reps); }
+	if (!hasFlag("--no-attach") && !floodOnly) { try await attachRun(reps); }
 	const _removed = removeAll(dir);
 	table();
 	return Result.ok(null);

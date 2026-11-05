@@ -20,13 +20,13 @@ first="$(pidOf)"
 check "status names a pid" '[ -n "$first" ]'
 "$bin" status
 
-(printf "$hello"; sleep 60) | setsid "$bin" proxy --state-dir "$state" > "$work/out1" 2> "$work/err1" &
+(printf "$hello"; sleep 60) | "$bin" proxy --state-dir "$state" > "$work/out1" 2> "$work/err1" &
 sleep 2
 proxied="$(pgrep -f "$bin proxy" | head -1)"
 check "the proxy relays the server's Welcome first" '[ "$(od -An -tx1 -j4 -N1 "$work/out1" | tr -d " ")" = 01 ]'
 check "the proxied client is attached" '[ "$(clientsOf)" = 1 ]'
 "$bin" status
-kill -HUP -- "-$(ps -o pgid= "$proxied" | tr -d ' ')" 2>/dev/null
+kill -HUP "$proxied" 2>/dev/null
 kill -9 "$proxied" 2>/dev/null
 sleep 1
 check "the server outlives a hung-up, killed proxy" '[ "$(pidOf)" = "$first" ]'

@@ -1,7 +1,8 @@
 #ifndef HARO_SERVER_WAKE_H
 #define HARO_SERVER_WAKE_H
 
-void serverWakeTo(int fd);
+int serverWakeOpen(void);
+void serverWakeClose(void);
 void serverWake(void);
 
 #endif

@@ -17,11 +17,18 @@ import {
 	WorkspaceEvent,
 } from "../workspace/workspace";
 import { append } from "../pty/bytes";
+import { deflateRaw } from "std/compress/deflate";
+import { CompressFormat, InflateStream, createInflate, inflateFeed, inflateFinish } from "std/compress/inflate";
 
 export const PROTOCOL_VERSION: uint32 = 2;
 export const HEADER_BYTES: int32 = 5;
 export const MAX_PAYLOAD_BYTES: int32 = 64 * 1024 * 1024;
 export const MAX_TREE_DEPTH: int32 = 128;
+export const PACK_AT_BYTES: int32 = 4 * 1024;
+export const PACKED: uint8 = 0x80;
+const PACKED_LENGTH_BYTES: int32 = 4;
+const PACK_LEVEL: int32 = 1;
+const INFLATE_STEP_BYTES: int32 = 16 * 1024;
 
 export enum Role {
 	Window,
@@ -118,6 +125,7 @@ export enum ProtocolError {
 	MalformedText,
 	RatioOutOfRange,
 	TreeTooDeep,
+	BadPacking,
 }
 
 export const MESSAGE_KINDS: MessageKind[] = [
@@ -479,6 +487,46 @@ function sealed(this w: Writer): Result<uint8[], ProtocolError> {
 	w.bytes[2] = ((size >> 8) & 0xff) as uint8;
 	w.bytes[3] = (size & 0xff) as uint8;
 	return Result.ok(w.bytes);
+}
+
+export function packed(frame: uint8[]): uint8[] {
+	const length = frame.length - HEADER_BYTES;
+	if (length < PACK_AT_BYTES) { return frame; }
+	const squeezed = deflateRaw(frame[HEADER_BYTES..frame.length].slice(), PACK_LEVEL);
+	if (!squeezed.ok || squeezed.value.length + PACKED_LENGTH_BYTES >= length) { return frame; }
+	const w: Writer = { bytes: [], tooDeep: false };
+	w.u32((squeezed.value.length + PACKED_LENGTH_BYTES) as uint32);
+	w.u8(frame[4] | PACKED);
+	w.u32(length as uint32);
+	w.bytes.append(squeezed.value);
+	return w.bytes;
+}
+
+function abandoned(stream: InflateStream): ProtocolError {
+	const _freed = inflateFinish(stream);
+	return ProtocolError.BadPacking;
+}
+
+function unpacked(bytes: uint8[], start: int32, end: int32): Result<uint8[], ProtocolError> {
+	if (end - start < PACKED_LENGTH_BYTES) { return Result.err(ProtocolError.PayloadTruncated); }
+	const length = bigEndian(bytes, start);
+	if ((length as int64) > (MAX_PAYLOAD_BYTES as int64)) { return Result.err(ProtocolError.PayloadTooLarge); }
+	const stream = createInflate(CompressFormat.Deflate);
+	const out: uint8[] = [];
+	let at = start + PACKED_LENGTH_BYTES;
+	while (at < end) {
+		const step = Math.min(end, at + INFLATE_STEP_BYTES);
+		const got = inflateFeed(stream, bytes[at..step].slice());
+		if (!got.ok) { return Result.err(ProtocolError.BadPacking); }
+		out.append(got.value as uint8[]);
+		if ((out.length as int64) > (length as int64)) { return Result.err(abandoned(stream)); }
+		at = step;
+	}
+	const tail = inflateFinish(stream);
+	if (!tail.ok) { return Result.err(ProtocolError.BadPacking); }
+	out.append(tail.value as uint8[]);
+	if ((out.length as int64) != (length as int64)) { return Result.err(ProtocolError.BadPacking); }
+	return Result.ok(out);
 }
 
 interface Reader {
@@ -935,15 +983,19 @@ function frame(
 	}
 	const kind = try code(
 		MESSAGE_KINDS,
-		bytes[at + 4],
+		bytes[at + 4] & ~PACKED,
 		ProtocolError.UnknownMessageType,
 	);
 	const start = at + HEADER_BYTES;
 	const end = start + (size as int32);
 	if (bytes.length < end) { return Result.ok(at); }
-	const r: Reader = { bytes: bytes, at: start, end: end };
+	let r: Reader = { bytes: bytes, at: start, end: end };
+	if ((bytes[at + 4] & PACKED) != 0) {
+		const payload = try unpacked(bytes, start, end);
+		r = { bytes: payload, at: 0, end: payload.length };
+	}
 	out.push(try r.message(kind));
-	if (r.at != end) { return Result.err(ProtocolError.TrailingBytes); }
+	if (r.at != r.end) { return Result.err(ProtocolError.TrailingBytes); }
 	return Result.ok(end);
 }
 

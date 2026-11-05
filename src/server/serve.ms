@@ -36,6 +36,7 @@ import {
 	encode,
 	encodeOutput,
 	greet,
+	packed,
 	push,
 	screenFormat,
 } from "./protocol";
@@ -224,6 +225,7 @@ export class Server {
 	wake: Connection | null = null;
 	jumpBytes: int64 = JUMP_BYTES;
 	paceCapMs: float64 = PACE_MS;
+	packing: boolean = true;
 	inputsHeld: int32 = 0;
 	cols: int32 = DEFAULT_COLS;
 	rows: int32 = DEFAULT_ROWS;
@@ -282,7 +284,11 @@ function sendTo(this s: Server, c: Client, m: Message): void {
 		return;
 	}
 	s.flushPaced(c);
-	const _sent = c.conn.send(bytes.value);
+	const _sent = c.conn.send(s.packedFor(c, bytes.value));
+}
+
+function packedFor(this s: Server, c: Client, frame: uint8[]): uint8[] {
+	return c.remote && s.packing ? packed(frame) : frame;
 }
 
 function broadcast(this s: Server, m: Message): void {
@@ -294,7 +300,7 @@ function broadcast(this s: Server, m: Message): void {
 	for (const c of s.clients) {
 		if (c.attached) {
 			s.flushPaced(c);
-			const _sent = c.conn.send(bytes.value);
+			const _sent = c.conn.send(s.packedFor(c, bytes.value));
 		}
 	}
 }
@@ -400,7 +406,7 @@ function forward(
 		s.jump(c, pane);
 		return;
 	}
-	const _sent = c.conn.send(frame, pane as int32);
+	const _sent = c.conn.send(s.packedFor(c, frame), pane as int32);
 	s.trace?.handed(c.conn, pane, seq, readAt, carried);
 }
 

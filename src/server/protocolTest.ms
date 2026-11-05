@@ -28,6 +28,8 @@ import {
 	Message,
 	MessageKind,
 	NODE_KINDS,
+	PACKED,
+	PACK_AT_BYTES,
 	PROTOCOL_VERSION,
 	ProtocolError,
 	ROLES,
@@ -38,9 +40,11 @@ import {
 	encode,
 	encodeOutput,
 	greet,
+	packed,
 	push,
 	screenFormat,
 } from "./protocol";
+import { deflateRaw } from "std/compress/deflate";
 
 // msc card 2026-11-04-literal-into-nullable-variant-field-dies-at-clang:
 // a non-null value in a variant's nullable field fails in the C compiler.
@@ -627,4 +631,56 @@ test "a native screen is chosen only for the same named vt build" {
 	assert screenFormat("b1", "b1") == ScreenFormat.Native;
 	assert screenFormat("b1", "b2") == ScreenFormat.VtBytes;
 	assert screenFormat("", "") == ScreenFormat.VtBytes;
+}
+
+function lines(count: int32): uint8[] {
+	const out: uint8[] = [];
+	for (let i: int32 = 0; i < count; i++) {
+		for (const b of `line ${i} of a flood\r\n`.asBytes()) { out.push(b); }
+	}
+	return out;
+}
+
+function packedFrame(kind: MessageKind, claimed: uint32, body: uint8[]): uint8[] {
+	const payload: uint8[] = [
+		((claimed >> 24) & 0xff) as uint8,
+		((claimed >> 16) & 0xff) as uint8,
+		((claimed >> 8) & 0xff) as uint8,
+		(claimed & 0xff) as uint8,
+	];
+	for (const b of body) { payload.push(b); }
+	return frame((kind as uint8) | PACKED, payload);
+}
+
+test "an output over 4 KiB packs into a smaller frame that decodes to the same message, a small one stays as it is" {
+	const big: Message = { kind: MessageKind.Output, pane: pane(2), seq: 9, bytes: lines(400) };
+	const plain = bytesOf(big);
+	const squeezed = packed(plain);
+	assert squeezed.length < plain.length / 4, `${squeezed.length} of ${plain.length}`;
+	assert (squeezed[4] & PACKED) != 0;
+	const back = decodeAll(squeezed, 1000);
+	assert back.length == 1 && same(bytesOf(back[0]), plain);
+	const small = bytesOf({ kind: MessageKind.Output, pane: pane(2), seq: 9, bytes: lines(3) });
+	assert small.length < PACK_AT_BYTES && same(packed(small), small);
+	const stream: uint8[] = [];
+	for (const b of squeezed) { stream.push(b); }
+	for (const b of small) { stream.push(b); }
+	assert decodeAll(stream, 7).length == 2;
+}
+
+test "a packed frame whose deflate is broken, whose length lies or claims too much is refused" {
+	const payload = bytesOf({ kind: MessageKind.Output, pane: pane(1), seq: 1, bytes: lines(300) });
+	const body = payload[HEADER_BYTES..payload.length].slice();
+	const squeezed = deflateRaw(body, 1);
+	assert squeezed.ok;
+	if (!squeezed.ok) { return; }
+	const good = squeezed.value as uint8[];
+	assert decodeAll(packedFrame(MessageKind.Output, body.length as uint32, good), 64).length == 1;
+	const broken: uint8[] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+	assert refusal(packedFrame(MessageKind.Output, body.length as uint32, broken)) == ProtocolError.BadPacking;
+	assert refusal(packedFrame(MessageKind.Output, (body.length - 1) as uint32, good)) == ProtocolError.BadPacking;
+	assert refusal(packedFrame(MessageKind.Output, (body.length + 1) as uint32, good)) == ProtocolError.BadPacking;
+	assert refusal(packedFrame(MessageKind.Output, (MAX_PAYLOAD_BYTES + 1) as uint32, good)) ==
+		ProtocolError.PayloadTooLarge;
+	assert refusal(frame((MessageKind.Output as uint8) | PACKED, [0, 0])) == ProtocolError.PayloadTruncated;
 }

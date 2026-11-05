@@ -36,6 +36,7 @@ import {
 	ScreenFormat,
 	create,
 	encode,
+	encodeOutput,
 	greet,
 	push,
 	screenFormat,
@@ -465,6 +466,18 @@ test "a stream cut anywhere decodes to the same messages" {
 			assert same(bytesOf(back[i]), bytesOf(expected[i]));
 		}
 	}
+}
+
+test "an output written from a view is the encoded Output, and a 1 MiB one decodes from 64 KiB chunks" {
+	let bytes: Vec<uint8> = [];
+	for (let i: int32 = 0; i < 1024 * 1024; i++) { bytes.push((i % 251) as uint8); }
+	const viewed = encodeOutput(pane(3), 9, bytes);
+	const message: Message = { kind: MessageKind.Output, pane: pane(3), seq: 9, bytes: [...bytes] };
+	assert viewed.ok;
+	if (!viewed.ok) { return; }
+	assert same(viewed.value, bytesOf(message));
+	const back = decodeAll(viewed.value, 64 * 1024);
+	assert back.length == 1 && same(bytesOf(back[0]), viewed.value);
 }
 
 test "a partial frame yields nothing until its last byte arrives" {

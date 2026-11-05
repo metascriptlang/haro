@@ -63,6 +63,7 @@ export enum MessageKind {
 	Ping,
 	Pong,
 	Proxied,
+	Unseen,
 }
 
 const SCREEN_FIELDS_BYTES: int32 = 17;
@@ -107,6 +108,7 @@ export struct Message = match (kind: MessageKind) {
 	MessageKind.Ping => { nonce: uint64, rttMicros: uint32 },
 	MessageKind.Pong => { nonce: uint64 },
 	MessageKind.Proxied => {},
+	MessageKind.Unseen => { pane: PaneId, unseen: boolean },
 };
 
 export enum ProtocolError {
@@ -151,6 +153,7 @@ export const MESSAGE_KINDS: MessageKind[] = [
 	MessageKind.Ping,
 	MessageKind.Pong,
 	MessageKind.Proxied,
+	MessageKind.Unseen,
 ];
 export const ROLES: Role[] = [Role.Window, Role.Cli];
 export const SCREEN_FORMATS: ScreenFormat[] = [
@@ -449,6 +452,9 @@ function payload(this w: Writer, m: Message): void {
 		w.u32(m.rttMicros);
 	} else if (m.kind == MessageKind.Pong) {
 		w.u64(m.nonce);
+	} else if (m.kind == MessageKind.Unseen) {
+		w.pane(m.pane);
+		w.flag(m.unseen);
 	}
 }
 
@@ -959,6 +965,11 @@ function message(
 			Result.ok({ kind: MessageKind.Pong, nonce: nonce })
 		},
 		MessageKind.Proxied => Result.ok({ kind: MessageKind.Proxied }),
+		MessageKind.Unseen => {
+			const id = try r.pane();
+			const unseen = try r.flag();
+			Result.ok({ kind: MessageKind.Unseen, pane: id, unseen: unseen })
+		},
 	};
 }
 

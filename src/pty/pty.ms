@@ -41,8 +41,13 @@ when (windows) {
 	import { ptyChildPid, ptyExitSignal, ptyMaster } from "./nativePty.h";
 
 	@include("unistd.h");
+	@include("termios.h");
 
 	extern function tcgetpgrp(fd: int32): int32;
+	extern struct Termios from "struct termios" { c_lflag: uint64; }
+	extern function tcgetattr(fd: int32, ref modes: Termios): int32;
+	extern const ECHO: uint64 from "ECHO";
+	extern const ICANON: uint64 from "ICANON";
 }
 
 export struct NativePty { id: int32; }
@@ -270,6 +275,16 @@ export function busy(this p: NativePty): boolean {
 		if (ptyExited(p.id) != 0) { return false; }
 		const group = tcgetpgrp(ptyMaster(p.id));
 		return group > 0 && group != ptyChildPid(p.id);
+	}
+}
+
+export function readsUnseen(this p: NativePty): boolean {
+	when (windows) {
+		return false;
+	} else {
+		let modes: Termios = { c_lflag: 0 };
+		if (tcgetattr(ptyMaster(p.id), modes) != 0) { return false; }
+		return (modes.c_lflag & ECHO) == 0 && (modes.c_lflag & ICANON) != 0;
 	}
 }
 

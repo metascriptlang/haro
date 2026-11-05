@@ -11,6 +11,7 @@ import {
 	mergedEnv,
 	open,
 	read,
+	readsUnseen,
 	resize,
 	sortedByName,
 	spawn,
@@ -327,6 +328,27 @@ when (!windows) {
 			if (performance.now() - start > withinMs) { return false; }
 		}
 		return true;
+	}
+
+	function readsUnseenWithin(this p: NativePty, wanted: boolean, withinMs: float64): boolean {
+		const start: float64 = performance.now();
+		while (p.readsUnseen() != wanted) {
+			if (performance.now() - start > withinMs) { return false; }
+		}
+		return true;
+	}
+
+	test "a pty reading a line without echo reads unseen, a cooked or raw read with its own echo does not" {
+		assert withPty("sh -c 'stty -echo; read line'", (p: NativePty): void => {
+			assert p.readsUnseenWithin(true, 5000);
+		});
+		assert withPty("sh -c 'read line'", (p: NativePty): void => {
+			assert !p.readsUnseen();
+		});
+		assert withPty("sh -c 'stty raw -echo; read line'", (p: NativePty): void => {
+			assert p.readsUnseenWithin(false, 5000);
+			assert !p.readsUnseen();
+		});
 	}
 
 	test "a shell is busy while a job it runs holds the terminal, and idle back at its own read" {

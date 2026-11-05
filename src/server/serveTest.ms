@@ -784,4 +784,32 @@ when (!windows) {
 		await stopped(s, ended);
 		cleanUp(socket);
 	}
+
+	function lastUnseen(p: Peer): string {
+		let said = "none";
+		for (const m of p.got) {
+			if (m.kind == MessageKind.Unseen && m.pane == FIRST) { said = m.unseen ? "unseen" : "seen"; }
+		}
+		return said;
+	}
+
+	test "a remote client is told when a pane reads a line without echo and when it echoes again, a local one is not" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const s = await serving(setupAt(socket, logged));
+		const ended = ending(s);
+		const near = await attached(socket, vtBuild());
+		const far = await dial(socket);
+		say(far, { kind: MessageKind.Proxied });
+		say(far, hello(vtBuild()));
+		say(far, { kind: MessageKind.Attach });
+		assert await until((): boolean => screenFor(far, FIRST) !== null);
+		say(far, { kind: MessageKind.Input, pane: FIRST, bytes: [...("stty -echo; echo A''SK; read secret; stty echo; echo D''ONE\r").asBytes()] });
+		assert await until((): boolean => lastUnseen(far) == "unseen"), `${kinds(far)} ${logged.text}`;
+		say(far, { kind: MessageKind.Input, pane: FIRST, bytes: [...("hidden\r").asBytes()] });
+		assert await until((): boolean => printed(far, FIRST).includes("DONE") && lastUnseen(far) == "seen"), kinds(far);
+		assert lastUnseen(near) == "none";
+		await stopped(s, ended);
+		cleanUp(socket);
+	}
 }

@@ -21,6 +21,7 @@ import {
 	closeAll,
 	holding,
 	open,
+	readsUnseen,
 	release,
 	snapshot,
 	wake as wakePanes,
@@ -231,6 +232,7 @@ export class Server {
 	rows: int32 = DEFAULT_ROWS;
 	jobs: (() => Promise<void>)[] = [];
 	typed: Typed[] = [];
+	unseen: PaneId[] = [];
 	working: boolean = false;
 	recheckQueued: boolean = false;
 	exits: PaneExit[] = [];
@@ -311,6 +313,7 @@ function output(this s: Server, pane: PaneId, seq: int64, bytes: Readonly<Span<u
 		s.log(`Output not sent: ${frame.error.toString()}`);
 		return;
 	}
+	let remote = false;
 	for (const c of s.clients) {
 		if (c.remote && s.paces(c, pane, performance.now())) {
 			s.pace(c, pane, seq, bytes, readAt);
@@ -318,6 +321,22 @@ function output(this s: Server, pane: PaneId, seq: int64, bytes: Readonly<Span<u
 			if (c.remote) { s.flushPaced(c, pane); }
 			s.route(c, pane, seq, frame.value, readAt, bytes.length);
 		}
+		remote = remote || c.remote && c.attached;
+	}
+	if (remote && s.unseenChanged(pane)) { s.tellUnseen(pane); }
+}
+
+function unseenChanged(this s: Server, pane: PaneId): boolean {
+	const now = s.hostOf().readsUnseen(pane);
+	if (now == s.unseen.includes(pane)) { return false; }
+	s.unseen = now ? [...s.unseen, pane] : s.unseen.filter((p: PaneId): boolean => !(p == pane));
+	return true;
+}
+
+function tellUnseen(this s: Server, pane: PaneId): void {
+	const told: Message = { kind: MessageKind.Unseen, pane: pane, unseen: s.unseen.includes(pane) };
+	for (const c of s.clients) {
+		if (c.remote && c.attached) { s.sendTo(c, told); }
 	}
 }
 
@@ -532,6 +551,7 @@ async function run(this s: Server, c: WorkspaceCommand): Promise<void> {
 
 function forget(this s: Server, pane: PaneId): void {
 	s.typed = s.typed.filter((t: Typed): boolean => !(t.pane == pane));
+	s.unseen = s.unseen.filter((p: PaneId): boolean => !(p == pane));
 	for (const c of s.clients) {
 		c.views = c.views.filter((v: PaneView): boolean => v.pane != pane);
 	}
@@ -552,6 +572,15 @@ async function attach(this s: Server, c: Client): Promise<void> {
 		for (const pane of tab.root.panes()) { await s.screenTo(c, pane, wanted); }
 	}
 	c.attached = true;
+	if (c.remote) {
+		for (const id of s.paneIds()) {
+			if (s.unseenChanged(id)) {
+				s.tellUnseen(id);
+			} else if (s.unseen.includes(id)) {
+				s.sendTo(c, { kind: MessageKind.Unseen, pane: id, unseen: true });
+			}
+		}
+	}
 	s.trace?.follow(c.conn);
 }
 

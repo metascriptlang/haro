@@ -1,7 +1,7 @@
 import { Shell, closed, localCwd, opened } from "../controller/shell";
 import { Drained, Where, label } from "../controller/io";
 import { TermError } from "../controller/term";
-import { NativePty, exitCode, wait, write as writeNative } from "../pty/pty";
+import { NativePty, exitCode, readsUnseen as nativeReadsUnseen, wait, write as writeNative } from "../pty/pty";
 import { PtyError } from "../pty/transport";
 import { CellRect, PaneId } from "../workspace/tree";
 import { EventKind, WorkspaceEvent } from "../workspace/workspace";
@@ -203,6 +203,11 @@ export function write(this h: PaneHost, id: PaneId, bytes: Vec<uint8>): boolean 
 		h.sink.failed(id, `${Where.Text.label()}: ${error}`);
 	}
 	return true;
+}
+
+export function readsUnseen(this h: PaneHost, id: PaneId): boolean {
+	const native = h.paneOf(id)?.native ?? null;
+	return native !== null && native.nativeReadsUnseen();
 }
 
 export async function busy(this h: PaneHost, id: PaneId): Promise<boolean> {

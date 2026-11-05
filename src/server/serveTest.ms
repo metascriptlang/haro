@@ -35,6 +35,8 @@ when (!windows) {
 		readonly conn: Connection;
 		decoder: Decoder = Decoder.create();
 		got: Message[] = [];
+		heardAt: string[] = [];
+		heardTimes: float64[] = [];
 		closed: boolean = false;
 		broken: string = "";
 
@@ -85,7 +87,13 @@ when (!windows) {
 				p.broken = got.error.toString();
 				return;
 			}
-			for (const m of got.value) { p.got.push(m); }
+			for (const m of got.value) {
+				p.got.push(m);
+				if (m.kind == MessageKind.Output) {
+					p.heardAt.push(printed(p, m.pane));
+					p.heardTimes.push(performance.now());
+				}
+			}
 		}, (why: CloseReason): void => { p.closed = true; });
 		return p;
 	}
@@ -738,6 +746,41 @@ when (!windows) {
 			assert link.rttMs !== null && heard.rtts[0] >= 0;
 			link.detach();
 		}
+		await stopped(s, ended);
+		cleanUp(socket);
+	}
+
+	function arrivalOf(p: Peer, text: string): float64 {
+		return p.heardAt.findIndex((t: string): boolean => t.includes(text)) < 0
+			? -1
+			: p.heardTimes[p.heardAt.findIndex((t: string): boolean => t.includes(text))];
+	}
+
+	test "a remote client's unsolicited output waits out the pacing window, its keystroke echo and a local client's output do not" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const s = await serving(setupAt(socket, logged));
+		s.paceCapMs = 600;
+		const ended = ending(s);
+		const near = await attached(socket, vtBuild());
+		const far = await dial(socket);
+		say(far, { kind: MessageKind.Proxied });
+		say(far, hello(vtBuild()));
+		say(far, { kind: MessageKind.Attach });
+		say(far, { kind: MessageKind.Ping, nonce: 1, rttMicros: 2000000 });
+		assert await until((): boolean => screenFor(far, FIRST) !== null && far.got.some((m: Message): boolean => m.kind == MessageKind.Pong));
+		typed(near, "stty -echo; echo R''EADY\r");
+		assert await until((): boolean => printed(far, FIRST).includes("READY")), logged.text;
+		await sleepAsync(800);
+		typed(near, "sleep 0.3; echo L''ATE\r");
+		assert await until((): boolean => printed(far, FIRST).includes("LATE")), logged.text;
+		const late = arrivalOf(far, "LATE") - arrivalOf(near, "LATE");
+		assert late >= 400, `${late}`;
+		await sleepAsync(800);
+		say(far, { kind: MessageKind.Input, pane: FIRST, bytes: [...("stty echo; echo K''EY\r").asBytes()] });
+		assert await until((): boolean => printed(far, FIRST).includes("KEY")), logged.text;
+		const key = arrivalOf(far, "KEY") - arrivalOf(near, "KEY");
+		assert key < 300, `${key}`;
 		await stopped(s, ended);
 		cleanUp(socket);
 	}

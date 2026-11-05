@@ -42,7 +42,7 @@ when (!windows) {
 		}
 	}
 
-	test "a proxy passes the stream both ways, and its stdin's end closes only its own client" {
+	test "a proxy marks its client remote, passes the stream both ways, and its stdin's end closes only its own client" {
 		const socket = join(join(tmpDir(), `haro-proxy-${Date.now()}`), "s.sock");
 		const started = await Server.start({
 			launch: { command: "sh", shellScripts: null, startIn: null, originCwd: false },
@@ -87,7 +87,7 @@ when (!windows) {
 		}
 		assert got.length > 0 && got[0].kind == MessageKind.Welcome;
 		assert got.some((m: Message): boolean => m.kind == MessageKind.Screen && m.pane == FIRST);
-		assert s.clients.length == 1;
+		assert s.clients.length == 1 && s.clients[0].remote;
 		const _closed = close(input[1]);
 		const done = await bridged;
 		assert done.ok;

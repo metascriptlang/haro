@@ -1,4 +1,5 @@
 import { CloseReason, Connection, connectToUnix } from "./transport";
+import { MessageKind, encode } from "./protocol";
 
 when (!windows) {
 	@include("./pump.h");
@@ -41,6 +42,11 @@ export function pumped(from: int32): Connection | null {
 }
 
 export async function bridge(conn: Connection, from: int32, to: int32): Promise<Result<void, string>> {
+	const said = encode({ kind: MessageKind.Proxied });
+	if (!said.ok || !conn.send(said.value)) {
+		conn.close();
+		return Result.err("the proxy could not tell the server it carries a remote client");
+	}
 	const input = pumped(from);
 	if (input === null) {
 		conn.close();

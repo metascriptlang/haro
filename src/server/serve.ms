@@ -2,6 +2,7 @@
 
 import { Config, PaneCwd } from "../config/config";
 import { ptySetWake } from "../pty/nativePty.h";
+import { append } from "../pty/bytes";
 import { vtBuild } from "../vt/vt";
 import { Pane, PaneId, panes } from "../workspace/tree";
 import {
@@ -84,6 +85,10 @@ const STALL_MS: float64 = 250;
 const FLUSH_ON_EXIT_MS: int32 = 2000;
 const MAX_ADMITTING: int32 = 8;
 const LOCAL: string = "local";
+const PACED_RTT_MS: float64 = 20;
+const PACE_MS: float64 = 8;
+const ECHO_MS: float64 = 50;
+const PACED_BYTES: int32 = 64 * 1024;
 
 export struct ServeOptions {
 	config: Config;
@@ -133,6 +138,18 @@ struct HeldFrame {
 	frame: uint8[];
 }
 
+struct PacedOutput {
+	pane: PaneId;
+	seq: int64;
+	bytes: Vec<uint8>;
+	readAt: float64;
+}
+
+struct Typed {
+	pane: PaneId;
+	at: float64;
+}
+
 class PaneView {
 	readonly pane: PaneId;
 	sight: Sight = Sight.Skipped;
@@ -154,6 +171,9 @@ class Client {
 	views: PaneView[] = [];
 	resyncQueued: boolean = false;
 	rttMs: float64 = 0;
+	remote: boolean = false;
+	paced: Vec<PacedOutput> = [];
+	pacing: number | null = null;
 
 	constructor(conn: Connection, identity: string) {
 		this.conn = conn;
@@ -203,10 +223,12 @@ export class Server {
 	serving: string[] = [];
 	wake: Connection | null = null;
 	jumpBytes: int64 = JUMP_BYTES;
+	paceCapMs: float64 = PACE_MS;
 	inputsHeld: int32 = 0;
 	cols: int32 = DEFAULT_COLS;
 	rows: int32 = DEFAULT_ROWS;
 	jobs: (() => Promise<void>)[] = [];
+	typed: Typed[] = [];
 	working: boolean = false;
 	recheckQueued: boolean = false;
 	exits: PaneExit[] = [];
@@ -259,6 +281,7 @@ function sendTo(this s: Server, c: Client, m: Message): void {
 		s.log(`${m.kind.toString()} not sent: ${bytes.error.toString()}`);
 		return;
 	}
+	s.flushPaced(c);
 	const _sent = c.conn.send(bytes.value);
 }
 
@@ -269,7 +292,10 @@ function broadcast(this s: Server, m: Message): void {
 		return;
 	}
 	for (const c of s.clients) {
-		if (c.attached) { const _sent = c.conn.send(bytes.value); }
+		if (c.attached) {
+			s.flushPaced(c);
+			const _sent = c.conn.send(bytes.value);
+		}
 	}
 }
 
@@ -280,14 +306,84 @@ function output(this s: Server, pane: PaneId, seq: int64, bytes: Readonly<Span<u
 		return;
 	}
 	for (const c of s.clients) {
-		const view = c.viewOf(pane);
-		if (view === null) {
-			if (c.attached) { s.forward(c, pane, seq, frame.value, readAt, bytes.length); }
-		} else if (view.sight == Sight.Shooting) {
-			view.held.push({ seq: seq, frame: frame.value });
-		} else if (view.sight == Sight.Live && seq > view.after) {
-			s.forward(c, pane, seq, frame.value, readAt, bytes.length);
+		if (c.remote && s.paces(c, pane, performance.now())) {
+			s.pace(c, pane, seq, bytes, readAt);
+		} else {
+			if (c.remote) { s.flushPaced(c, pane); }
+			s.route(c, pane, seq, frame.value, readAt, bytes.length);
 		}
+	}
+}
+
+function route(
+	this s: Server,
+	c: Client,
+	pane: PaneId,
+	seq: int64,
+	frame: uint8[],
+	readAt: float64,
+	carried: int32,
+): void {
+	const view = c.viewOf(pane);
+	if (view === null) {
+		if (c.attached) { s.forward(c, pane, seq, frame, readAt, carried); }
+	} else if (view.sight == Sight.Shooting) {
+		view.held.push({ seq: seq, frame: frame });
+	} else if (view.sight == Sight.Live && seq > view.after) {
+		s.forward(c, pane, seq, frame, readAt, carried);
+	}
+}
+
+function paces(this s: Server, c: Client, pane: PaneId, now: float64): boolean {
+	if (c.rttMs < PACED_RTT_MS) { return false; }
+	for (const t of s.typed) {
+		if (t.pane == pane) { return now - t.at > ECHO_MS; }
+	}
+	return true;
+}
+
+function pace(this s: Server, c: Client, pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>, readAt: float64): void {
+	let at = -1;
+	for (let i = 0; i < c.paced.length; i++) {
+		if (c.paced[i].pane == pane) { at = i; }
+	}
+	if (at < 0) {
+		c.paced.push({ pane: pane, seq: seq, bytes: [], readAt: readAt });
+		at = c.paced.length - 1;
+	}
+	c.paced[at].seq = seq;
+	c.paced[at].bytes.append(bytes);
+	if (c.paced[at].bytes.length >= PACED_BYTES) {
+		s.flushPaced(c, pane);
+		return;
+	}
+	if (c.pacing === null) {
+		c.pacing = setTimeout((): void => {
+			c.pacing = null;
+			s.flushPaced(c);
+		}, Math.max(1, Math.round(Math.min(s.paceCapMs, c.rttMs / 2))) as int32);
+	}
+}
+
+function flushPaced(this s: Server, c: Client, only: PaneId | null = null): void {
+	if (c.paced.length == 0) { return; }
+	const all = c.paced;
+	c.paced = [];
+	for (const p of all) {
+		if (only !== null && !(p.pane == only)) {
+			c.paced.push(p);
+			continue;
+		}
+		const frame = encodeOutput(p.pane, p.seq as uint64, p.bytes);
+		if (!frame.ok) {
+			s.log(`Output not sent: ${frame.error.toString()}`);
+			continue;
+		}
+		s.route(c, p.pane, p.seq, frame.value, p.readAt, p.bytes.length);
+	}
+	if (c.paced.length == 0 && c.pacing !== null) {
+		clearTimeout(c.pacing);
+		c.pacing = null;
 	}
 }
 
@@ -429,6 +525,7 @@ async function run(this s: Server, c: WorkspaceCommand): Promise<void> {
 }
 
 function forget(this s: Server, pane: PaneId): void {
+	s.typed = s.typed.filter((t: Typed): boolean => !(t.pane == pane));
 	for (const c of s.clients) {
 		c.views = c.views.filter((v: PaneView): boolean => v.pane != pane);
 	}
@@ -523,6 +620,10 @@ function fit(this s: Server, cols: int32, rows: int32): void {
 }
 
 function received(this s: Server, c: Client, m: Message): void {
+	if (m.kind == MessageKind.Proxied) {
+		c.remote = true;
+		return;
+	}
 	if (!c.greeted) {
 		if (m.kind == MessageKind.Hello) {
 			s.hello(c, m);
@@ -537,6 +638,7 @@ function received(this s: Server, c: Client, m: Message): void {
 		const command = m.command;
 		s.enqueue(async (): Promise<void> => { await s.run(command); });
 	} else if (m.kind == MessageKind.Input) {
+		if (c.remote) { s.stampTyped(m.pane); }
 		s.input(m.pane, m.bytes);
 	} else if (m.kind == MessageKind.Fit) {
 		s.fit(m.cols, m.rows);
@@ -559,6 +661,17 @@ function received(this s: Server, c: Client, m: Message): void {
 	} else {
 		s.refuse(c, `${m.kind.toString()} is a message only the server sends`);
 	}
+}
+
+function stampTyped(this s: Server, pane: PaneId): void {
+	const now = performance.now();
+	for (let i = 0; i < s.typed.length; i++) {
+		if (s.typed[i].pane == pane) {
+			s.typed[i].at = now;
+			return;
+		}
+	}
+	s.typed.push({ pane: pane, at: now });
 }
 
 function input(this s: Server, pane: PaneId, bytes: uint8[]): void {
@@ -610,9 +723,14 @@ function welcome(this s: Server, conn: Connection, identity: string): void {
 		return;
 	}
 	const c = new Client(conn, identity);
+	c.remote = identity != LOCAL;
 	s.clients.push(c);
 	conn.watchSent((total: int64): void => { s.sentOn(c, total); });
 	conn.start((chunk: uint8[]): void => { s.data(c, chunk); }, (why: CloseReason): void => {
+		c.paced = [];
+		const pacing = c.pacing;
+		if (pacing !== null) { clearTimeout(pacing); }
+		c.pacing = null;
 		s.clients = s.clients.filter((other: Client): boolean => other !== c);
 		if (why == CloseReason.Backlogged) { s.log("a client fell too far behind and was cut"); }
 		s.releaseHeld();

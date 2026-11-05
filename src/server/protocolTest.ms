@@ -317,6 +317,7 @@ function messages(): Message[] {
 		},
 		{ kind: MessageKind.Ping, nonce: 18446744073709551615, rttMicros: 4294967295 },
 		{ kind: MessageKind.Pong, nonce: 7 },
+		{ kind: MessageKind.Proxied },
 	];
 }
 
@@ -332,7 +333,7 @@ test "each decode table lists its enum in ordinal order" {
 	for (let i: int32 = 0; i < MESSAGE_KINDS.length; i++) {
 		assert MESSAGE_KINDS[i] as int32 == i;
 	}
-	assert MESSAGE_KINDS.length == (MessageKind.Pong as int32) + 1;
+	assert MESSAGE_KINDS.length == (MessageKind.Proxied as int32) + 1;
 	for (let i: int32 = 0; i < COMMAND_KINDS.length; i++) {
 		assert COMMAND_KINDS[i] as int32 == i;
 	}

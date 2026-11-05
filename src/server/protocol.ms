@@ -55,6 +55,7 @@ export enum MessageKind {
 	Status,
 	Ping,
 	Pong,
+	Proxied,
 }
 
 const SCREEN_FIELDS_BYTES: int32 = 17;
@@ -98,6 +99,7 @@ export struct Message = match (kind: MessageKind) {
 	MessageKind.Status => { listeners: string[], clients: string[] },
 	MessageKind.Ping => { nonce: uint64, rttMicros: uint32 },
 	MessageKind.Pong => { nonce: uint64 },
+	MessageKind.Proxied => {},
 };
 
 export enum ProtocolError {
@@ -140,6 +142,7 @@ export const MESSAGE_KINDS: MessageKind[] = [
 	MessageKind.Status,
 	MessageKind.Ping,
 	MessageKind.Pong,
+	MessageKind.Proxied,
 ];
 export const ROLES: Role[] = [Role.Window, Role.Cli];
 export const SCREEN_FORMATS: ScreenFormat[] = [
@@ -907,6 +910,7 @@ function message(
 			const nonce = try r.u64();
 			Result.ok({ kind: MessageKind.Pong, nonce: nonce })
 		},
+		MessageKind.Proxied => Result.ok({ kind: MessageKind.Proxied }),
 	};
 }
 

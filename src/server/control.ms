@@ -23,12 +23,16 @@ export struct StatusReport {
 
 class Asker {
 	readonly conn: Connection;
+	readonly peer: PeerProgram | null;
 	decoder: Decoder = Decoder.create();
 	got: Message[] = [];
 	closed: boolean = false;
 	broken: string = "";
 
-	constructor(conn: Connection) { this.conn = conn; }
+	constructor(conn: Connection) {
+		this.conn = conn;
+		this.peer = peerProgram(conn.fd);
+	}
 }
 
 function say(this a: Asker, m: Message): void {
@@ -142,9 +146,8 @@ export async function otherVersion(socket: string): Promise<string | null> {
 	if (a === null) { return null; }
 	const first: Message | null = a.got.length > 0 ? a.got[0] : null;
 	if (first !== null && first.kind == MessageKind.Refused) {
-		const peer = peerProgram(a.conn.fd);
 		a.conn.close();
-		return otherVersionAdvice(socket, first.reason, peer);
+		return otherVersionAdvice(socket, first.reason, a.peer);
 	}
 	a.say({ kind: MessageKind.Bye });
 	a.conn.finish();

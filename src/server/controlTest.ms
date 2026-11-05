@@ -68,18 +68,19 @@ when (!windows) {
 		const old = socketIn("old");
 		const refusal = encode({ kind: MessageKind.Refused, reason: "protocol version 2 refused: this server speaks 1" });
 		assert refusal.ok;
+		const refused: uint8[] = refusal.ok ? refusal.value : [];
 		const listener = listenUnix(old, {
 			accepted: (c: Connection): void => {
 				c.start((chunk: uint8[]): void => {
-					if (refusal.ok) { const _sent = c.send(refusal.value); }
+					const _sent = c.send(refused);
 					c.finish();
 				}, (why: CloseReason): void => {});
 			},
 			failed: (): void => {},
 		});
 		assert listener.ok;
-		const said = await otherVersion(old);
-		assert said !== null && said.includes("this server speaks 1") && said.includes(`pid ${getpid()}`), said ?? "null";
+		const said = (await otherVersion(old)) ?? "";
+		assert said.includes("this server speaks 1") && said.includes(`pid ${getpid()}`), said;
 		if (listener.ok) { listener.value.close(); }
 		const _removed = removeAll(old.slice(0, old.lastIndexOf("/")));
 	}

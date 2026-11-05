@@ -43,7 +43,7 @@ import {
 } from "./rows";
 import { Mark } from "./mark";
 import { holdsButton } from "./mouseButton";
-import { copyInto } from "../server/bytes";
+import { copyInto } from "../pty/bytes";
 import { MAX_SCREEN_BYTES } from "../server/protocol";
 
 const BUFFER_BYTES = 65536;

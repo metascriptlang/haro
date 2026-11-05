@@ -1,10 +1,11 @@
 @include("string.h");
-extern function memcpy(to: Ptr<uint8>, from: Readonly<Ptr<uint8>>, size: uint64): Ptr<uint8>;
+
+extern function memmove(to: Ptr<uint8>, from: Readonly<Ptr<uint8>>, size: uint64): Ptr<uint8>;
 
 export function copyInto(to: Span<uint8>, at: int32, from: Readonly<Span<uint8>>): void {
 	if (from.length == 0) { return; }
 	const into: Span<uint8> = to[at..at + from.length];
-	const _to = memcpy(into as Ptr<uint8>, from as Readonly<Ptr<uint8>>, from.length as uint64);
+	const _to = memmove(into as Ptr<uint8>, from as Readonly<Ptr<uint8>>, from.length as uint64);
 }
 
 export function append(this to: uint8[], from: Readonly<Span<uint8>>): void {
@@ -20,6 +21,7 @@ test "copyInto writes a view at an offset and append grows a Vec by a whole view
 	assert buf.join(",") == "0,0,2,3,4,0";
 	let grown: Vec<uint8> = [9];
 	grown.append(src);
+	grown.append(src[1..3]);
 	grown.append([]);
-	assert grown.join(",") == "9,1,2,3,4";
+	assert grown.join(",") == "9,1,2,3,4,2,3";
 }

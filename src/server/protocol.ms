@@ -16,7 +16,7 @@ import {
 	WorkspaceCommand,
 	WorkspaceEvent,
 } from "../workspace/workspace";
-import { appendBytes } from "./bytes";
+import { append } from "../pty/bytes";
 
 export const PROTOCOL_VERSION: uint32 = 1;
 export const HEADER_BYTES: int32 = 5;
@@ -246,7 +246,7 @@ function flag(this w: Writer, present: boolean): void {
 
 function blob(this w: Writer, bytes: Readonly<Span<uint8>>): void {
 	w.u32(bytes.length as uint32);
-	w.bytes.appendBytes(bytes);
+	w.bytes.append(bytes);
 }
 
 function text(this w: Writer, s: string): void {
@@ -942,7 +942,7 @@ export function push(
 	const failed = d.failed;
 	if (failed !== null) { return Result.err(failed); }
 	const held = d.pending.length > 0;
-	if (held) { d.pending.appendBytes(chunk); }
+	if (held) { d.pending.append(chunk); }
 	const bytes = held ? d.pending : chunk;
 	const out: Message[] = [];
 	const drained = drain(bytes, out);

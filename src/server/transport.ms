@@ -18,7 +18,7 @@ import { chmod, exists, isLinkLike, mkdir, remove } from "std/fs";
 import { dirname, join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { env } from "std/process";
-import { copyInto } from "./bytes";
+import { copyInto } from "../pty/bytes";
 import { MAX_PAYLOAD_BYTES } from "./protocol";
 
 extern function msIoEngineCancelFd_ms(fd: int32): void;

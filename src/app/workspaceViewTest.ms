@@ -2,7 +2,8 @@ import { removeAll } from "std/fs";
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { CloseReason, Connection, connectToUnix, listenUnix } from "../server/transport";
-import { MAX_SCREEN_BYTES, MessageKind, ScreenFormat, encode } from "../server/protocol";
+import { MAX_SCREEN_BYTES, Message, MessageKind, ScreenFormat, encode } from "../server/protocol";
+import { append } from "../pty/bytes";
 import { Server, start, stop } from "../server/serve";
 import { defaults } from "../config/config";
 import { HookPane, KeyAnswer, UNHANDLED } from "../config/hooks";
@@ -13,7 +14,8 @@ import { vtBuild } from "../vt/snapshot";
 import { Axis, PaneId, panes } from "../workspace/tree";
 import { HostId, HostPane } from "../workspace/hosted";
 import { CommandKind, focusedPane } from "../workspace/workspace";
-import { DialError, Failure, ServerLink, attach } from "../client/link";
+import { Dial, DialError, Failure, ServerLink, attach } from "../client/link";
+import { readKept } from "../client/hostBook";
 import { FakeServer, startFake } from "../client/fakeServer";
 import { dialUnix } from "../client/connect";
 import { Stats, empty } from "./stats";
@@ -27,12 +29,15 @@ import {
 	detachPanes,
 	LinkState,
 	LinkedHost,
+	addHost,
+	addHosts,
 	addRemote,
 	newTabOn,
 	open,
 	paneAt,
 	primary,
 	quit,
+	removeHost,
 	retryNow,
 	selectTab,
 	send,
@@ -86,6 +91,9 @@ class Notes {
 	lines: string[] = [];
 	fatal: string = "";
 	woke: () => void = (): void => {};
+	wakes: int32 = 0;
+	due: (() => void)[] = [];
+	book: string = "";
 }
 
 function hostOf(notes: Notes): WindowHost {
@@ -98,14 +106,17 @@ function hostOf(notes: Notes): WindowHost {
 		openConfig: (): void => {},
 		reloadConfig: (): void => {},
 		quit: (): void => {},
-		wake: (): void => { notes.woke(); },
+		wake: (): void => {
+			notes.wakes += 1;
+			notes.woke();
+		},
 		report: {
 			note: (message: string): void => { notes.lines.push(message); },
 			fail: (message: string): void => { notes.fatal = message; },
 		},
 		timing: {
 			clock: (): float64 => performance.now(),
-			schedule: (run: () => void): void => {},
+			schedule: (run: () => void): void => { notes.due.push(run); },
 		},
 		keyHook: {
 			answer: (pane: HookPane, k: KeyEvent): Result<KeyAnswer, string> => Result.ok(UNHANDLED),
@@ -122,6 +133,7 @@ function hostOf(notes: Notes): WindowHost {
 		},
 		stats: Stats.empty(),
 		fontFamily: "",
+		hostBook: { path: notes.book, dial: (address: string): Dial => dialUnix(address) },
 	};
 }
 
@@ -221,6 +233,136 @@ test "a window shows the server's pane exit and start failure the way an in-proc
 	assert await until((): boolean => notes.lines.includes("the last pane closed")), notes.lines.join("\n");
 	assert notes.lines.includes("pane 2: no such shell"), notes.lines.join("\n");
 	assert notes.fatal == "";
+	fake.close();
+	cleanUp(path);
+}
+
+function chunkOf(messages: Message[]): uint8[] {
+	const chunk: uint8[] = [];
+	for (const m of messages) {
+		const bytes = encode(m);
+		if (!bytes.ok) { throw new Error(`encode: ${bytes.error.toString()}`); }
+		chunk.append(bytes.value);
+	}
+	return chunk;
+}
+
+function outputs(pane: int32, from: uint64, count: int32, word: string): Message[] {
+	const out: Message[] = [];
+	for (let i: int32 = 0; i < count; i++) {
+		const text = `${word}-${i}\r\n`;
+		out.push({ kind: MessageKind.Output, pane: pane as PaneId, seq: from + (i as uint64), bytes: [...text.asBytes()] });
+	}
+	return out;
+}
+
+async function noted(notes: Notes, text: string): Promise<boolean> {
+	const start = performance.now();
+	while (performance.now() - start < WAIT_MS) {
+		if (notes.lines.some((l: string): boolean => l.includes(text))) { return true; }
+		const due = notes.due;
+		notes.due = [];
+		for (const run of due) { run(); }
+		await sleepAsync(10);
+	}
+	return false;
+}
+
+async function settled(notes: Notes): Promise<boolean> {
+	for (let i: int32 = 0; i < 50; i++) {
+		const due = notes.due;
+		notes.due = [];
+		for (const run of due) { run(); }
+		await sleepAsync(20);
+		if (notes.due.length == 0) { return true; }
+	}
+	return false;
+}
+
+test "many outputs that arrive together wake only their pane, as one feed and one frame request" {
+	const path = freshPath();
+	const fake = fakeWithTwoPanes(path);
+	const notes = new Notes();
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	assert got.ok;
+	if (!got.ok) { return; }
+	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
+	await v.attachTo(link, got.value);
+	assert await shows(v, 1, "one-marker");
+	assert await settled(notes);
+	const wakes = notes.wakes;
+	link.received(chunkOf(outputs(1, 1, 50, "burst")));
+	assert notes.wakes == wakes, `${notes.wakes - wakes} window-wide wakes`;
+	assert notes.due.length == 1, `${notes.due.length} frame requests`;
+	assert await shows(v, 1, "burst-49");
+	assert notes.fatal == "";
+	await v.detachPanes();
+	fake.close();
+	cleanUp(path);
+}
+
+test "typing in quick succession reaches the server in the order it was typed" {
+	const path = freshPath();
+	const fake = fakeWithTwoPanes(path);
+	const notes = new Notes();
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	assert got.ok;
+	if (!got.ok) { return; }
+	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
+	await v.attachTo(link, got.value);
+	const io = v.primary().panes.paneOf(1 as PaneId)?.model.io ?? null;
+	assert io !== null;
+	if (io === null) { return; }
+	let wanted = "";
+	for (let i: int32 = 0; i < 30; i++) {
+		io.text(`${i}.`, 0);
+		wanted += `${i}.`;
+	}
+	assert await until((): boolean => seqOf(fake, 1) == 30), `${seqOf(fake, 1)} inputs`;
+	assert await shows(v, 1, wanted), await screenOf(v, 1);
+	assert notes.fatal == "";
+	await v.detachPanes();
+	fake.close();
+	cleanUp(path);
+}
+
+test "a screen in the middle of a pane's output replaces its terminal, answers no query, and later output follows it" {
+	const path = freshPath();
+	const fake = fakeWithTwoPanes(path);
+	const notes = new Notes();
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	assert got.ok;
+	if (!got.ok) { return; }
+	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
+	await v.attachTo(link, got.value);
+	assert await shows(v, 1, "one-marker");
+	const jump = "\x1b[2J\x1b[Hjumped-marker\r\n\x1b[c\x1b[6n";
+	const messages = outputs(1, 1, 1, "before");
+	messages.push({
+		kind: MessageKind.Screen,
+		pane: 1 as PaneId,
+		cols: 80,
+		rows: 24,
+		format: ScreenFormat.VtBytes,
+		bytes: [...jump.asBytes()],
+	});
+	for (const m of outputs(1, 7, 2, "after")) { messages.push(m); }
+	link.received(chunkOf(messages));
+	assert await shows(v, 1, "after-1"), await screenOf(v, 1);
+	const shown = await screenOf(v, 1);
+	assert shown.includes("jumped-marker") && shown.includes("after-0"), shown;
+	assert !shown.includes("one-marker") && !shown.includes("before-0"), shown;
+	link.received(chunkOf(outputs(1, 8, 1, "stale")));
+	assert await noted(notes, "OutOfOrder"), notes.lines.join("\n");
+	await sleepAsync(100);
+	assert seqOf(fake, 1) == 0, `the replay answered ${seqOf(fake, 1)} times`;
+	await v.detachPanes();
 	fake.close();
 	cleanUp(path);
 }
@@ -447,4 +589,71 @@ test "a host that keeps no session opens its new tab as a local pane, scoped apa
 	assert await showsAt(v, at(plain, 1), "plain-shell");
 	assert !(await screenAt(v, at(v.primary(), 1))).includes("plain-shell");
 	await closeAll(t);
+}
+
+function hostLabelled(v: WorkspaceView, label: string): LinkedHost | null {
+	return v.hosts.find((h: LinkedHost): boolean => h.label == label) ?? null;
+}
+
+async function opened(notes: Notes, path: string): Promise<WorkspaceView> {
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	if (!got.ok) { throw new Error(`attach: ${got.error.why}`); }
+	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
+	await v.attachTo(link, got.value);
+	return v;
+}
+
+test "a host added from the window is kept, comes back with its panes in the next window, loses to config on a label, and can be removed" {
+	const localPath = freshPath();
+	const remotePath = freshPath();
+	const local = fakeWithTwoPanes(localPath);
+	const remote = fakeWithTwoPanes(remotePath);
+	remote.paneOf(1 as PaneId)?.vt.writeText("kept-marker\r\n");
+	const notes = new Notes();
+	notes.book = join(join(tmpDir(), `haro-book-${Date.now()}`), "hosts.json");
+
+	const first = await opened(notes, localPath);
+	assert first.addHost("build", remotePath) == "";
+	const kept = readKept(notes.book);
+	assert kept.ok && kept.value.length == 1 && kept.value[0].address == remotePath;
+	await first.quit();
+
+	const again = await opened(notes, localPath);
+	again.addHosts([]);
+	const back = hostLabelled(again, "build");
+	assert back !== null;
+	if (back === null) { return; }
+	again.retryNow(back);
+	assert await until((): boolean => back.state == LinkState.Connected && back.panes.running.length == 2);
+	assert await showsAt(again, at(back, 1), "kept-marker");
+	await again.quit();
+
+	const configured = await opened(notes, localPath);
+	configured.addHosts([{ label: "build", address: "other" }]);
+	assert configured.hosts.filter((h: LinkedHost): boolean => h.label == "build").length == 1;
+	assert configured.kept.length == 0;
+	await configured.quit();
+
+	const last = await opened(notes, localPath);
+	last.addHosts([]);
+	const gone = hostLabelled(last, "build");
+	assert gone !== null;
+	if (gone !== null) { await last.removeHost(gone.id); }
+	assert hostLabelled(last, "build") === null;
+	const left = readKept(notes.book);
+	assert left.ok && left.value.length == 0;
+	await last.quit();
+	const after = await opened(notes, localPath);
+	after.addHosts([]);
+	assert after.hosts.length == 1;
+	await after.quit();
+
+	assert notes.fatal == "";
+	local.close();
+	remote.close();
+	cleanUp(localPath);
+	cleanUp(remotePath);
+	cleanUp(notes.book);
 }

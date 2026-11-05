@@ -4,7 +4,8 @@ import { CellInk } from "../grid/lines";
 import { NativePty, spawn } from "../pty/pty";
 import { Replay, ofText, toPty } from "../pty/replay";
 import { Pty, PtyError } from "../pty/transport";
-import { RemotePty, Seed, asPty, empty, feed, takeTyped } from "../pty/remote";
+import { RemotePty, Seed, asPty, dropInbound, empty, feed, takeTyped } from "../pty/remote";
+import { reseeded } from "../session/session";
 import { nativeSnapshot, snapshot } from "../vt/snapshot";
 import { Annotation, Decoration, FrameRows, none } from "./rows";
 import { Action } from "../input/bindings";
@@ -19,6 +20,7 @@ import {
 	IoFrame,
 	IoPort,
 	Settings,
+	Where,
 	act,
 	annotate,
 	autoscroll,
@@ -133,14 +135,51 @@ export actor Shell {
 	unannotate(id: int32): void { this.io?.unannotate(id); }
 	write(bytes: Vec<uint8>): void { this.io?.write(bytes); }
 
-	feed(seq: uint64, bytes: Vec<uint8>): void {
+	feed(first: uint64, last: uint64, bytes: Vec<uint8>): void {
 		const remote = this.remote;
 		const io = this.io;
 		if (remote === null || io === null) { return; }
-		if (!remote.feed(seq, bytes)) { io.outOfOrder(); }
+		if (!remote.feed(first, last, bytes)) { io.outOfOrder(); }
+	}
+
+	reseed(seed: Seed): void {
+		const remote = this.remote;
+		const io = this.io;
+		if (remote === null || io === null) { return; }
+		remote.dropInbound();
+		const t = io.term;
+		const s = t.session;
+		if (s === null) {
+			t.seed = seed;
+			return;
+		}
+		const next = s.reseeded(seed, t.cols, t.rows, t.cellWidth, t.cellHeight);
+		if (!next.ok) {
+			io.failures.push({ where: Where.Output, error: TermError.VtFailed, started: true });
+			return;
+		}
+		t.session = next.value;
+		const settings = io.settings;
+		if (settings !== null) { io.configure(settings); }
 	}
 
 	typed(): Vec<uint8> {
+		const remote = this.remote;
+		if (remote === null) { return []; }
+		let got = remote.takeTyped();
+		return move got;
+	}
+
+	keyTyped(k: KeyEvent, time: float64): Vec<uint8> {
+		this.io?.key(k, time);
+		const remote = this.remote;
+		if (remote === null) { return []; }
+		let got = remote.takeTyped();
+		return move got;
+	}
+
+	textTyped(typed: string, time: float64): Vec<uint8> {
+		this.io?.text(typed, time);
 		const remote = this.remote;
 		if (remote === null) { return []; }
 		let got = remote.takeTyped();

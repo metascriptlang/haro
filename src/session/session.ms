@@ -16,6 +16,24 @@ export struct Session {
 	vt: Vt;
 }
 
+function screenOf(
+	pty: Pty,
+	seed: Seed | null,
+	cols: int32,
+	rows: int32,
+	cellWidth: int32,
+	cellHeight: int32,
+): Result<Vt, SessionError> {
+	const vt = seed === null ? Vt.create(cols, rows) : seed.seededVt();
+	if (!vt.ok) { return Result.err(SessionError.VtCreateFailed); }
+	const pullFailed = pty.ownsScreen && !vt.value.setPullScrollback(false).ok;
+	if (pullFailed || !vt.value.resize(cols, rows, cellWidth, cellHeight).ok) {
+		vt.value.free();
+		return Result.err(SessionError.VtCreateFailed);
+	}
+	return Result.ok(vt.value);
+}
+
 export function start(
 	this typeof Session,
 	pty: Pty,
@@ -25,18 +43,26 @@ export function start(
 	cellHeight: int32 = 0,
 	seed: Seed | null = null,
 ): Result<Session, SessionError> {
-	const vt = seed === null ? Vt.create(cols, rows) : seed.seededVt();
+	const vt = screenOf(pty, seed, cols, rows, cellWidth, cellHeight);
 	if (!vt.ok) {
 		pty.close();
-		return Result.err(SessionError.VtCreateFailed);
-	}
-	const pullFailed = pty.ownsScreen && !vt.value.setPullScrollback(false).ok;
-	if (pullFailed || !vt.value.resize(cols, rows, cellWidth, cellHeight).ok) {
-		vt.value.free();
-		pty.close();
-		return Result.err(SessionError.VtCreateFailed);
+		return Result.err(vt.error);
 	}
 	return Result.ok({ pty: pty, vt: vt.value });
+}
+
+export function reseeded(
+	this s: Session,
+	seed: Seed,
+	cols: int32,
+	rows: int32,
+	cellWidth: int32 = 0,
+	cellHeight: int32 = 0,
+): Result<Session, SessionError> {
+	const vt = try screenOf(s.pty, seed, cols, rows, cellWidth, cellHeight);
+	vt.dropReplies();
+	s.vt.free();
+	return Result.ok({ pty: s.pty, vt: vt });
 }
 
 export function pump(this s: Session, buf: Span<uint8>): Result<boolean, SessionError> {

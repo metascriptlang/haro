@@ -5,10 +5,14 @@ import { Shell, portOf } from "../controller/shell";
 import { Action } from "../input/bindings";
 import { KeyEvent } from "../keys/keys";
 
-function flushed(shell: Shell, send: (bytes: Vec<uint8>) => void): void {
-	shell.typed().then((bytes: Vec<uint8>): void => {
+function sent(typed: Promise<Vec<uint8>>, send: (bytes: Vec<uint8>) => void): void {
+	typed.then((bytes: Vec<uint8>): void => {
 		if (bytes.length > 0) { send(bytes); }
 	});
+}
+
+function flushed(shell: Shell, send: (bytes: Vec<uint8>) => void): void {
+	sent(shell.typed(), send);
 }
 
 export function remotePortOf(shell: Shell, send: (bytes: Vec<uint8>) => void): IoPort {
@@ -16,18 +20,12 @@ export function remotePortOf(shell: Shell, send: (bytes: Vec<uint8>) => void): I
 	const flush = (): void => { flushed(shell, send); };
 	return {
 		...local,
-		key: (k: KeyEvent, time: float64): void => {
-			local.key(k, time);
-			flush();
-		},
+		key: (k: KeyEvent, time: float64): void => { sent(shell.keyTyped(k, time), send); },
 		keyReleased: (k: KeyEvent): void => {
 			local.keyReleased(k);
 			flush();
 		},
-		text: (typed: string, time: float64): void => {
-			local.text(typed, time);
-			flush();
-		},
+		text: (typed: string, time: float64): void => { sent(shell.textTyped(typed, time), send); },
 		focus: (gained: boolean): void => {
 			local.focus(gained);
 			flush();

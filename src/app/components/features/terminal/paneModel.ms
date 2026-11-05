@@ -322,7 +322,8 @@ export function hosted(this m: PaneModel, action: Action): void {
 		Action.RenameTab |
 		Action.ToggleSidebar |
 		Action.NewTabOnHost |
-		Action.AddRemoteHost => { m.desktop.windowAction(action); },
+		Action.AddRemoteHost |
+		Action.RemoveRemoteHost => { m.desktop.windowAction(action); },
 		_ => { m.failed(Where.Key, `the window does not run ${action.toString()}`); },
 	}
 }

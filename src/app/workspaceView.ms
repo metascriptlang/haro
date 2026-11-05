@@ -9,6 +9,7 @@ import {
 	PaneCwd,
 	dividerCellsOf,
 	PaneTitle,
+	RemoteHost,
 	SidebarSide,
 } from "../config/config";
 import { Action } from "../input/bindings";
@@ -21,8 +22,9 @@ import { Axis, Pane, PaneId, panes } from "../workspace/tree";
 import { HostId, HostPane, HostTab } from "../workspace/hosted";
 import { Message, MessageKind } from "../server/protocol";
 import { Attached, Dial, DialError, Failure, ServerLink, linkTo } from "../client/link";
-import { sshDial } from "../client/ssh";
 import { destinationOf } from "../client/destination";
+import { Feed, add } from "../client/feeds";
+import { HostBook, readKept, writeKept } from "../client/hostBook";
 import { Layout, screenParts } from "../client/wire";
 import {
 	CommandKind,
@@ -39,7 +41,7 @@ import {
 	layout,
 } from "../workspace/workspace";
 import { hexOf } from "./frame";
-import { Stats } from "./stats";
+import { Stats, noteWake } from "./stats";
 import { CellFont, measured, open, reconfigured, stepped } from "./cellFont";
 import {
 	NewPaneCwd,
@@ -88,9 +90,11 @@ import {
 	open,
 } from "./components/features/confirm/confirmClose";
 import {
+	HostAsk,
 	HostChoice,
 	HostDialogModel,
 	askAdd,
+	askForget,
 	askPick,
 	open,
 	shut,
@@ -125,6 +129,7 @@ export interface WindowHost {
 	events: HostEvents;
 	stats: Stats;
 	fontFamily: string;
+	hostBook: HostBook;
 }
 
 export struct Chrome {
@@ -196,6 +201,7 @@ export interface WorkspaceView {
 	font: CellFont;
 	confirm: ConfirmModel;
 	hostDialog: HostDialogModel;
+	kept: RemoteHost[];
 	layout: Accessor<FrameLayout>;
 	setLayout: Setter<FrameLayout>;
 	tabs: Accessor<SidebarHost[]>;
@@ -336,6 +342,7 @@ export function open(
 		font: font,
 		confirm: ConfirmModel.open(),
 		hostDialog: HostDialogModel.open(),
+		kept: [],
 		layout: layout,
 		setLayout: setLayout,
 		tabs: tabs,
@@ -509,7 +516,8 @@ export function connect(this v: WorkspaceView): void {
 	events.onWake((): void => {
 		for (const h of v.hooks) {
 			const wake = h.wake;
-			if (wake !== null) { wake(); }
+			const host = v.hostOf(h.id.host);
+			if (wake !== null && (host === null || host.inProcess)) { wake(); }
 		}
 	});
 	events.onMenu((item: string): void => {
@@ -1150,15 +1158,73 @@ export function addHost(this v: WorkspaceView, label: string, address: string): 
 	if (v.hosts.some((h: LinkedHost): boolean => v.labelOf(h) == name)) {
 		return `The label ${name} is taken.`;
 	}
-	const typed = address.trim();
-	const destination = destinationOf(typed);
+	const destination = destinationOf(address.trim());
 	if (!destination.ok) { return `The address ${destination.error}.`; }
-	const _added = v.addRemote(name, sshDial(destination.value));
-	v.focusedModel()?.notify(
-		`${name} is added to this window. To keep it, add ` +
-			`{ label: "${name}", address: "${typed}" } to remoteHosts in config.ms.`,
-	);
+	const _added = v.addRemote(name, v.host.hostBook.dial(destination.value));
+	v.kept.push({ label: name, address: destination.value });
+	const saved = writeKept(v.host.hostBook.path, v.kept);
+	if (saved.ok) {
+		v.focusedModel()?.notify(`${name} is added and comes back the next time Haro opens.`);
+	} else {
+		v.host.report.note(`remote hosts: ${saved.error}`);
+		v.focusedModel()?.notify(`${name} is added to this window, but Haro could not keep it: ${saved.error}`);
+	}
 	return "";
+}
+
+export function addHosts(this v: WorkspaceView, configured: Vec<RemoteHost>): void {
+	const book = v.host.hostBook;
+	for (const c of configured) { const _added = v.addRemote(c.label, book.dial(c.address)); }
+	const kept = readKept(book.path);
+	if (!kept.ok) {
+		v.host.report.note(`remote hosts: ${kept.error}`);
+		return;
+	}
+	for (const k of kept.value) {
+		if (configured.some((c: RemoteHost): boolean => c.label == k.label)) { continue; }
+		v.kept.push(k);
+		const _added = v.addRemote(k.label, book.dial(k.address));
+	}
+}
+
+export function askRemoveHost(this v: WorkspaceView): void {
+	const choices = v.hostChoices().filter((c: HostChoice): boolean =>
+		v.kept.some((k: RemoteHost): boolean => k.label == c.label)
+	);
+	if (choices.length == 0) {
+		v.focusedModel()?.notify("No remote host added from the File menu is kept; hosts in config.ms leave by editing it.");
+		return;
+	}
+	v.hostDialog.askForget(choices);
+	flush();
+}
+
+export function hostPicked(this v: WorkspaceView, id: HostId): void {
+	const forgetting = v.hostDialog.ask() == HostAsk.Forget;
+	v.hostDialogShut();
+	if (forgetting) {
+		const _removed = v.removeHost(id);
+	} else {
+		v.newTabOn(id);
+	}
+}
+
+export async function removeHost(this v: WorkspaceView, id: HostId): Promise<void> {
+	const h = v.hostOf(id);
+	if (h === null || h === v.primary()) { return; }
+	v.kept = v.kept.filter((k: RemoteHost): boolean => k.label != h.label);
+	const saved = writeKept(v.host.hostBook.path, v.kept);
+	if (!saved.ok) { v.host.report.note(`remote hosts: ${saved.error}`); }
+	const retry = h.retry;
+	if (retry !== null) { clearTimeout(retry); }
+	h.retry = null;
+	h.dial = null;
+	h.link?.detach();
+	h.link = null;
+	await v.dropPanes(h);
+	v.hosts = v.hosts.filter((k: LinkedHost): boolean => !(k.id == id));
+	if (v.pendingShow !== null && v.pendingShow == id) { v.pendingShow = null; }
+	v.redraw();
 }
 
 export function windowAction(this v: WorkspaceView, action: Action): void {
@@ -1216,6 +1282,7 @@ export function windowAction(this v: WorkspaceView, action: Action): void {
 		Action.ToggleSidebar => { v.toggleSidebar(); },
 		Action.NewTabOnHost => { v.askHost(); },
 		Action.AddRemoteHost => { v.askNewHost(); },
+		Action.RemoveRemoteHost => { v.askRemoveHost(); },
 		_ => {
 			v.host.report.note(`the window does not run ${action.toString()}`);
 		},
@@ -1304,7 +1371,7 @@ export async function attachHost(
 	}
 	link.fit(v.cols, v.rows);
 	link.listen(
-		(m: Message): void => { v.received(h, link, m); },
+		(ms: Message[]): void => { v.received(h, link, ms); },
 		(why: string): void => { v.lost(h, link, why); },
 	);
 }
@@ -1402,9 +1469,9 @@ function lost(this v: WorkspaceView, h: LinkedHost, link: ServerLink | null, why
 	v.offline(h, why);
 }
 
-function received(this v: WorkspaceView, h: LinkedHost, link: ServerLink, m: Message): void {
+function received(this v: WorkspaceView, h: LinkedHost, link: ServerLink, ms: Message[]): void {
 	if (h.link !== link) { return; }
-	h.inbox.push(m);
+	for (const m of ms) { h.inbox.push(m); }
 	if (h.receiving) { return; }
 	const _drained = v.drainInbox(h);
 }
@@ -1412,22 +1479,49 @@ function received(this v: WorkspaceView, h: LinkedHost, link: ServerLink, m: Mes
 async function drainInbox(this v: WorkspaceView, h: LinkedHost): Promise<void> {
 	h.receiving = true;
 	while (h.inbox.length > 0 && !v.quitting) {
-		const next = h.inbox.shift();
-		if (next !== undefined) { await v.receive(h, next); }
+		const link = h.link;
+		const batch = h.inbox;
+		h.inbox = [];
+		const feeds: Feed[] = [];
+		for (const m of batch) {
+			if (v.quitting || h.link !== link) { break; }
+			if (m.kind == MessageKind.Output) {
+				feeds.add(m.pane, m.seq, m.bytes);
+			} else {
+				v.feed(h, feeds);
+				await v.receive(h, m);
+			}
+		}
+		v.feed(h, feeds);
 	}
 	h.receiving = false;
 }
 
-function output(this v: WorkspaceView, h: LinkedHost, id: PaneId, seq: uint64, bytes: uint8[]): void {
-	const pane = h.panes.paneOf(id);
-	if (pane === null) {
-		v.host.report.note(
-			`server ${v.labelOf(h)}: output for pane ${id as int32}, which this window does not show`,
-		);
-		return;
+function feed(this v: WorkspaceView, h: LinkedHost, feeds: Feed[]): void {
+	if (feeds.length == 0) { return; }
+	const fed: PaneId[] = [];
+	for (const f of feeds) {
+		const pane = h.panes.paneOf(f.pane);
+		if (pane === null) {
+			v.host.report.note(
+				`server ${v.labelOf(h)}: output for pane ${f.pane as int32}, which this window does not show`,
+			);
+		} else {
+			pane.shell.feed(f.first, f.last, move f.bytes);
+			if (!fed.includes(f.pane)) { fed.push(f.pane); }
+		}
 	}
-	pane.shell.feed(seq, [...bytes]);
-	v.host.wake();
+	feeds.length = 0;
+	v.wakePanes(h, fed);
+}
+
+function wakePanes(this v: WorkspaceView, h: LinkedHost, ids: PaneId[]): void {
+	if (ids.length == 0) { return; }
+	v.host.stats.noteWake(performance.now());
+	for (const id of ids) {
+		const wake = v.hooksOf({ host: h.id, pane: id }).wake;
+		if (wake !== null) { wake(); }
+	}
 }
 
 async function receive(this v: WorkspaceView, h: LinkedHost, m: Message): Promise<void> {
@@ -1436,17 +1530,23 @@ async function receive(this v: WorkspaceView, h: LinkedHost, m: Message): Promis
 		const layout = parts.layout;
 		if (layout !== null) { adopt(h, layout); }
 		const remote = h.panes.remote;
-		if (remote !== null) {
-			for (const s of parts.screens) { remote.screens.push(s); }
+		const reseeded: PaneId[] = [];
+		for (const s of parts.screens) {
+			const pane = h.panes.paneOf(s.pane);
+			if (pane !== null) {
+				pane.shell.reseed(s.seed);
+				reseeded.push(s.pane);
+			} else if (remote !== null) {
+				remote.screens.push(s);
+			}
 		}
+		v.wakePanes(h, reseeded);
 		v.follow(h);
 		v.redraw();
 		return;
 	}
 	if (m.kind == MessageKind.Event) {
 		await v.applyEvents(h, [m.event]);
-	} else if (m.kind == MessageKind.Output) {
-		v.output(h, m.pane, m.seq, m.bytes);
 	} else if (m.kind == MessageKind.Exited) {
 		v.exited({ host: h.id, pane: m.pane }, m.code);
 	} else if (m.kind == MessageKind.Failed) {

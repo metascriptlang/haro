@@ -1,4 +1,5 @@
 import { Pty, PtyError } from "./transport";
+import { append, copyInto } from "./bytes";
 import { Vt, VtError, create, restore, write } from "../vt/vt";
 
 export struct Seed {
@@ -28,11 +29,16 @@ export function empty(this typeof RemotePty): RemotePty {
 	return { inbound: [], head: 0, typed: [], lastSeq: 0, closed: false };
 }
 
-export function feed(this r: RemotePty, seq: uint64, bytes: Vec<uint8>): boolean {
-	if (seq <= r.lastSeq) { return false; }
-	r.lastSeq = seq;
+export function feed(this r: RemotePty, first: uint64, last: uint64, sink bytes: Vec<uint8>): boolean {
+	if (first <= r.lastSeq) { return false; }
+	r.lastSeq = last;
 	if (bytes.length > 0) { r.inbound.push(bytes); }
 	return true;
+}
+
+export function dropInbound(this r: RemotePty): void {
+	r.inbound = [];
+	r.head = 0;
 }
 
 export function takeTyped(this r: RemotePty): Vec<uint8> {
@@ -44,12 +50,13 @@ export function takeTyped(this r: RemotePty): Vec<uint8> {
 function read(this r: RemotePty, buf: Span<uint8>): int32 {
 	let n: int32 = 0;
 	while (n < buf.length && r.inbound.length > 0) {
-		const chunk = r.inbound[0];
+		const chunk: Readonly<Span<uint8>> = r.inbound[0];
 		const take = Math.min(chunk.length - r.head, buf.length - n);
-		for (let i: int32 = 0; i < take; i++) { buf[n + i] = chunk[r.head + i]; }
+		copyInto(buf, n, chunk[r.head..r.head + take]);
+		const ended = r.head + take == chunk.length;
 		n += take;
 		r.head += take;
-		if (r.head == chunk.length) {
+		if (ended) {
 			r.inbound.shift();
 			r.head = 0;
 		}
@@ -68,7 +75,7 @@ export function asPty(this r: RemotePty): Pty {
 		},
 		write: (data: Readonly<Span<uint8>>): Result<void, PtyError> => {
 			if (r.closed) { return Result.err(PtyError.Closed); }
-			for (const b of data) { r.typed.push(b); }
+			r.typed.append(data);
 			return Result.ok(null);
 		},
 		resize: (

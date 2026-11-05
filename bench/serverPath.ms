@@ -85,6 +85,7 @@ class Watch {
 	matched: int32 = 0;
 	found: boolean = false;
 	heldAt: float64 = -1;
+	arrivedAt: float64 = -1;
 }
 
 function expect(this w: Watch, pattern: Vec<uint8>): void {
@@ -92,6 +93,17 @@ function expect(this w: Watch, pattern: Vec<uint8>): void {
 	w.matched = 0;
 	w.found = false;
 	w.heldAt = -1;
+	w.arrivedAt = -1;
+}
+
+function arrived(this w: Watch, at: float64, bytes: Readonly<Span<uint8>>): void {
+	if (w.found || w.arrivedAt >= 0 || w.pattern.length != 1) { return; }
+	for (const b of bytes) {
+		if (b == w.pattern[0]) {
+			w.arrivedAt = at;
+			return;
+		}
+	}
 }
 
 function scan(this w: Watch, buf: Span<uint8>, n: int32): void {
@@ -113,7 +125,7 @@ function scan(this w: Watch, buf: Span<uint8>, n: int32): void {
 	}
 }
 
-function shownIn(this w: Watch, vt: Vt): Result<void, string> {
+function shownIn(this w: Watch, vt: Vt, arrivedAt: float64): Result<void, string> {
 	if (w.found || w.pattern.length == 0) { return Result.ok(null); }
 	const updated = vt.update();
 	if (!updated.ok) { return Result.err(`update: ${updated.error.toString()}`); }
@@ -127,11 +139,13 @@ function shownIn(this w: Watch, vt: Vt): Result<void, string> {
 	const pattern = w.pattern.asString();
 	if (w.pattern.length == 1) {
 		const before = cursor.x > 0 ? row.slice(cursor.x - 1, cursor.x) : above.slice(-1);
-		w.found = before == pattern;
+		const under = row.slice(cursor.x, cursor.x + 1);
+		w.found = before == pattern || under == pattern;
 	} else {
 		w.found = row.includes(pattern) || above.includes(pattern);
 	}
 	w.matched = 0;
+	if (w.found && w.arrivedAt < 0) { w.arrivedAt = arrivedAt; }
 	w.settle();
 	return Result.ok(null);
 }
@@ -207,6 +221,8 @@ interface Driver {
 	split: () => Promise<Result<BenchPane, string>>;
 	close: () => Promise<Result<float64, string>>;
 	reseeds: () => int32;
+	busyMs: () => float64;
+	takeLongestMs: () => float64;
 }
 
 function drainOnce(p: BenchPane): Result<boolean, string> {
@@ -268,6 +284,8 @@ function localDriver(): Result<Driver, string> {
 			return Result.ok(0);
 		},
 		reseeds: (): int32 => 0,
+		busyMs: (): float64 => 0,
+		takeLongestMs: (): float64 => 0,
 	});
 }
 
@@ -334,6 +352,9 @@ class Client {
 	tabs: Tab[] = [];
 	opened: PaneId[] = [];
 	reseeds: int32 = 0;
+	batchAt: float64 = 0;
+	busyMs: float64 = 0;
+	longestMs: float64 = 0;
 	failure: string = "";
 
 	constructor(link: ServerLink) { this.link = link; }
@@ -351,6 +372,7 @@ function fed(this c: Client, feeds: Feed[]): void {
 		const p = c.paneOf(f.pane);
 		const remote = p?.remote ?? null;
 		if (p === null || remote === null) { continue; }
+		p.watch.arrived(c.batchAt, f.bytes);
 		if (!remote.feed(f.first, f.last, move f.bytes)) {
 			c.failure = `pane ${f.pane as int32} output out of order at ${f.first}`;
 			return;
@@ -385,7 +407,7 @@ function reseed(this c: Client, p: BenchPane, seed: Seed): void {
 		return;
 	}
 	t.session = next.value;
-	const shown = p.watch.shownIn(next.value.vt);
+	const shown = p.watch.shownIn(next.value.vt, c.batchAt);
 	if (!shown.ok) { c.failure = `pane ${p.id as int32} after reseed: ${shown.error}`; }
 }
 
@@ -431,6 +453,8 @@ function receivedOne(this c: Client, m: Message): void {
 }
 
 function received(this c: Client, ms: Message[]): void {
+	const began = performance.now();
+	c.batchAt = began;
 	const feeds: Feed[] = [];
 	for (const m of ms) {
 		if (m.kind == MessageKind.Output) {
@@ -441,6 +465,9 @@ function received(this c: Client, ms: Message[]): void {
 		}
 	}
 	c.fed(feeds);
+	const took = performance.now() - began;
+	c.busyMs += took;
+	c.longestMs = Math.max(c.longestMs, took);
 }
 
 async function linked(path: string): Promise<Result<ServerLink, string>> {
@@ -507,6 +534,12 @@ async function clientDriver(): Promise<Result<Driver, string>> {
 			return await stopServer(s);
 		},
 		reseeds: (): int32 => c.reseeds,
+		busyMs: (): float64 => c.busyMs,
+		takeLongestMs: (): float64 => {
+			const longest = c.longestMs;
+			c.longestMs = 0;
+			return longest;
+		},
 	});
 }
 
@@ -552,24 +585,35 @@ async function answering(d: Driver, p: BenchPane): Promise<Result<void, string>>
 
 struct Echoes {
 	latencies: Vec<float64>;
+	arrivals: Vec<float64>;
 	failure: string;
 }
 
 async function echoes(d: Driver, p: BenchPane): Promise<Echoes> {
-	let latencies: Vec<float64> = [];
+	let got: Echoes = { latencies: [], arrivals: [], failure: "" };
 	for (let i: int32 = 0; i < ECHO_KEYS; i++) {
 		const key = (97 + i % 26) as uint8;
 		p.watch.expect([key]);
 		const at = performance.now();
 		d.input(p, [key]);
 		const seen = await waitFor(d, p, (): boolean => p.watch.heldAt >= 0, KEY_TIMEOUT_MS);
-		if (!seen.ok) { return { latencies: latencies, failure: seen.error }; }
-		if (!seen.value) { return { latencies: latencies, failure: `key ${i} never echoed` }; }
-		latencies.push(p.watch.heldAt - at);
+		if (!seen.ok) {
+			got.failure = seen.error;
+			return got;
+		}
+		if (!seen.value) {
+			got.failure = `key ${i} never echoed`;
+			return got;
+		}
+		got.latencies.push(p.watch.heldAt - at);
+		if (p.watch.arrivedAt >= 0) { got.arrivals.push(p.watch.arrivedAt - at); }
 		const paused = await pause(d, p, KEY_GAP_MS);
-		if (!paused.ok) { return { latencies: latencies, failure: paused.error }; }
+		if (!paused.ok) {
+			got.failure = paused.error;
+			return got;
+		}
 	}
-	return { latencies: latencies, failure: "" };
+	return got;
 }
 
 struct Pair {
@@ -656,7 +700,20 @@ async function measuredEcho(
 	echo: BenchPane,
 ): Promise<boolean> {
 	const reseedsBefore = d.reseeds();
+	const busyBefore = d.busyMs();
+	const began = performance.now();
+	const _reset = d.takeLongestMs();
 	const got = await echoes(d, echo);
+	if (got.arrivals.length > 0) {
+		const busy = (d.busyMs() - busyBefore) / (performance.now() - began);
+		record(mode, `${measure}_split`, rep, [
+			{ key: "to_client_p50_ms", value: percentile(got.arrivals, 0.5) },
+			{ key: "to_client_p999_ms", value: percentile(got.arrivals, 0.999) },
+			{ key: "client_busy_share", value: busy },
+			{ key: "longest_batch_ms", value: d.takeLongestMs() },
+			{ key: "n", value: got.arrivals.length as float64 },
+		]);
+	}
 	pool(mode, measure, got.latencies);
 	const reseeds: Pair = { key: "reseeds", value: (d.reseeds() - reseedsBefore) as float64 };
 	if (got.failure != "") {
@@ -826,6 +883,12 @@ async function attachRun(reps: int32): Promise<Result<void, string>> {
 		split: async (): Promise<Result<BenchPane, string>> => Result.err("no split here"),
 		close: async (): Promise<Result<float64, string>> => Result.ok(0),
 		reseeds: (): int32 => first.reseeds,
+		busyMs: (): float64 => first.busyMs,
+		takeLongestMs: (): float64 => {
+			const longest = first.longestMs;
+			first.longestMs = 0;
+			return longest;
+		},
 	};
 	const p = first.panes[0];
 	try await answering(firstDriver, p);

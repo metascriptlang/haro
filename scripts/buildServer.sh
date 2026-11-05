@@ -17,6 +17,7 @@ mkdir -p "$out/assets" "$out/metascript"
 (cd "$root" && msc build src/server/haroServer.ms --release --strip \
 	"--passC=-DHARO_SERVER_BUILD=$version" --output="$out/haro-server")
 rm -f "$out/haro-server_link.rsp"
+echo "$version" > "$out/version"
 rm -rf "$out/assets/shell" "$out/assets/haro" "$out/metascript/std"
 cp -R "$root/assets/shell" "$root/assets/haro" "$out/assets/"
 cp -R "$toolchain/std" "$out/metascript/std"

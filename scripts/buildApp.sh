@@ -22,7 +22,7 @@ rm -rf "$res/servers"
 mkdir -p "$res/servers"
 for bundle in "$root"/out/haro-server/*/; do
 	platform="$(basename "$bundle")"
-	if grep -qF -e "$HARO_SERVER_VERSION" "$bundle/haro-server"; then
+	if [ "$(cat "$bundle/version" 2>/dev/null)" = "$HARO_SERVER_VERSION" ]; then
 		cp -R "$bundle" "$res/servers/$platform"
 	else
 		echo "buildApp: out/haro-server/$platform is another version than $HARO_SERVER_VERSION, not shipped" >&2

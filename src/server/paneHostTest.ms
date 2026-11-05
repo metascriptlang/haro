@@ -37,19 +37,21 @@ when (!windows) {
 	interface Seen {
 		printed: Map<int32, string>;
 		seqs: Map<int32, int64>;
+		outputs: int32;
 		gaps: string;
 		exits: string;
 		fatal: string;
 	}
 
 	function fresh(): Seen {
-		return { printed: new Map(), seqs: new Map(), gaps: "", exits: "", fatal: "" };
+		return { printed: new Map(), seqs: new Map(), outputs: 0, gaps: "", exits: "", fatal: "" };
 	}
 
 	function sinkOf(seen: Seen): PaneSink {
 		return {
-			output: (pane: PaneId, seq: int64, bytes: Vec<uint8>): void => {
+			output: (pane: PaneId, seq: int64, bytes: Readonly<Span<uint8>>): void => {
 				const id = pane as int32;
+				seen.outputs += 1;
 				const last = seen.seqs.get(id) ?? 0;
 				if (seq != last + 1) { seen.gaps += `${id}:${last}->${seq} `; }
 				seen.seqs.set(id, seq);
@@ -158,6 +160,30 @@ when (!windows) {
 		const _closed = await ran(ws, h, { kind: CommandKind.ClosePane, pane: 2 as PaneId }, seen);
 		assert h.paneOf(2 as PaneId) === null;
 		assert !h.write(2 as PaneId, [0x61]);
+		await h.closeAll();
+		assert seen.fatal == "", seen.fatal;
+	}
+
+	test "each pump hands out at most one Output per pane, however many pty reads its drain joined" {
+		const seen = fresh();
+		const dir = dirNamed("hostJoined", seen);
+		const w = Workspace.create(1);
+		assert w.ok;
+		if (!w.ok) { return; }
+		const h = hostIn(dir, seen);
+		const _tab = await ran(w.value, h, { kind: CommandKind.NewTab }, seen);
+		assert typed(h, 1, "head -c 400000 /dev/zero | tr '\\0' x; printf 'joined%send\\n' -\r");
+		await sleepAsync(500);
+		let most: int32 = 0;
+		const start: float64 = performance.now();
+		while (!printedBy(seen, 1).includes("joined-end") && performance.now() - start < WAIT_MS) {
+			const before = seen.outputs;
+			const _more = await h.pump();
+			most = Math.max(most, seen.outputs - before);
+		}
+		assert printedBy(seen, 1).includes("joined-end");
+		assert most == 1, `${most} Outputs in one pump`;
+		assert seen.gaps == "", seen.gaps;
 		await h.closeAll();
 		assert seen.fatal == "", seen.fatal;
 	}

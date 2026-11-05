@@ -623,10 +623,6 @@ async function session(
 	const _raw = try await run(d, echo, "stty raw -echo; echo R''EADY; exec cat\n", "READY", SETUP_TIMEOUT_MS);
 	try await pause(d, echo, 200);
 	if (!(await measuredEcho(mode, "echo_idle", rep, d, echo))) { return Result.ok(null); }
-	const catLoad = `while :; do cat '${file}'; done\n`;
-	if (!(try await loadedEcho(mode, "echo_loaded_cat", rep, d, echo, flood, catLoad))) {
-		return Result.ok(null);
-	}
 	d.input(flood, bytesOf("yes\n"));
 	try await pause(d, flood, FLOOD_LEAD_MS);
 	const stopMs = await stopped(d, flood);
@@ -635,6 +631,10 @@ async function session(
 		return Result.ok(null);
 	}
 	record(mode, "ctrl_c_yes", rep, [{ key: "ms", value: stopMs.value }]);
+	const catLoad = `while :; do cat '${file}'; done\n`;
+	if (!(try await loadedEcho(mode, "echo_loaded_cat", rep, d, echo, flood, catLoad))) {
+		return Result.ok(null);
+	}
 	const _yes = try await loadedEcho(mode, "echo_loaded_yes", rep, d, echo, flood, "yes\n");
 	return Result.ok(null);
 }
@@ -655,6 +655,8 @@ async function floodOnce(
 	const serverCpu = await d.close();
 	if (!ran.ok) {
 		const mbDone = (p.watch.bytes as float64) / MB;
+		const seconds = (performance.now() - at) / 1000.0;
+		record(mode, "flood_until_cut", rep, [{ key: "mb_s", value: mbDone / seconds }]);
 		failed(mode, "flood", rep, { key: "failed_after_mb", value: mbDone }, `${ran.error} after ${mbDone.toFixed(1)} MB`);
 		return Result.ok(-1);
 	}

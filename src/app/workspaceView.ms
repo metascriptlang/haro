@@ -1465,9 +1465,17 @@ async function receive(this v: WorkspaceView, h: LinkedHost, m: Message): Promis
 		const layout = parts.layout;
 		if (layout !== null) { adopt(h, layout); }
 		const remote = h.panes.remote;
-		if (remote !== null) {
-			for (const s of parts.screens) { remote.screens.push(s); }
+		const reseeded: PaneId[] = [];
+		for (const s of parts.screens) {
+			const pane = h.panes.paneOf(s.pane);
+			if (pane !== null) {
+				pane.shell.reseed(s.seed);
+				reseeded.push(s.pane);
+			} else if (remote !== null) {
+				remote.screens.push(s);
+			}
 		}
+		v.wakePanes(h, reseeded);
 		v.follow(h);
 		v.redraw();
 		return;

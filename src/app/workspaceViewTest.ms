@@ -250,6 +250,18 @@ function outputs(pane: int32, from: uint64, count: int32, word: string): Message
 	return out;
 }
 
+async function noted(notes: Notes, text: string): Promise<boolean> {
+	const start = performance.now();
+	while (performance.now() - start < WAIT_MS) {
+		if (notes.lines.some((l: string): boolean => l.includes(text))) { return true; }
+		const due = notes.due;
+		notes.due = [];
+		for (const run of due) { run(); }
+		await sleepAsync(10);
+	}
+	return false;
+}
+
 async function settled(notes: Notes): Promise<boolean> {
 	for (let i: int32 = 0; i < 50; i++) {
 		const due = notes.due;
@@ -307,6 +319,43 @@ test "typing in quick succession reaches the server in the order it was typed" {
 	assert await until((): boolean => seqOf(fake, 1) == 30), `${seqOf(fake, 1)} inputs`;
 	assert await shows(v, 1, wanted), await screenOf(v, 1);
 	assert notes.fatal == "";
+	await v.detachPanes();
+	fake.close();
+	cleanUp(path);
+}
+
+test "a screen in the middle of a pane's output replaces its terminal, answers no query, and later output follows it" {
+	const path = freshPath();
+	const fake = fakeWithTwoPanes(path);
+	const notes = new Notes();
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	assert got.ok;
+	if (!got.ok) { return; }
+	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
+	await v.attachTo(link, got.value);
+	assert await shows(v, 1, "one-marker");
+	const jump = "\x1b[2J\x1b[Hjumped-marker\r\n\x1b[c\x1b[6n";
+	const messages = outputs(1, 1, 1, "before");
+	messages.push({
+		kind: MessageKind.Screen,
+		pane: 1 as PaneId,
+		cols: 80,
+		rows: 24,
+		format: ScreenFormat.VtBytes,
+		bytes: [...jump.asBytes()],
+	});
+	for (const m of outputs(1, 7, 2, "after")) { messages.push(m); }
+	link.received(chunkOf(messages));
+	assert await shows(v, 1, "after-1"), await screenOf(v, 1);
+	const shown = await screenOf(v, 1);
+	assert shown.includes("jumped-marker") && shown.includes("after-0"), shown;
+	assert !shown.includes("one-marker") && !shown.includes("before-0"), shown;
+	link.received(chunkOf(outputs(1, 8, 1, "stale")));
+	assert await noted(notes, "OutOfOrder"), notes.lines.join("\n");
+	await sleepAsync(100);
+	assert seqOf(fake, 1) == 0, `the replay answered ${seqOf(fake, 1)} times`;
 	await v.detachPanes();
 	fake.close();
 	cleanUp(path);

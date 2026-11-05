@@ -36,6 +36,11 @@ export function feed(this r: RemotePty, first: uint64, last: uint64, sink bytes:
 	return true;
 }
 
+export function dropInbound(this r: RemotePty): void {
+	r.inbound = [];
+	r.head = 0;
+}
+
 export function takeTyped(this r: RemotePty): Vec<uint8> {
 	const typed = r.typed;
 	r.typed = [];

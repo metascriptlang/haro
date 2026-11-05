@@ -312,6 +312,7 @@ async function openWindow(
 	served: Served = IN_PROCESS,
 ): Promise<int32> {
 	registerFallbacks();
+	ptySetWake(ionWakeLoop);
 	const families = familyList(config.loaded.faces);
 	const host: WindowHost = {
 		setTitle: (title: string, belled: boolean): void => {
@@ -446,7 +447,6 @@ function quitter(v: WorkspaceView): () => void {
 }
 
 async function runShell(command: string): Promise<int32> {
-	ptySetWake(ionWakeLoop);
 	const launch: Launch = {
 		command: command,
 		startIn: config.startIn(probableCli(), homeDir()),

@@ -23,6 +23,7 @@ import { Message, MessageKind } from "../server/protocol";
 import { Attached, Dial, DialError, Failure, ServerLink, linkTo } from "../client/link";
 import { sshDial } from "../client/ssh";
 import { destinationOf } from "../client/destination";
+import { Feed, add } from "../client/feeds";
 import { Layout, screenParts } from "../client/wire";
 import {
 	CommandKind,
@@ -39,7 +40,7 @@ import {
 	layout,
 } from "../workspace/workspace";
 import { hexOf } from "./frame";
-import { Stats } from "./stats";
+import { Stats, noteWake } from "./stats";
 import { CellFont, measured, open, reconfigured, stepped } from "./cellFont";
 import {
 	NewPaneCwd,
@@ -509,7 +510,8 @@ export function connect(this v: WorkspaceView): void {
 	events.onWake((): void => {
 		for (const h of v.hooks) {
 			const wake = h.wake;
-			if (wake !== null) { wake(); }
+			const host = v.hostOf(h.id.host);
+			if (wake !== null && (host === null || host.inProcess)) { wake(); }
 		}
 	});
 	events.onMenu((item: string): void => {
@@ -1304,7 +1306,7 @@ export async function attachHost(
 	}
 	link.fit(v.cols, v.rows);
 	link.listen(
-		(m: Message): void => { v.received(h, link, m); },
+		(ms: Message[]): void => { v.received(h, link, ms); },
 		(why: string): void => { v.lost(h, link, why); },
 	);
 }
@@ -1402,9 +1404,9 @@ function lost(this v: WorkspaceView, h: LinkedHost, link: ServerLink | null, why
 	v.offline(h, why);
 }
 
-function received(this v: WorkspaceView, h: LinkedHost, link: ServerLink, m: Message): void {
+function received(this v: WorkspaceView, h: LinkedHost, link: ServerLink, ms: Message[]): void {
 	if (h.link !== link) { return; }
-	h.inbox.push(m);
+	for (const m of ms) { h.inbox.push(m); }
 	if (h.receiving) { return; }
 	const _drained = v.drainInbox(h);
 }
@@ -1412,22 +1414,49 @@ function received(this v: WorkspaceView, h: LinkedHost, link: ServerLink, m: Mes
 async function drainInbox(this v: WorkspaceView, h: LinkedHost): Promise<void> {
 	h.receiving = true;
 	while (h.inbox.length > 0 && !v.quitting) {
-		const next = h.inbox.shift();
-		if (next !== undefined) { await v.receive(h, next); }
+		const link = h.link;
+		const batch = h.inbox;
+		h.inbox = [];
+		const feeds: Feed[] = [];
+		for (const m of batch) {
+			if (v.quitting || h.link !== link) { break; }
+			if (m.kind == MessageKind.Output) {
+				feeds.add(m.pane, m.seq, m.bytes);
+			} else {
+				v.feed(h, feeds);
+				await v.receive(h, m);
+			}
+		}
+		v.feed(h, feeds);
 	}
 	h.receiving = false;
 }
 
-function output(this v: WorkspaceView, h: LinkedHost, id: PaneId, seq: uint64, bytes: uint8[]): void {
-	const pane = h.panes.paneOf(id);
-	if (pane === null) {
-		v.host.report.note(
-			`server ${v.labelOf(h)}: output for pane ${id as int32}, which this window does not show`,
-		);
-		return;
+function feed(this v: WorkspaceView, h: LinkedHost, feeds: Feed[]): void {
+	if (feeds.length == 0) { return; }
+	const fed: PaneId[] = [];
+	for (const f of feeds) {
+		const pane = h.panes.paneOf(f.pane);
+		if (pane === null) {
+			v.host.report.note(
+				`server ${v.labelOf(h)}: output for pane ${f.pane as int32}, which this window does not show`,
+			);
+		} else {
+			pane.shell.feed(f.first, f.last, move f.bytes);
+			if (!fed.includes(f.pane)) { fed.push(f.pane); }
+		}
 	}
-	pane.shell.feed(seq, [...bytes]);
-	v.host.wake();
+	feeds.length = 0;
+	v.wakePanes(h, fed);
+}
+
+function wakePanes(this v: WorkspaceView, h: LinkedHost, ids: PaneId[]): void {
+	if (ids.length == 0) { return; }
+	v.host.stats.noteWake(performance.now());
+	for (const id of ids) {
+		const wake = v.hooksOf({ host: h.id, pane: id }).wake;
+		if (wake !== null) { wake(); }
+	}
 }
 
 async function receive(this v: WorkspaceView, h: LinkedHost, m: Message): Promise<void> {
@@ -1445,8 +1474,6 @@ async function receive(this v: WorkspaceView, h: LinkedHost, m: Message): Promis
 	}
 	if (m.kind == MessageKind.Event) {
 		await v.applyEvents(h, [m.event]);
-	} else if (m.kind == MessageKind.Output) {
-		v.output(h, m.pane, m.seq, m.bytes);
 	} else if (m.kind == MessageKind.Exited) {
 		v.exited({ host: h.id, pane: m.pane }, m.code);
 	} else if (m.kind == MessageKind.Failed) {

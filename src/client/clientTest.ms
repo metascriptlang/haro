@@ -112,11 +112,13 @@ test "the fake server sends a layout before the events of a command, as the real
 	const got = await attach(link, vtBuild(), 80, 24, 5000);
 	assert got.ok;
 	const kinds: string[] = [];
-	link.listen((m: Message): void => {
-		if (m.kind == MessageKind.Layout) {
-			kinds.push(`layout ${m.tabs[0].root.panes().length}`);
-		} else if (m.kind == MessageKind.Event && m.event.kind == EventKind.PaneOpened) {
-			kinds.push("opened");
+	link.listen((ms: Message[]): void => {
+		for (const m of ms) {
+			if (m.kind == MessageKind.Layout) {
+				kinds.push(`layout ${m.tabs[0].root.panes().length}`);
+			} else if (m.kind == MessageKind.Event && m.event.kind == EventKind.PaneOpened) {
+				kinds.push("opened");
+			}
 		}
 	}, (why: string): void => {});
 	link.command({ kind: CommandKind.Split, pane: 2 as PaneId, axis: Axis.Stacked });

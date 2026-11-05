@@ -82,7 +82,7 @@ test "a real host gets the bundle, keeps a pane's shell across a dropped ssh, an
 	assert uploads.count == 1, `uploads ${uploads.count}`;
 	const heard = new Heard();
 	first.link.listen(
-		(m: Message): void => { heard.messages.push(m); },
+		(ms: Message[]): void => { for (const m of ms) { heard.messages.push(m); } },
 		(why: string): void => { heard.ended = why; },
 	);
 	const opening = first.attached.layout.tabs[0].root.panes()[0].id;

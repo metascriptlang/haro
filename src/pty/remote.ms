@@ -29,9 +29,9 @@ export function empty(this typeof RemotePty): RemotePty {
 	return { inbound: [], head: 0, typed: [], lastSeq: 0, closed: false };
 }
 
-export function feed(this r: RemotePty, seq: uint64, sink bytes: Vec<uint8>): boolean {
-	if (seq <= r.lastSeq) { return false; }
-	r.lastSeq = seq;
+export function feed(this r: RemotePty, first: uint64, last: uint64, sink bytes: Vec<uint8>): boolean {
+	if (first <= r.lastSeq) { return false; }
+	r.lastSeq = last;
 	if (bytes.length > 0) { r.inbound.push(bytes); }
 	return true;
 }

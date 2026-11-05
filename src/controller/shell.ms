@@ -133,11 +133,11 @@ export actor Shell {
 	unannotate(id: int32): void { this.io?.unannotate(id); }
 	write(bytes: Vec<uint8>): void { this.io?.write(bytes); }
 
-	feed(seq: uint64, bytes: Vec<uint8>): void {
+	feed(first: uint64, last: uint64, bytes: Vec<uint8>): void {
 		const remote = this.remote;
 		const io = this.io;
 		if (remote === null || io === null) { return; }
-		if (!remote.feed(seq, bytes)) { io.outOfOrder(); }
+		if (!remote.feed(first, last, bytes)) { io.outOfOrder(); }
 	}
 
 	typed(): Vec<uint8> {

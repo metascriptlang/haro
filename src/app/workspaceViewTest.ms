@@ -2,7 +2,8 @@ import { removeAll } from "std/fs";
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { CloseReason, Connection, connectToUnix, listenUnix } from "../server/transport";
-import { MAX_SCREEN_BYTES, MessageKind, ScreenFormat, encode } from "../server/protocol";
+import { MAX_SCREEN_BYTES, Message, MessageKind, ScreenFormat, encode } from "../server/protocol";
+import { append } from "../pty/bytes";
 import { Server, start, stop } from "../server/serve";
 import { defaults } from "../config/config";
 import { HookPane, KeyAnswer, UNHANDLED } from "../config/hooks";
@@ -86,6 +87,8 @@ class Notes {
 	lines: string[] = [];
 	fatal: string = "";
 	woke: () => void = (): void => {};
+	wakes: int32 = 0;
+	due: (() => void)[] = [];
 }
 
 function hostOf(notes: Notes): WindowHost {
@@ -98,14 +101,17 @@ function hostOf(notes: Notes): WindowHost {
 		openConfig: (): void => {},
 		reloadConfig: (): void => {},
 		quit: (): void => {},
-		wake: (): void => { notes.woke(); },
+		wake: (): void => {
+			notes.wakes += 1;
+			notes.woke();
+		},
 		report: {
 			note: (message: string): void => { notes.lines.push(message); },
 			fail: (message: string): void => { notes.fatal = message; },
 		},
 		timing: {
 			clock: (): float64 => performance.now(),
-			schedule: (run: () => void): void => {},
+			schedule: (run: () => void): void => { notes.due.push(run); },
 		},
 		keyHook: {
 			answer: (pane: HookPane, k: KeyEvent): Result<KeyAnswer, string> => Result.ok(UNHANDLED),
@@ -221,6 +227,60 @@ test "a window shows the server's pane exit and start failure the way an in-proc
 	assert await until((): boolean => notes.lines.includes("the last pane closed")), notes.lines.join("\n");
 	assert notes.lines.includes("pane 2: no such shell"), notes.lines.join("\n");
 	assert notes.fatal == "";
+	fake.close();
+	cleanUp(path);
+}
+
+function chunkOf(messages: Message[]): uint8[] {
+	const chunk: uint8[] = [];
+	for (const m of messages) {
+		const bytes = encode(m);
+		if (!bytes.ok) { throw new Error(`encode: ${bytes.error.toString()}`); }
+		chunk.append(bytes.value);
+	}
+	return chunk;
+}
+
+function outputs(pane: int32, from: uint64, count: int32, word: string): Message[] {
+	const out: Message[] = [];
+	for (let i: int32 = 0; i < count; i++) {
+		const text = `${word}-${i}\r\n`;
+		out.push({ kind: MessageKind.Output, pane: pane as PaneId, seq: from + (i as uint64), bytes: [...text.asBytes()] });
+	}
+	return out;
+}
+
+async function settled(notes: Notes): Promise<boolean> {
+	for (let i: int32 = 0; i < 50; i++) {
+		const due = notes.due;
+		notes.due = [];
+		for (const run of due) { run(); }
+		await sleepAsync(20);
+		if (notes.due.length == 0) { return true; }
+	}
+	return false;
+}
+
+test "many outputs that arrive together wake only their pane, as one feed and one frame request" {
+	const path = freshPath();
+	const fake = fakeWithTwoPanes(path);
+	const notes = new Notes();
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	assert got.ok;
+	if (!got.ok) { return; }
+	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
+	await v.attachTo(link, got.value);
+	assert await shows(v, 1, "one-marker");
+	assert await settled(notes);
+	const wakes = notes.wakes;
+	link.received(chunkOf(outputs(1, 1, 50, "burst")));
+	assert notes.wakes == wakes, `${notes.wakes - wakes} window-wide wakes`;
+	assert notes.due.length == 1, `${notes.due.length} frame requests`;
+	assert await shows(v, 1, "burst-49");
+	assert notes.fatal == "";
+	await v.detachPanes();
 	fake.close();
 	cleanUp(path);
 }

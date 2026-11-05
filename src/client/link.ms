@@ -20,7 +20,7 @@ interface BusyWait {
 	answer: (busy: boolean) => void;
 }
 
-function ignoreMessage(m: Message): void {}
+function ignoreMessages(ms: Message[]): void {}
 function ignoreEnd(why: string): void {}
 
 function closeText(reason: CloseReason): string {
@@ -37,7 +37,7 @@ export class ServerLink {
 	private decoder: Decoder = Decoder.create();
 	private held: Message[] = [];
 	private listening: boolean = false;
-	private handler: (m: Message) => void = ignoreMessage;
+	private handler: (ms: Message[]) => void = ignoreMessages;
 	private onEnd: (why: string) => void = ignoreEnd;
 	private busyWaits: BusyWait[] = [];
 	ended: string | null = null;
@@ -58,14 +58,16 @@ export class ServerLink {
 			this.end(`the server sent a malformed message: ${got.error.toString()}`);
 			return;
 		}
+		const kept: Message[] = [];
 		for (const m of got.value) {
 			if (this.answeredBusy(m)) { continue; }
 			if (this.listening) {
-				this.handler(m);
+				kept.push(m);
 			} else {
 				this.held.push(m);
 			}
 		}
+		if (kept.length > 0) { this.handler(kept); }
 	}
 
 	answeredBusy(m: Message): boolean {
@@ -108,13 +110,13 @@ export class ServerLink {
 		this.held = [...kept, ...this.held];
 	}
 
-	listen(handler: (m: Message) => void, onEnd: (why: string) => void): void {
+	listen(handler: (ms: Message[]) => void, onEnd: (why: string) => void): void {
 		this.handler = handler;
 		this.onEnd = onEnd;
 		this.listening = true;
 		const held = this.held;
 		this.held = [];
-		for (const m of held) { handler(m); }
+		if (held.length > 0) { handler(held); }
 		const ended = this.ended;
 		if (ended !== null) { onEnd(ended); }
 	}
@@ -142,7 +144,7 @@ export class ServerLink {
 
 	detach(): void {
 		this.listening = false;
-		this.handler = ignoreMessage;
+		this.handler = ignoreMessages;
 		this.onEnd = ignoreEnd;
 		this.unanswered();
 		this.send({ kind: MessageKind.Bye });

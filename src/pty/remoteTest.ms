@@ -23,7 +23,7 @@ function ready(pty: Pty): boolean {
 function fed(r: RemotePty, seq: uint64, s: string): boolean {
 	let bytes: Vec<uint8> = [];
 	for (const b of s.asBytes()) { bytes.push(b); }
-	return r.feed(seq, bytes);
+	return r.feed(seq, seq, bytes);
 }
 
 test "output is read in seq order across chunk edges, and a seq at or below the last one is refused" {
@@ -43,6 +43,14 @@ test "output is read in seq order across chunk edges, and a seq at or below the 
 		if (got.ok) { read += ascii(buf[0..got.value]); }
 	}
 	assert read == "abcdefgh";
+}
+
+test "a feed that joins several outputs is checked by its first seq and leaves its last as the pane's seq" {
+	const r = RemotePty.empty();
+	assert r.feed(1, 4, [0x61]);
+	assert !r.feed(4, 6, [0x62]);
+	assert r.feed(5, 5, [0x63]);
+	assert r.lastSeq == 5;
 }
 
 test "a remote pane's writes are kept for the window to send, and its foreground counts as busy" {

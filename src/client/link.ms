@@ -9,6 +9,7 @@ import {
 	encode,
 	push,
 } from "../server/protocol";
+import { append } from "../pty/bytes";
 import { PaneId, panes } from "../workspace/tree";
 import { WorkspaceCommand } from "../workspace/workspace";
 import { Layout, Screen, screenParts } from "./wire";
@@ -135,7 +136,9 @@ export class ServerLink {
 	}
 
 	input(pane: PaneId, bytes: Vec<uint8>): void {
-		this.send({ kind: MessageKind.Input, pane: pane, bytes: [...bytes] });
+		const out: uint8[] = [];
+		out.append(bytes);
+		this.send({ kind: MessageKind.Input, pane: pane, bytes: out });
 	}
 
 	fit(cols: int32, rows: int32): void {

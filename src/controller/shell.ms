@@ -147,6 +147,22 @@ export actor Shell {
 		return move got;
 	}
 
+	keyTyped(k: KeyEvent, time: float64): Vec<uint8> {
+		this.io?.key(k, time);
+		const remote = this.remote;
+		if (remote === null) { return []; }
+		let got = remote.takeTyped();
+		return move got;
+	}
+
+	textTyped(typed: string, time: float64): Vec<uint8> {
+		this.io?.text(typed, time);
+		const remote = this.remote;
+		if (remote === null) { return []; }
+		let got = remote.takeTyped();
+		return move got;
+	}
+
 	output(): Drained | null {
 		const io = this.io;
 		if (io === null) { return null; }

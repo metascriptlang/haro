@@ -285,6 +285,33 @@ test "many outputs that arrive together wake only their pane, as one feed and on
 	cleanUp(path);
 }
 
+test "typing in quick succession reaches the server in the order it was typed" {
+	const path = freshPath();
+	const fake = fakeWithTwoPanes(path);
+	const notes = new Notes();
+	const link = await linked(path);
+	const got = await attach(link, vtBuild(), 80, 24, 5000);
+	assert got.ok;
+	if (!got.ok) { return; }
+	const v = WorkspaceView.open(hostOf(notes), defaults(), "", null, null, null, link, got.value);
+	v.connect();
+	await v.attachTo(link, got.value);
+	const io = v.primary().panes.paneOf(1 as PaneId)?.model.io ?? null;
+	assert io !== null;
+	if (io === null) { return; }
+	let wanted = "";
+	for (let i: int32 = 0; i < 30; i++) {
+		io.text(`${i}.`, 0);
+		wanted += `${i}.`;
+	}
+	assert await until((): boolean => seqOf(fake, 1) == 30), `${seqOf(fake, 1)} inputs`;
+	assert await shows(v, 1, wanted), await screenOf(v, 1);
+	assert notes.fatal == "";
+	await v.detachPanes();
+	fake.close();
+	cleanUp(path);
+}
+
 test "closing a server pane asks first only when the server says its shell runs a program" {
 	const path = freshPath();
 	const fake = fakeWithTwoPanes(path);

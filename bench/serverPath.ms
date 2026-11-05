@@ -1,5 +1,5 @@
-import { readFile, removeAll } from "std/fs";
-import { join } from "std/fs/path";
+import { chmod, ensureDir, exists, readFile, removeAll, writeFile } from "std/fs";
+import { dirname, join } from "std/fs/path";
 import { hostname, tmpDir } from "std/os";
 import {
 	ChildProcess,
@@ -22,7 +22,12 @@ import { MAX_SCREEN_BYTES, Message, MessageKind } from "../src/server/protocol";
 import { Server, start } from "../src/server/serve";
 import { askStop } from "../src/server/control";
 import { connectToUnix, socketPath } from "../src/server/transport";
-import { ServerLink, attach } from "../src/client/link";
+import { Attached, ServerLink, attach, linkTo } from "../src/client/link";
+import { serverPath as remoteServerPath, sshDial, versionLine } from "../src/client/ssh";
+import { proxy } from "../src/server/proxy";
+import { DelayRelay, carriedBack, delayed, relay } from "../src/server/delayRelay";
+import { overlayAt, predict } from "../src/controller/predict";
+import { predictTyped, pumpFrame } from "../src/controller/term";
 import { Axis, CellRect, PaneId, panes } from "../src/workspace/tree";
 import { CommandKind, EventKind, Tab, Workspace, apply, create } from "../src/workspace/workspace";
 
@@ -62,6 +67,22 @@ const SCROLLBACK_LINES: int32 = 50000;
 const MB: float64 = 1000000.0;
 const INTERRUPT: uint8 = 0x03;
 const RUSAGE_SELF: int32 = 0;
+const REMOTE_RTTS: float64[] = [50, 100, 300];
+const REMOTE_KEYS: int32 = 100;
+const REMOTE_HOST = "far";
+const RELAY_COUNT_MS: int32 = 100;
+const RELAY_START_MS: float64 = 10000;
+const EXECUTABLE: int32 = 0o755;
+const FAKE_SSH = `#!/bin/sh
+while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
+shift
+host="$1"
+shift
+HOME="$FAKE_REMOTES/$host"
+export HOME
+cd "$HOME" || exit 1
+exec /bin/sh -c "$*"
+`;
 
 function cpuMs(): float64 {
 	when (windows) {
@@ -178,6 +199,8 @@ class BenchPane {
 	watch: Watch;
 	remote: RemotePty | null;
 	sent: int32 = 0;
+	predicting: boolean = false;
+	predicted: int32 = 0;
 
 	constructor(id: PaneId, term: Term, watch: Watch, remote: RemotePty | null) {
 		this.id = id;
@@ -312,7 +335,7 @@ class ServerProc {
 
 let servers: int32 = 0;
 
-async function startServer(): Promise<Result<ServerProc, string>> {
+async function startServer(packing: boolean = true): Promise<Result<ServerProc, string>> {
 	servers += 1;
 	const dir = join(tmpDir(), `haro-bench-${Date.now()}-${servers}`);
 	const path = join(dir, "s.sock");
@@ -321,6 +344,7 @@ async function startServer(): Promise<Result<ServerProc, string>> {
 		`HARO_SERVER_TRACE=${join(dir, "trace.tsv")}`,
 		execPath,
 		"--serve",
+		packing ? "--pack" : "--no-pack",
 	]);
 	if (!launched.ok) { return Result.err(`server spawn: ${launched.error.message}`); }
 	const deadline = performance.now() + SERVER_START_MS;
@@ -401,6 +425,13 @@ function fed(this c: Client, feeds: Feed[]): void {
 				return;
 			}
 			more = drained.value;
+		}
+		if (p.predicting) {
+			const planned = p.term.pumpFrame();
+			if (!planned.ok) {
+				c.failure = `pane ${f.pane as int32} frame: ${planned.error.toString()}`;
+				return;
+			}
 		}
 	}
 	feeds.length = 0;
@@ -498,9 +529,13 @@ async function attachClient(s: ServerProc): Promise<Result<Client, string>> {
 	const link = try await linked(s.path);
 	const got = await attach(link, vtBuild(), COLS, ROWS, ATTACH_TIMEOUT_MS);
 	if (!got.ok) { return Result.err(`attach: ${got.error.why}`); }
+	return clientOf(link, got.value);
+}
+
+function clientOf(link: ServerLink, attached: Attached): Result<Client, string> {
 	const c = new Client(link);
-	c.tabs = got.value.layout.tabs;
-	for (const screen of got.value.screens) {
+	c.tabs = attached.layout.tabs;
+	for (const screen of attached.screens) {
 		const rect = rectOf(c.tabs, screen.pane);
 		if (rect === null) { return Result.err(`screen for unknown pane ${screen.pane as int32}`); }
 		c.panes.push(try remotePane(screen.pane, screen.seed, rect));
@@ -608,9 +643,9 @@ struct Echoes {
 	failure: string;
 }
 
-async function echoes(d: Driver, p: BenchPane, measure: string): Promise<Echoes> {
+async function echoes(d: Driver, p: BenchPane, measure: string, keys: int32): Promise<Echoes> {
 	let got: Echoes = { latencies: [], arrivals: [], failure: "" };
-	for (let i: int32 = 0; i < ECHO_KEYS; i++) {
+	for (let i: int32 = 0; i < keys; i++) {
 		const key = (97 + i % 26) as uint8;
 		p.watch.expect([key]);
 		const at = performance.now();
@@ -860,12 +895,13 @@ async function measuredEcho(
 	rep: int32,
 	d: Driver,
 	echo: BenchPane,
+	keys: int32 = ECHO_KEYS,
 ): Promise<boolean> {
 	const reseedsBefore = d.reseeds();
 	const busyBefore = d.busyMs();
 	const began = performance.now();
 	const _reset = d.takeLongestMs();
-	const got = await echoes(d, echo, measure);
+	const got = await echoes(d, echo, measure, keys);
 	if (got.arrivals.length > 0) {
 		const busy = (d.busyMs() - busyBefore) / (performance.now() - began);
 		record(mode, `${measure}_split`, rep, [
@@ -1077,9 +1113,9 @@ async function attachRun(reps: int32): Promise<Result<void, string>> {
 	return Result.ok(null);
 }
 
-function makeFile(path: string, megabytes: int32): Result<float64, string> {
+function makeFile(path: string, megabytes: int32, source: string = `yes ${LINE}`): Result<float64, string> {
 	const bytes = (megabytes as int64) * 1048576;
-	const made = spawnProcess("/bin/sh", ["-c", `yes ${LINE} | head -c ${bytes} > '${path}'`]);
+	const made = spawnProcess("/bin/sh", ["-c", `${source} | head -c ${bytes} > '${path}'`]);
 	if (!made.ok) { return Result.err(`flood file: ${made.error.message}`); }
 	const done = made.value.wait(300000);
 	made.value.close();
@@ -1223,6 +1259,344 @@ async function bench(): Promise<Result<void, string>> {
 	return Result.ok(null);
 }
 
+async function proxyBench(): Promise<int32> {
+	const done = await proxy(socketPath(), async (): Promise<boolean> => false);
+	if (!done.ok) {
+		console.error(`bench proxy: ${done.error}`);
+		return 1;
+	}
+	return 0;
+}
+
+function argAfter(flag: string, at: int32): string {
+	for (let i = 1; i + at < argv.length; i++) {
+		if (argv[i] == flag) { return argv[i + at]; }
+	}
+	return "";
+}
+
+async function relayBench(): Promise<int32> {
+	const countFile = argAfter("--relay", 4);
+	const made = DelayRelay.relay(argAfter("--relay", 1), argAfter("--relay", 2), delayed(parseFloat(argAfter("--relay", 3))));
+	if (!made.ok) {
+		console.error(`bench relay: ${made.error.toString()}`);
+		return 1;
+	}
+	const r = made.value;
+	while (true) {
+		const _written = writeFile(countFile, `${r.carriedBack()}`);
+		await sleepAsync(RELAY_COUNT_MS);
+	}
+	return 0;
+}
+
+class RelayProc {
+	readonly listen: string;
+	readonly count: string;
+	readonly child: ChildProcess;
+
+	constructor(listen: string, count: string, child: ChildProcess) {
+		this.listen = listen;
+		this.count = count;
+		this.child = child;
+	}
+}
+
+function wireBytes(r: RelayProc): float64 {
+	const got = readFile(r.count);
+	return got.ok ? parseFloat(got.value) : 0;
+}
+
+async function settledWire(r: RelayProc): Promise<float64> {
+	await sleepAsync(RELAY_COUNT_MS * 3);
+	return wireBytes(r);
+}
+
+async function startRelay(s: ServerProc, rttMs: float64): Promise<Result<RelayProc, string>> {
+	const listen = join(join(s.dir, "relay"), "r.sock");
+	const count = join(s.dir, "relay.count");
+	const launched = spawnProcess(execPath, ["--relay", listen, s.path, `${rttMs}`, count]);
+	if (!launched.ok) { return Result.err(`relay spawn: ${launched.error.message}`); }
+	const deadline = performance.now() + RELAY_START_MS;
+	while (performance.now() < deadline) {
+		if (exists(listen) && exists(count)) { return Result.ok(new RelayProc(listen, count, launched.value)); }
+		await sleepAsync(20);
+	}
+	launched.value.close();
+	return Result.err(`the relay never listened at ${listen}`);
+}
+
+function stopRelay(r: RelayProc): void {
+	const _killed = r.child.kill();
+	r.child.close();
+}
+
+function executable(path: string, text: string): Result<void, string> {
+	if (!ensureDir(dirname(path)).ok || !writeFile(path, text).ok || !chmod(path, EXECUTABLE).ok) {
+		return Result.err(`could not write ${path}`);
+	}
+	return Result.ok(null);
+}
+
+function fakeSsh(s: ServerProc): Result<void, string> {
+	const bin = join(s.dir, "bin");
+	const remotes = join(s.dir, "remotes");
+	try executable(join(bin, "ssh"), FAKE_SSH);
+	const installed = join(join(join(remotes, REMOTE_HOST), ".haro"), remoteServerPath().slice(".haro/".length));
+	const script = `#!/bin/sh\ncase "$1" in\nversion) echo "${versionLine(vtBuild())}";;\n` +
+		`proxy) exec "${execPath}" --proxy;;\n*) exit 2;;\nesac\n`;
+	try executable(installed, script);
+	const path = env.get("PATH");
+	const _p = env.set("PATH", `${bin}:${path}`);
+	const _r = env.set("FAKE_REMOTES", remotes);
+	return Result.ok(null);
+}
+
+class Far {
+	readonly s: ServerProc;
+	readonly relay: RelayProc;
+	readonly c: Client;
+
+	constructor(s: ServerProc, relay: RelayProc, c: Client) {
+		this.s = s;
+		this.relay = relay;
+		this.c = c;
+	}
+}
+
+async function dialFar(s: ServerProc, relay: RelayProc): Promise<Result<Client, string>> {
+	const got = await linkTo(sshDial(REMOTE_HOST, relay.listen), (): void => {}, vtBuild(), COLS, ROWS, ATTACH_TIMEOUT_MS);
+	if (!got.ok) { return Result.err(`remote attach: ${got.error.why}`); }
+	const c = try clientOf(got.value.link, got.value.attached);
+	got.value.link.listen((ms: Message[]): void => { c.received(ms); }, (why: string): void => {
+		if (c.failure == "") { c.failure = `link ended: ${why}`; }
+	});
+	got.value.link.measure((ms: float64): void => {});
+	const deadline = performance.now() + SETUP_TIMEOUT_MS;
+	while (got.value.link.rttMs === null) {
+		if (performance.now() > deadline) { return Result.err("no round trip was measured"); }
+		await sleepAsync(10);
+	}
+	return Result.ok(c);
+}
+
+let lastWire: float64 = 0;
+
+async function farDriver(rttMs: float64, packing: boolean): Promise<Result<Driver, string>> {
+	const s = try await startServer(packing);
+	const relayed = await startRelay(s, rttMs);
+	if (!relayed.ok) {
+		const _stopped = await stopServer(s);
+		return Result.err(relayed.error);
+	}
+	const r = relayed.value;
+	const faked = fakeSsh(s);
+	const dialed: Result<Client, string> = faked.ok ? await dialFar(s, r) : Result.err(faked.error);
+	if (!dialed.ok) {
+		stopRelay(r);
+		const _stopped = await stopServer(s);
+		return Result.err(dialed.error);
+	}
+	const c = dialed.value;
+	return Result.ok({
+		panes: c.panes,
+		input: (p: BenchPane, bytes: Vec<uint8>): void => {
+			p.sent += 1;
+			c.link.input(p.id, bytes);
+			if (p.predicting) { predictedAhead(p, bytes); }
+		},
+		poll: async (focus: BenchPane): Promise<Result<void, string>> => {
+			if (c.failure != "") { return Result.err(c.failure); }
+			await sleepAsync(1);
+			return Result.ok(null);
+		},
+		split: async (): Promise<Result<BenchPane, string>> => Result.err("no split on a far host"),
+		close: async (): Promise<Result<float64, string>> => {
+			lastWire = await settledWire(r);
+			detachClient(c);
+			stopRelay(r);
+			return await stopServer(s);
+		},
+		reseeds: (): int32 => c.reseeds,
+		busyMs: (): float64 => c.busyMs,
+		takeLongestMs: (): float64 => {
+			const longest = c.longestMs;
+			c.longestMs = 0;
+			return longest;
+		},
+	});
+}
+
+function predictedAhead(p: BenchPane, bytes: Vec<uint8>): void {
+	p.term.predictTyped(bytes);
+	const planned = p.term.pumpFrame();
+	const ahead = p.term.decor.ahead;
+	if (!planned.ok || ahead.guesses.length == 0) { return; }
+	const last = ahead.guesses[ahead.guesses.length - 1];
+	const over = ahead.overlayAt(last.y);
+	if (over !== null && over.x + (over.text.length as int32) - 1 == last.x) {
+		p.watch.found = true;
+		p.watch.settle();
+		p.predicted += 1;
+	}
+}
+
+async function farEcho(rttMs: float64, rep: int32): Promise<Result<void, string>> {
+	const mode = `far_${rttMs}`;
+	const d = try await farDriver(rttMs, true);
+	const echo = d.panes[0];
+	try await answering(d, echo);
+	const _raw = try await run(d, echo, "stty raw -echo; echo R''EADY; exec cat\n", "READY", SETUP_TIMEOUT_MS);
+	try await pause(d, echo, 200);
+	const _off = await measuredEcho(mode, "echo_predict_off", rep, d, echo, REMOTE_KEYS);
+	d.input(echo, [0x0d]);
+	try await pause(d, echo, rttMs * 2 + 100);
+	echo.predicting = true;
+	echo.term.decor.ahead.predict(true, rttMs);
+	const missesBefore = echo.term.decor.ahead.misses;
+	const _on = await measuredEcho(mode, "echo_predict_on", rep, d, echo, REMOTE_KEYS);
+	record(mode, "echo_predict_on_shown", rep, [
+		{ key: "predicted_keys", value: echo.predicted as float64 },
+		{ key: "misses", value: (echo.term.decor.ahead.misses - missesBefore) as float64 },
+	]);
+	const closed = await d.close();
+	if (!closed.ok) { return Result.err(closed.error); }
+	keyRows = [];
+	return Result.ok(null);
+}
+
+async function farFlood(
+	rep: int32,
+	file: string,
+	fileBytes: float64,
+	packing: boolean,
+	kind: string,
+): Promise<Result<void, string>> {
+	const mode = `far_100_${kind}_${packing ? "packed" : "plain"}`;
+	const d = try await farDriver(100, packing);
+	const serverCpu = try await floodOnce(mode, rep, d, file, fileBytes);
+	keyRows = [];
+	if (serverCpu < 0) { return Result.ok(null); }
+	record(mode, "flood_wire", rep, [
+		{ key: "wire_mb", value: lastWire / MB },
+		{ key: "wire_per_pty_byte", value: lastWire / fileBytes },
+		{ key: "server_cpu_ms_per_mb", value: serverCpu / (fileBytes / MB) },
+	]);
+	return Result.ok(null);
+}
+
+async function farAttaches(s: ServerProc, r: RelayProc, mode: string, label: string, reps: int32): Promise<Result<void, string>> {
+	for (let rep: int32 = 1; rep <= reps; rep++) {
+		const before = wireBytes(r);
+		const at = performance.now();
+		const got = await linkTo(sshDial(REMOTE_HOST, r.listen), (): void => {}, vtBuild(), COLS, ROWS, ATTACH_TIMEOUT_MS);
+		if (!got.ok) { return Result.err(`far attach: ${got.error.why}`); }
+		const ms = performance.now() - at;
+		let bytes = 0;
+		for (const screen of got.value.attached.screens) { bytes += screen.seed.bytes.length; }
+		got.value.link.detach();
+		const wire = (await settledWire(r)) - before;
+		record(mode, `attach_${label}`, rep, [
+			{ key: "attach_ms", value: ms },
+			{ key: "screen_bytes", value: bytes as float64 },
+			{ key: "wire_bytes", value: wire },
+		]);
+	}
+	return Result.ok(null);
+}
+
+async function farAttach(reps: int32, packing: boolean): Promise<Result<void, string>> {
+	const mode = packing ? "far_100_packed" : "far_100_plain";
+	const s = try await startServer(packing);
+	const r = try await startRelay(s, 100);
+	try fakeSsh(s);
+	const first = try await dialFar(s, r);
+	const firstDriver: Driver = {
+		panes: first.panes,
+		input: (p: BenchPane, bytes: Vec<uint8>): void => { first.link.input(p.id, bytes); },
+		poll: async (focus: BenchPane): Promise<Result<void, string>> => {
+			if (first.failure != "") { return Result.err(first.failure); }
+			await sleepAsync(1);
+			return Result.ok(null);
+		},
+		split: async (): Promise<Result<BenchPane, string>> => Result.err("no split here"),
+		close: async (): Promise<Result<float64, string>> => Result.ok(0),
+		reseeds: (): int32 => first.reseeds,
+		busyMs: (): float64 => first.busyMs,
+		takeLongestMs: (): float64 => 0,
+	};
+	try await answering(firstDriver, first.panes[0]);
+	detachClient(first);
+	try await farAttaches(s, r, mode, "empty", reps);
+	const second = try await dialFar(s, r);
+	const _filled = try await run(
+		{ ...firstDriver, panes: second.panes, input: (q: BenchPane, bytes: Vec<uint8>): void => {
+			second.link.input(q.id, bytes);
+		} },
+		second.panes[0],
+		`seq 1 ${SCROLLBACK_LINES}; ${DONE_PRINT}\n`,
+		DONE_MARK,
+		FLOOD_TIMEOUT_MS,
+	);
+	detachClient(second);
+	try await farAttaches(s, r, mode, "50k", reps);
+	stopRelay(r);
+	const _cpu = try await stopServer(s);
+	return Result.ok(null);
+}
+
+function farTable(): void {
+	let lines: Vec<string> = [];
+	lines.push(`## ${header}`);
+	lines.push("median [min..max] over reps");
+	lines.push("| mode | measure | key | value |");
+	lines.push("|---|---|---|---|");
+	let shown: Vec<string> = [];
+	for (const r of rows) {
+		if (r.rep < 0) { continue; }
+		for (const p of r.pairs) {
+			const id = `${r.mode} ${r.measure} ${p.key}`;
+			if (shown.includes(id) || p.key == "n") { continue; }
+			shown.push(id);
+			lines.push(`| ${r.mode} | ${r.measure} | ${p.key} | ${cell(valuesOf(r.mode, r.measure, p.key))} |`);
+		}
+	}
+	console.log(lines.join("\n"));
+}
+
+async function remoteBench(): Promise<Result<void, string>> {
+	const reps = flagNumber("--reps", 3);
+	const floodMb = flagNumber("--flood-mb", 50);
+	const commit = env.get("BENCH_COMMIT");
+	const msc = env.get("BENCH_MSC");
+	header = `host=${hostname()} os=${osName()} commit=${commit != "" ? commit : "unknown"} ` +
+		`msc=${msc != "" ? msc.replaceAll(" ", "_") : "unknown"} remote`;
+	const dir = join(tmpDir(), `haro-bench-file-${Date.now()}`);
+	if (!ensureDir(dir).ok) { return Result.err(`no dir ${dir}`); }
+	const file = join(dir, "flood.txt");
+	const fileBytes = try makeFile(file, floodMb);
+	const numbers = join(dir, "seq.txt");
+	const numberBytes = try makeFile(numbers, floodMb, "seq 1 100000000");
+	for (let rep: int32 = 1; rep <= reps; rep++) {
+		if (!hasFlag("--no-echo")) {
+			for (const rtt of REMOTE_RTTS) { try await farEcho(rtt, rep); }
+		}
+		if (!hasFlag("--no-flood")) {
+			for (const packing of [true, false]) {
+				try await farFlood(rep, file, fileBytes, packing, "line");
+				try await farFlood(rep, numbers, numberBytes, packing, "seq");
+			}
+		}
+	}
+	if (!hasFlag("--no-attach")) {
+		try await farAttach(reps, true);
+		try await farAttach(reps, false);
+	}
+	const _removed = removeAll(dir);
+	farTable();
+	return Result.ok(null);
+}
+
 async function serveBench(): Promise<int32> {
 	const started = await Server.start({
 		launch: { command: SHELL_COMMAND, shellScripts: null, startIn: null, originCwd: false },
@@ -1236,6 +1610,7 @@ async function serveBench(): Promise<int32> {
 		console.error(`bench server: ${started.error}`);
 		return 1;
 	}
+	started.value.packing = !hasFlag("--no-pack");
 	const code = await started.value.finished;
 	console.log(`cpu ${cpuMs()}`);
 	return code;
@@ -1245,7 +1620,13 @@ when (!testBuild) {
 	if (hasFlag("--serve")) {
 		exit(await serveBench());
 	}
-	const ran = await bench();
+	if (hasFlag("--proxy")) {
+		exit(await proxyBench());
+	}
+	if (hasFlag("--relay")) {
+		exit(await relayBench());
+	}
+	const ran = hasFlag("--remote") ? await remoteBench() : await bench();
 	if (!ran.ok) {
 		console.log(`serverPath bench failed: ${ran.error}`);
 		exit(1);

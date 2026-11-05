@@ -1,23 +1,14 @@
 import { ensureDir, exists, readFile, removeAll, rename, writeFile } from "std/fs";
 import { dirname, join } from "std/fs/path";
-import { homeDir, tmpDir } from "std/os";
-import { env } from "std/process";
+import { tmpDir } from "std/os";
 import { JSON } from "std/core/json";
 import { RemoteHost, parse } from "../config/config";
 import { Dial } from "./link";
+import { stateDir } from "../server/cli";
 
 export interface HostBook {
 	path: string;
 	dial: (address: string) => Dial;
-}
-
-export function stateDir(): string {
-	when (macos) {
-		return `${homeDir()}/Library/Logs/haro`;
-	} else {
-		const xdg = env.get("XDG_STATE_HOME");
-		return `${xdg != "" ? xdg : `${homeDir()}/.local/state`}/haro`;
-	}
 }
 
 export function keptHostsPath(): string {

@@ -1,10 +1,10 @@
 import { ensureDir, exists, fileSize, isDir, readFile, rename } from "std/fs";
 import { dirname, join } from "std/fs/path";
 import { homeDir } from "std/os";
-import { ChildStream, argv, cwd, env, execPath, exit, spawn as spawnProcess } from "std/process";
+import { ChildStream, argv, cwd, execPath, exit, spawn as spawnProcess } from "std/process";
 import { defaults, dividerCellsOf } from "../config/config";
 import { configPath, load } from "../config/source";
-import { Invocation, USAGE, Verb, parseArgs, runArgs, tailnetChoice } from "./cli";
+import { Invocation, USAGE, Verb, parseArgs, runArgs, stateDir, tailnetChoice } from "./cli";
 import { answeringPid, askStatus, askStop, nobody } from "./control";
 import { PROTOCOL_VERSION } from "./protocol";
 import { proxy } from "./proxy";
@@ -39,13 +39,7 @@ function logged(line: string): void {
 
 function stateDirOf(inv: Invocation): string {
 	const chosen = inv.stateDir;
-	if (chosen !== null) { return chosen; }
-	when (macos) {
-		return `${homeDir()}/Library/Logs/haro`;
-	} else {
-		const xdg = env.get("XDG_STATE_HOME");
-		return `${xdg != "" ? xdg : `${homeDir()}/.local/state`}/haro`;
-	}
+	return chosen !== null ? chosen : stateDir();
 }
 
 function resourceRoot(): string {

@@ -1,6 +1,17 @@
+import { homeDir } from "std/os";
+import { env } from "std/process";
 import { Config, defaults } from "../config/config";
 import { TailnetAllow } from "./tailnet";
 import { TailnetChoice } from "./serve";
+
+export function stateDir(): string {
+	when (macos) {
+		return `${homeDir()}/Library/Logs/haro`;
+	} else {
+		const xdg = env.get("XDG_STATE_HOME");
+		return `${xdg != "" ? xdg : `${homeDir()}/.local/state`}/haro`;
+	}
+}
 
 export enum Verb {
 	Run,

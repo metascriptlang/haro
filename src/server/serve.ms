@@ -35,7 +35,16 @@ import {
 	push,
 	screenFormat,
 } from "./protocol";
-import { TailnetSelf, listenAddress, peerAllowed, tailnetSelf } from "./tailnet";
+import {
+	PeerInfo,
+	TailnetAllow,
+	TailnetError,
+	TailnetSelf,
+	identityOf,
+	listenAddress,
+	peerAllowed,
+	tailnetSelf,
+} from "./tailnet";
 import {
 	CloseReason,
 	Connection,
@@ -67,6 +76,8 @@ const DEFAULT_COLS: int32 = 80;
 const DEFAULT_ROWS: int32 = 24;
 const WAKE_CONNECT_MS: int32 = 2000;
 const FLUSH_ON_EXIT_MS: int32 = 2000;
+const MAX_ADMITTING: int32 = 8;
+const LOCAL: string = "local";
 
 export struct ServeOptions {
 	config: Config;
@@ -76,8 +87,24 @@ export struct ServeOptions {
 }
 
 export struct TailnetListen {
-	self: TailnetSelf;
+	address: string;
 	port: int32;
+	admits: string;
+	admit: (remote: string) => Promise<Result<PeerInfo, TailnetError>>;
+}
+
+export struct TailnetChoice {
+	port: int32;
+	allow: TailnetAllow;
+}
+
+export function tailnetListen(self: TailnetSelf, port: int32, allow: TailnetAllow): TailnetListen {
+	return {
+		address: listenAddress(self),
+		port: port,
+		admits: allow == TailnetAllow.Owner ? `its owner ${self.loginName}` : "any identified tailnet user",
+		admit: (remote: string): Promise<Result<PeerInfo, TailnetError>> => peerAllowed(remote, self, allow),
+	};
 }
 
 export struct ServerSetup {
@@ -91,6 +118,7 @@ export struct ServerSetup {
 
 class Client {
 	readonly conn: Connection;
+	readonly identity: string;
 	decoder: Decoder = Decoder.create();
 	greeted: boolean = false;
 	attached: boolean = false;
@@ -98,7 +126,10 @@ class Client {
 	cols: int32 = 0;
 	rows: int32 = 0;
 
-	constructor(conn: Connection) { this.conn = conn; }
+	constructor(conn: Connection, identity: string) {
+		this.conn = conn;
+		this.identity = identity;
+	}
 }
 
 struct PaneExit {
@@ -114,7 +145,9 @@ export class Server {
 	workspace: Workspace;
 	host: PaneHost | null = null;
 	clients: Client[] = [];
+	admitting: Connection[] = [];
 	listeners: Listener[] = [];
+	serving: string[] = [];
 	wakeIn: Connection | null = null;
 	wakeOut: Connection | null = null;
 	cols: int32 = DEFAULT_COLS;
@@ -340,6 +373,11 @@ function received(this s: Server, c: Client, m: Message): void {
 		});
 	} else if (m.kind == MessageKind.Bye) {
 		c.conn.finish();
+	} else if (m.kind == MessageKind.AskStatus) {
+		s.sendTo(c, { kind: MessageKind.Status, listeners: [...s.serving], clients: s.attachedIdentities() });
+	} else if (m.kind == MessageKind.Stop) {
+		s.log(`stop asked by ${c.identity}`);
+		s.stop(0);
 	} else {
 		s.refuse(c, `${m.kind.toString()} is a message only the server sends`);
 	}
@@ -357,12 +395,20 @@ function data(this s: Server, c: Client, chunk: uint8[]): void {
 	}
 }
 
-function welcome(this s: Server, conn: Connection): void {
+function attachedIdentities(this s: Server): string[] {
+	const out: string[] = [];
+	for (const c of s.clients) {
+		if (c.attached) { out.push(c.identity); }
+	}
+	return out;
+}
+
+function welcome(this s: Server, conn: Connection, identity: string): void {
 	if (s.stopping) {
 		conn.close();
 		return;
 	}
-	const c = new Client(conn);
+	const c = new Client(conn, identity);
 	s.clients.push(c);
 	conn.start((chunk: uint8[]): void => { s.data(c, chunk); }, (why: CloseReason): void => {
 		s.clients = s.clients.filter((other: Client): boolean => other !== c);
@@ -370,21 +416,37 @@ function welcome(this s: Server, conn: Connection): void {
 	});
 }
 
-function admit(this s: Server, conn: Connection, self: TailnetSelf): void {
+function admit(this s: Server, conn: Connection, tailnet: TailnetListen): void {
 	const remote = peerAddress(conn.fd);
 	if (remote === null) {
 		s.log("tailnet peer refused: its address is unknown");
 		conn.close();
 		return;
 	}
-	const allowed = peerAllowed(remote, self);
+	if (s.admitting.length >= MAX_ADMITTING) {
+		s.log(`tailnet peer ${remote} refused: ${MAX_ADMITTING} other peers are still being identified`);
+		conn.close();
+		return;
+	}
+	s.admitting.push(conn);
+	const _checking = s.identify(conn, remote, tailnet);
+}
+
+async function identify(this s: Server, conn: Connection, remote: string, tailnet: TailnetListen): Promise<void> {
+	const allowed = await tailnet.admit(remote);
+	s.admitting = s.admitting.filter((other: Connection): boolean => other !== conn);
+	if (s.stopping || !conn.isOpen()) {
+		conn.close();
+		return;
+	}
 	if (!allowed.ok) {
 		s.log(`tailnet peer ${remote} refused: ${allowed.error.detail}`);
 		conn.close();
 		return;
 	}
-	s.log(`tailnet peer ${remote} (${allowed.value.hostName}) admitted`);
-	s.welcome(conn);
+	const identity = identityOf(allowed.value);
+	s.log(`tailnet peer ${remote} (${identity}) admitted`);
+	s.welcome(conn, identity);
 }
 
 export function stop(this s: Server, code: int32): void {
@@ -396,6 +458,8 @@ export function stop(this s: Server, code: int32): void {
 async function shutdown(this s: Server, code: int32): Promise<void> {
 	for (const l of s.listeners) { l.close(); }
 	s.listeners = [];
+	for (const c of s.admitting) { c.close(); }
+	s.admitting = [];
 	serverWakeTo(-1);
 	s.wakeIn?.close();
 	s.wakeOut?.close();
@@ -444,10 +508,9 @@ async function openWake(this s: Server): Promise<boolean> {
 }
 
 function listenTailnet(this s: Server, tailnet: TailnetListen): void {
-	const self = tailnet.self;
-	const address = listenAddress(self);
+	const address = tailnet.address;
 	const listening = listenTcp(address, tailnet.port, {
-		accepted: (c: Connection): void => { s.admit(c, self); },
+		accepted: (c: Connection): void => { s.admit(c, tailnet); },
 		failed: (): void => { s.log("the tailnet listener stopped accepting"); },
 	});
 	if (!listening.ok) {
@@ -455,7 +518,9 @@ function listenTailnet(this s: Server, tailnet: TailnetListen): void {
 		return;
 	}
 	s.listeners.push(listening.value);
-	s.log(`serving the tailnet at ${address}:${tailnet.port} for ${self.loginName}`);
+	const serving = `tailnet ${address}:${tailnet.port} for ${tailnet.admits}`;
+	s.serving.push(serving);
+	s.log(`serving the ${serving}`);
 }
 
 export function listenRefusal(path: string, e: ListenError): string {
@@ -472,11 +537,12 @@ export async function start(this typeof Server, setup: ServerSetup): Promise<Res
 	if (!workspace.ok) { return Result.err(`no workspace: ${workspace.error.toString()}`); }
 	const s = new Server(setup, workspace.value);
 	const listening = listenUnix(setup.socket, {
-		accepted: (c: Connection): void => { s.welcome(c); },
+		accepted: (c: Connection): void => { s.welcome(c, LOCAL); },
 		failed: (): void => { s.log("the socket stopped accepting"); },
 	});
 	if (!listening.ok) { return Result.err(listenRefusal(setup.socket, listening.error)); }
 	s.listeners.push(listening.value);
+	s.serving.push(`unix ${setup.socket}`);
 	s.host = PaneHost.open(setup.launch, {
 		output: (pane: PaneId, seq: int64, bytes: Vec<uint8>): void => {
 			s.broadcast({ kind: MessageKind.Output, pane: pane, seq: seq as uint64, bytes: [...bytes] });
@@ -502,17 +568,26 @@ function logLine(line: string): void {
 	console.error(line);
 }
 
-function tailnetOf(config: Config, say: (line: string) => void): TailnetListen | null {
-	if (!config.serverTailnet) { return null; }
+function tailnetOf(choice: TailnetChoice | null, say: (line: string) => void): TailnetListen | null {
+	if (choice === null) { return null; }
 	const self = tailnetSelf();
 	if (!self.ok) {
 		say(`haro server: tailnet off, unix socket only: ${self.error.detail}`);
 		return null;
 	}
-	return { self: self.value, port: config.serverTailnetPort };
+	return tailnetListen(self.value, choice.port, choice.allow);
 }
 
-export async function serve(options: ServeOptions): Promise<int32> {
+export function configuredTailnet(config: Config): TailnetChoice | null {
+	if (!config.serverTailnet) { return null; }
+	return { port: config.serverTailnetPort, allow: TailnetAllow.Owner };
+}
+
+export async function serveOn(
+	options: ServeOptions,
+	tailnet: TailnetChoice | null,
+	log: (line: string) => void,
+): Promise<int32> {
 	const config = options.config;
 	const started = await Server.start({
 		launch: {
@@ -523,13 +598,17 @@ export async function serve(options: ServeOptions): Promise<int32> {
 		},
 		socket: socketPath(),
 		dividerCells: options.dividerCells,
-		tailnet: tailnetOf(config, logLine),
+		tailnet: tailnetOf(tailnet, log),
 		screenLimit: MAX_SCREEN_BYTES,
-		log: logLine,
+		log: log,
 	});
 	if (!started.ok) {
-		logLine(`haro server: ${started.error}`);
+		log(`haro server: ${started.error}`);
 		return 1;
 	}
 	return await started.value.finished;
+}
+
+export async function serve(options: ServeOptions): Promise<int32> {
+	return await serveOn(options, configuredTailnet(options.config), logLine);
 }

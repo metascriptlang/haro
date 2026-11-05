@@ -49,6 +49,9 @@ export enum MessageKind {
 	Busy,
 	Refused,
 	Bye,
+	Stop,
+	AskStatus,
+	Status,
 }
 
 const SCREEN_FIELDS_BYTES: int32 = 17;
@@ -87,6 +90,9 @@ export struct Message = match (kind: MessageKind) {
 	MessageKind.Busy => { pane: PaneId, busy: boolean },
 	MessageKind.Refused => { reason: string },
 	MessageKind.Bye => {},
+	MessageKind.Stop => {},
+	MessageKind.AskStatus => {},
+	MessageKind.Status => { listeners: string[], clients: string[] },
 };
 
 export enum ProtocolError {
@@ -124,6 +130,9 @@ export const MESSAGE_KINDS: MessageKind[] = [
 	MessageKind.Busy,
 	MessageKind.Refused,
 	MessageKind.Bye,
+	MessageKind.Stop,
+	MessageKind.AskStatus,
+	MessageKind.Status,
 ];
 export const ROLES: Role[] = [Role.Window, Role.Cli];
 export const SCREEN_FORMATS: ScreenFormat[] = [
@@ -241,6 +250,11 @@ function blob(this w: Writer, bytes: Readonly<Span<uint8>>): void {
 
 function text(this w: Writer, s: string): void {
 	w.blob(s.asBytes());
+}
+
+function texts(this w: Writer, list: string[]): void {
+	w.u32(list.length as uint32);
+	for (const s of list) { w.text(s); }
 }
 
 function optionalText(this w: Writer, s: string | null): void {
@@ -405,6 +419,9 @@ function payload(this w: Writer, m: Message): void {
 		w.flag(m.busy);
 	} else if (m.kind == MessageKind.Refused) {
 		w.text(m.reason);
+	} else if (m.kind == MessageKind.Status) {
+		w.texts(m.listeners);
+		w.texts(m.clients);
 	}
 }
 
@@ -517,6 +534,13 @@ function text(this r: Reader): Result<string, ProtocolError> {
 		return Result.err(ProtocolError.MalformedText);
 	}
 	return Result.ok(bytes.toString());
+}
+
+function texts(this r: Reader): Result<string[], ProtocolError> {
+	const n = try r.count();
+	const out: string[] = [];
+	for (let i: int32 = 0; i < n; i++) { out.push(try r.text()); }
+	return Result.ok(out);
 }
 
 function optionalText(this r: Reader): Result<string | null, ProtocolError> {
@@ -832,6 +856,13 @@ function message(
 			Result.ok({ kind: MessageKind.Refused, reason: reason })
 		},
 		MessageKind.Bye => Result.ok({ kind: MessageKind.Bye }),
+		MessageKind.Stop => Result.ok({ kind: MessageKind.Stop }),
+		MessageKind.AskStatus => Result.ok({ kind: MessageKind.AskStatus }),
+		MessageKind.Status => {
+			const listeners = try r.texts();
+			const clients = try r.texts();
+			Result.ok({ kind: MessageKind.Status, listeners: listeners, clients: clients })
+		},
 	};
 }
 

@@ -1,0 +1,12 @@
+#ifndef HARO_SERVER_VERSION_H
+#define HARO_SERVER_VERSION_H
+
+#define HARO_TEXT_OF(x) #x
+#define HARO_TEXT(x) HARO_TEXT_OF(x)
+#ifdef HARO_SERVER_BUILD
+#define HARO_SERVER_VERSION HARO_TEXT(HARO_SERVER_BUILD)
+#else
+#define HARO_SERVER_VERSION "dev"
+#endif
+
+#endif

@@ -17,7 +17,8 @@ import {
 	push,
 } from "./protocol";
 import { screenText } from "./screenRig";
-import { Server, ServerSetup, TailnetListen, start, stop } from "./serve";
+import { Server, ServerSetup, TailnetListen, start, stop, tailnetListen } from "./serve";
+import { PeerInfo, TailnetAllow, TailnetError, TailnetFault, TailnetSelf } from "./tailnet";
 import { CloseReason, Connection, connectToTcp, connectToUnix } from "./transport";
 
 when (!windows) {
@@ -107,6 +108,17 @@ when (!windows) {
 			cols: COLS,
 			rows: ROWS,
 			vtBuild: build,
+		};
+	}
+
+	function cliHello(): Message {
+		return {
+			kind: MessageKind.Hello,
+			version: PROTOCOL_VERSION,
+			role: Role.Cli,
+			cols: 0,
+			rows: 0,
+			vtBuild: "",
 		};
 	}
 
@@ -379,45 +391,168 @@ when (!windows) {
 		cleanUp(socket);
 	}
 
+	struct OnTailnet {
+		server: Server;
+		port: int32;
+	}
+
+	async function servingTailnet(
+		socket: string,
+		logged: Logged,
+		listen: (port: int32) => TailnetListen,
+	): Promise<OnTailnet> {
+		let port: int32 = 43000 + ((Date.now() % 15000) as int32);
+		for (let tries: int32 = 0; tries < 20; tries++) {
+			logged.text = "";
+			const s = await serving({ ...setupAt(socket, logged), tailnet: listen(port) });
+			if (logged.text.includes("serving the tailnet")) { return { server: s, port: port }; }
+			const ended = ending(s);
+			await stopped(s, ended);
+			port += 1;
+		}
+		throw new Error(`no free port: ${logged.text}`);
+	}
+
+	const BUILD_1: PeerInfo = {
+		userId: 7,
+		loginName: "person@example.com",
+		hostName: "build-1",
+		os: "linux",
+		tags: [],
+	};
+
+	function fakeTailnet(port: int32, delayMs: int32, answer: Result<PeerInfo, TailnetError>): TailnetListen {
+		return {
+			address: "127.0.0.1",
+			port: port,
+			admits: "a test",
+			admit: async (remote: string): Promise<Result<PeerInfo, TailnetError>> => {
+				await sleepAsync(delayMs);
+				return answer;
+			},
+		};
+	}
+
+	async function dialTcp(port: int32): Promise<Peer> {
+		const dialed = await connectToTcp("127.0.0.1", port, 2000);
+		if (!dialed.ok) { throw new Error(`no connection to port ${port}`); }
+		return watched(new Peer(dialed.value));
+	}
+
+	function statusOf(p: Peer): Message | null {
+		const found = p.got.find((m: Message): boolean => m.kind == MessageKind.Status);
+		return found === undefined ? null : found;
+	}
+
 	test "a peer that is not on the tailnet is closed unread and logged with its address" {
 		const socket = socketIn();
-		let port: int32 = 43000 + ((Date.now() % 15000) as int32);
-		let found: Server | null = null;
-		let logged = new Logged();
-		for (let tries: int32 = 0; tries < 20 && found === null; tries++) {
-			logged = new Logged();
-			const tailnet: TailnetListen = {
-				self: {
-					ipv4: "127.0.0.1",
-					ipv6: null,
-					userId: 1,
-					loginName: "person@example.com",
-					hostName: "studio",
-				},
-				port: port,
-			};
-			const s = await serving({ ...setupAt(socket, logged), tailnet: tailnet });
-			if (logged.text.includes("serving the tailnet")) {
-				found = s;
-			} else {
-				const ended = ending(s);
-				await stopped(s, ended);
-				port += 1;
-			}
-		}
-		assert found !== null, logged.text;
-		if (found === null) { return; }
-		const ended = ending(found);
-		const dialed = await connectToTcp("127.0.0.1", port, 2000);
-		assert dialed.ok;
-		if (!dialed.ok) { return; }
-		const p = watched(new Peer(dialed.value));
+		const logged = new Logged();
+		const me: TailnetSelf = {
+			ipv4: "127.0.0.1",
+			ipv6: null,
+			userId: 1,
+			loginName: "person@example.com",
+			hostName: "studio",
+			tagged: false,
+		};
+		const on = await servingTailnet(socket, logged, (port: int32): TailnetListen =>
+			tailnetListen(me, port, TailnetAllow.Owner)
+		);
+		const ended = ending(on.server);
+		const p = await dialTcp(on.port);
 		say(p, hello(vtBuild()));
 		assert await until((): boolean => p.closed), logged.text;
 		assert p.got.length == 0, kinds(p);
 		assert logged.text.includes("tailnet peer 127.0.0.1:"), logged.text;
 		assert logged.text.includes("is not a tailnet address"), logged.text;
-		await stopped(found, ended);
+		await stopped(on.server, ended);
+		cleanUp(socket);
+	}
+
+	test "a peer still being identified holds no other client's output, and is closed when refused" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const refused: Result<PeerInfo, TailnetError> = Result.err({ fault: TailnetFault.OtherUser, detail: "not yours" });
+		const on = await servingTailnet(socket, logged, (port: int32): TailnetListen =>
+			fakeTailnet(port, 3000, refused)
+		);
+		const ended = ending(on.server);
+		const slow = await dialTcp(on.port);
+		say(slow, hello(vtBuild()));
+		assert await until((): boolean => on.server.admitting.length == 1), logged.text;
+		const began = Date.now();
+		const a = await attached(socket, vtBuild());
+		typed(a, "printf 'not%sheld\\n' -\r");
+		assert await until((): boolean => printed(a, FIRST).includes("not-held")), printed(a, FIRST);
+		assert Date.now() - began < 2500, `${Date.now() - began} ms`;
+		assert on.server.admitting.length == 1;
+		assert !slow.closed;
+		assert await until((): boolean => slow.closed), logged.text;
+		assert slow.got.length == 0, kinds(slow);
+		assert logged.text.includes("refused: not yours"), logged.text;
+		await stopped(on.server, ended);
+		cleanUp(socket);
+	}
+
+	test "status names the listeners and each attached client, a tailnet one by its login" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const on = await servingTailnet(socket, logged, (port: int32): TailnetListen =>
+			fakeTailnet(port, 0, Result.ok(BUILD_1))
+		);
+		const ended = ending(on.server);
+		const local = await attached(socket, vtBuild());
+		const remote = await dialTcp(on.port);
+		say(remote, hello(vtBuild()));
+		say(remote, { kind: MessageKind.Attach });
+		assert await until((): boolean => screenFor(remote, FIRST) !== null), `${kinds(remote)} ${logged.text}`;
+		const asker = await dial(socket);
+		say(asker, cliHello());
+		say(asker, { kind: MessageKind.AskStatus });
+		assert await until((): boolean => statusOf(asker) !== null), kinds(asker);
+		const status = statusOf(asker);
+		if (status !== null && status.kind == MessageKind.Status) {
+			assert status.listeners.join("|") == `unix ${socket}|tailnet 127.0.0.1:${on.port} for a test`, status.listeners.join("|");
+			assert status.clients.join("|") == "local|person@example.com on build-1", status.clients.join("|");
+		}
+		assert logged.text.includes("(person@example.com on build-1) admitted"), logged.text;
+		local.conn.close();
+		remote.conn.close();
+		asker.conn.close();
+		await stopped(on.server, ended);
+		cleanUp(socket);
+	}
+
+	test "stop asked through the protocol ends the server with 0, its shells and its socket" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const s = await serving(setupAt(socket, logged));
+		const ended = ending(s);
+		const a = await attached(socket, vtBuild());
+		const asker = await dial(socket);
+		say(asker, cliHello());
+		say(asker, { kind: MessageKind.Stop });
+		assert await until((): boolean => ended.code >= 0), logged.text;
+		assert ended.code == 0;
+		assert await until((): boolean => asker.closed && a.closed);
+		assert logged.text.includes("stop asked by local"), logged.text;
+		const again = await connectToUnix(socket, 500);
+		assert !again.ok;
+		cleanUp(socket);
+	}
+
+	test "stop before Hello is refused and the server keeps serving" {
+		const socket = socketIn();
+		const logged = new Logged();
+		const s = await serving(setupAt(socket, logged));
+		const ended = ending(s);
+		const rude = await dial(socket);
+		say(rude, { kind: MessageKind.Stop });
+		assert await until((): boolean => rude.closed);
+		assert ended.code < 0;
+		const a = await attached(socket, vtBuild());
+		assert a.got[0].kind == MessageKind.Welcome;
+		await stopped(s, ended);
 		cleanUp(socket);
 	}
 }

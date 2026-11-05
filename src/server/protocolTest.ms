@@ -307,6 +307,13 @@ function messages(): Message[] {
 		{ kind: MessageKind.Busy, pane: pane(3), busy: true },
 		{ kind: MessageKind.Refused, reason: "nope \u{1f680}" },
 		{ kind: MessageKind.Bye },
+		{ kind: MessageKind.Stop },
+		{ kind: MessageKind.AskStatus },
+		{
+			kind: MessageKind.Status,
+			listeners: ["unix /run/user/1000/haro/haro.sock", "tailnet 100.100.1.1:7681"],
+			clients: ["local", "person@example.com on build-1", "\u{e9}"],
+		},
 	];
 }
 
@@ -322,7 +329,7 @@ test "each decode table lists its enum in ordinal order" {
 	for (let i: int32 = 0; i < MESSAGE_KINDS.length; i++) {
 		assert MESSAGE_KINDS[i] as int32 == i;
 	}
-	assert MESSAGE_KINDS.length == (MessageKind.Bye as int32) + 1;
+	assert MESSAGE_KINDS.length == (MessageKind.Status as int32) + 1;
 	for (let i: int32 = 0; i < COMMAND_KINDS.length; i++) {
 		assert COMMAND_KINDS[i] as int32 == i;
 	}

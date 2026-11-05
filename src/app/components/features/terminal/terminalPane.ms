@@ -30,7 +30,10 @@ export function TerminalPane(props: {
 		spans={item().spans}
 		widths={item().line.widths}
 	/>;
-	onCleanup((): void => { m.grid = null; });
+	let mine: ViewHandle | null = null;
+	onCleanup((): void => {
+		if (m.grid === mine) { m.grid = null; }
+	});
 	return <View
 		style={{
 			flexGrow: 1,
@@ -41,6 +44,7 @@ export function TerminalPane(props: {
 		}}
 		focusable
 		ref={(h: ViewHandle): void => {
+			mine = h;
 			m.grid = h;
 			if (props.focused()) { h.focus(); }
 		}}

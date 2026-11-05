@@ -98,10 +98,16 @@ export class ServerLink {
 	ponged(m: Message): boolean {
 		if (m.kind != MessageKind.Pong) { return false; }
 		if (m.nonce != this.nonce || this.pingedAt < 0) { return true; }
+		const first = this.rttMs === null;
 		const rtt = smoothed(this.rttMs, performance.now() - this.pingedAt);
 		this.pingedAt = -1;
 		this.rttMs = rtt;
 		this.onRtt(rtt);
+		const pinging = this.pinging;
+		if (first && pinging !== null) {
+			clearTimeout(pinging);
+			this.ping();
+		}
 		return true;
 	}
 

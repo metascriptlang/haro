@@ -474,10 +474,8 @@ async function run(
 	return Result.ok(p.watch.heldAt - at);
 }
 
-async function prompted(d: Driver, p: BenchPane): Promise<Result<void, string>> {
-	p.watch.expect(bytesOf(PROMPT));
-	const seen = try await waitFor(d, p, (): boolean => p.watch.heldAt >= 0, SETUP_TIMEOUT_MS);
-	if (!seen) { return Result.err("no prompt"); }
+async function answering(d: Driver, p: BenchPane): Promise<Result<void, string>> {
+	const _ready = try await run(d, p, "echo R''EADY\n", "READY", SETUP_TIMEOUT_MS);
 	return Result.ok(null);
 }
 
@@ -619,9 +617,9 @@ async function session(
 	file: string,
 ): Promise<Result<void, string>> {
 	const echo = d.panes[0];
-	try await prompted(d, echo);
+	try await answering(d, echo);
 	const flood = try await d.split();
-	try await prompted(d, flood);
+	try await answering(d, flood);
 	const _raw = try await run(d, echo, "stty raw -echo; echo R''EADY; exec cat\n", "READY", SETUP_TIMEOUT_MS);
 	try await pause(d, echo, 200);
 	if (!(await measuredEcho(mode, "echo_idle", rep, d, echo))) { return Result.ok(null); }
@@ -649,7 +647,7 @@ async function floodOnce(
 	fileBytes: float64,
 ): Promise<Result<float64, string>> {
 	const p = d.panes[0];
-	try await prompted(d, p);
+	try await answering(d, p);
 	const cpuBefore = cpuMs();
 	const at = performance.now();
 	const ran = await run(d, p, `cat '${file}'; ${DONE_PRINT}\n`, DONE_MARK, FLOOD_TIMEOUT_MS);
@@ -672,7 +670,7 @@ async function floodOnce(
 
 async function idleServerCpu(): Promise<Result<float64, string>> {
 	const d = try await clientDriver();
-	try await prompted(d, d.panes[0]);
+	try await answering(d, d.panes[0]);
 	return await d.close();
 }
 
@@ -751,7 +749,7 @@ async function attachRun(reps: int32): Promise<Result<void, string>> {
 		close: async (): Promise<Result<float64, string>> => Result.ok(0),
 	};
 	const p = first.panes[0];
-	try await prompted(firstDriver, p);
+	try await answering(firstDriver, p);
 	detachClient(first);
 	try await attaches(s, "empty", reps);
 	const second = try await attachClient(s);

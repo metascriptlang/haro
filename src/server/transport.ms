@@ -30,6 +30,10 @@ when (!windows) {
 	@include("arpa/inet.h");
 
 	extern function getuid(): uint32;
+	extern const SOL_SOCKET: int32 from "SOL_SOCKET";
+	extern const SO_SNDBUF: int32 from "SO_SNDBUF";
+	extern const SO_RCVBUF: int32 from "SO_RCVBUF";
+	extern function setsockopt(fd: int32, level: int32, name: int32, ref value: int32, len: uint32): int32;
 	extern struct PeerStorage from "struct sockaddr_storage" { ss_family: uint16; }
 	extern struct PeerSockaddr from "struct sockaddr" { sa_family: uint16; }
 	extern struct PeerIn4Addr from "struct in_addr" { s_addr: uint32; }
@@ -53,6 +57,7 @@ const OWNER_ONLY_DIR: int32 = 0o700;
 const OWNER_ONLY_SOCKET: int32 = 0o600;
 const TIMED_OUT: int32 = -2;
 const ADDRESS_TEXT_BYTES: int32 = 64;
+const LOCAL_SOCKET_BUFFER_BYTES: int32 = 1024 * 1024;
 
 export enum CloseReason {
 	Closed,
@@ -104,6 +109,15 @@ when (windows) {
 		const end = text.indexOf(0);
 		return `${text.slice(0, end < 0 ? text.length : end).asString()}:${ntohs(v4[0].sin_port)}`;
 	}
+}
+
+function widened(fd: int32): int32 {
+	when (!windows) {
+		let size = LOCAL_SOCKET_BUFFER_BYTES;
+		const _sending = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, size, sizeof int32 as uint32);
+		const _receiving = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, size, sizeof int32 as uint32);
+	}
+	return fd;
 }
 
 export const UNTAGGED: int32 = -1;
@@ -347,7 +361,9 @@ export class Listener {
 
 	isOpen(): boolean { return this.open; }
 
-	accepted(fd: int32): void { this.handlers.accepted(new Connection(fd)); }
+	accepted(fd: int32): void {
+		this.handlers.accepted(new Connection(this.path === null ? fd : widened(fd)));
+	}
 
 	close(): void {
 		if (!this.open) { return; }
@@ -451,7 +467,7 @@ export function listenTcp(
 function dialedUnix(path: string): int32 {
 	const fd = createUnixSocket();
 	if (fd < 0) { return -1; }
-	if (connectUnix(fd, path) == 0) { return fd; }
+	if (connectUnix(fd, path) == 0) { return widened(fd); }
 	closeFd(fd);
 	return -1;
 }

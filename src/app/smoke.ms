@@ -210,7 +210,7 @@ function act(v: WorkspaceView, action: Action): void {
 	v.windowAction(action);
 }
 
-export async function smokePanes(v: WorkspaceView): Promise<void> {
+export async function smokePanes(v: WorkspaceView, stop: () => void): Promise<void> {
 	const t: Tally = { failed: 0 };
 	t.checked(await until((): boolean => v.cols > 0 && v.primary().panes.cellWidth > 0),
 		"the window laid out a grid of cells");
@@ -284,6 +284,7 @@ export async function smokePanes(v: WorkspaceView): Promise<void> {
 
 	console.log(`smoke-panes: ${t.failed == 0 ? "PASS" : `FAIL ${t.failed}`}`);
 	await v.closeShells();
+	stop();
 	exit(t.failed == 0 ? 0 : 1);
 }
 

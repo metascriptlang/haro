@@ -37,7 +37,7 @@ import { Pace, Slot } from "./pace";
 import { Stats, empty, mark, noteWake } from "./stats";
 import { logStatsEverySecond } from "./statsLog";
 import { familyList, registerFallbacks } from "./fonts";
-import { Config, dividerCellsOf } from "../config/config";
+import { Config } from "../config/config";
 import { CommandDone } from "../vt/vt";
 import { KeyEvent, OptionAsAlt } from "../keys/keys";
 import { cacheDir, configPath } from "../config/source";
@@ -72,7 +72,8 @@ import {
 import { join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { Connection, connectToUnix, socketPath } from "../server/transport";
-import { Attached, Dial, ServerLink, attach } from "../client/link";
+import { otherVersion, otherVersionAdvice } from "../server/control";
+import { Attached, Dial, Failure, ServerLink, attach } from "../client/link";
 import { connectLocal, dialLocal, dialUnix } from "../client/connect";
 import { startFake } from "../client/fakeServer";
 import { ScreenFormat } from "../server/protocol";
@@ -81,9 +82,7 @@ import { PaneId } from "../workspace/tree";
 import { writeText } from "../vt/vt";
 import { sshDial } from "../client/ssh";
 import { destinationOf } from "../client/destination";
-import { serve } from "../server/serve";
 import { vtBuild } from "../vt/snapshot";
-import { portOf } from "../controller/shell";
 import { ptySetWake } from "../pty/nativePty.h";
 import { ConfigChange, ConfigOutcome } from "./components/features/terminal/paneModel";
 import { RunningPane } from "./panes";
@@ -171,7 +170,7 @@ const config = ConfigWatch.forFile(flagValue("--config") ?? configPath());
 const ATTACH_TIMEOUT_MS: int32 = 5000;
 const HELLO_COLS: int32 = 80;
 const HELLO_ROWS: int32 = 24;
-const IN_PROCESS_FLAGS: string[] = ["--smoke", "--smoke-panes", "--typing", "--flood", "--shell"];
+const SMOKE_FLAGS: string[] = ["--smoke", "--smoke-panes", "--typing", "--flood"];
 
 const CONFIG_STUB = `import { HaroConfig } from "haro";\n\nexport const config: HaroConfig = {};\n`;
 const LOG_LIMIT_BYTES = 1048576;
@@ -445,6 +444,23 @@ function quitter(v: WorkspaceView): () => void {
 	return (): void => { const _quit = v.quit(); };
 }
 
+function smokes(stop: () => void): (v: WorkspaceView, first: RunningPane) => void {
+	return (v: WorkspaceView, first: RunningPane): void => {
+		const io = first.model.io;
+		const rows = first.model.view;
+		const quit = (): void => {
+			stop();
+			quitter(v)();
+		};
+		if (hasFlag("--smoke")) { smoke(io, rows, quit); }
+		if (hasFlag("--flood")) { smokeFlood(io, rows, pace, quit); }
+		if (hasFlag("--typing")) { smokeTyping(io, quit); }
+		if (hasFlag("--smoke-panes")) { const _s = smokePanes(v, stop); }
+	};
+}
+
+function nothing(): void {}
+
 async function runShell(command: string): Promise<int32> {
 	const launch: Launch = {
 		command: command,
@@ -452,14 +468,7 @@ async function runShell(command: string): Promise<int32> {
 		shellScripts: config.shellScripts(),
 		recording: null,
 	};
-	return await openWindow(launch, (v: WorkspaceView, first: RunningPane): void => {
-		const io = portOf(first.shell);
-		const rows = first.model.view;
-		if (hasFlag("--smoke")) { smoke(io, rows, quitter(v)); }
-		if (hasFlag("--flood")) { smokeFlood(io, rows, pace, quitter(v)); }
-		if (hasFlag("--typing")) { smokeTyping(io, quitter(v)); }
-		if (hasFlag("--smoke-panes")) { smokePanes(v); }
-	});
+	return await openWindow(launch, smokes(nothing));
 }
 
 async function runReplay(path: string): Promise<int32> {
@@ -478,13 +487,16 @@ async function runReplay(path: string): Promise<int32> {
 	});
 }
 
-async function attachedTo(connection: Connection): Promise<Reattach> {
+async function attachedTo(connection: Connection, path: string): Promise<Reattach> {
 	const link = new ServerLink(connection);
 	link.begin();
 	const got = await attach(link, vtBuild(), HELLO_COLS, HELLO_ROWS, ATTACH_TIMEOUT_MS);
 	if (!got.ok) {
 		link.connection.close();
-		failVisibly(`Haro could not attach to its server: ${got.error.why}`);
+		if (got.error.failure == Failure.Refused) {
+			failVisibly(await otherVersion(path) ?? otherVersionAdvice(path, got.error.why, null));
+		}
+		failVisibly(`Haro could not attach to its server at ${path}: ${got.error.why}`);
 	}
 	return { link: link, attached: got.value };
 }
@@ -497,7 +509,7 @@ async function runClient(): Promise<int32> {
 	const path = socketPath();
 	const connected = await connectLocal(path);
 	if (!connected.ok) { failVisibly(connected.error); }
-	const server = await attachedTo(connected.value);
+	const server = await attachedTo(connected.value, path);
 	return await openWindow(CLIENT_LAUNCH, ignoreStart, {
 		link: server.link,
 		attached: server.attached,
@@ -527,107 +539,109 @@ async function reattachAt(path: string): Promise<Result<Reattach, string>> {
 	return Result.ok({ link: link, attached: got.value });
 }
 
-async function runSmokeAttach(): Promise<int32> {
+interface PrivateServer {
+	dir: string;
+	path: string;
+	first: Reattach;
+	stop: () => void;
+}
+
+async function privateServer(what: string): Promise<PrivateServer> {
 	when (windows) {
-		fail("smoke-attach: a Haro server does not run on Windows yet");
+		fail(`${what}: a Haro server does not run on Windows yet`);
 	} else {
-		const dir = join(tmpDir(), `haro-smoke-attach-${Date.now()}`);
+		const dir = join(tmpDir(), `haro-${what}-${Date.now()}`);
 		const path = join(dir, "haro.sock");
 		const _chosen = env.set("HARO_SOCKET", path);
-		const started = await connectLocal(socketPath());
-		if (!started.ok) { fail(`smoke-attach: ${started.error}`); }
+		const started = await connectLocal(path);
+		if (!started.ok) { fail(`${what}: ${started.error}`); }
 		const link = new ServerLink(started.value);
 		link.begin();
 		const first = await attach(link, vtBuild(), HELLO_COLS, HELLO_ROWS, ATTACH_TIMEOUT_MS);
-		if (!first.ok) { fail(`smoke-attach: ${first.error.why}`); }
+		if (!first.ok) { fail(`${what}: ${first.error.why}`); }
 		const daemon = first.value.serverPid;
-		const reconnect = (): Promise<Result<Reattach, string>> => reattachAt(path);
-		const stopServer = (): void => {
-			if (kill(daemon, SIGTERM) != 0) { console.log(`smoke-attach: the server ${daemon} was already gone`); }
-			const _removed = removeAll(dir);
-		};
-		const code = await openWindow(
-			CLIENT_LAUNCH,
-			(v: WorkspaceView, shown: RunningPane): void => {
-				const _s = smokeAttach(v, reconnect, stopServer);
+		return {
+			dir: dir,
+			path: path,
+			first: { link: link, attached: first.value },
+			stop: (): void => {
+				if (kill(daemon, SIGTERM) != 0) { console.log(`${what}: the server ${daemon} was already gone`); }
+				const _removed = removeAll(dir);
 			},
-			{ link: link, attached: first.value, dial: null, label: "", remotes: false },
-		);
-		stopServer();
-		return code;
+		};
 	}
+}
+
+function servedBy(server: PrivateServer): Served {
+	return { link: server.first.link, attached: server.first.attached, dial: null, label: "", remotes: false };
+}
+
+async function runSmoke(): Promise<int32> {
+	const server = await privateServer("smoke");
+	const code = await openWindow(CLIENT_LAUNCH, smokes(server.stop), servedBy(server));
+	server.stop();
+	return code;
+}
+
+async function runSmokeAttach(): Promise<int32> {
+	const server = await privateServer("smoke-attach");
+	const reconnect = (): Promise<Result<Reattach, string>> => reattachAt(server.path);
+	const code = await openWindow(
+		CLIENT_LAUNCH,
+		(v: WorkspaceView, shown: RunningPane): void => {
+			const _s = smokeAttach(v, reconnect, server.stop);
+		},
+		servedBy(server),
+	);
+	server.stop();
+	return code;
 }
 
 async function runSmokeHosts(): Promise<int32> {
-	when (windows) {
-		fail("smoke-hosts: a Haro server does not run on Windows yet");
-	} else {
-		const dir = join(tmpDir(), `haro-smoke-hosts-${Date.now()}`);
-		const path = join(dir, "haro.sock");
-		const remotePath = join(dir, "remote.sock");
-		const _chosen = env.set("HARO_SOCKET", path);
-		const started = await connectLocal(socketPath());
-		if (!started.ok) { fail(`smoke-hosts: ${started.error}`); }
-		const link = new ServerLink(started.value);
-		link.begin();
-		const first = await attach(link, vtBuild(), HELLO_COLS, HELLO_ROWS, ATTACH_TIMEOUT_MS);
-		if (!first.ok) { fail(`smoke-hosts: ${first.error.why}`); }
-		const fake = startFake(remotePath, ScreenFormat.Native);
-		if (!fake.ok) { fail(`smoke-hosts: the fake remote did not listen: ${fake.error.toString()}`); }
-		const _tab = fake.value.apply({ kind: CommandKind.NewTab });
-		fake.value.paneOf(1 as PaneId)?.vt.writeText("remote-marker\r\n");
-		const daemon = first.value.serverPid;
-		const stop = (): void => {
-			fake.value.close();
-			if (kill(daemon, SIGTERM) != 0) { console.log(`smoke-hosts: the server ${daemon} was already gone`); }
-			const _removed = removeAll(dir);
-		};
-		const code = await openWindow(
-			CLIENT_LAUNCH,
-			(v: WorkspaceView, shown: RunningPane): void => {
-				const _s = smokeHosts(v, fake.value, dialUnix(remotePath), stop);
-			},
-			{ link: link, attached: first.value, dial: null, label: "", remotes: false },
-		);
-		stop();
-		return code;
-	}
-}
-
-function inProcess(): boolean {
-	when (windows) {
-		return true;
-	} else {
-		return IN_PROCESS_FLAGS.some((flag: string): boolean => hasFlag(flag));
-	}
+	const server = await privateServer("smoke-hosts");
+	const remotePath = join(server.dir, "remote.sock");
+	const fake = startFake(remotePath, ScreenFormat.Native);
+	if (!fake.ok) { fail(`smoke-hosts: the fake remote did not listen: ${fake.error.toString()}`); }
+	const _tab = fake.value.apply({ kind: CommandKind.NewTab });
+	fake.value.paneOf(1 as PaneId)?.vt.writeText("remote-marker\r\n");
+	const stop = (): void => {
+		fake.value.close();
+		server.stop();
+	};
+	const code = await openWindow(
+		CLIENT_LAUNCH,
+		(v: WorkspaceView, shown: RunningPane): void => {
+			const _s = smokeHosts(v, fake.value, dialUnix(remotePath), stop);
+		},
+		servedBy(server),
+	);
+	stop();
+	return code;
 }
 
 async function main(): Promise<int32> {
 	stats.mark("main", Date.now());
 	config.readConfig();
 	stats.mark("config", Date.now());
-	if (hasFlag("--server")) {
-		return await serve({
-			config: config.loaded.config,
-			shellScripts: config.shellScripts(),
-			startIn: config.startIn(probableCli(), homeDir()),
-			dividerCells: dividerCellsOf(config.loaded.config),
-		});
-	}
 	const replayPath = flagValue("--replay");
 	if (replayPath !== null) { return await runReplay(replayPath); }
-	if (inProcess()) {
+	when (windows) {
 		return await runShell(flagValue("--shell") ?? config.loaded.config.command);
+	} else {
+		if (flagValue("--shell") !== null) {
+			fail("--shell picks the shell only on Windows; elsewhere the server runs command from config.ms");
+		}
+		if (hasFlag("--smoke-attach")) { return await runSmokeAttach(); }
+		if (hasFlag("--smoke-hosts")) { return await runSmokeHosts(); }
+		if (SMOKE_FLAGS.some((flag: string): boolean => hasFlag(flag))) { return await runSmoke(); }
+		const remote = flagValue("--connect");
+		if (remote !== null) {
+			const destination = destinationOf(remote);
+			if (!destination.ok) { failVisibly(`--connect: ${destination.error}`); }
+			return await runRemote(destination.value);
+		}
+		return await runClient();
 	}
-	if (hasFlag("--smoke-attach")) { return await runSmokeAttach(); }
-	if (hasFlag("--smoke-hosts")) { return await runSmokeHosts(); }
-	const remote = flagValue("--connect");
-	if (remote !== null) {
-		const destination = destinationOf(remote);
-		if (!destination.ok) { failVisibly(`--connect: ${destination.error}`); }
-		return await runRemote(destination.value);
-	}
-	return await runClient();
 }
 
 when (!testBuild) {

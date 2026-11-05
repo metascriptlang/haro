@@ -7,7 +7,8 @@ toolchain="$(cd "$(dirname "$(readlink "$msc" || echo "$msc")")/.." && pwd)"
 app="$out/Haro.app"
 res="$app/Contents/Resources"
 
-(cd "$root/src/app" && msc build haro.ms --release)
+version="$("$root/scripts/version.sh")"
+(cd "$root/src/app" && msc build haro.ms --release "--passC=-DHARO_SERVER_BUILD=$version")
 bash "$root/../ion/scripts/make-app.sh" "$root/src/app/out/release/haro" Haro dev.haro.terminal "$out" \
 	--icon="$root/assets/icon.icns"
 cp -R "$root/assets" "$res/assets"

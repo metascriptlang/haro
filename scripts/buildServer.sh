@@ -7,8 +7,7 @@ arch="$(uname -m)"
 out="${1:-$root/out/haro-server/$os-$arch}"
 msc="$(command -v msc)"
 toolchain="${MSC_HOME:-$(cd "$(dirname "$(readlink "$msc" || echo "$msc")")/.." && pwd)}"
-version="${HARO_SERVER_VERSION:-$(git -C "$root" rev-parse --short=12 HEAD 2>/dev/null || echo dev)}"
-if [ -z "${HARO_SERVER_VERSION:-}" ] && [ -n "$(git -C "$root" status --porcelain 2>/dev/null)" ]; then version="$version-dirty"; fi
+version="$("$root/scripts/version.sh")"
 mkdir -p "$out/assets" "$out/metascript"
 (cd "$root" && msc build src/server/haroServer.ms --release --strip \
 	"--passC=-DHARO_SERVER_BUILD=$version" --output="$out/haro-server")

@@ -9,7 +9,7 @@ import { PaneId } from "../workspace/tree";
 import { CommandKind } from "../workspace/workspace";
 import { DialError, Failure, linkTo } from "./link";
 import { FakeServer, startFake } from "./fakeServer";
-import { NEEDS_KEY, serverName, sshDial, versionLine } from "./ssh";
+import { NEEDS_KEY, serverName, serverVersion, sshDial, versionLine } from "./ssh";
 
 const EXECUTABLE: int32 = 0o755;
 const PLATFORMS: string[] = ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64"];
@@ -71,7 +71,7 @@ function written(path: string, text: string): void {
 }
 
 function serverScript(line: string, bridge: string): string {
-	return `#!/bin/sh\ncase "$1" in\nversion) echo "${line} vt test";;\n` +
+	return `#!/bin/sh\ncase "$1" in\nversion) echo "${line}";;\n` +
 		`proxy) exec python3 ${bridge};;\n*) exit 2;;\nesac\n`;
 }
 
@@ -87,7 +87,7 @@ function rig(shipped: boolean): Rig {
 	must(writeFile(bridge, BRIDGE).ok, bridge);
 	if (shipped) {
 		for (const p of PLATFORMS) {
-			written(join(servers, `haro-server-${p}`), serverScript(versionLine(), bridge));
+			written(join(servers, `haro-server-${p}`), serverScript(versionLine("test"), bridge));
 		}
 	}
 	const socket = join(dir, "s.sock");
@@ -128,7 +128,7 @@ async function attachedOver(r: Rig, host: string): Promise<Result<string, DialEr
 
 test "a host whose server answers the version attaches over ssh without an upload" {
 	const r = rig(true);
-	preinstall(r, "present", versionLine());
+	preinstall(r, "present", versionLine("test"));
 	const got = await attachedOver(r, "present");
 	assert got.ok, got.ok ? "" : got.error.why;
 	if (got.ok) { assert got.value == "1 tab 1 screen", got.value; }
@@ -143,18 +143,18 @@ test "a host without the server gets the binary for its system, then attaches" {
 	assert r.uploads == 1;
 	assert exists(installed(r, "bare"));
 	const shipped = readFile(installed(r, "bare"));
-	assert shipped.ok && shipped.value.includes(versionLine());
+	assert shipped.ok && shipped.value.includes(versionLine("test"));
 	done(r);
 }
 
-test "a host with another version of the server gets this one uploaded over it" {
+test "a host whose server of this build speaks another protocol gets this one uploaded over it" {
 	const r = rig(true);
-	preinstall(r, "stale", "haro-server old protocol 0");
+	preinstall(r, "stale", `haro-server ${serverVersion()} protocol 0 vt test`);
 	const got = await attachedOver(r, "stale");
 	assert got.ok, got.ok ? "" : got.error.why;
 	assert r.uploads == 1;
 	const now = readFile(installed(r, "stale"));
-	assert now.ok && now.value.includes(versionLine());
+	assert now.ok && now.value.includes(versionLine("test"));
 	done(r);
 }
 

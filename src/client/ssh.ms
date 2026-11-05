@@ -13,7 +13,7 @@ when (!windows) {
 	@include("sys/wait.h");
 	@include("fcntl.h");
 	@include("unistd.h");
-	@include("./version.h");
+	@include("../server/version.h");
 
 	extern struct SpawnFiles from "posix_spawn_file_actions_t" {}
 	extern struct SpawnAttr from "posix_spawnattr_t" {}
@@ -124,13 +124,29 @@ export function serverName(): string {
 	return `haro-server-${serverVersion()}`;
 }
 
-export function versionLine(): string {
-	return `haro-server ${serverVersion()} protocol ${PROTOCOL_VERSION}`;
+export struct ServerVersion {
+	build: string;
+	protocol: uint32;
+	vt: string;
+}
+
+export function versionOf(out: string): ServerVersion | null {
+	const words = out.trim().split(" ");
+	if (words.length != 6 || words[0] != "haro-server" || words[2] != "protocol" || words[4] != "vt") {
+		return null;
+	}
+	const protocol = parseInt(words[3]);
+	if (`${protocol}` != words[3] || protocol < 0) { return null; }
+	return { build: words[1], protocol: protocol as uint32, vt: words[5] };
+}
+
+export function versionLine(vt: string): string {
+	return `haro-server ${serverVersion()} protocol ${PROTOCOL_VERSION} vt ${vt}`;
 }
 
 function answersVersion(out: string): boolean {
-	const line = out.trim();
-	return line == versionLine() || line.startsWith(`${versionLine()} `);
+	const v = versionOf(out);
+	return v !== null && v.build == serverVersion() && v.protocol == PROTOCOL_VERSION;
 }
 
 function controlDir(): string {
@@ -380,6 +396,17 @@ test "uname names the server binary built for the host's system" {
 	assert platformOf("Darwin arm64") == "macos-arm64";
 	assert platformOf("Darwin x86_64") == "macos-x64";
 	assert platformOf("FreeBSD amd64") === null;
+}
+
+test "the version line names the build and the protocol a window compares" {
+	const v = versionOf("haro-server abc123 protocol 1 vt 1.2.0-dev+7a1\n");
+	assert v !== null;
+	if (v !== null) {
+		assert v.build == "abc123" && v.protocol == 1 && v.vt == "1.2.0-dev+7a1";
+	}
+	assert versionOf("haro-server abc123 protocol one vt x") === null;
+	assert versionOf("haro-server abc123 protocol 1") === null;
+	assert versionOf(versionLine("x")) !== null;
 }
 
 test "ssh that asks for a password is refused, an unreachable host is offline" {

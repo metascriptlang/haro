@@ -9,7 +9,7 @@ machine with no display.
 The window reaches a remote machine with
 
 ```sh
-ssh <host> ~/.haro/bin/haro-server-<version> proxy
+ssh <host> ~/.haro/server/<version>/haro-server proxy
 ```
 
 `proxy` bridges its stdin and stdout to the user's server on the machine's unix socket, byte for
@@ -17,15 +17,19 @@ byte, and starts the server in the background (as `start` does) when none answer
 outlives the proxy, the ssh session and its hangup; the end of the proxy's stdin closes only the
 proxy's own connection. Who gets in is decided by ssh (keys, or Tailscale SSH).
 
-`<version>` is what `haro-server version` prints first. A window that finds no binary of its
-version uploads one into `~/.haro/bin/` under a temporary name and renames it into place, so two
-windows uploading at once never run a half-written file:
+`<version>` is the build both the window and the server were built from, the second word of
+`haro-server version`. A window first runs `version` there; when no server answers with its build
+and protocol, it streams a gzipped tar of its bundle for the machine's system (the server with the
+`assets/` and `metascript/` it reads) and unpacks it under a temporary name, renamed into place
+once complete, so a window never runs a half-unpacked server:
 
 ```sh
-mkdir -p ~/.haro/bin && cat > ~/.haro/bin/.haro-server-<version>.$$ \
-  && chmod 755 ~/.haro/bin/.haro-server-<version>.$$ \
-  && mv -f ~/.haro/bin/.haro-server-<version>.$$ ~/.haro/bin/haro-server-<version>
+d="$HOME/.haro/server"; mkdir -p "$d"; t=$(mktemp -d "$d/.tmp-XXXXXX")
+tar -xzf - -C "$t" && { [ -e "$d/<version>" ] || mv "$t" "$d/<version>"; }
 ```
+
+When two windows upload at once, the first rename wins and the other's copy is dropped. A server
+of the same build that answers with another protocol is replaced.
 
 ## Commands
 
@@ -53,5 +57,6 @@ let in every identified user and tagged device.
 
 ## Building
 
-`scripts/buildServer.sh` builds `out/haro-server/<os>-<arch>/` for the machine it runs on;
+`scripts/buildServer.sh` builds the bundle `out/haro-server/<platform>/` (`linux-x64`,
+`linux-arm64`, `macos-arm64`, `macos-x64`) for the machine it runs on;
 `scripts/serverCheck.sh <binary>` drives a build end to end on a private socket.

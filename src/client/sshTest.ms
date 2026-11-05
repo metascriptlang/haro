@@ -1,5 +1,5 @@
-import { chmod, ensureDir, exists, readFile, removeAll, writeFile } from "std/fs";
-import { join } from "std/fs/path";
+import { chmod, ensureDir, readDir, readFile, removeAll, writeFile } from "std/fs";
+import { dirname, join } from "std/fs/path";
 import { tmpDir } from "std/os";
 import { env } from "std/process";
 import { ScreenFormat } from "../server/protocol";
@@ -9,7 +9,7 @@ import { PaneId } from "../workspace/tree";
 import { CommandKind } from "../workspace/workspace";
 import { DialError, Failure, linkTo } from "./link";
 import { FakeServer, startFake } from "./fakeServer";
-import { NEEDS_KEY, serverName, serverVersion, sshDial, versionLine } from "./ssh";
+import { NEEDS_KEY, serverPath, serverVersion, sshDial, versionLine } from "./ssh";
 
 const EXECUTABLE: int32 = 0o755;
 const PLATFORMS: string[] = ["linux-x64", "linux-arm64", "macos-arm64", "macos-x64"];
@@ -87,7 +87,8 @@ function rig(shipped: boolean): Rig {
 	must(writeFile(bridge, BRIDGE).ok, bridge);
 	if (shipped) {
 		for (const p of PLATFORMS) {
-			written(join(servers, `haro-server-${p}`), serverScript(versionLine("test"), bridge));
+			must(ensureDir(join(servers, p)).ok, p);
+			written(join(join(servers, p), "haro-server"), serverScript(versionLine("test"), bridge));
 		}
 	}
 	const socket = join(dir, "s.sock");
@@ -104,13 +105,21 @@ function rig(shipped: boolean): Rig {
 }
 
 function installed(r: Rig, host: string): string {
-	return join(join(join(join(r.remotes, host), ".haro"), "bin"), serverName());
+	return join(join(r.remotes, host), serverPath());
 }
 
-function preinstall(r: Rig, host: string, line: string): void {
+function preinstall(r: Rig, host: string, script: string): void {
 	const path = installed(r, host);
-	must(ensureDir(path.slice(0, path.lastIndexOf("/"))).ok, path);
-	written(path, serverScript(line, join(r.dir, "bridge.py")));
+	must(ensureDir(dirname(path)).ok, path);
+	written(path, script);
+}
+
+function answering(r: Rig, line: string): string {
+	return serverScript(line, join(r.dir, "bridge.py"));
+}
+
+function serverDirEntries(r: Rig, host: string): string[] {
+	return readDir(dirname(dirname(installed(r, host))));
 }
 
 function done(r: Rig): void {
@@ -128,7 +137,7 @@ async function attachedOver(r: Rig, host: string): Promise<Result<string, DialEr
 
 test "a host whose server answers the version attaches over ssh without an upload" {
 	const r = rig(true);
-	preinstall(r, "present", versionLine("test"));
+	preinstall(r, "present", answering(r, versionLine("test")));
 	const got = await attachedOver(r, "present");
 	assert got.ok, got.ok ? "" : got.error.why;
 	if (got.ok) { assert got.value == "1 tab 1 screen", got.value; }
@@ -136,20 +145,35 @@ test "a host whose server answers the version attaches over ssh without an uploa
 	done(r);
 }
 
-test "a host without the server gets the binary for its system, then attaches" {
+test "a host without the server gets the bundle for its system under its version, then attaches" {
 	const r = rig(true);
 	const got = await attachedOver(r, "bare");
 	assert got.ok, got.ok ? "" : got.error.why;
 	assert r.uploads == 1;
-	assert exists(installed(r, "bare"));
 	const shipped = readFile(installed(r, "bare"));
 	assert shipped.ok && shipped.value.includes(versionLine("test"));
+	const entries = serverDirEntries(r, "bare");
+	assert entries.length == 1 && entries[0] == `${serverVersion()}/`, entries.join(" ");
+	done(r);
+}
+
+test "an upload into a version directory another upload already made is dropped" {
+	const r = rig(true);
+	preinstall(r, "raced", "#!/bin/sh\nexit 1\n");
+	const got = await attachedOver(r, "raced");
+	assert !got.ok;
+	if (!got.ok) { assert got.error.failure == Failure.Unkept, got.error.why; }
+	assert r.uploads == 1;
+	const kept = readFile(installed(r, "raced"));
+	assert kept.ok && kept.value.includes("exit 1");
+	const entries = serverDirEntries(r, "raced");
+	assert entries.length == 1 && entries[0] == `${serverVersion()}/`, entries.join(" ");
 	done(r);
 }
 
 test "a host whose server of this build speaks another protocol gets this one uploaded over it" {
 	const r = rig(true);
-	preinstall(r, "stale", `haro-server ${serverVersion()} protocol 0 vt test`);
+	preinstall(r, "stale", answering(r, `haro-server ${serverVersion()} protocol 0 vt test`));
 	const got = await attachedOver(r, "stale");
 	assert got.ok, got.ok ? "" : got.error.why;
 	assert r.uploads == 1;

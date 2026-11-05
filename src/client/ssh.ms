@@ -1,8 +1,8 @@
 import { env, execPath } from "std/process";
-import { chmod, ensureDir, exists, readFile, readFileBytes, remove } from "std/fs";
+import { chmod, ensureDir, exists, readFile, remove } from "std/fs";
 import { dirname, join } from "std/fs/path";
 import { homeDir, tmpDir } from "std/os";
-import { close as closeFd, recvAsync, sendAsync } from "std/net";
+import { close as closeFd, recvAsync } from "std/net";
 import { Connection } from "../server/transport";
 import { PROTOCOL_VERSION } from "../server/protocol";
 import { Dial, DialError, Failure, offline, refused } from "./link";
@@ -89,9 +89,7 @@ when (macos) {
 }
 
 const SSH = "ssh";
-const REMOTE_DIR = "~/.haro/bin";
 const READ_CHUNK: int32 = 64 * 1024;
-const UPLOAD_CHUNK: int32 = 1024 * 1024;
 const REAP_POLL_MS: int32 = 10;
 const LINGER_POLL_MS: int32 = 500;
 const OWNER_ONLY_DIR: int32 = 0o700;
@@ -120,8 +118,12 @@ export function serverVersion(): string {
 	}
 }
 
-export function serverName(): string {
-	return `haro-server-${serverVersion()}`;
+export function serverPath(): string {
+	return `.haro/server/${serverVersion()}/haro-server`;
+}
+
+function serverCommand(): string {
+	return `~/${quoted(serverPath())}`;
 }
 
 export struct ServerVersion {
@@ -297,16 +299,9 @@ function lastLine(path: string): string {
 	return lines.length == 0 ? "" : lines[lines.length - 1].trim();
 }
 
-export async function run(args: string[], input: Buffer): Promise<Result<Ran, string>> {
+export async function run(args: string[]): Promise<Result<Ran, string>> {
 	const s = try spawned(args);
-	when (!windows) {
-		const size = input.length as int32;
-		for (let at: int32 = 0; at < size; at += UPLOAD_CHUNK) {
-			const end = Math.min(at + UPLOAD_CHUNK, size);
-			if (await sendAsync(s.fd, input.slice(at, end)) < 0) { break; }
-		}
-		const _shut = shutdown(s.fd, SHUT_WR);
-	}
+	when (!windows) { const _shut = shutdown(s.fd, SHUT_WR); }
 	let out = "";
 	while (true) {
 		const chunk = await recvAsync(s.fd, READ_CHUNK);
@@ -328,35 +323,49 @@ function unkept(destination: string, why: string): DialError {
 	return { failure: Failure.Unkept, why: why, command: paneCommand(destination) };
 }
 
-async function ssh(destination: string, command: string, input: Buffer): Promise<Result<Ran, DialError>> {
-	const ran = await run(sshArgs(destination, command), input);
+async function ssh(args: string[]): Promise<Result<Ran, DialError>> {
+	const ran = await run(args);
 	if (!ran.ok) { return Result.err(refused(ran.error)); }
 	if (ran.value.code == SSH_FAILED) { return Result.err(sshFailure(ran.value.err)); }
 	return Result.ok(ran.value);
 }
 
-async function installed(destination: string): Promise<Result<boolean, DialError>> {
-	const ran = try await ssh(destination, `${REMOTE_DIR}/${serverName()} version`, Buffer.alloc(0));
-	return Result.ok(ran.code == 0 && answersVersion(ran.out));
+enum Installed {
+	Current,
+	Stale,
+	Missing,
+}
+
+async function installed(destination: string): Promise<Result<Installed, DialError>> {
+	const ran = try await ssh(sshArgs(destination, `${serverCommand()} version`));
+	if (answersVersion(ran.out)) { return Result.ok(Installed.Current); }
+	return Result.ok(versionOf(ran.out) === null ? Installed.Missing : Installed.Stale);
+}
+
+function unpackScript(replace: boolean): string {
+	return `set -e; d="$HOME/.haro/server"; v=${quoted(serverVersion())}; mkdir -p "$d"; ` +
+		`t=$(mktemp -d "$d/.tmp-XXXXXX"); trap 'rm -rf "$t" "$d/$v/\${t##*/}"' EXIT; ` +
+		`tar -xzf - -C "$t"; ${replace ? 'rm -rf "$d/$v"; ' : ""}[ -e "$d/$v" ] || mv "$t" "$d/$v"`;
 }
 
 async function uploaded(
 	destination: string,
+	replace: boolean,
 	uploading: () => void,
 ): Promise<Result<string, DialError>> {
-	const uname = try await ssh(destination, "uname -sm", Buffer.alloc(0));
+	const uname = try await ssh(sshArgs(destination, "uname -sm"));
 	const platform = uname.code == 0 ? platformOf(uname.out) : null;
 	if (platform === null) {
 		return Result.ok(`no Haro server is built for ${uname.out.trim()}`);
 	}
-	const path = join(serversDir(), `haro-server-${platform}`);
-	const bytes = readFileBytes(path);
-	if (!bytes.ok) { return Result.ok(`no Haro server for ${platform} beside this app`); }
+	const bundle = join(serversDir(), platform);
+	if (!exists(join(bundle, "haro-server"))) {
+		return Result.ok(`no Haro server for ${platform} beside this app`);
+	}
 	uploading();
-	const tmp = `${REMOTE_DIR}/.tmp-${Date.now()}`;
-	const script = `mkdir -p ${REMOTE_DIR} && cat > ${tmp} && chmod +x ${tmp} && ` +
-		`mv ${tmp} ${REMOTE_DIR}/${serverName()}`;
-	const put = try await ssh(destination, script, bytes.value);
+	const streamed = 'COPYFILE_DISABLE=1 tar -czf - -C "$0" . | "$@"';
+	const unpack = `sh -c ${quoted(unpackScript(replace))}`;
+	const put = try await ssh(["/bin/sh", "-c", streamed, bundle, ...sshArgs(destination, unpack)]);
 	if (put.code != 0) { return Result.ok(`the upload failed: ${put.err}`); }
 	return Result.ok("");
 }
@@ -366,27 +375,34 @@ async function linger(s: Spawned): Promise<void> {
 	const _removed = remove(s.errPath);
 }
 
-function proxied(destination: string): Result<Connection, DialError> {
-	const s = spawned(sshArgs(destination, `${REMOTE_DIR}/${serverName()} proxy`));
+function proxyCommand(socket: string | null): string {
+	if (socket === null) { return `${serverCommand()} proxy`; }
+	const place = `HARO_SOCKET=${quoted(socket)}`;
+	return `env ${place} ${serverCommand()} proxy --state-dir ${quoted(dirname(socket))}`;
+}
+
+function proxied(destination: string, socket: string | null): Result<Connection, DialError> {
+	const s = spawned(sshArgs(destination, proxyCommand(socket)));
 	if (!s.ok) { return Result.err(refused(s.error)); }
 	const _reaped = linger(s.value);
 	return Result.ok(new Connection(s.value.fd));
 }
 
-export function sshDial(destination: string): Dial {
+export function sshDial(destination: string, socket: string | null = null): Dial {
 	return async (uploading: () => void): Promise<Result<Connection, DialError>> => {
 		const dir = controlDir();
 		if (!ensureDir(dir).ok || !chmod(dir, OWNER_ONLY_DIR).ok) {
 			return Result.err(refused(`${dir} cannot hold ssh's control sockets`));
 		}
-		if (!(try await installed(destination))) {
-			const missing = try await uploaded(destination, uploading);
+		const found = try await installed(destination);
+		if (found != Installed.Current) {
+			const missing = try await uploaded(destination, found == Installed.Stale, uploading);
 			if (missing != "") { return Result.err(unkept(destination, missing)); }
-			if (!(try await installed(destination))) {
+			if ((try await installed(destination)) != Installed.Current) {
 				return Result.err(unkept(destination, "the uploaded Haro server does not answer version"));
 			}
 		}
-		return proxied(destination);
+		return proxied(destination, socket);
 	};
 }
 

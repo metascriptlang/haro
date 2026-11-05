@@ -6,7 +6,7 @@ import { createEffect } from "../../../neon/src/core/effect";
 import { Cleanup } from "../../../neon/src/core/types";
 import { PixelRatio } from "../../../neon/src/api/pixelRatio";
 import { View, Void } from "../../../neon/src/components/primitives";
-import { Axis, PaneId, TabId } from "../workspace/tree";
+import { Axis, PaneId, Placed, TabId } from "../workspace/tree";
 import { HostId, HostPane } from "../workspace/hosted";
 import { CommandKind, WorkspaceCommand } from "../workspace/workspace";
 import { Notice } from "./components/features/notice/notice";
@@ -41,8 +41,20 @@ import {
 function PaneView(props: { view: WorkspaceView; at: HostPane }): NeonNode {
 	const v = props.view;
 	const id = props.at.pane;
+	const laidOutAndRunning = (): boolean =>
+		v.layout().panes.some((p: Placed): boolean => p.pane.id == id) && v.paneAt(props.at) !== null;
+	return <View style={{ flexGrow: 1 }}>
+		<Show when={laidOutAndRunning()}>
+			<RunningPaneView view={v} at={props.at} />
+		</Show>
+	</View>;
+}
+
+function RunningPaneView(props: { view: WorkspaceView; at: HostPane }): NeonNode {
+	const v = props.view;
+	const id = props.at.pane;
 	const running = v.paneAt(props.at);
-	if (running === null) { return <View style={{ flexGrow: 1 }} />; }
+	if (running === null) { throw new Error(`internal: pane ${id as int32} is shown before it runs`); }
 	const m = running.model;
 	return <View style={{ flexGrow: 1 }}>
 		<TerminalPane model={m} focused={v.layout().focused == id} />

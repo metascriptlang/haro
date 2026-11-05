@@ -12,9 +12,12 @@ import {
 } from "std/process";
 import { NativePty, spawn } from "../src/pty/pty";
 import { Pty, PtyError } from "../src/pty/transport";
-import { RemotePty, Seed, asPty, empty, feed, seededVt } from "../src/pty/remote";
+import { RemotePty, Seed, asPty, dropInbound, empty, feed, seededVt } from "../src/pty/remote";
+import { reseeded } from "../src/session/session";
+import { Feed, add } from "../src/client/feeds";
+import { screenParts } from "../src/client/wire";
 import { Term, drain, fit, openTerm, sendInput, settleSize, shutdown } from "../src/controller/term";
-import { free, vtBuild } from "../src/vt/vt";
+import { Vt, cursor, free, lines, update, vtBuild } from "../src/vt/vt";
 import { MAX_SCREEN_BYTES, Message, MessageKind } from "../src/server/protocol";
 import { Server, start } from "../src/server/serve";
 import { askStop } from "../src/server/control";
@@ -110,6 +113,29 @@ function scan(this w: Watch, buf: Span<uint8>, n: int32): void {
 	}
 }
 
+function shownIn(this w: Watch, vt: Vt): Result<void, string> {
+	if (w.found || w.pattern.length == 0) { return Result.ok(null); }
+	const updated = vt.update();
+	if (!updated.ok) { return Result.err(`update: ${updated.error.toString()}`); }
+	const at = vt.cursor();
+	const rows = vt.lines();
+	if (!at.ok || !rows.ok) { return Result.err("the VT did not read back"); }
+	const cursor = at.value;
+	if (cursor === null) { return Result.ok(null); }
+	const row = rows.value[cursor.y];
+	const above = cursor.y > 0 ? rows.value[cursor.y - 1] : "";
+	const pattern = w.pattern.asString();
+	if (w.pattern.length == 1) {
+		const before = cursor.x > 0 ? row.slice(cursor.x - 1, cursor.x) : above.slice(-1);
+		w.found = before == pattern;
+	} else {
+		w.found = row.includes(pattern) || above.includes(pattern);
+	}
+	w.matched = 0;
+	w.settle();
+	return Result.ok(null);
+}
+
 function settle(this w: Watch): void {
 	if (w.found && w.heldAt < 0) { w.heldAt = performance.now(); }
 }
@@ -180,6 +206,7 @@ interface Driver {
 	poll: (focus: BenchPane) => Promise<Result<void, string>>;
 	split: () => Promise<Result<BenchPane, string>>;
 	close: () => Promise<Result<float64, string>>;
+	reseeds: () => int32;
 }
 
 function drainOnce(p: BenchPane): Result<boolean, string> {
@@ -240,6 +267,7 @@ function localDriver(): Result<Driver, string> {
 			for (const p of all) { p.term.shutdown(); }
 			return Result.ok(0);
 		},
+		reseeds: (): int32 => 0,
 	});
 }
 
@@ -305,6 +333,7 @@ class Client {
 	panes: BenchPane[] = [];
 	tabs: Tab[] = [];
 	opened: PaneId[] = [];
+	reseeds: int32 = 0;
 	failure: string = "";
 
 	constructor(link: ServerLink) { this.link = link; }
@@ -317,23 +346,47 @@ function paneOf(this c: Client, id: PaneId): BenchPane | null {
 	return null;
 }
 
-function output(this c: Client, id: PaneId, seq: uint64, bytes: Vec<uint8>): void {
-	const p = c.paneOf(id);
-	const remote = p?.remote ?? null;
-	if (p === null || remote === null) { return; }
-	if (!remote.feed(seq, bytes)) {
-		c.failure = `pane ${id as int32} output out of order at ${seq}`;
-		return;
-	}
-	let more = true;
-	while (more) {
-		const drained = drainOnce(p);
-		if (!drained.ok) {
-			c.failure = drained.error;
+function fed(this c: Client, feeds: Feed[]): void {
+	for (const f of feeds) {
+		const p = c.paneOf(f.pane);
+		const remote = p?.remote ?? null;
+		if (p === null || remote === null) { continue; }
+		if (!remote.feed(f.first, f.last, move f.bytes)) {
+			c.failure = `pane ${f.pane as int32} output out of order at ${f.first}`;
 			return;
 		}
-		more = drained.value;
+		let more = true;
+		while (more) {
+			const drained = drainOnce(p);
+			if (!drained.ok) {
+				c.failure = drained.error;
+				return;
+			}
+			more = drained.value;
+		}
 	}
+	feeds.length = 0;
+}
+
+function reseed(this c: Client, p: BenchPane, seed: Seed): void {
+	const remote = p.remote;
+	if (remote === null) { return; }
+	remote.dropInbound();
+	c.reseeds += 1;
+	const t = p.term;
+	const s = t.session;
+	if (s === null) {
+		t.seed = seed;
+		return;
+	}
+	const next = s.reseeded(seed, t.cols, t.rows, t.cellWidth, t.cellHeight);
+	if (!next.ok) {
+		c.failure = `pane ${p.id as int32} reseed: ${next.error.toString()}`;
+		return;
+	}
+	t.session = next.value;
+	const shown = p.watch.shownIn(next.value.vt);
+	if (!shown.ok) { c.failure = `pane ${p.id as int32} after reseed: ${shown.error}`; }
 }
 
 function laidOut(this c: Client, tabs: Tab[]): void {
@@ -360,17 +413,34 @@ function paneOpened(this c: Client, id: PaneId): void {
 	c.opened.push(id);
 }
 
-function received(this c: Client, m: Message): void {
-	if (m.kind == MessageKind.Output) {
-		c.output(m.pane, m.seq, [...m.bytes]);
-	} else if (m.kind == MessageKind.Layout) {
-		c.laidOut(m.tabs);
+function receivedOne(this c: Client, m: Message): void {
+	const parts = screenParts(m);
+	if (parts !== null) {
+		const layout = parts.layout;
+		if (layout !== null) { c.laidOut(layout.tabs); }
+		for (const screen of parts.screens) {
+			const p = c.paneOf(screen.pane);
+			if (p !== null) { c.reseed(p, screen.seed); }
+		}
 	} else if (m.kind == MessageKind.Event) {
 		const e = m.event;
 		if (e.kind == EventKind.PaneOpened) { c.paneOpened(e.pane); }
 	} else if (m.kind == MessageKind.Failed) {
 		c.failure = `pane ${m.pane as int32} failed: ${m.reason}`;
 	}
+}
+
+function received(this c: Client, ms: Message[]): void {
+	const feeds: Feed[] = [];
+	for (const m of ms) {
+		if (m.kind == MessageKind.Output) {
+			feeds.add(m.pane, m.seq, m.bytes);
+		} else {
+			c.fed(feeds);
+			c.receivedOne(m);
+		}
+	}
+	c.fed(feeds);
 }
 
 async function linked(path: string): Promise<Result<ServerLink, string>> {
@@ -392,7 +462,7 @@ async function attachClient(s: ServerProc): Promise<Result<Client, string>> {
 		if (rect === null) { return Result.err(`screen for unknown pane ${screen.pane as int32}`); }
 		c.panes.push(try remotePane(screen.pane, screen.seed, rect));
 	}
-	link.listen((m: Message): void => { c.received(m); }, (why: string): void => {
+	link.listen((ms: Message[]): void => { c.received(ms); }, (why: string): void => {
 		if (c.failure == "") { c.failure = `link ended: ${why}`; }
 	});
 	return Result.ok(c);
@@ -436,6 +506,7 @@ async function clientDriver(): Promise<Result<Driver, string>> {
 			detachClient(c);
 			return await stopServer(s);
 		},
+		reseeds: (): int32 => c.reseeds,
 	});
 }
 
@@ -584,13 +655,18 @@ async function measuredEcho(
 	d: Driver,
 	echo: BenchPane,
 ): Promise<boolean> {
+	const reseedsBefore = d.reseeds();
 	const got = await echoes(d, echo);
 	pool(mode, measure, got.latencies);
+	const reseeds: Pair = { key: "reseeds", value: (d.reseeds() - reseedsBefore) as float64 };
 	if (got.failure != "") {
 		failed(mode, measure, rep, keysDone(got), got.failure);
+		record(mode, `${measure}_reseeds`, rep, [reseeds]);
 		return false;
 	}
-	record(mode, measure, rep, spread(got.latencies));
+	let pairs = spread(got.latencies);
+	pairs.push(reseeds);
+	record(mode, measure, rep, pairs);
 	return true;
 }
 
@@ -749,6 +825,7 @@ async function attachRun(reps: int32): Promise<Result<void, string>> {
 		},
 		split: async (): Promise<Result<BenchPane, string>> => Result.err("no split here"),
 		close: async (): Promise<Result<float64, string>> => Result.ok(0),
+		reseeds: (): int32 => first.reseeds,
 	};
 	const p = first.panes[0];
 	try await answering(firstDriver, p);
